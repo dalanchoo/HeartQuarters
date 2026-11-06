@@ -115,8 +115,17 @@ function PieceGroup({ title, pieces }: { title: string; pieces: Piece[] }) {
   );
 }
 
+/** "V05_Shock" -> "V05 · Shock" */
+function versionLabel(name: string): string {
+  const [num, ...rest] = name.split('_');
+  return rest.length ? `${num} · ${rest.join(' ')}` : num;
+}
+
 function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boolean }) {
   const [playing, setPlaying] = useState<string | null>(null);
+  const [versionName, setVersionName] = useState(piece.packagingVersion);
+  const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
+  const latest = piece.versions.at(-1)?.name;
 
   return (
     <details className="card" open={startOpen}>
@@ -124,7 +133,10 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
         <span className="piece-name">{piece.name}</span>
         <span className="muted">
           {piece.exports.length > 0 ? '✓ exported' : 'not exported'}
-          {piece.packagingVersion ? ` · packaging ${piece.packagingVersion}` : ' · no packaging'}
+          {piece.packagingVersion
+            ? ` · packaging ${versionLabel(piece.packagingVersion)}` +
+              (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
+            : ' · no packaging'}
         </span>
       </summary>
 
@@ -150,11 +162,35 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
         </div>
       )}
 
-      {piece.covers.length > 0 && (
+      {version && (
+        <div className="block">
+          <h4>Packaging</h4>
+          <div className="versions">
+            {piece.versions.map((v) => (
+              <button
+                key={v.name}
+                className={`version ${v.name === version.name ? 'active' : ''}`}
+                onClick={() => setVersionName(v.name)}
+              >
+                {versionLabel(v.name)}
+                {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
+              </button>
+            ))}
+            <button className="small" onClick={() => openInExplorer('projects', version.path)}>
+              Open {versionLabel(version.name)} folder
+            </button>
+          </div>
+          {version.docs.length === 0 && version.covers.length === 0 && (
+            <p className="muted">This version folder is empty.</p>
+          )}
+        </div>
+      )}
+
+      {version && version.covers.length > 0 && (
         <div className="block">
           <h4>Covers</h4>
           <div className="covers">
-            {piece.covers.map((f) => (
+            {version.covers.map((f) => (
               <a key={f.path} href={fileUrl('projects', f.path)} target="_blank" rel="noreferrer" title={f.name}>
                 <img src={fileUrl('projects', f.path)} alt={f.name} loading="lazy" />
                 <span>{f.name}</span>
@@ -164,7 +200,7 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
         </div>
       )}
 
-      {piece.docs.map((d) => (
+      {version?.docs.map((d) => (
         <PackagingDoc key={d.path} file={d} />
       ))}
     </details>

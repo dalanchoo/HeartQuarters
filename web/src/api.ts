@@ -1,7 +1,13 @@
 // Small helpers for talking to the HeartQuarters server.
 import type { RootId } from '../../server/config';
 
-export type { ProjectSummary, ProjectDetail, Piece, FileRef } from '../../server/projects';
+export type {
+  ProjectSummary,
+  ProjectDetail,
+  Piece,
+  PackagingVersion,
+  FileRef,
+} from '../../server/projects';
 export type { Job } from '../../server/tools';
 export type { RootId };
 

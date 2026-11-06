@@ -93,8 +93,10 @@ if (fs.existsSync(webDir)) {
   app.use((_req, res) => res.sendFile(path.join(webDir, 'index.html')));
 }
 
-const url = `http://127.0.0.1:${config.port}`;
-app.listen(config.port, '127.0.0.1', () => {
+// HQ_PORT lets a second copy run alongside (e.g. for testing).
+const port = Number(process.env.HQ_PORT) || config.port;
+const url = `http://127.0.0.1:${port}`;
+app.listen(port, '127.0.0.1', () => {
   console.log(`HeartQuarters is running at ${url}`);
   console.log('Close this window (or press Ctrl+C) to stop it.');
   if (process.argv.includes('--open')) {

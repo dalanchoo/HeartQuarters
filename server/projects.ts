@@ -25,13 +25,24 @@ export interface FileRef {
   size: number;
 }
 
+export interface PackagingVersion {
+  /** Folder name: "Legacy", "V01", "V05_Shock", ... */
+  name: string;
+  path: string;
+  /** Text files anywhere in the version (e.g. YouTube.md, Metadata/YouTube v01.md). */
+  docs: FileRef[];
+  /** Images anywhere in the version, except Source folders. */
+  covers: FileRef[];
+}
+
 export interface Piece {
   kind: 'longform' | 'short' | 'reel';
   name: string;
   path: string;
+  /** Name of the newest version, or null if there's no packaging. */
   packagingVersion: string | null;
-  docs: FileRef[];
-  covers: FileRef[];
+  /** Oldest first: Legacy, then V01, V02, ... */
+  versions: PackagingVersion[];
   exports: FileRef[];
 }
 
@@ -84,18 +95,57 @@ function filesIn(dir: string, exts: Set<string>): FileRef[] {
   }
 }
 
+/**
+ * Like filesIn, but also looks in subfolders (skipping "Source" folders, which
+ * hold Photoshop files and layers). Names are relative to `base`,
+ * e.g. "Covers/Exports/Cover_v02.png".
+ */
+function filesDeep(dir: string, exts: Set<string>, base = dir): FileRef[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: FileRef[] = [];
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name.toLowerCase() !== 'source') out.push(...filesDeep(full, exts, base));
+    } else if (e.isFile() && exts.has(path.extname(e.name).toLowerCase())) {
+      const name = path.relative(base, full).split(path.sep).join('/');
+      out.push({ name, path: rel(full), size: fs.statSync(full).size });
+    }
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+/** Sort order for version folders: Legacy first, then by number. */
+function versionOrder(name: string): number {
+  if (name.toLowerCase() === 'legacy') return -1;
+  return Number(/^V(\d+)/i.exec(name)?.[1] ?? 9999);
+}
+
 function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
   const packagingRoot = path.join(dir, 'Packaging');
-  const versions = subfolders(packagingRoot).filter((v) => /^V\d+/i.test(v));
-  const latest = versions.at(-1) ?? null;
-  const packagingDir = latest ? path.join(packagingRoot, latest) : null;
+  const versions = subfolders(packagingRoot)
+    .filter((v) => /^V\d+/i.test(v) || v.toLowerCase() === 'legacy')
+    .sort((a, b) => versionOrder(a) - versionOrder(b))
+    .map((v): PackagingVersion => {
+      const vDir = path.join(packagingRoot, v);
+      return {
+        name: v,
+        path: rel(vDir),
+        docs: filesDeep(vDir, DOC_EXTS),
+        covers: filesDeep(vDir, IMAGE_EXTS),
+      };
+    });
   return {
     kind,
     name,
     path: rel(dir),
-    packagingVersion: latest,
-    docs: packagingDir ? filesIn(packagingDir, DOC_EXTS) : [],
-    covers: packagingDir ? filesIn(path.join(packagingDir, 'Covers'), IMAGE_EXTS) : [],
+    packagingVersion: versions.at(-1)?.name ?? null,
+    versions,
     exports: filesIn(path.join(dir, 'Exports'), VIDEO_EXTS),
   };
 }
