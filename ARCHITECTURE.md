@@ -34,6 +34,8 @@ see your projects, edit metadata, watch videos, and run jobs
 | Video projects | `D:\Google Drive\HeartMind\Video Projects\NNN - Title\` |
 | Metadata for each video | `...\Packaging\Vxx\YouTube.md` (and `TikTok.md`, `Instagram.md`, ... for Shorts). Already in use; the app reads these. |
 | Editing rules | `Video Projects\LONGFORM.md`, `SHORTS.md`, `CLAUDE.md` |
+| Substack writing | `D:\Google Drive\HeartMind\Writing\<My Journey / My Reflections / My Wisdom>\<piece>\` with `Drafts\*.docx` and `Substack Metadata\Preview.png` |
+| Downloaded Substack archive | `HMF_SYS\Generated\Substack` (made by SubstackDownloader.py; not shown in the app yet) |
 | Tools (Python scripts, Longform/Shorts toolbox) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |
 | HeartQuarters code | `C:\Dev\HeartQuarters` (Git), outside Drive |
 | App cache / database (later) | `C:\Dev\HeartQuarters\data\` (ignored by Git; can be deleted) |

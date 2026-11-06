@@ -1,0 +1,201 @@
+import { useEffect, useState } from 'react';
+import {
+  fileUrl,
+  formatSize,
+  getJson,
+  openInExplorer,
+  type FileRef,
+  type WritingDetail,
+  type WritingSummary,
+} from './api';
+
+interface Section {
+  section: string;
+  pieces: WritingSummary[];
+}
+
+// The selected piece is kept in the address: #Substack/My Journey/2022-02 – Kinbaku
+function pieceFromHash(): string | null {
+  const rest = location.hash.slice(1).split('/').slice(1).join('/');
+  return rest ? decodeURIComponent(rest) : null;
+}
+
+export function SubstackPage() {
+  const [sections, setSections] = useState<Section[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(pieceFromHash);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getJson<Section[]>('/api/writing').then(setSections, (e) => setError(e.message));
+    const onHash = () => setSelected(pieceFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  return (
+    <div className="split">
+      <aside className="sidebar">
+        {error && <p className="error">{error}</p>}
+        {!sections && !error && <p className="muted">Loading…</p>}
+        {sections?.map((s) => (
+          <details key={s.section} className="sidebar-section" open>
+            <summary>
+              {s.section} <span className="muted">({s.pieces.length})</span>
+            </summary>
+            {s.pieces.map((p) => (
+              <a
+                key={p.id}
+                href={`#Substack/${encodeURIComponent(p.id)}`}
+                className={`project-link ${p.id === selected ? 'active' : ''}`}
+              >
+                {p.date && <span className="num">{p.date}</span>}
+                <span className="title">{p.title}</span>
+                {p.draftCount === 0 && <span className="muted" title="No drafts">–</span>}
+              </a>
+            ))}
+          </details>
+        ))}
+      </aside>
+      <section className="content">
+        {selected ? <PieceView id={selected} /> : <p className="muted">Pick a piece on the left.</p>}
+      </section>
+    </div>
+  );
+}
+
+function PieceView({ id }: { id: string }) {
+  const [piece, setPiece] = useState<WritingDetail | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPiece(null);
+    setError(null);
+    getJson<WritingDetail>(`/api/writing/piece?id=${encodeURIComponent(id)}`).then((p) => {
+      setPiece(p);
+      setDraft(p.drafts[0]?.path ?? null);
+    }, (e) => setError(e.message));
+  }, [id]);
+
+  if (error) return <p className="error">{error}</p>;
+  if (!piece) return <p className="muted">Loading…</p>;
+
+  return (
+    <div>
+      <div className="page-head">
+        <h1>
+          {piece.date && <span className="num">{piece.date}</span>} {piece.title}
+        </h1>
+        <button onClick={() => openInExplorer('writing', piece.id)}>Open folder</button>
+      </div>
+      <p className="muted">{piece.section}</p>
+
+      {piece.previews.length > 0 && (
+        <div className="card">
+          <h4>Substack preview</h4>
+          <ImageGrid files={piece.previews} />
+        </div>
+      )}
+
+      <div className="card">
+        <h4>Drafts</h4>
+        {piece.drafts.length === 0 && piece.googleDocs.length === 0 && (
+          <p className="muted">No drafts in this folder.</p>
+        )}
+        <div className="versions">
+          {piece.drafts.map((d) => (
+            <button
+              key={d.path}
+              className={`version ${d.path === draft ? 'active' : ''}`}
+              onClick={() => setDraft(d.path)}
+            >
+              {d.name.split('/').pop()?.replace(/\.docx$/i, '')}
+            </button>
+          ))}
+          {piece.googleDocs.map((g) => (
+            <a key={g.url} className="button-link" href={g.url} target="_blank" rel="noreferrer">
+              {g.name} ↗ <span className="muted">Google Doc</span>
+            </a>
+          ))}
+        </div>
+        {draft && <DraftView path={draft} />}
+      </div>
+
+      {piece.images.length > 0 && (
+        <div className="card">
+          <h4>Images ({piece.images.length})</h4>
+          <ImageGrid files={piece.images} />
+        </div>
+      )}
+
+      {piece.videos.length > 0 && (
+        <div className="card">
+          <h4>Videos ({piece.videos.length})</h4>
+          <VideoList files={piece.videos} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftView({ path }: { path: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHtml(null);
+    setError(null);
+    getJson<{ html: string }>(`/api/writing/draft?path=${encodeURIComponent(path)}`).then(
+      (r) => setHtml(r.html),
+      (e) => setError(e.message),
+    );
+  }, [path]);
+
+  return (
+    <div className="draft">
+      <div className="draft-actions">
+        <button className="small" onClick={() => openInExplorer('writing', path)}>
+          Open folder
+        </button>
+        <a className="small button-link" href={fileUrl('writing', path)} download>
+          Download .docx
+        </a>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {!html && !error && <p className="muted">Loading…</p>}
+      {/* The HTML comes from your own Word file, converted on this PC. */}
+      {html && <article className="markdown draft-body" dangerouslySetInnerHTML={{ __html: html }} />}
+    </div>
+  );
+}
+
+function ImageGrid({ files }: { files: FileRef[] }) {
+  return (
+    <div className="covers">
+      {files.map((f) => (
+        <a key={f.path} href={fileUrl('writing', f.path)} target="_blank" rel="noreferrer" title={f.name}>
+          <img src={fileUrl('writing', f.path)} alt={f.name} loading="lazy" />
+          <span>{f.name}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function VideoList({ files }: { files: FileRef[] }) {
+  const [playing, setPlaying] = useState<string | null>(null);
+  return (
+    <div>
+      {files.map((f) => (
+        <div key={f.path} className="export-row">
+          <span>{f.name}</span>
+          <span className="muted">{formatSize(f.size)}</span>
+          <button onClick={() => setPlaying(playing === f.path ? null : f.path)}>
+            {playing === f.path ? 'Hide' : 'Play'}
+          </button>
+        </div>
+      ))}
+      {playing && <video className="player" src={fileUrl('writing', playing)} controls autoPlay />}
+    </div>
+  );
+}

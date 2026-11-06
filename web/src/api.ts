@@ -9,6 +9,7 @@ export type {
   FileRef,
 } from '../../server/projects';
 export type { Job } from '../../server/tools';
+export type { WritingSummary, WritingDetail } from '../../server/writing';
 export type { RootId };
 
 export async function getJson<T>(url: string): Promise<T> {

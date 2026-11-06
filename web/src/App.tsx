@@ -1,20 +1,27 @@
 import { useEffect, useState } from 'react';
 import { ProjectsPage } from './ProjectsPage';
+import { SubstackPage } from './SubstackPage';
 import { GuidesPage } from './GuidesPage';
 import { ToolsPage } from './ToolsPage';
 
-const TABS = ['Projects', 'Guides', 'Tools'] as const;
-type Tab = (typeof TABS)[number];
+// Each tab has an id (used in the address, e.g. #Videos) and a label.
+const TABS = [
+  { id: 'Videos', label: 'Video Projects' },
+  { id: 'Substack', label: 'Substack' },
+  { id: 'Guides', label: 'Guides' },
+  { id: 'Tools', label: 'Tools' },
+] as const;
+type TabId = (typeof TABS)[number]['id'];
 
-// The current tab is kept in the address (#Projects, #Guides, #Tools)
-// so refreshing the page keeps you where you were.
-function tabFromHash(): Tab {
+// The current tab is kept in the address so refreshing keeps you where you were.
+function tabFromHash(): TabId {
   const name = decodeURIComponent(location.hash.slice(1).split('/')[0]);
-  return (TABS as readonly string[]).includes(name) ? (name as Tab) : 'Projects';
+  if (name === 'Projects') return 'Videos'; // old bookmarks
+  return TABS.find((t) => t.id === name)?.id ?? 'Videos';
 }
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [tab, setTab] = useState<TabId>(tabFromHash);
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash());
@@ -31,14 +38,15 @@ export function App() {
         </div>
         <nav>
           {TABS.map((t) => (
-            <a key={t} href={`#${t}`} className={t === tab ? 'active' : ''}>
-              {t}
+            <a key={t.id} href={`#${t.id}`} className={t.id === tab ? 'active' : ''}>
+              {t.label}
             </a>
           ))}
         </nav>
       </header>
       <main>
-        {tab === 'Projects' && <ProjectsPage />}
+        {tab === 'Videos' && <ProjectsPage />}
+        {tab === 'Substack' && <SubstackPage />}
         {tab === 'Guides' && <GuidesPage />}
         {tab === 'Tools' && <ToolsPage />}
       </main>

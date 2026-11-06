@@ -10,7 +10,7 @@ import {
 } from './api';
 import { PackagingDoc } from './PackagingDoc';
 
-// The selected project is kept in the address: #Projects/022 - Worth Telling Them
+// The selected project is kept in the address: #Videos/022 - Worth Telling Them
 function projectFromHash(): string | null {
   const [, id] = location.hash.slice(1).split('/');
   return id ? decodeURIComponent(id) : null;
@@ -39,7 +39,7 @@ export function ProjectsPage() {
           .map((p) => (
             <a
               key={p.id}
-              href={`#Projects/${encodeURIComponent(p.id)}`}
+              href={`#Videos/${encodeURIComponent(p.id)}`}
               className={`project-link ${p.id === selected ? 'active' : ''}`}
             >
               <span className="num">{p.number}</span>

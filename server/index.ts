@@ -7,6 +7,7 @@ import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
 import { getJob, listTools, runTool } from './tools.js';
+import { draftHtml, listWriting, readWriting } from './writing.js';
 
 const app = express();
 app.use(express.json());
@@ -56,6 +57,23 @@ app.post('/api/open', handle((req, res) => {
   spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
 }));
+
+// ---- Writing (Substack) ---------------------------------------------------
+
+app.get('/api/writing', handle((_req, res) => {
+  res.json(listWriting());
+}));
+
+app.get('/api/writing/piece', handle((req, res) => {
+  res.json(readWriting(String(req.query.id ?? '')));
+}));
+
+app.get('/api/writing/draft', (req, res) => {
+  draftHtml(String(req.query.path ?? '')).then(
+    (html) => res.json({ html }),
+    (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
 
 // ---- Guides ---------------------------------------------------------------
 

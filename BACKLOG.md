@@ -24,6 +24,15 @@ Automation levels:
 - Tools: Run buttons with live output for UpdateContentArchive,
   VideoMetaPackager, SubstackDownloader.
 
+## Done since v0.1
+
+- Icon (shortcut, browser tab, header) and taskbar pinning.
+- Browse every packaging version (Legacy, V01, V05 Shock...).
+- Collapsible packaging fields; Copy with a fallback.
+- "Projects" tab renamed "Video Projects".
+- Substack tab: the Writing folder by section; Word drafts readable in the
+  app; preview image, photos, videos; Google Doc links.
+
 ## Now
 
 | # | Item | Level | Notes |
