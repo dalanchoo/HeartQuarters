@@ -49,31 +49,51 @@ export function PackagingDoc({ file }: { file: FileRef }) {
       {isEmpty && <p className="muted">Empty.</p>}
       {fields &&
         fields.map((f, i) => (
-          <div key={i} className="field">
-            <div className="field-head">
+          <details key={i} className="field" open>
+            <summary className="field-head">
               <strong>{f.label}</strong>
               {f.value && <CopyButton text={f.value} />}
-            </div>
+            </summary>
             <div className="field-value">{f.value || <span className="muted">(empty)</span>}</div>
-          </div>
+          </details>
         ))}
       {text && !fields && !isEmpty && <pre className="raw">{text}</pre>}
     </div>
   );
 }
 
+/** Copies text, falling back to the older method if the browser refuses. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
+}
+
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<'copied' | 'failed' | null>(null);
   return (
     <button
       className="small"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+      onClick={async (e) => {
+        // Don't let the click also open/close the section the button sits in.
+        e.preventDefault();
+        e.stopPropagation();
+        setResult((await copyText(text)) ? 'copied' : 'failed');
+        setTimeout(() => setResult(null), 1500);
       }}
     >
-      {copied ? 'Copied ✓' : label}
+      {result === 'copied' ? 'Copied ✓' : result === 'failed' ? 'Copy failed' : label}
     </button>
   );
 }
