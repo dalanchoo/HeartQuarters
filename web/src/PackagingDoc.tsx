@@ -1,0 +1,79 @@
+import { useEffect, useState } from 'react';
+import { getText, type FileRef } from './api';
+
+// Packaging files (YouTube.md etc.) are written as labelled blocks:
+//
+//   Title:
+//   When Should You Tell Someone You Have SDAM?
+//
+//   Description:
+//   ...
+//
+// This splits them into fields so each one gets its own Copy button.
+interface Field {
+  label: string;
+  value: string;
+}
+
+const LABEL_RE = /^([A-Z][A-Za-z ]{0,30}):\s*$/;
+
+export function parseFields(text: string): Field[] | null {
+  const fields: { label: string; lines: string[] }[] = [];
+  for (const line of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const match = LABEL_RE.exec(line.trim());
+    if (match) fields.push({ label: match[1], lines: [] });
+    else if (fields.length) fields[fields.length - 1].lines.push(line);
+  }
+  if (fields.length < 2) return null;
+  return fields.map((f) => ({ label: f.label, value: f.lines.join('\n').trim() }));
+}
+
+export function PackagingDoc({ file }: { file: FileRef }) {
+  const [text, setText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getText('projects', file.path).then(setText, (e) => setError(e.message));
+  }, [file.path]);
+
+  const fields = text ? parseFields(text) : null;
+  const isEmpty = text !== null && text.replace(/^#.*$/gm, '').trim() === '';
+
+  return (
+    <div className="block">
+      <h4>
+        {file.name}
+        {text && !isEmpty && <CopyButton text={text} label="Copy all" />}
+      </h4>
+      {error && <p className="error">{error}</p>}
+      {isEmpty && <p className="muted">Empty.</p>}
+      {fields &&
+        fields.map((f, i) => (
+          <div key={i} className="field">
+            <div className="field-head">
+              <strong>{f.label}</strong>
+              {f.value && <CopyButton text={f.value} />}
+            </div>
+            <div className="field-value">{f.value || <span className="muted">(empty)</span>}</div>
+          </div>
+        ))}
+      {text && !fields && !isEmpty && <pre className="raw">{text}</pre>}
+    </div>
+  );
+}
+
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="small"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? 'Copied ✓' : label}
+    </button>
+  );
+}

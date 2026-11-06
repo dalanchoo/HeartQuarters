@@ -1,0 +1,32 @@
+{
+  "port": 4321,
+  "videoProjectsDir": "D:\\Google Drive\\HeartMind\\Video Projects",
+  "toolsDir": "D:\\Google Drive\\HeartMind\\HMF_SYS\\Tools",
+  "python": "C:\\Users\\dalan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "guides": [
+    { "name": "Longform editing (LONGFORM.md)", "root": "projects", "path": "LONGFORM.md" },
+    { "name": "Shorts (SHORTS.md)", "root": "projects", "path": "SHORTS.md" },
+    { "name": "Video editing rules (CLAUDE.md)", "root": "projects", "path": "CLAUDE.md" },
+    { "name": "Longform toolbox (Tools/Longform/README.md)", "root": "tools", "path": "Longform/README.md" }
+  ],
+  "tools": [
+    {
+      "id": "update-content-archive",
+      "name": "Update content archive",
+      "description": "Runs VideoMetaPackager, then SubstackDownloader.",
+      "script": "UpdateContentArchive.py"
+    },
+    {
+      "id": "video-meta-packager",
+      "name": "Video meta packager",
+      "description": "Zips every video's metadata and subtitles into HMF_SYS/Generated/YouTube.",
+      "script": "VideoMetaPackager.py"
+    },
+    {
+      "id": "substack-downloader",
+      "name": "Substack downloader",
+      "description": "Downloads all Substack posts and media into HMF_SYS/Generated/Substack.",
+      "script": "SubstackDownloader.py"
+    }
+  ]
+}
