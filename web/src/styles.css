@@ -38,7 +38,8 @@ button.small { padding: 0.15rem 0.55rem; font-size: 0.75rem; text-transform: non
 .app { display: flex; flex-direction: column; height: 100vh; }
 .topbar { display: flex; align-items: center; gap: 2rem; padding: 0 1.25rem; height: 52px;
           background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.brand { font-weight: 700; color: var(--accent); font-size: 1.1rem; }
+.brand { font-weight: 700; color: var(--accent); font-size: 1.1rem; display: flex; align-items: center; gap: 0.55rem; }
+.brand img { width: 34px; height: 34px; }
 .topbar nav { display: flex; gap: 0.25rem; }
 .topbar nav a { padding: 0.4rem 0.9rem; border-radius: 6px; color: var(--text); text-decoration: none; }
 .topbar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }

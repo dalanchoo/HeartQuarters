@@ -25,7 +25,10 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">HeartQuarters</div>
+        <div className="brand">
+          <img src="/icon.png" alt="" />
+          HeartQuarters
+        </div>
         <nav>
           {TABS.map((t) => (
             <a key={t} href={`#${t}`} className={t === tab ? 'active' : ''}>
