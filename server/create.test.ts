@@ -4,7 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { checkFolderName, createCapCutDraft, createSeries, createVideoFolder, draftsForVideo, suggestPrefix } from './create';
+import {
+  checkFolderName,
+  createCapCutDraft,
+  createSeries,
+  createVideoFolder,
+  draftsForVideo,
+  plainDraftName,
+  suggestPrefix,
+} from './create';
 import { makeTree, removeTree } from './testing';
 
 const YEAR = new Date().getFullYear();
@@ -174,6 +182,20 @@ describe('copying an existing CapCut draft (shorts cut from a long-form)', () =>
     expect(draftsForVideo('022 - Worth Telling Them', all)).toEqual(['022 - Worth Telling Them(2)', '022 - Other Cut']);
     expect(draftsForVideo('015 - NVC/015A - Making It Worse', ['015A - Making It Worse(3)', '015 - NVC'])).toEqual([
       '015A - Making It Worse(3)',
+    ]);
+  });
+
+  it('removes every copy number, but never a year in brackets', () => {
+    expect(plainDraftName('022 - Worth Telling Them(2)')).toBe('022 - Worth Telling Them');
+    expect(plainDraftName('000_S01 - I Thought I Was Fine(2) (2)')).toBe('000_S01 - I Thought I Was Fine');
+    expect(plainDraftName('010B_S04 - Sentence. Interpretation. Reaction(2) (5)')).toBe(
+      '010B_S04 - Sentence. Interpretation. Reaction',
+    );
+    expect(plainDraftName('000A - Legacy (2025)')).toBe('000A - Legacy (2025)');
+    expect(plainDraftName('000A - Legacy (2025)(1)')).toBe('000A - Legacy (2025)');
+    expect(plainDraftName('022 - No Copy Number')).toBe('022 - No Copy Number');
+    expect(draftsForVideo('010 - Feelings/010A - How To Not Be Heard', ['010A - How To Not Be Heard(2) (2)'])).toEqual([
+      '010A - How To Not Be Heard(2) (2)',
     ]);
   });
 

@@ -239,8 +239,12 @@ export function checkDraftName(name: string): string {
   return n;
 }
 
-/** CapCut adds "(1)", "(2)"... to copies: "022 - Worth Telling Them(2)" -> "022 - Worth Telling Them". */
-export const plainDraftName = (d: string) => d.replace(/\s*\(\d+\)$/, '').trim();
+/**
+ * CapCut adds "(1)", "(2)"... to copies, and copies of copies get more than one:
+ * "022 - Worth Telling Them(2)" and "000_S01 - Fine(2) (2)" -> the name without them.
+ * Only 1-2 digit numbers count, so a year like "(2025)" is left alone.
+ */
+export const plainDraftName = (d: string) => d.replace(/(\s*\(\d{1,2}\))+$/, '').trim();
 
 /**
  * The drafts that probably belong to a video, best guess first. CapCut adds
