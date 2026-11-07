@@ -5,6 +5,7 @@ import {
   formatSize,
   getJson,
   openInExplorer,
+  thumbUrl,
   type FileRef,
   type WritingDetail,
   type WritingSummary,
@@ -89,60 +90,70 @@ function PieceView({ id }: { id: string }) {
   if (error) return <p className="error">{error}</p>;
   if (!piece) return <p className="muted">Loading…</p>;
 
+  const hasDrafts = piece.drafts.length > 0 || piece.googleDocs.length > 0;
+
   return (
     <div>
       <div className="page-head">
         <h1>
           {piece.date && <span className="num">{piece.date}</span>} {piece.title}
+          <span className="h1-note">{piece.section}</span>
         </h1>
-        <button onClick={() => openInExplorer('writing', piece.id)}>Open folder</button>
+        <button className="small" onClick={() => openInExplorer('writing', piece.id)}>
+          Open folder
+        </button>
       </div>
-      <p className="muted">{piece.section}</p>
 
-      {piece.previews.length > 0 && (
-        <div className="card">
-          <h4>Substack preview</h4>
-          <ImageGrid files={piece.previews} />
-        </div>
-      )}
-
-      <div className="card">
-        <h4>Drafts</h4>
-        {piece.drafts.length === 0 && piece.googleDocs.length === 0 && (
-          <p className="muted">No drafts in this folder.</p>
-        )}
-        <div className="versions">
-          {piece.drafts.map((d) => (
-            <button
-              key={d.path}
-              className={`version ${d.path === draft ? 'active' : ''}`}
-              onClick={() => setDraft(d.path)}
-            >
-              {d.name.split('/').pop()?.replace(/\.docx$/i, '')}
-            </button>
-          ))}
-          {piece.googleDocs.map((g) => (
-            <a key={g.url} className="button-link" href={g.url} target="_blank" rel="noreferrer">
-              {g.name} ↗ <span className="muted">Google Doc</span>
+      {/* Two columns: preview, photos and videos on the left; the draft on the right. */}
+      <div className="card piece-body">
+        <div className="piece-media">
+          {piece.previews.length > 0 ? (
+            <a className="cover-main" href={fileUrl('writing', piece.previews[0].path)} target="_blank" rel="noreferrer"
+               title="Substack preview (click for full size)">
+              <img src={thumbUrl('writing', piece.previews[0].path, 640)} alt="Substack preview" />
             </a>
-          ))}
+          ) : (
+            <p className="muted">No Substack preview image.</p>
+          )}
+
+          {piece.videos.length > 0 && (
+            <>
+              <h4>Videos ({piece.videos.length})</h4>
+              <VideoList files={piece.videos} />
+            </>
+          )}
+
+          {piece.images.length > 0 && (
+            <>
+              <h4>Images ({piece.images.length})</h4>
+              <ImageGrid files={piece.images} />
+            </>
+          )}
         </div>
-        {draft && <DraftView path={draft} />}
+
+        <div className="piece-docs">
+          {!hasDrafts && <p className="muted">No drafts in this folder.</p>}
+          {hasDrafts && (
+            <div className="versions">
+              {piece.drafts.map((d) => (
+                <button
+                  key={d.path}
+                  className={`version small ${d.path === draft ? 'active' : ''}`}
+                  onClick={() => setDraft(d.path)}
+                >
+                  {d.name.split('/').pop()?.replace(/\.docx$/i, '')}
+                </button>
+              ))}
+              {piece.googleDocs.map((g) => (
+                <a key={g.url} className="button-link small" href={g.url} target="_blank" rel="noreferrer">
+                  {g.name} ↗ <span className="muted">Google Doc</span>
+                </a>
+              ))}
+            </div>
+          )}
+          {draft && <DraftView path={draft} />}
+        </div>
       </div>
-
-      {piece.images.length > 0 && (
-        <div className="card">
-          <h4>Images ({piece.images.length})</h4>
-          <ImageGrid files={piece.images} />
-        </div>
-      )}
-
-      {piece.videos.length > 0 && (
-        <div className="card">
-          <h4>Videos ({piece.videos.length})</h4>
-          <VideoList files={piece.videos} />
-        </div>
-      )}
     </div>
   );
 }
@@ -185,13 +196,13 @@ function DraftView({ path }: { path: string }) {
   );
 }
 
+/** Small square previews; click one for full size. */
 function ImageGrid({ files }: { files: FileRef[] }) {
   return (
-    <div className="covers">
+    <div className="thumb-grid">
       {files.map((f) => (
         <a key={f.path} href={fileUrl('writing', f.path)} target="_blank" rel="noreferrer" title={f.name}>
-          <img src={fileUrl('writing', f.path)} alt={f.name} loading="lazy" />
-          <span>{f.name}</span>
+          <img src={thumbUrl('writing', f.path, 240)} alt={f.name} loading="lazy" />
         </a>
       ))}
     </div>
@@ -203,12 +214,12 @@ function VideoList({ files }: { files: FileRef[] }) {
   return (
     <div>
       {files.map((f) => (
-        <div key={f.path} className="export-row">
-          <span>{f.name}</span>
-          <span className="muted">{formatSize(f.size)}</span>
-          <button onClick={() => setPlaying(playing === f.path ? null : f.path)}>
-            {playing === f.path ? 'Hide' : 'Play'}
+        <div key={f.path} className="export-row" title={f.name}>
+          <button className="small" onClick={() => setPlaying(playing === f.path ? null : f.path)}>
+            {playing === f.path ? '■ Hide' : '▶ Play'}
           </button>
+          <span className="ellipsis">{f.name}</span>
+          <span className="muted">{formatSize(f.size)}</span>
         </div>
       ))}
       {playing && <video className="player" src={fileUrl('writing', playing)} controls autoPlay />}

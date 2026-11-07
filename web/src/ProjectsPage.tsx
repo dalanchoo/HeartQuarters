@@ -4,6 +4,7 @@ import {
   formatSize,
   getJson,
   openInExplorer,
+  thumbUrl,
   type Piece,
   type ProjectDetail,
   type ProjectNode,
@@ -220,69 +221,76 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
         </span>
       </summary>
 
-      <div className="card-actions">
-        <button onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
-      </div>
+      {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
+      <div className="piece-body">
+        <div className="piece-media">
+          {version && version.covers.length > 0 && (
+            <div className="cover-stack">
+              {version.covers.map((f, i) => (
+                <a
+                  key={f.path}
+                  className={i === 0 ? 'cover-main' : 'cover-extra'}
+                  href={fileUrl('projects', f.path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`${f.name} (click for full size)`}
+                >
+                  <img src={thumbUrl('projects', f.path, i === 0 ? 640 : 240)} alt={f.name} loading="lazy" />
+                </a>
+              ))}
+            </div>
+          )}
 
-      {piece.exports.length > 0 && (
-        <div className="block">
-          <h4>Exports</h4>
           {piece.exports.map((f) => (
-            <div key={f.path} className="export-row">
-              <span>{f.name}</span>
-              <span className="muted">{formatSize(f.size)}</span>
-              <button onClick={() => setPlaying(playing === f.path ? null : f.path)}>
-                {playing === f.path ? 'Hide' : 'Play'}
+            <div key={f.path} className="export-row" title={f.name}>
+              <button className="small" onClick={() => setPlaying(playing === f.path ? null : f.path)}>
+                {playing === f.path ? '■ Hide' : '▶ Play'}
               </button>
+              <span className="ellipsis">{f.name}</span>
+              <span className="muted">{formatSize(f.size)}</span>
             </div>
           ))}
-          {playing && (
-            <video className="player" src={fileUrl('projects', playing)} controls autoPlay preload="metadata" />
-          )}
-        </div>
-      )}
 
-      {version && (
-        <div className="block">
-          <h4>Packaging</h4>
+          {version && (
+            <div className="versions">
+              {piece.versions.map((v) => (
+                <button
+                  key={v.name}
+                  className={`version small ${v.name === version.name ? 'active' : ''}`}
+                  onClick={() => setVersionName(v.name)}
+                  title={v.name === latest ? 'Latest version' : undefined}
+                >
+                  {versionLabel(v.name)}
+                  {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="versions">
-            {piece.versions.map((v) => (
-              <button
-                key={v.name}
-                className={`version ${v.name === version.name ? 'active' : ''}`}
-                onClick={() => setVersionName(v.name)}
-              >
-                {versionLabel(v.name)}
-                {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
-              </button>
-            ))}
-            <button className="small" onClick={() => openInExplorer('projects', version.path)}>
-              Open {versionLabel(version.name)} folder
+            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>
+              Open folder
             </button>
-          </div>
-          {version.docs.length === 0 && version.covers.length === 0 && (
-            <p className="muted">This version folder is empty.</p>
-          )}
-        </div>
-      )}
-
-      {version && version.covers.length > 0 && (
-        <div className="block">
-          <h4>Covers</h4>
-          <div className="covers">
-            {version.covers.map((f) => (
-              <a key={f.path} href={fileUrl('projects', f.path)} target="_blank" rel="noreferrer" title={f.name}>
-                <img src={fileUrl('projects', f.path)} alt={f.name} loading="lazy" />
-                <span>{f.name}</span>
-              </a>
-            ))}
+            {version && (
+              <button className="small" onClick={() => openInExplorer('projects', version.path)}>
+                Open {versionLabel(version.name)} folder
+              </button>
+            )}
           </div>
         </div>
-      )}
 
-      {version?.docs.map((d) => (
-        <PackagingDoc key={d.path} file={d} />
-      ))}
+        <div className="piece-docs">
+          {!version && <p className="muted">No packaging yet.</p>}
+          {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
+          {version?.docs.map((d) => (
+            <PackagingDoc key={d.path} file={d} />
+          ))}
+        </div>
+      </div>
+
+      {playing && (
+        <video className="player" src={fileUrl('projects', playing)} controls autoPlay preload="metadata" />
+      )}
     </details>
   );
 }
