@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"tsx watch server/index.ts\" \"vite\"",
     "build": "vite build",
-    "start": "vite build && tsx server/index.ts --open",
+    "start": "vite build && concurrently -k -n screens,engine -c magenta,blue \"vite build --watch --logLevel warn\" \"tsx watch --clear-screen=false --include config.json server/index.ts --open\"",
     "serve": "tsx server/index.ts",
     "typecheck": "tsc --noEmit"
   },

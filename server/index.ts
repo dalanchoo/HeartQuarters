@@ -105,10 +105,33 @@ app.use('/api', (_req, res) => {
 
 // ---- Screens (built by `npm run build`) -----------------------------------
 
+// The screens are rebuilt in the background while the app runs (npm start),
+// so look for them on each request rather than once at startup.
 const webDir = path.join(appDir, 'dist', 'web');
-if (fs.existsSync(webDir)) {
-  app.use(express.static(webDir));
-  app.use((_req, res) => res.sendFile(path.join(webDir, 'index.html')));
+app.use(express.static(webDir));
+app.use((_req, res) => {
+  res.sendFile(path.join(webDir, 'index.html'), (err) => {
+    if (err && !res.headersSent) res.status(503).send('The screens are still building. Refresh in a moment.');
+  });
+});
+
+/**
+ * With auto-reload, the engine restarts whenever its code changes. Only open
+ * the browser on the first start: the watcher (our parent process) stays the
+ * same across restarts, so remember which watcher already opened it.
+ */
+function shouldOpenBrowser(): boolean {
+  if (!process.argv.includes('--open')) return false;
+  const marker = path.join(appDir, 'data', 'browser-opened-by.txt');
+  const watcher = String(process.ppid);
+  try {
+    if (fs.readFileSync(marker, 'utf8') === watcher) return false;
+  } catch {
+    /* first run */
+  }
+  fs.mkdirSync(path.dirname(marker), { recursive: true });
+  fs.writeFileSync(marker, watcher);
+  return true;
 }
 
 // HQ_PORT lets a second copy run alongside (e.g. for testing).
@@ -117,7 +140,7 @@ const url = `http://127.0.0.1:${port}`;
 app.listen(port, '127.0.0.1', () => {
   console.log(`HeartQuarters is running at ${url}`);
   console.log('Close this window (or press Ctrl+C) to stop it.');
-  if (process.argv.includes('--open')) {
+  if (shouldOpenBrowser()) {
     spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
   }
 });
