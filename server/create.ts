@@ -143,8 +143,19 @@ function copyTemplate(kind: NewKind, dest: string, name: string) {
   }
 }
 
-export function createVideoFolder(kind: NewKind, parentId: string, rawName: string): CreateResult {
+/**
+ * Makes the new folder, then its CapCut draft. `copyDraft` (shorts only) names
+ * an existing CapCut draft to duplicate, e.g. the long-form's; otherwise the
+ * empty template draft is used.
+ */
+export async function createVideoFolder(
+  kind: NewKind,
+  parentId: string,
+  rawName: string,
+  copyDraft = '',
+): Promise<CreateResult> {
   const name = checkFolderName(rawName);
+  const source = copyDraft ? checkDraftName(copyDraft) : '';
   checkParent(kind, parentId);
   templateDir(kind); // check before making anything
   const year = String(new Date().getFullYear());
@@ -174,7 +185,7 @@ export function createVideoFolder(kind: NewKind, parentId: string, rawName: stri
   return {
     showId,
     path: folderId,
-    capcut: createCapCutDraft(name, kind === 'top' || kind === 'part' ? 'longform' : 'short'),
+    capcut: await createCapCutDraft(name, kind === 'top' || kind === 'part' ? 'longform' : 'short', source),
   };
 }
 
@@ -186,14 +197,53 @@ function setJsonValue(json: string, key: string, value: string | number): string
   return json.replace(re, (_m, head: string) => head + JSON.stringify(value));
 }
 
+const isDraft = (dir: string) => fs.existsSync(path.join(dir, 'draft_meta_info.json'));
+
+/** Every CapCut draft, newest first. */
+export function listDrafts(): string[] {
+  const dir = config.capcutDraftsDir;
+  if (!dir) return [];
+  return subfolders(dir)
+    .filter((d) => isDraft(path.join(dir, d)))
+    .map((d) => ({ d, t: fs.statSync(path.join(dir, d, 'draft_meta_info.json')).mtimeMs }))
+    .sort((a, b) => b.t - a.t)
+    .map((x) => x.d);
+}
+
+/** A draft name must be one existing draft, nothing else. */
+function checkDraftName(name: string): string {
+  const n = checkFolderName(name);
+  if (!isDraft(path.join(config.capcutDraftsDir, n))) throw new Error(`There's no CapCut draft called "${n}".`);
+  return n;
+}
+
 /**
- * Makes a CapCut draft called `name` by copying an empty draft you made once
- * in CapCut ("--- LONGFORM TEMPLATE" or "--- SHORTS TEMPLATE"), then giving the
- * copy its own name and id. Never fails the whole job: it reports what happened.
+ * The drafts that probably belong to a video, best guess first. CapCut adds
+ * "(1)", "(2)"... to copies, so "022 - Worth Telling Them(1)" counts too.
  */
-export function createCapCutDraft(name: string, which: 'longform' | 'short'): CreateResult['capcut'] {
+export function draftsForVideo(parentId: string, all = listDrafts()): string[] {
+  const folder = parentId.split('/').at(-1) ?? '';
+  const num = numberOf(parentId);
+  const plain = (d: string) => d.replace(/\s*\(\d+\)$/, '').trim();
+  const same = all.filter((d) => plain(d).toLowerCase() === folder.toLowerCase());
+  const similar = all.filter((d) => !same.includes(d) && new RegExp(`^${num}\\s*[-–]`).test(d));
+  return [...same, ...similar];
+}
+
+/**
+ * Makes a CapCut draft called `name` by copying another draft: `source` if
+ * given (e.g. the long-form's draft, for a short cut from it), otherwise the
+ * empty draft you made once in CapCut ("--- LONGFORM TEMPLATE" or
+ * "--- SHORTS TEMPLATE"). The copy gets its own name and id. Never fails the
+ * whole job: it reports what happened.
+ */
+export async function createCapCutDraft(
+  name: string,
+  which: 'longform' | 'short',
+  source = '',
+): Promise<CreateResult['capcut']> {
   const drafts = config.capcutDraftsDir;
-  const templateName = config.capcutTemplates[which];
+  const templateName = source || config.capcutTemplates[which];
   if (!drafts) return { created: false, message: 'No CapCut drafts folder is set in config.json.' };
   const template = path.join(drafts, templateName);
   const dest = path.join(drafts, name);
@@ -208,7 +258,9 @@ export function createCapCutDraft(name: string, which: 'longform' | 'short'): Cr
     if (fs.existsSync(dest)) return { created: false, message: `A CapCut draft called "${name}" already exists. Left it alone.` };
     makeNewFolder(dest);
     madeDest = true;
-    fs.cpSync(template, dest, { recursive: true, errorOnExist: true, force: false });
+    // Not cpSync: a big draft can take a while, and the app should keep responding.
+    // dest was just made empty above, so nothing in it can be overwritten.
+    await fs.promises.cp(template, dest, { recursive: true, force: false });
     const metaFile = path.join(dest, 'draft_meta_info.json');
     const now = Date.now() * 1000; // CapCut counts in microseconds
     let meta = fs.readFileSync(metaFile, 'utf8');
@@ -223,7 +275,8 @@ export function createCapCutDraft(name: string, which: 'longform' | 'short'): Cr
       throw new Error("the template's draft_meta_info.json isn't in the expected format.");
     }
     fs.writeFileSync(metaFile, meta);
-    return { created: true, message: `Made the CapCut draft "${name}". Restart CapCut if it doesn't show up.` };
+    const from = source ? ` (a copy of "${source}")` : '';
+    return { created: true, message: `Made the CapCut draft "${name}"${from}. Restart CapCut if it doesn't show up.` };
   } catch (e) {
     // Only ever removes the half-made copy this function just started.
     if (madeDest) fs.rmSync(dest, { recursive: true, force: true });

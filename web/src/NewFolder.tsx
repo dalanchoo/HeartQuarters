@@ -59,14 +59,22 @@ function NewFolderDialog({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Shorts only: which CapCut draft to copy ('' = the empty template).
+  const [drafts, setDrafts] = useState<{ videoDrafts: string[]; otherDrafts: string[] } | null>(null);
+  const [copyDraft, setCopyDraft] = useState('');
   const input = useRef<HTMLInputElement>(null);
 
   // Fill in the next number ("023 - ") and put the cursor after it.
   useEffect(() => {
-    getJson<{ prefix: string }>(`/api/create/suggest?kind=${kind}&parent=${encodeURIComponent(parent)}`).then(
+    type Suggestion = { prefix: string; videoDrafts?: string[]; otherDrafts?: string[] };
+    getJson<Suggestion>(`/api/create/suggest?kind=${kind}&parent=${encodeURIComponent(parent)}`).then(
       (r) => {
         setPrefix(r.prefix);
         setName(r.prefix);
+        if (r.videoDrafts && r.otherDrafts) {
+          setDrafts({ videoDrafts: r.videoDrafts, otherDrafts: r.otherDrafts });
+          setCopyDraft(r.videoDrafts[0] ?? ''); // usually: duplicate the long-form's draft
+        }
       },
       (e) => setError(e.message),
     );
@@ -92,7 +100,7 @@ function NewFolderDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await postJson<CreateResult>('/api/create', { kind, parent, name });
+      const result = await postJson<CreateResult>('/api/create', { kind, parent, name, copyDraft });
       onClose();
       onCreated(result); // shows the new folder, with a note about the CapCut draft
     } catch (e) {
@@ -125,14 +133,50 @@ function NewFolderDialog({
             spellCheck={false}
           />
           <p className="muted small-text">Will be made in: {whereItGoes(kind, parent, name)}</p>
-          <p className="muted small-text">A CapCut draft with the same name is made too.</p>
+          {drafts ? (
+            <>
+              <label className="muted small-text" htmlFor="new-folder-draft">
+                CapCut draft: make a copy of
+              </label>
+              <select
+                id="new-folder-draft"
+                className="text-input"
+                value={copyDraft}
+                disabled={busy}
+                onChange={(e) => setCopyDraft(e.target.value)}
+              >
+                {drafts.videoDrafts.length > 0 && (
+                  <optgroup label="This video's drafts">
+                    {drafts.videoDrafts.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="">Nothing: start with an empty draft</option>
+                <optgroup label="All other drafts (newest first)">
+                  {drafts.otherDrafts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <p className="muted small-text">
+                The copy is named after the short. A big draft can take a minute to copy.
+              </p>
+            </>
+          ) : (
+            <p className="muted small-text">An empty CapCut draft with the same name is made too.</p>
+          )}
           {error && <p className="error">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="small" onClick={onClose} disabled={busy}>
               Cancel
             </button>
             <button type="submit" disabled={!ready}>
-              {busy ? 'Making…' : 'Create'}
+              {busy ? (copyDraft ? 'Copying…' : 'Making…') : 'Create'}
             </button>
           </div>
         </form>

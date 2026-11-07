@@ -213,6 +213,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .modal p { margin: 0.4rem 0; }
 .text-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; padding: 0.4rem 0.55rem;
               border: 1px solid var(--line); border-radius: 6px; margin-top: 0.2rem; }
+.modal label { display: block; margin-top: 0.6rem; }
 .text-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .small-text { font-size: 0.8rem; }
 .warn { color: #9a6200; }

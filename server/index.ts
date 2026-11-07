@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
-import { createVideoFolder, parseKind, suggestPrefix } from './create.js';
+import { createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
@@ -42,14 +42,26 @@ app.get('/api/project', handle((req, res) => {
 // ---- New folders (copies a template; see create.ts) -------------------------
 
 // ?kind=top|part|short|standalone&parent=<id> -> { prefix: "023 - " }
+// For a short, also lists the CapCut drafts it could copy (the video's own first).
 app.get('/api/create/suggest', handle((req, res) => {
-  res.json({ prefix: suggestPrefix(parseKind(req.query.kind), String(req.query.parent ?? '')) });
+  const kind = parseKind(req.query.kind);
+  const parent = String(req.query.parent ?? '');
+  const prefix = suggestPrefix(kind, parent);
+  if (kind !== 'short') return void res.json({ prefix });
+  const all = listDrafts();
+  const mine = draftsForVideo(parent, all);
+  res.json({ prefix, videoDrafts: mine, otherDrafts: all.filter((d) => !mine.includes(d)) });
 }));
 
-app.post('/api/create', handle((req, res) => {
-  const { kind, parent, name } = req.body ?? {};
-  res.json(createVideoFolder(parseKind(kind), String(parent ?? ''), String(name ?? '')));
-}));
+// Async: copying a big CapCut draft can take a while.
+app.post('/api/create', async (req, res) => {
+  try {
+    const { kind, parent, name, copyDraft } = req.body ?? {};
+    res.json(await createVideoFolder(parseKind(kind), String(parent ?? ''), String(name ?? ''), String(copyDraft ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // ---- Files ----------------------------------------------------------------
 

@@ -45,8 +45,9 @@ Automation levels:
   short for a video, new standalone short. Each copies the right
   `--- ... TEMPLATE` folder with the next number filled in, and copies an empty
   CapCut draft (`--- LONGFORM TEMPLATE` / `--- SHORTS TEMPLATE` in CapCut's
-  drafts folder) under the same name. Only ever adds folders; refuses names
-  that already exist.
+  drafts folder) under the same name. A new short can instead duplicate the
+  long-form's CapCut draft (picked by default). Only ever adds folders;
+  refuses names that already exist.
 
 ## Later (from code review)
 
