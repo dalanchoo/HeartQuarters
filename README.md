@@ -36,6 +36,12 @@ npm run typecheck
 
 Checks the TypeScript for mistakes.
 
+```bash
+npm test
+```
+
+Runs the automated tests (a few seconds). They use small fake folders, never your real Drive.
+
 ## Layout
 
 | Folder | What's in it |

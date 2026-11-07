@@ -36,6 +36,17 @@ Automation levels:
 - Expressions tab: category tree with definitions and reference images,
   photo grid with cached previews, tag search, full-size viewer with tags,
   Copy file path. (Browsing only; tagging/favourites still to do.)
+- Security fixes from ChatGPT's review: other websites can't trigger actions
+  (header + origin + host checks), Drive files served sandboxed, junction-proof
+  path check, Word drafts cleaned with DOMPurify. Also: fast-click race fixed,
+  en-dash project names, empty drafts, clear message if Drive is offline.
+- Unit tests (Vitest): `npm test`, 35 tests.
+
+## Later (from code review)
+
+- Large-folder scans run on the engine's main thread, so a slow Drive scan can
+  pause other requests. Fine at today's sizes (~0.3 s); move to background
+  work with a cache if folders grow a lot.
 
 ## Now
 

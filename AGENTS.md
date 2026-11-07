@@ -11,4 +11,11 @@ Instructions for any AI (or person) changing this code.
 4. The app reads `D:\Google Drive\HeartMind`. Never delete, move or overwrite
    anything there without John's explicit OK. Test against copies.
 5. One AI builds at a time; other AIs review.
-6. Before finishing: `npm run typecheck` and `npm run build` must pass.
+6. Before finishing: `npm run typecheck`, `npm test` and `npm run build` must pass.
+7. New logic comes with tests (`*.test.ts` next to the code, using fake folders
+   from `server/testing.ts`, never the real Drive). Security checks
+   (`safeResolve`, `server/security.ts`) must stay covered.
+8. Every request that *does* something (POST etc.) goes through `postJson` in
+   `web/src/api.ts`, which adds the `X-HeartQuarters` header the server requires.
+   Files from Drive are served sandboxed; HTML from documents is cleaned with
+   DOMPurify before display.

@@ -10,8 +10,10 @@ import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
+import { guard, sandboxHeaders } from './security.js';
 
 const app = express();
+app.use(guard); // see security.ts: blocks other websites
 app.use(express.json());
 
 /** Runs a route handler and turns any error into a readable JSON message. */
@@ -41,6 +43,7 @@ app.get('/api/projects/:id', handle((req, res) => {
 // Videos support seeking because Express handles "Range" requests.
 app.get('/api/file', handle((req, res) => {
   const full = safeResolve(parseRoot(req.query.root), String(req.query.path ?? ''));
+  sandboxHeaders(res);
   res.sendFile(full, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: 'File not found.' });
   });
@@ -49,6 +52,7 @@ app.get('/api/file', handle((req, res) => {
 app.get('/api/text', handle((req, res) => {
   const full = safeResolve(parseRoot(req.query.root), String(req.query.path ?? ''));
   if (fs.statSync(full).size > 2_000_000) throw new Error('File too large to show as text.');
+  sandboxHeaders(res);
   res.type('text/plain; charset=utf-8').send(fs.readFileSync(full, 'utf8'));
 }));
 

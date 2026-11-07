@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import mammoth from 'mammoth';
 import { config, safeResolve } from './config.js';
-import type { FileRef } from './projects.js';
+import { requireFolder, type FileRef } from './projects.js';
 
 const SECTIONS = ['My Journey', 'My Reflections', 'My Wisdom'];
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -76,6 +76,7 @@ function describe(section: string, folder: string): WritingSummary {
 }
 
 export function listWriting(): { section: string; pieces: WritingSummary[] }[] {
+  requireFolder(config.writingDir, 'Writing');
   return SECTIONS.map((section) => {
     let folders: string[] = [];
     try {

@@ -26,8 +26,15 @@ export function GuidesPage() {
 
   useEffect(() => {
     if (!current) return;
+    let stale = false; // set when you pick another guide before this one has loaded
     setText('');
-    getText(current.root, current.path).then(setText, (e) => setError(e.message));
+    getText(current.root, current.path).then(
+      (t) => !stale && setText(t),
+      (e) => !stale && setError(e.message),
+    );
+    return () => {
+      stale = true;
+    };
   }, [current]);
 
   return (

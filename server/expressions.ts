@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { requireFolder } from './projects.js';
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const CACHE_MS = 30_000;
@@ -50,13 +51,16 @@ export interface ExpressionIndex {
 
 let cached: { at: number; index: ExpressionIndex } | null = null;
 
-function parseTags(file: string): Tag[] {
-  let text: string;
+function parseTagsFile(file: string): Tag[] {
   try {
-    text = fs.readFileSync(file, 'utf8');
+    return parseTags(fs.readFileSync(file, 'utf8'));
   } catch {
     return [];
   }
+}
+
+/** Reads tag lines like "Joy, 82%, UNCONFIRMED" or "Warmth, N/A, CONFIRMED". */
+export function parseTags(text: string): Tag[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.split(',').map((s) => s.trim()))
@@ -79,8 +83,9 @@ function readText(file: string): string | null {
   }
 }
 
-function build(): ExpressionIndex {
+export function buildExpressionIndex(): ExpressionIndex {
   const root = config.expressionsDir;
+  requireFolder(root, 'Expressions');
   const categories: ExpressionCategory[] = [];
   const photos: ExpressionPhoto[] = [];
 
@@ -116,7 +121,7 @@ function build(): ExpressionIndex {
           path: rel,
           name: base,
           category: relPath,
-          tags: files.has(`${base}.txt`) ? parseTags(path.join(dir, `${base}.txt`)) : [],
+          tags: files.has(`${base}.txt`) ? parseTagsFile(path.join(dir, `${base}.txt`)) : [],
         });
         category.ownCount++;
       }
@@ -141,7 +146,7 @@ function build(): ExpressionIndex {
 /** The whole library, re-read at most every 30 seconds. */
 export function expressionIndex(): ExpressionIndex {
   if (!cached || Date.now() - cached.at > CACHE_MS) {
-    cached = { at: Date.now(), index: build() };
+    cached = { at: Date.now(), index: buildExpressionIndex() };
   }
   return cached.index;
 }

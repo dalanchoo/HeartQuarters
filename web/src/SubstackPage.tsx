@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import {
   fileUrl,
   formatSize,
@@ -69,12 +70,20 @@ function PieceView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let stale = false; // set when you pick another piece before this one has loaded
     setPiece(null);
     setError(null);
-    getJson<WritingDetail>(`/api/writing/piece?id=${encodeURIComponent(id)}`).then((p) => {
-      setPiece(p);
-      setDraft(p.drafts[0]?.path ?? null);
-    }, (e) => setError(e.message));
+    getJson<WritingDetail>(`/api/writing/piece?id=${encodeURIComponent(id)}`).then(
+      (p) => {
+        if (stale) return;
+        setPiece(p);
+        setDraft(p.drafts[0]?.path ?? null);
+      },
+      (e) => !stale && setError(e.message),
+    );
+    return () => {
+      stale = true;
+    };
   }, [id]);
 
   if (error) return <p className="error">{error}</p>;
@@ -143,12 +152,18 @@ function DraftView({ path }: { path: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let stale = false; // set when you pick another draft before this one has loaded
     setHtml(null);
     setError(null);
     getJson<{ html: string }>(`/api/writing/draft?path=${encodeURIComponent(path)}`).then(
-      (r) => setHtml(r.html),
-      (e) => setError(e.message),
+      // Clean the converted Word file before showing it: removes scripts and
+      // dangerous links (e.g. "javascript:") a document could contain.
+      (r) => !stale && setHtml(DOMPurify.sanitize(r.html)),
+      (e) => !stale && setError(e.message),
     );
+    return () => {
+      stale = true;
+    };
   }, [path]);
 
   return (
@@ -162,8 +177,9 @@ function DraftView({ path }: { path: string }) {
         </a>
       </div>
       {error && <p className="error">{error}</p>}
-      {!html && !error && <p className="muted">Loading…</p>}
-      {/* The HTML comes from your own Word file, converted on this PC. */}
+      {html === null && !error && <p className="muted">Loading…</p>}
+      {html === '' && <p className="muted">This draft is empty.</p>}
+      {/* Converted from your Word file on this PC, then cleaned by DOMPurify above. */}
       {html && <article className="markdown draft-body" dangerouslySetInnerHTML={{ __html: html }} />}
     </div>
   );

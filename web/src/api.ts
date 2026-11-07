@@ -28,7 +28,8 @@ export async function getJson<T>(url: string): Promise<T> {
 export async function postJson<T>(url: string, data: unknown = {}): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // X-HeartQuarters proves the request comes from our own pages (see server/security.ts).
+    headers: { 'Content-Type': 'application/json', 'X-HeartQuarters': '1' },
     body: JSON.stringify(data),
   });
   const body = await res.json();

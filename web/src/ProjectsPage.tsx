@@ -63,11 +63,16 @@ function ProjectView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let stale = false; // set when you pick another project before this one has loaded
     setProject(null);
     setError(null);
-    getJson<ProjectDetail>(`/api/projects/${encodeURIComponent(id)}`).then(setProject, (e) =>
-      setError(e.message),
+    getJson<ProjectDetail>(`/api/projects/${encodeURIComponent(id)}`).then(
+      (p) => !stale && setProject(p),
+      (e) => !stale && setError(e.message),
     );
+    return () => {
+      stale = true;
+    };
   }, [id]);
 
   if (error) return <p className="error">{error}</p>;

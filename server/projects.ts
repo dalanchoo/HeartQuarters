@@ -15,7 +15,7 @@ import { config } from './config.js';
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const DOC_EXTS = new Set(['.md', '.txt']);
-const PROJECT_RE = /^(\d+)\s*-\s*(.+)$/; // "022 - Worth Telling Them"
+const PROJECT_RE = /^(\d+)\s*[-–]\s*(.+)$/; // "022 - Worth Telling Them" (hyphen or en-dash)
 const SERIES_RE = /^\d+[A-Z]\s*[-–]/; // "005A - Night One"
 
 export interface FileRef {
@@ -190,7 +190,21 @@ export function readProject(id: string): ProjectDetail {
   };
 }
 
+/**
+ * Throws a clear message if a whole library folder can't be read (e.g. Google
+ * Drive isn't running), instead of quietly showing an empty list.
+ */
+export function requireFolder(dir: string, label: string) {
+  try {
+    if (fs.statSync(dir).isDirectory()) return;
+  } catch {
+    /* fall through */
+  }
+  throw new Error(`Can't read the ${label} folder (${dir}). Is Google Drive running?`);
+}
+
 export function listProjects(): ProjectSummary[] {
+  requireFolder(config.videoProjectsDir, 'Video Projects');
   return subfolders(config.videoProjectsDir)
     .filter((name) => PROJECT_RE.test(name))
     .map((name) => {
