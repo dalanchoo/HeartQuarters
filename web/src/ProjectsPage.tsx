@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   fileUrl,
   formatSize,
@@ -208,6 +208,12 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
   const docs = usePackagingDocs(version?.docs ?? []);
+  const playerRef = useRef<HTMLVideoElement>(null);
+
+  // When you press Play, bring the player into view.
+  useEffect(() => {
+    if (playing) playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [playing]);
 
   return (
     <details className="card" open={startOpen}>
@@ -221,6 +227,19 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
             : ' · no packaging'}
         </span>
       </summary>
+
+      {/* The player sits at the top of the card, full width, and scrolls into view. */}
+      {playing && (
+        <video
+          key={playing}
+          className="player"
+          src={fileUrl('projects', playing)}
+          controls
+          autoPlay
+          preload="metadata"
+          ref={playerRef}
+        />
+      )}
 
       {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
       <div className="piece-body">
@@ -291,10 +310,6 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
 
       {/* Long fields (Description) run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-
-      {playing && (
-        <video className="player" src={fileUrl('projects', playing)} controls autoPlay preload="metadata" />
-      )}
     </details>
   );
 }
