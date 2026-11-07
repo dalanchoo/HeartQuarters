@@ -47,7 +47,7 @@ Automation levels:
   CapCut draft (`--- LONGFORM TEMPLATE` / `--- SHORTS TEMPLATE` in CapCut's
   drafts folder) under the same name. A new short can instead duplicate the
   long-form's CapCut draft (picked by default). "+ New video" can also make
-  a series: the series folder plus its first part (023 - XA - Y\Longform). Only ever adds folders;
+  a series: the series folder plus its first part (`023 - XA - Y\Longform`). Only ever adds folders;
   refuses names that already exist.
 
 ## Later (from code review)
