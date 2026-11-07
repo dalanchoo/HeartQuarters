@@ -122,7 +122,7 @@ function checkDrafts(chosen: unknown, offered: string[]): string[] {
 
 function requireCapCutClosed() {
   if (system.isCapCutRunning()) {
-    throw new Error('Please close CapCut first: it could overwrite the changes to its drafts. Nothing was changed.');
+    throw new Error('Close CapCut first, then try again. (If CapCut is open, it can save its old copy of a draft and wipe out the change.) Nothing was changed.');
   }
 }
 

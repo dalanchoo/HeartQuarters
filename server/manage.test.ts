@@ -136,7 +136,7 @@ describe('renameFolder', () => {
 
   it('refuses while CapCut is open, changing nothing', () => {
     capcutOpen = true;
-    expect(() => renameFolder('022 - Worth Telling Them', '022 - X', [])).toThrow(/close CapCut/);
+    expect(() => renameFolder('022 - Worth Telling Them', '022 - X', [])).toThrow(/close CapCut/i);
     expect(fs.existsSync(p('022 - Worth Telling Them'))).toBe(true);
   });
 
@@ -182,7 +182,7 @@ describe('deleteFolder', () => {
 
   it('needs CapCut closed only when drafts are moved', () => {
     capcutOpen = true;
-    expect(() => deleteFolder('022 - Worth Telling Them', ['022 - Worth Telling Them(2)'])).toThrow(/close CapCut/);
+    expect(() => deleteFolder('022 - Worth Telling Them', ['022 - Worth Telling Them(2)'])).toThrow(/close CapCut/i);
     expect(fs.existsSync(p('022 - Worth Telling Them'))).toBe(true);
     expect(() => deleteFolder('022 - Worth Telling Them', [])).not.toThrow();
   });

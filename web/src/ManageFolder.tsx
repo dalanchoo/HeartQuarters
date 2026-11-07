@@ -168,7 +168,7 @@ function ManageDialog({
 
             {blockedByCapCut && (
               <p className="warn">
-                CapCut is open. Please close it first, so it can't undo these changes.{' '}
+                CapCut is open. Close CapCut, then click Check again. (If CapCut is open, it can save its old copy of a draft and wipe out the change.){' '}
                 <button type="button" className="small" onClick={load}>
                   Check again
                 </button>
