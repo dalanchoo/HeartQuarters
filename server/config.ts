@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Which top-level folder a relative path belongs to. */
-export type RootId = 'projects' | 'tools' | 'writing';
+export type RootId = 'projects' | 'tools' | 'writing' | 'expressions';
 
 export interface ToolDef {
   id: string;
@@ -28,6 +28,7 @@ export interface Config {
   videoProjectsDir: string;
   toolsDir: string;
   writingDir: string;
+  expressionsDir: string;
   python: string;
   guides: GuideDef[];
   tools: ToolDef[];
@@ -48,11 +49,12 @@ export const config = loadConfig();
 export function rootDir(root: RootId): string {
   if (root === 'tools') return config.toolsDir;
   if (root === 'writing') return config.writingDir;
+  if (root === 'expressions') return config.expressionsDir;
   return config.videoProjectsDir;
 }
 
 export function parseRoot(value: unknown): RootId {
-  return value === 'tools' || value === 'writing' ? value : 'projects';
+  return value === 'tools' || value === 'writing' || value === 'expressions' ? value : 'projects';
 }
 
 /**

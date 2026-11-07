@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
+import { ExpressionsPage } from './ExpressionsPage';
 import { GuidesPage } from './GuidesPage';
 import { ToolsPage } from './ToolsPage';
 
@@ -8,6 +9,7 @@ import { ToolsPage } from './ToolsPage';
 const TABS = [
   { id: 'Videos', label: 'Video Projects' },
   { id: 'Substack', label: 'Substack' },
+  { id: 'Expressions', label: 'Expressions' },
   { id: 'Guides', label: 'Guides' },
   { id: 'Tools', label: 'Tools' },
 ] as const;
@@ -47,6 +49,7 @@ export function App() {
       <main>
         {tab === 'Videos' && <ProjectsPage />}
         {tab === 'Substack' && <SubstackPage />}
+        {tab === 'Expressions' && <ExpressionsPage />}
         {tab === 'Guides' && <GuidesPage />}
         {tab === 'Tools' && <ToolsPage />}
       </main>

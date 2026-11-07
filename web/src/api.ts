@@ -10,6 +10,12 @@ export type {
 } from '../../server/projects';
 export type { Job } from '../../server/tools';
 export type { WritingSummary, WritingDetail } from '../../server/writing';
+export type {
+  ExpressionIndex,
+  ExpressionCategory,
+  ExpressionPhoto,
+  Tag,
+} from '../../server/expressions';
 export type { RootId };
 
 export async function getJson<T>(url: string): Promise<T> {
@@ -40,8 +46,30 @@ export function fileUrl(root: RootId, path: string): string {
   return `/api/file?root=${root}&path=${encodeURIComponent(path)}`;
 }
 
+export function thumbUrl(root: RootId, path: string, width = 360): string {
+  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}`;
+}
+
 export function openInExplorer(root: RootId, path: string) {
   return postJson('/api/open', { root, path });
+}
+
+/** Copies text, falling back to the older method if the browser refuses. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
 }
 
 export function formatSize(bytes: number): string {

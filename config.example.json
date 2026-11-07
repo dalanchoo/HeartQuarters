@@ -3,6 +3,7 @@
   "videoProjectsDir": "D:\\Google Drive\\HeartMind\\Video Projects",
   "toolsDir": "D:\\Google Drive\\HeartMind\\HMF_SYS\\Tools",
   "writingDir": "D:\\Google Drive\\HeartMind\\Writing",
+  "expressionsDir": "D:\\Google Drive\\HeartMind\\Assets\\Expressions",
   "python": "C:\\Users\\dalan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
   "guides": [
     { "name": "Longform editing (LONGFORM.md)", "root": "projects", "path": "LONGFORM.md" },

@@ -32,6 +32,10 @@ Automation levels:
 - "Projects" tab renamed "Video Projects".
 - Substack tab: the Writing folder by section; Word drafts readable in the
   app; preview image, photos, videos; Google Doc links.
+- Auto-reload: engine restarts and screens rebuild when code changes.
+- Expressions tab: category tree with definitions and reference images,
+  photo grid with cached previews, tag search, full-size viewer with tags,
+  Copy file path. (Browsing only; tagging/favourites still to do.)
 
 ## Now
 

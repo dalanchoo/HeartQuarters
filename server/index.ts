@@ -8,6 +8,8 @@ import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
+import { expressionIndex } from './expressions.js';
+import { thumbnail } from './thumbs.js';
 
 const app = express();
 app.use(express.json());
@@ -56,6 +58,26 @@ app.post('/api/open', handle((req, res) => {
   const folder = fs.statSync(full).isDirectory() ? full : path.dirname(full);
   spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
+}));
+
+// Small JPEG preview of an image (made once, then cached in data/thumbs).
+app.get('/api/thumb', (req, res) => {
+  try {
+    const full = safeResolve(parseRoot(req.query.root), String(req.query.path ?? ''));
+    const width = Math.min(800, Math.max(120, Number(req.query.w) || 360));
+    thumbnail(full, width).then(
+      (thumb) => res.set('Cache-Control', 'max-age=86400').sendFile(thumb),
+      (e) => res.status(500).json({ error: e instanceof Error ? e.message : String(e) }),
+    );
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ---- Expressions ----------------------------------------------------------
+
+app.get('/api/expressions', handle((_req, res) => {
+  res.json(expressionIndex());
 }));
 
 // ---- Writing (Substack) ---------------------------------------------------

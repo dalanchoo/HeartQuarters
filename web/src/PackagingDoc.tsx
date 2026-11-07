@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getText, type FileRef } from './api';
+import { copyText, getText, type FileRef } from './api';
 
 // Packaging files (YouTube.md etc.) are written as labelled blocks:
 //
@@ -62,25 +62,7 @@ export function PackagingDoc({ file }: { file: FileRef }) {
   );
 }
 
-/** Copies text, falling back to the older method if the browser refuses. */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    return ok;
-  }
-}
-
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+export function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [result, setResult] = useState<'copied' | 'failed' | null>(null);
   return (
     <button
