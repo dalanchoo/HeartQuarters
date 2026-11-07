@@ -30,13 +30,18 @@ export interface Config {
   writingDir: string;
   expressionsDir: string;
   python: string;
+  /** Where CapCut keeps its drafts (CapCut: Settings > Draft location). */
+  capcutDraftsDir: string;
+  /** Empty drafts made once in CapCut, copied for each new video. */
+  capcutTemplates: { longform: string; short: string };
   guides: GuideDef[];
   tools: ToolDef[];
 }
 
 function loadConfig(): Config {
   const examplePath = path.join(appDir, 'config.example.json');
-  const local = path.join(appDir, 'config.json');
+  // HQ_CONFIG lets a test copy use other folders (e.g. copies of the templates).
+  const local = process.env.HQ_CONFIG ? path.resolve(process.env.HQ_CONFIG) : path.join(appDir, 'config.json');
   if (!fs.existsSync(local)) fs.copyFileSync(examplePath, local);
   // Settings added in newer versions fall back to config.example.json,
   // so an older config.json keeps working.

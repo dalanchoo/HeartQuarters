@@ -202,3 +202,22 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .status.failed { color: var(--bad); }
 .output { background: #1f1d1a; color: #e9e6df; padding: 0.75rem; border-radius: 6px; margin: 0.75rem 0 0;
           max-height: 320px; overflow-y: auto; font-size: 0.8rem; white-space: pre-wrap; }
+
+/* "+ New ..." buttons and the name dialog */
+.sidebar-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
+.head-actions { display: flex; align-items: center; gap: 0.4rem; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex;
+                  align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 50; }
+.modal { width: min(560px, 92vw); padding: 1rem 1.2rem; }
+.modal h3 { margin: 0 0 0.6rem; }
+.modal p { margin: 0.4rem 0; }
+.text-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; padding: 0.4rem 0.55rem;
+              border: 1px solid var(--line); border-radius: 6px; margin-top: 0.2rem; }
+.text-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.small-text { font-size: 0.8rem; }
+.warn { color: #9a6200; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.8rem; }
+.notice { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+          background: #eaf5ec; border: 1px solid #b9dcc0; border-radius: 8px; padding: 0.5rem 0.75rem;
+          margin-bottom: 0.75rem; line-height: 1.7; }
+.notice-warn { background: #fdf4e3; border-color: #ecd29c; }

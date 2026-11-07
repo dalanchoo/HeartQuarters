@@ -41,6 +41,12 @@ Automation levels:
   path check, Word drafts cleaned with DOMPurify. Also: fast-click race fixed,
   en-dash project names, empty drafts, clear message if Drive is offline.
 - Unit tests (Vitest): `npm test`, 35 tests.
+- "+ New" buttons in Video Projects: new video, new part of a series, new
+  short for a video, new standalone short. Each copies the right
+  `--- ... TEMPLATE` folder with the next number filled in, and copies an empty
+  CapCut draft (`--- LONGFORM TEMPLATE` / `--- SHORTS TEMPLATE` in CapCut's
+  drafts folder) under the same name. Only ever adds folders; refuses names
+  that already exist.
 
 ## Later (from code review)
 

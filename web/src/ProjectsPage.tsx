@@ -7,8 +7,10 @@ import {
   thumbUrl,
   type Piece,
   type ProjectDetail,
+  type CreateResult,
   type ProjectNode,
 } from './api';
+import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
 
 // The selected folder is kept in the address, e.g.
@@ -31,25 +33,69 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectNode[] | null>(null);
   const [selected, setSelected] = useState<string | null>(projectFromHash);
   const [error, setError] = useState<string | null>(null);
+  // Goes up by one after a new folder is made, so the list and the page re-read the disk.
+  const [reloads, setReloads] = useState(0);
+  const [created, setCreated] = useState<CreateResult | null>(null);
 
   useEffect(() => {
     getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
+  }, [reloads]);
+
+  useEffect(() => {
     const onHash = () => setSelected(projectFromHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  function onCreated(result: CreateResult) {
+    setReloads((n) => n + 1);
+    setCreated(result);
+    location.hash = linkTo(result.showId);
+  }
+
   return (
     <div className="split">
       <aside className="sidebar">
+        <div className="sidebar-actions">
+          <NewFolderButton kind="top" onCreated={onCreated} />
+          <NewFolderButton kind="standalone" onCreated={onCreated} />
+        </div>
         {error && <p className="error">{error}</p>}
         {!projects && !error && <p className="muted">Loading…</p>}
         {projects &&
           ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} />)}
       </aside>
       <section className="content">
-        {selected ? <ProjectView id={selected} /> : <p className="muted">Pick a project on the left.</p>}
+        {created && created.showId === selected && <CreatedNote result={created} onDismiss={() => setCreated(null)} />}
+        {selected ? (
+          <ProjectView id={selected} reloads={reloads} onCreated={onCreated} />
+        ) : (
+          <p className="muted">Pick a project on the left.</p>
+        )}
       </section>
+    </div>
+  );
+}
+
+/** Shown after "+ New ...": what was made, and whether the CapCut draft was made too. */
+function CreatedNote({ result, onDismiss }: { result: CreateResult; onDismiss: () => void }) {
+  return (
+    <div className={`notice ${result.capcut.created ? '' : 'notice-warn'}`}>
+      <div>
+        <div>
+          ✓ Made <strong>{result.path.split('/').at(-1)}</strong> from the template.{' '}
+          <button className="small" onClick={() => openInExplorer('projects', result.path)}>
+            Open folder
+          </button>
+        </div>
+        <div>
+          {result.capcut.created ? '✓ ' : '⚠ '}
+          {result.capcut.message}
+        </div>
+      </div>
+      <button className="small" onClick={onDismiss} title="Hide this note">
+        ✕
+      </button>
     </div>
   );
 }
@@ -91,7 +137,15 @@ function TreeItem({ node, selected }: { node: ProjectNode; selected: string | nu
   );
 }
 
-function ProjectView({ id }: { id: string }) {
+function ProjectView({
+  id,
+  reloads,
+  onCreated,
+}: {
+  id: string;
+  reloads: number;
+  onCreated: (result: CreateResult) => void;
+}) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,7 +160,7 @@ function ProjectView({ id }: { id: string }) {
     return () => {
       stale = true;
     };
-  }, [id]);
+  }, [id, reloads]);
 
   if (error) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
@@ -134,7 +188,13 @@ function ProjectView({ id }: { id: string }) {
         <h1>
           {project.number && <span className="num">{project.number}</span>} {project.title}
         </h1>
-        <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
+        <div className="head-actions">
+          {project.kind === 'series' && <NewFolderButton kind="part" parent={project.id} onCreated={onCreated} />}
+          {(project.kind === 'project' || project.kind === 'part') && (
+            <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
+          )}
+          <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
+        </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
 

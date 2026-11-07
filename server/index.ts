@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
+import { createVideoFolder, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
@@ -36,6 +37,18 @@ app.get('/api/projects', handle((_req, res) => {
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
 app.get('/api/project', handle((req, res) => {
   res.json(readProject(String(req.query.id ?? '')));
+}));
+
+// ---- New folders (copies a template; see create.ts) -------------------------
+
+// ?kind=top|part|short|standalone&parent=<id> -> { prefix: "023 - " }
+app.get('/api/create/suggest', handle((req, res) => {
+  res.json({ prefix: suggestPrefix(parseKind(req.query.kind), String(req.query.parent ?? '')) });
+}));
+
+app.post('/api/create', handle((req, res) => {
+  const { kind, parent, name } = req.body ?? {};
+  res.json(createVideoFolder(parseKind(kind), String(parent ?? ''), String(name ?? '')));
 }));
 
 // ---- Files ----------------------------------------------------------------
