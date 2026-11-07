@@ -75,13 +75,14 @@ main { flex: 1; min-height: 0; }
 .block { border-top: 1px solid var(--line); padding: 0.5rem 0; }
 
 /* Two columns inside a card: media on the left, text on the right. */
-.piece-body { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); gap: 1rem;
+.piece-body { display: grid; grid-template-columns: minmax(200px, 340px) minmax(0, 1fr); gap: 1rem;
               margin-top: 0.6rem; align-items: start; }
 .card.piece-body { margin-top: 0; }
 .piece-media { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
 .piece-docs { min-width: 0; }
 .piece-docs > .block:first-child { border-top: none; padding-top: 0; }
-@media (max-width: 900px) { .piece-body { grid-template-columns: 1fr; } }
+/* Only stack into one column when the window is really narrow. */
+@media (max-width: 700px) { .piece-body { grid-template-columns: 1fr; } }
 
 .cover-stack { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .cover-main { display: block; width: 100%; }
