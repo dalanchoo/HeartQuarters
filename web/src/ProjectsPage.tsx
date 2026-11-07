@@ -6,23 +6,33 @@ import {
   openInExplorer,
   type Piece,
   type ProjectDetail,
-  type ProjectSummary,
+  type ProjectNode,
 } from './api';
 import { PackagingDoc } from './PackagingDoc';
 
-// The selected project is kept in the address: #Videos/022 - Worth Telling Them
+// The selected folder is kept in the address, e.g.
+// #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
 function projectFromHash(): string | null {
   const [, id] = location.hash.slice(1).split('/');
   return id ? decodeURIComponent(id) : null;
 }
 
+function linkTo(id: string) {
+  return `#Videos/${encodeURIComponent(id)}`;
+}
+
+/** Series parts read in order (005A, 005B...); everything else newest first. */
+function ordered(node: ProjectNode | null, nodes: ProjectNode[]): ProjectNode[] {
+  return node?.kind === 'series' ? nodes : nodes.slice().reverse();
+}
+
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [projects, setProjects] = useState<ProjectNode[] | null>(null);
   const [selected, setSelected] = useState<string | null>(projectFromHash);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getJson<ProjectSummary[]>('/api/projects').then(setProjects, (e) => setError(e.message));
+    getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
     const onHash = () => setSelected(projectFromHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -33,28 +43,50 @@ export function ProjectsPage() {
       <aside className="sidebar">
         {error && <p className="error">{error}</p>}
         {!projects && !error && <p className="muted">Loading…</p>}
-        {projects
-          ?.slice()
-          .reverse()
-          .map((p) => (
-            <a
-              key={p.id}
-              href={`#Videos/${encodeURIComponent(p.id)}`}
-              className={`project-link ${p.id === selected ? 'active' : ''}`}
-            >
-              <span className="num">{p.number}</span>
-              <span className="title">{p.title}</span>
-              <span className="badges">
-                {p.longformExported && <span title="Long-form exported">🎬</span>}
-                {p.shortCount > 0 && <span title="Shorts">{p.shortCount}▮</span>}
-              </span>
-            </a>
-          ))}
+        {projects &&
+          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} />)}
       </aside>
       <section className="content">
         {selected ? <ProjectView id={selected} /> : <p className="muted">Pick a project on the left.</p>}
       </section>
     </div>
+  );
+}
+
+function NodeLink({ node, selected }: { node: ProjectNode; selected: string | null }) {
+  return (
+    <a href={linkTo(node.id)} className={`project-link ${node.id === selected ? 'active' : ''}`}>
+      {node.number && <span className="num">{node.number}</span>}
+      <span className="title">{node.title}</span>
+      <span className="badges">
+        {node.exported && <span title="Exported">🎬</span>}
+        {node.kind !== 'short' && node.shortCount > 0 && <span title="Shorts">{node.shortCount}▮</span>}
+      </span>
+    </a>
+  );
+}
+
+/** One row in the sidebar; series and groups can be expanded to show what's inside. */
+function TreeItem({ node, selected }: { node: ProjectNode; selected: string | null }) {
+  if (node.children.length === 0) {
+    return (
+      <div className="tree-leaf">
+        <NodeLink node={node} selected={selected} />
+      </div>
+    );
+  }
+  const holdsSelection = !!selected && (selected === node.id || selected.startsWith(node.id + '/'));
+  return (
+    <details className="tree-node" open={holdsSelection}>
+      <summary>
+        <NodeLink node={node} selected={selected} />
+      </summary>
+      <div className="tree-children">
+        {ordered(node, node.children).map((c) => (
+          <TreeItem key={c.id} node={c} selected={selected} />
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -66,7 +98,7 @@ function ProjectView({ id }: { id: string }) {
     let stale = false; // set when you pick another project before this one has loaded
     setProject(null);
     setError(null);
-    getJson<ProjectDetail>(`/api/projects/${encodeURIComponent(id)}`).then(
+    getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(id)}`).then(
       (p) => !stale && setProject(p),
       (e) => !stale && setError(e.message),
     );
@@ -78,29 +110,72 @@ function ProjectView({ id }: { id: string }) {
   if (error) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
 
-  const isSeries = project.videos.length > 1 || project.videos[0]?.path !== project.path;
+  // Breadcrumbs: "005 - Ayahuasca › 005B - Night One"
+  const segments = project.id.split('/');
+  const crumbs = segments.slice(0, -1).map((name, i) => ({ name, id: segments.slice(0, i + 1).join('/') }));
+  const kindLabel = { series: 'Series', group: 'Folder', part: 'Part of a series', short: 'Standalone short', project: '' }[
+    project.kind
+  ];
 
   return (
     <div>
+      {crumbs.length > 0 && (
+        <div className="crumbs">
+          {crumbs.map((c, i) => (
+            <span key={c.id}>
+              {i > 0 && <span className="muted"> › </span>}
+              <a href={linkTo(c.id)}>{c.name}</a>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="page-head">
         <h1>
-          <span className="num">{project.number}</span> {project.title}
+          {project.number && <span className="num">{project.number}</span>} {project.title}
         </h1>
         <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
       </div>
+      {kindLabel && <p className="muted">{kindLabel}</p>}
 
-      {project.videos.map((video) => (
-        <div key={video.path} className="video">
-          {isSeries && <h2>{video.name}</h2>}
-          {video.pieces.length === 0 && <p className="muted">No Longform, Shorts or Reels folders found.</p>}
-          {video.pieces
-            .filter((p) => p.kind === 'longform')
-            .map((p) => (
-              <PieceCard key={p.path} piece={p} startOpen />
-            ))}
-          <PieceGroup title="Shorts" pieces={video.pieces.filter((p) => p.kind === 'short')} />
-          <PieceGroup title="Reels" pieces={video.pieces.filter((p) => p.kind === 'reel')} />
-        </div>
+      {project.children.length > 0 ? (
+        <ChildList node={project} />
+      ) : (
+        project.videos.map((video) => (
+          <div key={video.path} className="video">
+            {video.pieces.length === 0 && <p className="muted">No Longform, Shorts or Reels folders found.</p>}
+            {video.pieces
+              .filter((p) => p.kind === 'longform' || project.kind === 'short')
+              .map((p) => (
+                <PieceCard key={p.path} piece={p} startOpen />
+              ))}
+            {project.kind !== 'short' && (
+              <PieceGroup title="Shorts" pieces={video.pieces.filter((p) => p.kind === 'short')} />
+            )}
+            <PieceGroup title="Reels" pieces={video.pieces.filter((p) => p.kind === 'reel')} />
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/** For a series or a folder: what's inside, each linking to its own page. */
+function ChildList({ node }: { node: ProjectDetail }) {
+  return (
+    <div className="child-list">
+      {ordered(node, node.children).map((c) => (
+        <a key={c.id} href={linkTo(c.id)} className="card child-card">
+          {c.number && <span className="num">{c.number}</span>}
+          <span className="piece-name">{c.title}</span>
+          <span className="muted">
+            {c.kind === 'group'
+              ? `${c.children.length} item${c.children.length === 1 ? '' : 's'}`
+              : c.exported
+                ? '✓ exported'
+                : 'not exported'}
+            {c.kind !== 'short' && c.shortCount > 0 && ` · ${c.shortCount} shorts`}
+          </span>
+        </a>
       ))}
     </div>
   );

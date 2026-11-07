@@ -33,8 +33,9 @@ app.get('/api/projects', handle((_req, res) => {
   res.json(listProjects());
 }));
 
-app.get('/api/projects/:id', handle((req, res) => {
-  res.json(readProject(String(req.params.id)));
+// ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
+app.get('/api/project', handle((req, res) => {
+  res.json(readProject(String(req.query.id ?? '')));
 }));
 
 // ---- Files ----------------------------------------------------------------

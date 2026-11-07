@@ -26,6 +26,10 @@ beforeAll(() => {
     '005 - Series/005A - Part One/Longform/Exports/a.mp4': 'video',
     '005 - Series/005B – Part Two/Longform/Packaging/V01/YouTube.md': 'b',
     '006 - Old Layout/Packaging/V01/YouTube.md': 'old layout',
+    '999 - Shorts/2026/999-2026-01 - First One/Exports/a.mp4': 'video',
+    '999 - Shorts/2026/999-2026-01 - First One/Packaging/V01/YouTube.md': 'Title:\nx\n\nTags:\ny',
+    "999 - Shorts/2026/999-2026-02 - Isn't Done/Raw/raw.mp4": 'raw',
+    "999 - Shorts/2026/999-2026-02 - Isn't Done/Packaging/V01/TikTok.md": 'tt',
   });
   original = config.videoProjectsDir;
   config.videoProjectsDir = tmp;
@@ -44,7 +48,35 @@ describe('listProjects', () => {
       '022 - Worth Telling Them',
       '023 – En Dash Name',
       "024 - It's Got An Apostrophe",
+      '999 - Shorts',
     ]);
+  });
+
+  it('shows series parts as children', () => {
+    const series = listProjects().find((x) => x.number === '005')!;
+    expect(series.kind).toBe('series');
+    expect(series.children.map((c) => [c.number, c.title, c.kind])).toEqual([
+      ['005A', 'Part One', 'part'],
+      ['005B', 'Part Two', 'part'],
+    ]);
+    expect(series.children[0].exported).toBe(true);
+    expect(series.children[1].exported).toBe(false);
+  });
+
+  it('shows grouped standalone shorts: 999 - Shorts > 2026 > shorts', () => {
+    const group = listProjects().find((x) => x.number === '999')!;
+    expect(group.kind).toBe('group');
+    expect(group.shortCount).toBe(2);
+    const year = group.children[0];
+    expect([year.title, year.kind, year.number]).toEqual(['2026', 'group', null]);
+    expect(year.children.map((c) => [c.number, c.title, c.kind, c.exported])).toEqual([
+      ['999-2026-01', 'First One', 'short', true],
+      ['999-2026-02', "Isn't Done", 'short', false],
+    ]);
+  });
+
+  it('treats ordinary projects as projects', () => {
+    expect(listProjects().find((x) => x.number === '022')).toMatchObject({ kind: 'project', children: [] });
   });
 
   it('reads names with an en-dash', () => {
@@ -101,7 +133,29 @@ describe('readProject', () => {
     expect(p.longformExported).toBe(false);
   });
 
+  it('opens one part of a series by its path', () => {
+    const part = readProject('005 - Series/005B – Part Two');
+    expect(part).toMatchObject({ kind: 'part', number: '005B', title: 'Part Two' });
+    expect(part.videos[0].pieces[0].packagingVersion).toBe('V01');
+  });
+
+  it('opens a standalone short, treating its packaging as a short', () => {
+    const short = readProject('999 - Shorts/2026/999-2026-01 - First One');
+    expect(short.kind).toBe('short');
+    const piece = short.videos[0].pieces[0];
+    expect([piece.kind, piece.name, piece.exports.length]).toEqual(['short', '999-2026-01 - First One', 1]);
+  });
+
+  it('opens a group folder with its contents', () => {
+    const year = readProject('999 - Shorts/2026');
+    expect(year.kind).toBe('group');
+    expect(year.children).toHaveLength(2);
+  });
+
   it('refuses names that are not project folders', () => {
+    expect(() => readProject('999 - Shorts/../006 - Old Layout')).toThrow();
+    expect(() => readProject('Claude + CapCut')).toThrow();
+    expect(() => readProject('999 - Shorts/2026/Nope')).toThrow(/not found/);
     expect(() => readProject('../secret')).toThrow();
     expect(() => readProject('022 - Worth Telling Them/../..')).toThrow();
   });

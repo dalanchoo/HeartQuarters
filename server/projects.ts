@@ -10,7 +10,7 @@
 // Series projects (e.g. 005 - Ayahuasca) hold one folder per video: 005A - ..., 005B - ...
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.js';
+import { config, safeResolve } from './config.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -52,15 +52,29 @@ export interface Video {
   pieces: Piece[];
 }
 
-export interface ProjectSummary {
+/**
+ * project = an ordinary video project ("022 - Worth Telling Them")
+ * series  = a project made of parts ("005 - Ayahuasca" -> 005A, 005B, ...)
+ * part    = one part of a series
+ * group   = a folder of folders ("999 - Shorts", "2026")
+ * short   = a standalone short inside a group
+ */
+export type NodeKind = 'project' | 'series' | 'part' | 'group' | 'short';
+
+export interface ProjectNode {
+  /** Relative path, e.g. "005 - Ayahuasca/005B - Night One". */
   id: string;
-  number: string;
+  number: string | null;
   title: string;
+  kind: NodeKind;
+  /** This video itself is exported (the long-form, or the standalone short). */
+  exported: boolean;
   longformExported: boolean;
   shortCount: number;
+  children: ProjectNode[];
 }
 
-export interface ProjectDetail extends ProjectSummary {
+export interface ProjectDetail extends ProjectNode {
   path: string;
   videos: Video[];
 }
@@ -150,14 +164,17 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
   };
 }
 
-function readVideo(dir: string, name: string): Video {
+/**
+ * Reads one video's folder. `looseKind` says what a folder with Packaging/
+ * Exports directly inside it is: an old-style long-form, or a standalone short.
+ */
+function readVideo(dir: string, name: string, looseKind: 'longform' | 'short' = 'longform'): Video {
   const pieces: Piece[] = [];
   const children = subfolders(dir);
   if (children.includes('Longform')) {
     pieces.push(readPiece(path.join(dir, 'Longform'), 'longform', 'Longform'));
   } else if (children.includes('Packaging') || children.includes('Exports')) {
-    // Older layout: longform folders sit directly in the project folder.
-    pieces.push(readPiece(dir, 'longform', 'Longform'));
+    pieces.push(readPiece(dir, looseKind, looseKind === 'short' ? name : 'Longform'));
   }
   for (const [folder, kind] of [['Shorts', 'short'], ['Reels', 'reel']] as const) {
     for (const child of subfolders(path.join(dir, folder))) {
@@ -167,27 +184,73 @@ function readVideo(dir: string, name: string): Video {
   return { name, path: rel(dir), pieces };
 }
 
-export function readProject(id: string): ProjectDetail {
-  const match = PROJECT_RE.exec(id);
-  if (!match || /[\\/]/.test(id)) throw new Error('Not a project folder name.');
-  const dir = path.join(config.videoProjectsDir, id);
-  if (!fs.existsSync(dir)) throw new Error('Project not found.');
+const VIDEO_FOLDERS = ['Longform', 'Shorts', 'Reels', 'Packaging', 'Exports'];
 
-  const series = subfolders(dir).filter((d) => SERIES_RE.test(d));
-  const videos = series.length
-    ? series.map((s) => readVideo(path.join(dir, s), s))
-    : [readVideo(dir, id)];
+/** "005A - Night One" -> 005A / Night One; "999-2026-18 - Cafe" -> 999-2026-18 / Cafe; "2026" -> 2026 */
+function splitName(folder: string): { number: string | null; title: string } {
+  const m = /^(\d\S*)\s+[-–]\s+(.+)$/.exec(folder) ?? PROJECT_RE.exec(folder);
+  return m ? { number: m[1], title: m[2] } : { number: null, title: folder };
+}
+
+function stats(videos: Video[]) {
   const pieces = videos.flatMap((v) => v.pieces);
-
   return {
-    id,
-    number: match[1],
-    title: match[2],
-    path: rel(dir),
-    videos,
     longformExported: pieces.some((p) => p.kind === 'longform' && p.exports.length > 0),
     shortCount: pieces.filter((p) => p.kind === 'short').length,
   };
+}
+
+/** Where a folder sits: a top-level project, a part of a series, or inside a group like 999 - Shorts. */
+type Role = 'top' | 'part' | 'inGroup';
+
+function readNode(dir: string, role: Role): { node: ProjectNode; videos: Video[] } {
+  const folder = path.basename(dir);
+  const base = { id: rel(dir), ...splitName(folder) };
+  const subs = subfolders(dir);
+
+  const leaf = (kind: NodeKind, video: Video) => {
+    const s = stats([video]);
+    const exported = kind === 'short' ? video.pieces.some((p) => p.exports.length > 0) : s.longformExported;
+    return { node: { ...base, kind, ...s, exported, children: [] }, videos: [video] };
+  };
+  const branch = (kind: NodeKind, children: { node: ProjectNode; videos: Video[] }[]) => {
+    const videos = children.flatMap((c) => c.videos);
+    const node = { ...base, kind, ...stats(videos), exported: false, children: children.map((c) => c.node) };
+    return { node, videos };
+  };
+
+  if (role === 'part') return leaf('part', readVideo(dir, folder));
+
+  // A series: "005 - Ayahuasca" holding "005A - ...", "005B - ...".
+  const parts = role === 'top' ? subs.filter((d) => SERIES_RE.test(d)) : [];
+  if (parts.length) return branch('series', parts.map((p) => readNode(path.join(dir, p), 'part')));
+
+  // An ordinary video folder, or a standalone short inside a group.
+  if (subs.length === 0 || subs.some((d) => VIDEO_FOLDERS.includes(d))) {
+    return role === 'inGroup' ? leaf('short', readVideo(dir, folder, 'short')) : leaf('project', readVideo(dir, folder));
+  }
+
+  // A folder of folders: "999 - Shorts" holding "2026" holding standalone shorts.
+  return branch('group', subs.map((d) => readNode(path.join(dir, d), 'inGroup')));
+}
+
+/**
+ * Reads any folder in the project tree by its relative path, e.g.
+ * "022 - Worth Telling Them", "005 - Ayahuasca/005B - Night One" or
+ * "999 - Shorts/2026/999-2026-18 - SDAM Cafe Borrone".
+ */
+export function readProject(id: string): ProjectDetail {
+  const segments = id.split('/');
+  if (!PROJECT_RE.test(segments[0]) || segments.some((s) => !s || s === '.' || s === '..' || s.includes('\\'))) {
+    throw new Error('Not a project folder.');
+  }
+  const dir = safeResolve('projects', id);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error('Project not found.');
+
+  const role: Role =
+    segments.length === 1 ? 'top' : segments.length === 2 && SERIES_RE.test(segments[1]) ? 'part' : 'inGroup';
+  const { node, videos } = readNode(dir, role);
+  return { ...node, path: rel(dir), videos };
 }
 
 /**
@@ -203,12 +266,10 @@ export function requireFolder(dir: string, label: string) {
   throw new Error(`Can't read the ${label} folder (${dir}). Is Google Drive running?`);
 }
 
-export function listProjects(): ProjectSummary[] {
+/** Every top-level project, with series parts and grouped shorts as children. */
+export function listProjects(): ProjectNode[] {
   requireFolder(config.videoProjectsDir, 'Video Projects');
   return subfolders(config.videoProjectsDir)
     .filter((name) => PROJECT_RE.test(name))
-    .map((name) => {
-      const { videos: _videos, path: _path, ...summary } = readProject(name);
-      return summary;
-    });
+    .map((name) => readNode(path.join(config.videoProjectsDir, name), 'top').node);
 }

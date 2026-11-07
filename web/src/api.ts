@@ -2,7 +2,7 @@
 import type { RootId } from '../../server/config';
 
 export type {
-  ProjectSummary,
+  ProjectNode,
   ProjectDetail,
   Piece,
   PackagingVersion,

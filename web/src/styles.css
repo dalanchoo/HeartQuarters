@@ -99,6 +99,11 @@ details.field:not([open]) { margin-bottom: 0.35rem; }
                font-size: 0.9rem; line-height: 1.45; }
 pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.75rem; border-radius: 6px; margin: 0; }
 
+.child-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.child-card { display: flex; gap: 0.8rem; align-items: baseline; color: var(--text); text-decoration: none; margin: 0; }
+.child-card:hover { border-color: var(--accent); }
+.child-card .muted { margin-left: auto; font-size: 0.85rem; }
+
 /* Substack */
 .sidebar-section > summary { font-weight: 600; padding: 0.5rem 0.6rem 0.3rem; cursor: pointer; }
 .button-link { font-size: 0.85rem; padding: 0.35rem 0.8rem; border-radius: 6px; border: 1px solid var(--line);
