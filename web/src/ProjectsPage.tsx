@@ -9,7 +9,7 @@ import {
   type ProjectDetail,
   type ProjectNode,
 } from './api';
-import { PackagingDoc } from './PackagingDoc';
+import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -207,6 +207,7 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
+  const docs = usePackagingDocs(version?.docs ?? []);
 
   return (
     <details className="card" open={startOpen}>
@@ -282,11 +283,14 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
         <div className="piece-docs">
           {!version && <p className="muted">No packaging yet.</p>}
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
-          {version?.docs.map((d) => (
-            <PackagingDoc key={d.path} file={d} />
+          {docs.map((d) => (
+            <PackagingDocShort key={d.file.path} doc={d} />
           ))}
         </div>
       </div>
+
+      {/* Long fields (Description) run full width under both columns. */}
+      <PackagingDocsWide docs={docs} />
 
       {playing && (
         <video className="player" src={fileUrl('projects', playing)} controls autoPlay preload="metadata" />

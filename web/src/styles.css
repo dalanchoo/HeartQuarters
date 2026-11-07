@@ -81,6 +81,7 @@ main { flex: 1; min-height: 0; }
 .piece-media { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
 .piece-docs { min-width: 0; }
 .piece-docs > .block:first-child { border-top: none; padding-top: 0; }
+.piece-wide { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
 /* Only stack into one column when the window is really narrow. */
 @media (max-width: 700px) { .piece-body { grid-template-columns: 1fr; } }
 
