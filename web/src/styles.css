@@ -136,7 +136,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .button-link.small { padding: 0.15rem 0.55rem; font-size: 0.75rem; }
 .draft { margin-top: 0.45rem; }
 .draft-actions { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; }
-.draft-body { background: var(--bg); border-radius: 8px; padding: 0.6rem 1rem; max-width: none; }
+.markdown.draft-body { background: var(--bg); border-radius: 8px; padding: 0.6rem 1rem; max-width: none; }
 .draft-body > :first-child { margin-top: 0; }
 .draft-body img { max-width: 100%; height: auto; }
 

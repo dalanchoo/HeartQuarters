@@ -104,34 +104,42 @@ function PieceView({ id }: { id: string }) {
         </button>
       </div>
 
-      {/* Two columns: preview, photos and videos on the left; the draft on the right. */}
-      <div className="card piece-body">
-        <div className="piece-media">
-          {piece.previews.length > 0 ? (
-            <a className="cover-main" href={fileUrl('writing', piece.previews[0].path)} target="_blank" rel="noreferrer"
-               title="Substack preview (click for full size)">
-              <img src={thumbUrl('writing', piece.previews[0].path, 640)} alt="Substack preview" />
-            </a>
-          ) : (
-            <p className="muted">No Substack preview image.</p>
-          )}
+      <div className="card">
+        {/* Top: the Substack preview on the left; videos and photos beside it. */}
+        <div className="piece-body" style={{ marginTop: 0 }}>
+          <div className="piece-media">
+            {piece.previews.length > 0 ? (
+              <a className="cover-main" href={fileUrl('writing', piece.previews[0].path)} target="_blank" rel="noreferrer"
+                 title="Substack preview (click for full size)">
+                <img src={thumbUrl('writing', piece.previews[0].path, 640)} alt="Substack preview" />
+              </a>
+            ) : (
+              <p className="muted">No Substack preview image.</p>
+            )}
+          </div>
 
-          {piece.videos.length > 0 && (
-            <>
-              <h4>Videos ({piece.videos.length})</h4>
-              <VideoList files={piece.videos} />
-            </>
-          )}
-
-          {piece.images.length > 0 && (
-            <>
-              <h4>Images ({piece.images.length})</h4>
-              <ImageGrid files={piece.images} />
-            </>
-          )}
+          <div className="piece-docs">
+            {piece.videos.length > 0 && (
+              <>
+                <h4>Videos ({piece.videos.length})</h4>
+                <VideoList files={piece.videos} />
+              </>
+            )}
+            {piece.images.length > 0 && (
+              <>
+                <h4>Images ({piece.images.length})</h4>
+                <ImageGrid files={piece.images} />
+              </>
+            )}
+            {piece.videos.length === 0 && piece.images.length === 0 && (
+              <p className="muted">No photos or videos in this folder.</p>
+            )}
+          </div>
         </div>
 
-        <div className="piece-docs">
+        {/* Below, full width: the drafts. */}
+        <div className="piece-wide">
+          <h4>Drafts</h4>
           {!hasDrafts && <p className="muted">No drafts in this folder.</p>}
           {hasDrafts && (
             <div className="versions">
