@@ -34,6 +34,8 @@ export interface Config {
   capcutDraftsDir: string;
   /** Empty drafts made once in CapCut, copied for each new video. */
   capcutTemplates: { longform: string; short: string };
+  /** Deleted video folders and drafts are moved here, never really deleted. */
+  trashDir: string;
   guides: GuideDef[];
   tools: ToolDef[];
 }

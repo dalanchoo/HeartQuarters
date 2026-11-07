@@ -49,6 +49,12 @@ Automation levels:
   long-form's CapCut draft (picked by default). "+ New video" can also make
   a series: the series folder plus its first part (`023 - X\023A - Y\Longform`). Only ever adds folders;
   refuses names that already exist.
+- Rename and Delete buttons on videos, series, parts, shorts and standalone
+  shorts, each with a confirmation box. Rename also renames the matching
+  CapCut drafts and fixes the file links inside every draft that uses the
+  folder. Delete moves the folder (and ticked drafts) to
+  `HMF_SYS\HeartQuarters Trash`; nothing is really deleted. Both refuse to
+  touch drafts while CapCut is open.
 
 ## Later (from code review)
 

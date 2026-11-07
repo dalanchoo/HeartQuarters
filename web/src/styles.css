@@ -223,3 +223,6 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
           background: #eaf5ec; border: 1px solid #b9dcc0; border-radius: 8px; padding: 0.5rem 0.75rem;
           margin-bottom: 0.75rem; line-height: 1.7; }
 .notice-warn { background: #fdf4e3; border-color: #ecd29c; }
+button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+button.danger:hover:not(:disabled) { color: #fff; filter: brightness(1.1); }
+button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }

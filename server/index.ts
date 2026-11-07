@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
+import { deleteFolder, manageInfo, renameFolder } from './manage.js';
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
@@ -71,6 +72,20 @@ app.post('/api/create/series', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+// ---- Rename and delete (see manage.ts; delete moves to the trash folder) ---
+
+app.get('/api/manage/info', handle((req, res) => {
+  res.json(manageInfo(String(req.query.path ?? '')));
+}));
+
+app.post('/api/manage/rename', handle((req, res) => {
+  res.json(renameFolder(String(req.body?.path ?? ''), String(req.body?.newName ?? ''), req.body?.drafts));
+}));
+
+app.post('/api/manage/delete', handle((req, res) => {
+  res.json(deleteFolder(String(req.body?.path ?? ''), req.body?.drafts));
+}));
 
 // ---- Files ----------------------------------------------------------------
 

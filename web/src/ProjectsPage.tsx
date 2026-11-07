@@ -8,8 +8,10 @@ import {
   type Piece,
   type ProjectDetail,
   type CreateResult,
+  type ManageResult,
   type ProjectNode,
 } from './api';
+import { ManageButtons } from './ManageFolder';
 import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
 
@@ -35,7 +37,8 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   // Goes up by one after a new folder is made, so the list and the page re-read the disk.
   const [reloads, setReloads] = useState(0);
-  const [created, setCreated] = useState<CreateResult | null>(null);
+  // The note shown after making, renaming or deleting a folder.
+  const [note, setNote] = useState<Note | null>(null);
 
   useEffect(() => {
     getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
@@ -47,10 +50,26 @@ export function ProjectsPage() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  function onCreated(result: CreateResult) {
+  function afterChange(showId: string, newNote: Note) {
     setReloads((n) => n + 1);
-    setCreated(result);
-    location.hash = linkTo(result.showId);
+    setNote(newNote);
+    location.hash = showId ? linkTo(showId) : '#Videos';
+  }
+
+  function onCreated(result: CreateResult) {
+    afterChange(result.showId, {
+      showId: result.showId,
+      openPath: result.path,
+      lines: [
+        { ok: true, text: `Made "${result.path.split('/').at(-1)}" from the template.` },
+        { ok: result.capcut.created, text: result.capcut.message },
+      ],
+    });
+  }
+
+  function onManaged(result: ManageResult) {
+    const failed = /couldn't/i.test(result.message);
+    afterChange(result.showId, { showId: result.showId, lines: [{ ok: !failed, text: result.message }] });
   }
 
   return (
@@ -66,9 +85,9 @@ export function ProjectsPage() {
           ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} />)}
       </aside>
       <section className="content">
-        {created && created.showId === selected && <CreatedNote result={created} onDismiss={() => setCreated(null)} />}
+        {note && note.showId === (selected ?? '') && <NoteBox note={note} onDismiss={() => setNote(null)} />}
         {selected ? (
-          <ProjectView id={selected} reloads={reloads} onCreated={onCreated} />
+          <ProjectView id={selected} reloads={reloads} onCreated={onCreated} onManaged={onManaged} />
         ) : (
           <p className="muted">Pick a project on the left.</p>
         )}
@@ -77,21 +96,31 @@ export function ProjectsPage() {
   );
 }
 
-/** Shown after "+ New ...": what was made, and whether the CapCut draft was made too. */
-function CreatedNote({ result, onDismiss }: { result: CreateResult; onDismiss: () => void }) {
+interface Note {
+  showId: string;
+  lines: { ok: boolean; text: string }[];
+  openPath?: string;
+}
+
+/** Shown after making, renaming or deleting: what happened, including the CapCut drafts. */
+function NoteBox({ note, onDismiss }: { note: Note; onDismiss: () => void }) {
   return (
-    <div className={`notice ${result.capcut.created ? '' : 'notice-warn'}`}>
+    <div className={`notice ${note.lines.every((l) => l.ok) ? '' : 'notice-warn'}`}>
       <div>
-        <div>
-          ✓ Made <strong>{result.path.split('/').at(-1)}</strong> from the template.{' '}
-          <button className="small" onClick={() => openInExplorer('projects', result.path)}>
-            Open folder
-          </button>
-        </div>
-        <div>
-          {result.capcut.created ? '✓ ' : '⚠ '}
-          {result.capcut.message}
-        </div>
+        {note.lines.map((l, i) => (
+          <div key={i}>
+            {l.ok ? '✓ ' : '⚠ '}
+            {l.text}
+            {i === 0 && note.openPath && (
+              <>
+                {' '}
+                <button className="small" onClick={() => openInExplorer('projects', note.openPath!)}>
+                  Open folder
+                </button>
+              </>
+            )}
+          </div>
+        ))}
       </div>
       <button className="small" onClick={onDismiss} title="Hide this note">
         ✕
@@ -141,10 +170,12 @@ function ProjectView({
   id,
   reloads,
   onCreated,
+  onManaged,
 }: {
   id: string;
   reloads: number;
   onCreated: (result: CreateResult) => void;
+  onManaged: (result: ManageResult) => void;
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +224,7 @@ function ProjectView({
           {(project.kind === 'project' || project.kind === 'part') && (
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
+          {project.kind !== 'group' && <ManageButtons path={project.id} onDone={onManaged} />}
           <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
         </div>
       </div>
@@ -210,9 +242,9 @@ function ProjectView({
                 <PieceCard key={p.path} piece={p} startOpen />
               ))}
             {project.kind !== 'short' && (
-              <PieceGroup title="Shorts" pieces={video.pieces.filter((p) => p.kind === 'short')} />
+              <PieceGroup title="Shorts" pieces={video.pieces.filter((p) => p.kind === 'short')} onManaged={onManaged} />
             )}
-            <PieceGroup title="Reels" pieces={video.pieces.filter((p) => p.kind === 'reel')} />
+            <PieceGroup title="Reels" pieces={video.pieces.filter((p) => p.kind === 'reel')} onManaged={onManaged} />
           </div>
         ))
       )}
@@ -242,7 +274,15 @@ function ChildList({ node }: { node: ProjectDetail }) {
   );
 }
 
-function PieceGroup({ title, pieces }: { title: string; pieces: Piece[] }) {
+function PieceGroup({
+  title,
+  pieces,
+  onManaged,
+}: {
+  title: string;
+  pieces: Piece[];
+  onManaged: (result: ManageResult) => void;
+}) {
   if (pieces.length === 0) return null;
   return (
     <div className="piece-group">
@@ -250,7 +290,7 @@ function PieceGroup({ title, pieces }: { title: string; pieces: Piece[] }) {
         {title} <span className="muted">({pieces.length})</span>
       </h3>
       {pieces.map((p) => (
-        <PieceCard key={p.path} piece={p} />
+        <PieceCard key={p.path} piece={p} onManaged={onManaged} />
       ))}
     </div>
   );
@@ -262,7 +302,16 @@ function versionLabel(name: string): string {
   return rest.length ? `${num} · ${rest.join(' ')}` : num;
 }
 
-function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boolean }) {
+function PieceCard({
+  piece,
+  startOpen = false,
+  onManaged,
+}: {
+  piece: Piece;
+  startOpen?: boolean;
+  /** Given for shorts and reels inside a video, which get Rename / Delete buttons. */
+  onManaged?: (result: ManageResult) => void;
+}) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
@@ -356,6 +405,7 @@ function PieceCard({ piece, startOpen = false }: { piece: Piece; startOpen?: boo
                 Open {versionLabel(version.name)} folder
               </button>
             )}
+            {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
           </div>
         </div>
 

@@ -219,7 +219,7 @@ function setJsonValue(json: string, key: string, value: string | number): string
   return json.replace(re, (_m, head: string) => head + JSON.stringify(value));
 }
 
-const isDraft = (dir: string) => fs.existsSync(path.join(dir, 'draft_meta_info.json'));
+export const isDraft = (dir: string) => fs.existsSync(path.join(dir, 'draft_meta_info.json'));
 
 /** Every CapCut draft, newest first. */
 export function listDrafts(): string[] {
@@ -233,11 +233,14 @@ export function listDrafts(): string[] {
 }
 
 /** A draft name must be one existing draft, nothing else. */
-function checkDraftName(name: string): string {
+export function checkDraftName(name: string): string {
   const n = checkFolderName(name);
   if (!isDraft(path.join(config.capcutDraftsDir, n))) throw new Error(`There's no CapCut draft called "${n}".`);
   return n;
 }
+
+/** CapCut adds "(1)", "(2)"... to copies: "022 - Worth Telling Them(2)" -> "022 - Worth Telling Them". */
+export const plainDraftName = (d: string) => d.replace(/\s*\(\d+\)$/, '').trim();
 
 /**
  * The drafts that probably belong to a video, best guess first. CapCut adds
@@ -246,8 +249,7 @@ function checkDraftName(name: string): string {
 export function draftsForVideo(parentId: string, all = listDrafts()): string[] {
   const folder = parentId.split('/').at(-1) ?? '';
   const num = numberOf(parentId);
-  const plain = (d: string) => d.replace(/\s*\(\d+\)$/, '').trim();
-  const same = all.filter((d) => plain(d).toLowerCase() === folder.toLowerCase());
+  const same = all.filter((d) => plainDraftName(d).toLowerCase() === folder.toLowerCase());
   const similar = all.filter((d) => !same.includes(d) && new RegExp(`^${num}\\s*[-–]`).test(d));
   return [...same, ...similar];
 }
