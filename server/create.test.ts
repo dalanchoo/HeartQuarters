@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { checkFolderName, createCapCutDraft, createVideoFolder, draftsForVideo, suggestPrefix } from './create';
+import { checkFolderName, createCapCutDraft, createSeries, createVideoFolder, draftsForVideo, suggestPrefix } from './create';
 import { makeTree, removeTree } from './testing';
 
 const YEAR = new Date().getFullYear();
@@ -193,5 +193,30 @@ describe('copying an existing CapCut draft (shorts cut from a long-form)', () =>
     await expect(createVideoFolder('short', '022 - Worth Telling Them', '022_S04 - X', 'Not A Draft')).rejects.toThrow(/no CapCut draft/);
     await expect(createVideoFolder('short', '022 - Worth Telling Them', '022_S04 - X', '../Drafts')).rejects.toThrow();
     expect(exists('022 - Worth Telling Them', 'Shorts', '022_S04 - X')).toBe(false);
+  });
+});
+
+describe('createSeries', () => {
+  it('makes the series folder with its first part and the longform template inside', async () => {
+    const r = await createSeries('023 - Test', '023A - Test Part 1');
+    expect(r.showId).toBe('023 - Test/023A - Test Part 1');
+    expect(exists('023 - Test', '023A - Test Part 1', 'Longform', 'Packaging', 'V01', 'YouTube.md')).toBe(true);
+    expect(exists('023 - Test', '023A - Test Part 1', 'Longform', '023A - Test Part 1 - Script.docx')).toBe(true);
+    // The CapCut draft is named after the part (no longform template draft in these fake folders).
+    expect(r.capcut.message).toMatch(/LONGFORM TEMPLATE/);
+    // And the app now sees it as a series, so "+ New part" works on it.
+    expect(suggestPrefix('part', '023 - Test')).toBe('023B - ');
+  });
+
+  it("refuses a first part that wouldn't count as part of the series, before making anything", async () => {
+    await expect(createSeries('023 - Test', 'Part 1')).rejects.toThrow(/023A - /);
+    await expect(createSeries('023 - Test', '024A - Wrong Number')).rejects.toThrow(/023A - /);
+    await expect(createSeries('Test', '023A - X')).rejects.toThrow(/number/);
+    expect(exists('023 - Test')).toBe(false);
+  });
+
+  it('never reuses an existing folder', async () => {
+    await expect(createSeries('022 - Worth Telling Them', '022A - X')).rejects.toThrow(/already exists/);
+    expect(exists('022 - Worth Telling Them', '022A - X')).toBe(false);
   });
 });

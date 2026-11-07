@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
-import { createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
+import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
@@ -58,6 +58,15 @@ app.post('/api/create', async (req, res) => {
   try {
     const { kind, parent, name, copyDraft } = req.body ?? {};
     res.json(await createVideoFolder(parseKind(kind), String(parent ?? ''), String(name ?? ''), String(copyDraft ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// A new series with its first part: { name: "023 - Test", partName: "023A - Part 1" }
+app.post('/api/create/series', async (req, res) => {
+  try {
+    res.json(await createSeries(String(req.body?.name ?? ''), String(req.body?.partName ?? '')));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }

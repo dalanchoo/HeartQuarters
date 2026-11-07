@@ -11,10 +11,12 @@ const WHAT: Record<NewKind, { button: string; title: string }> = {
 };
 
 /** Where the new folder will go, e.g. "015 - NVC › 015B - Title › Longform". */
-function whereItGoes(kind: NewKind, parent: string, name: string): string {
+function whereItGoes(kind: NewKind, parent: string, name: string, seriesPart?: string): string {
   const n = name.trim() || '…';
   const parts =
-    kind === 'top'
+    seriesPart !== undefined
+      ? [n, seriesPart.trim() || '…', 'Longform']
+      : kind === 'top'
       ? [n, 'Longform']
       : kind === 'part'
         ? [parent, n, 'Longform']
@@ -62,7 +64,12 @@ function NewFolderDialog({
   // Shorts only: which CapCut draft to copy ('' = the empty template).
   const [drafts, setDrafts] = useState<{ videoDrafts: string[]; otherDrafts: string[] } | null>(null);
   const [copyDraft, setCopyDraft] = useState('');
+  // New video only: make it a series ("023 - Test") with a first part ("023A - ...").
+  const [series, setSeries] = useState(false);
+  const [partName, setPartName] = useState<string | null>(null); // null = not typed in yet
   const input = useRef<HTMLInputElement>(null);
+  const partPrefix = `${/^(\d+)/.exec(name.trim())?.[1] ?? ''}A - `;
+  const part = partName ?? partPrefix;
 
   // Fill in the next number ("023 - ") and put the cursor after it.
   useEffect(() => {
@@ -93,14 +100,20 @@ function NewFolderDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, onClose]);
 
-  const ready = name.trim() !== '' && name.trim() !== prefix?.trim() && !busy;
+  const ready =
+    name.trim() !== '' &&
+    name.trim() !== prefix?.trim() &&
+    (!series || (part.trim() !== '' && part.trim() !== partPrefix.trim())) &&
+    !busy;
 
   async function create() {
     if (!ready) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await postJson<CreateResult>('/api/create', { kind, parent, name, copyDraft });
+      const result = series
+        ? await postJson<CreateResult>('/api/create/series', { name, partName: part })
+        : await postJson<CreateResult>('/api/create', { kind, parent, name, copyDraft });
       onClose();
       onCreated(result); // shows the new folder, with a note about the CapCut draft
     } catch (e) {
@@ -132,7 +145,31 @@ function NewFolderDialog({
             onChange={(e) => setName(e.target.value)}
             spellCheck={false}
           />
-          <p className="muted small-text">Will be made in: {whereItGoes(kind, parent, name)}</p>
+          {kind === 'top' && (
+            <label className="checkbox small-text">
+              <input type="checkbox" checked={series} disabled={busy} onChange={(e) => setSeries(e.target.checked)} />
+              Make it a series (a folder of parts, like 015 - NVC)
+            </label>
+          )}
+          {series && (
+            <>
+              <label className="muted small-text" htmlFor="new-folder-part">
+                First part
+              </label>
+              <input
+                id="new-folder-part"
+                className="text-input"
+                value={part}
+                disabled={busy}
+                onChange={(e) => setPartName(e.target.value)}
+                onFocus={(e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
+                spellCheck={false}
+              />
+            </>
+          )}
+          <p className="muted small-text">
+            Will be made in: {whereItGoes(kind, parent, name, series ? part : undefined)}
+          </p>
           {drafts ? (
             <>
               <label className="muted small-text" htmlFor="new-folder-draft">
@@ -168,7 +205,9 @@ function NewFolderDialog({
               </p>
             </>
           ) : (
-            <p className="muted small-text">An empty CapCut draft with the same name is made too.</p>
+            <p className="muted small-text">
+              An empty CapCut draft is made too, named after the {series ? 'first part' : 'video'}.
+            </p>
           )}
           {error && <p className="error">{error}</p>}
           <div className="modal-actions">

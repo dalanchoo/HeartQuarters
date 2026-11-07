@@ -189,6 +189,28 @@ export async function createVideoFolder(
   };
 }
 
+/**
+ * A new series: "023 - Test" holding its first part "023A - Test Part 1\Longform".
+ * The part must be named like "023A - ...", or the app wouldn't see the
+ * folder as a series. The CapCut draft is made for the part.
+ */
+export async function createSeries(rawName: string, rawPartName: string): Promise<CreateResult> {
+  const name = checkFolderName(rawName);
+  const partName = checkFolderName(rawPartName);
+  const num = /^(\d+)\s*[-–]/.exec(name)?.[1];
+  if (!num) throw new Error('The series name must start with its number, like "023 - ".');
+  if (!new RegExp(`^${num}[A-Z]\\s*[-–]`).test(partName)) {
+    throw new Error(`The first part's name must start like "${num}A - ", so it shows up as part of the series.`);
+  }
+  templateDir('part'); // check before making anything
+  const dir = safeResolve('projects', name);
+  makeNewFolder(dir);
+  makeNewFolder(path.join(dir, partName));
+  copyTemplate('part', path.join(dir, partName, 'Longform'), partName);
+  const id = `${name}/${partName}`;
+  return { showId: id, path: id, capcut: await createCapCutDraft(partName, 'longform') };
+}
+
 // ---- CapCut ------------------------------------------------------------------
 
 /** Sets one JSON value in the text, leaving everything else exactly as CapCut wrote it. */
