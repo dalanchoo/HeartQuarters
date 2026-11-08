@@ -20,7 +20,7 @@ Automation levels:
   exports play in the app; covers shown; `Packaging\Vxx\*.md` split into fields
   with Copy buttons; Open folder buttons. (Metadata already lives in
   `Packaging\Vxx\YouTube.md`, so no new `project.md` file was needed.)
-- Guides: read LONGFORM.md, SHORTS.md, CLAUDE.md, the toolbox README.
+- Guides: read the editing skills (channel-basics, longform-edit, shorts-from-longform) and the longform scripts README.
 - Tools: Run buttons with live output for UpdateContentArchive,
   VideoMetaPackager, SubstackDownloader.
 
@@ -75,7 +75,9 @@ Automation levels:
 |---|---|---|---|
 | 5 | Publish long-form to YouTube: upload video, fill metadata from `project.md`, upload thumbnail, schedule | Auto | YouTube API supports all of this. Start as a script. |
 | 6 | Pinned comment at go-live | Remind | The API can't pin comments. HQ can post the comment and remind you to pin it, or just remind you. |
-| 7 | Turn `LONGFORM.md` into the first proper skill (instructions + scripts) | n/a | The Claude + CapCut editing workflow. Do this first: it's useful even before the app exists. |
+| 7 | "Make first cut": the `longform-edit` skill run on prepared takes, ending in a CapCut project; then a button that runs it | Auto (Claude-assisted) | The skill folders exist (`HMF_SYS\Skills\HMF_Skills\`). Next: the first-cut steps in the skill, tested on short test takes in 023; then the button. |
+| 7a | "Prepare Video" button (sync, pop repair, Adobe Enhance when needed) into `Longform\Intermediate\Takes\` | Prep | Placeholder button first. Raw\ stays untouched originals. |
+| 7b | Skills page: every skill, with a checkbox per AI (Claude Code, Codex, Gemini CLI) that creates or removes its link | Auto | Links are Windows junctions from each AI's skills folder to `HMF_SYS\Skills`. |
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 

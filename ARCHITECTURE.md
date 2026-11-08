@@ -33,25 +33,32 @@ see your projects, edit metadata, watch videos, and run jobs
 |---|---|
 | Video projects | `D:\Google Drive\HeartMind\Video Projects\NNN - Title\` |
 | Metadata for each video | `...\Packaging\Vxx\YouTube.md` (and `TikTok.md`, `Instagram.md`, ... for Shorts). Already in use; the app reads these. |
-| Editing rules | `Video Projects\LONGFORM.md`, `SHORTS.md`, `CLAUDE.md` |
+| Editing rules (skills) | `D:\Google Drive\HeartMind\HMF_SYS\Skills\HMF_Skills\` (`channel-basics`, `longform-edit`, `shorts-from-longform`, each a `SKILL.md` + `scripts\`); other people's skills in `HMF_SYS\Skills\Downloaded\`. `Video Projects\CLAUDE.md` (and `AGENTS.md`, `GEMINI.md`) only point there. |
+| An episode's own edit settings | `NNN - Title\Longform\Claude\project\episode.json` while editing; kept in `Longform\Intermediate\Edit Scripts\` afterwards |
 | Substack writing | `D:\Google Drive\HeartMind\Writing\<My Journey / My Reflections / My Wisdom>\<piece>\` with `Drafts\*.docx` and `Substack Metadata\Preview.png` |
 | Expressions library (thumbnail photos) | `D:\Google Drive\HeartMind\Assets\Expressions\<Category>\<Sub>\` with `<Name>.txt` (definition), `_<Name>.png` (reference), photos + `<photo>.txt` tags |
 | Photo previews (cache) | `C:\Dev\HeartQuarters\data\thumbs` (made by FFmpeg; safe to delete) |
 | Downloaded Substack archive | `HMF_SYS\Generated\Substack` (made by SubstackDownloader.py; not shown in the app yet) |
-| Tools (Python scripts, Longform/Shorts toolbox) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |
+| Tools (standalone Python scripts the Tools tab runs) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |
 | HeartQuarters code | `C:\Dev\HeartQuarters` (Git), outside Drive |
 | App cache / database (later) | `C:\Dev\HeartQuarters\data\` (ignored by Git; can be deleted) |
 | Per-machine settings | `C:\Dev\HeartQuarters\config.json` (made from `config.example.json`) |
 
-**The rules and tools stay in Drive for now.** Episode `Claude\CLAUDE.md` files
-and the toolbox README point at those exact paths, and the current
-Claude + CapCut workflow works. Moving them into Git as formal skills is a later
-decision, made one skill at a time.
+**The skills stay in Drive** (`HMF_SYS\Skills`), not in Git: they are part of
+the content work, and Drive keeps them backed up with the rest.
 
 ## Skills
 
 A skill is a folder with a `SKILL.md` (plain-language instructions: what the
-job is, how you like it done) plus any scripts it needs.
+job is, how you like it done, with a `name` and `description` header) plus any
+scripts it needs, in the open "Agent Skills" format that Claude Code, Codex and
+Gemini CLI all read. There is one real copy of each skill, in `HMF_SYS\Skills`;
+each AI on this computer gets a link (a Windows junction) in its own skills
+folder (Claude Code: `C:\Users\dalan\.claude\skills\<name>`), so every AI sees
+the same, current version.
+
+- **Never about one episode.** Skills and their scripts contain no episode's
+  number, name, paths or settings. Those live in the episode's own files.
 
 - **Plain files, no lock-in.** Markdown + scripts, so Claude, ChatGPT, Gemini
   or a person can follow them.

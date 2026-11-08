@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_LOGO = Path(
-    r"D:\Google Drive\HeartMind\HMF_SYS\Tools\Longform\graphics\hyperframes starter\assets\hero-alpha-filled.png"
+    r"D:\Google Drive\HeartMind\HMF_SYS\Skills\HMF_Skills\longform-edit\scripts\graphics\hyperframes starter\assets\hero-alpha-filled.png"
 )
 
 SIZE = 1024

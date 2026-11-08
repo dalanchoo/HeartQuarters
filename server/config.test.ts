@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { config, safeResolve } from './config';
+import { config, parseRoot, safeResolve } from './config';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -62,5 +62,20 @@ describe('safeResolve', () => {
 
   it('ignores upper/lower case differences, like Windows', () => {
     expect(() => safeResolve('projects', 'PROJECT/file.txt')).not.toThrow();
+  });
+});
+
+describe('the skills folder', () => {
+  it('is its own allowed folder, with the same protection', () => {
+    const saved = config.skillsDir;
+    config.skillsDir = allowed;
+    try {
+      expect(parseRoot('skills')).toBe('skills');
+      expect(safeResolve('skills', 'Project/file.txt')).toBe(path.join(allowed, 'Project', 'file.txt'));
+      expect(() => safeResolve('skills', '../Outside/secret.txt')).toThrow(/outside/);
+      expect(() => safeResolve('skills', 'Sneaky/secret.txt')).toThrow(/outside/);
+    } finally {
+      config.skillsDir = saved;
+    }
   });
 });

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Which top-level folder a relative path belongs to. */
-export type RootId = 'projects' | 'tools' | 'writing' | 'expressions';
+export type RootId = 'projects' | 'tools' | 'skills' | 'writing' | 'expressions';
 
 export interface ToolDef {
   id: string;
@@ -27,6 +27,8 @@ export interface Config {
   port: number;
   videoProjectsDir: string;
   toolsDir: string;
+  /** The AI skills (instructions + scripts), e.g. HMF_SYS\Skills with HMF_Skills\ and Downloaded\ inside. */
+  skillsDir: string;
   writingDir: string;
   expressionsDir: string;
   python: string;
@@ -55,13 +57,14 @@ export const config = loadConfig();
 
 export function rootDir(root: RootId): string {
   if (root === 'tools') return config.toolsDir;
+  if (root === 'skills') return config.skillsDir;
   if (root === 'writing') return config.writingDir;
   if (root === 'expressions') return config.expressionsDir;
   return config.videoProjectsDir;
 }
 
 export function parseRoot(value: unknown): RootId {
-  return value === 'tools' || value === 'writing' || value === 'expressions' ? value : 'projects';
+  return value === 'tools' || value === 'skills' || value === 'writing' || value === 'expressions' ? value : 'projects';
 }
 
 /** True if `child` is `parent` or somewhere inside it (ignoring upper/lower case, as Windows does). */
