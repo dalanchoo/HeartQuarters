@@ -13,6 +13,8 @@ export type { NewKind, CreateResult } from '../../server/create';
 export type { ManageInfo, ManageResult } from '../../server/manage';
 export type { WritingSummary, WritingDetail } from '../../server/writing';
 export type { SkillsOverview, SkillInfo, TargetInfo, LinkState } from '../../server/skills';
+export type { ClaudeRun, ClaudeMessage } from '../../server/claude';
+export type { ShortsPlan, PlannedShort, ShortsOverview, TimedWord } from '../../server/shorts';
 export type {
   ExpressionIndex,
   ExpressionCategory,

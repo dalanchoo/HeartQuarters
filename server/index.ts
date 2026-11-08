@@ -13,10 +13,22 @@ import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
+import { getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
+import {
+  hasRetention,
+  keepOldPlan,
+  makeShort,
+  readTranscript,
+  retireRetention,
+  savePlan,
+  saveRetention,
+  shortsOverview,
+} from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
+app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use(express.json());
 
 /** Runs a route handler and turns any error into a readable JSON message. */
@@ -178,6 +190,74 @@ app.post('/api/skills/open', handle((req, res) => {
   spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
 }));
+
+// ---- Edit with Claude (see claude.ts) --------------------------------------
+
+app.get('/api/claude', handle((req, res) => {
+  res.json(getRun(String(req.query.video ?? '')));
+}));
+
+app.post('/api/claude/start', handle((req, res) => {
+  res.json(startEdit(String(req.body?.video ?? '')));
+}));
+
+app.post('/api/claude/note', handle((req, res) => {
+  res.json(sendNote(String(req.body?.video ?? ''), String(req.body?.text ?? '')));
+}));
+
+app.post('/api/claude/stop', handle((req, res) => {
+  res.json(stopRun(String(req.body?.video ?? '')));
+}));
+
+// ---- Shorts plan (see shorts.ts) -------------------------------------------
+
+app.get('/api/shorts', handle((req, res) => {
+  res.json(shortsOverview(String(req.query.video ?? '')));
+}));
+
+app.get('/api/shorts/transcript', handle((req, res) => {
+  res.json(readTranscript(String(req.query.video ?? '')));
+}));
+
+app.post('/api/shorts/propose', handle((req, res) => {
+  const video = String(req.body?.video ?? '');
+  if (getRun(video, 'shorts')?.status === 'running') throw new Error('Claude is already proposing shorts for this video.');
+  keepOldPlan(video);
+  res.json(startShortsProposal(video, hasRetention(video)));
+}));
+
+// { video, job: "shorts" or "short-S07", text }
+app.post('/api/shorts/note', handle((req, res) => {
+  res.json(sendNote(String(req.body?.video ?? ''), String(req.body?.text ?? ''), parseShortsJob(req.body?.job)));
+}));
+
+app.post('/api/shorts/stop', handle((req, res) => {
+  res.json(stopRun(String(req.body?.video ?? ''), parseShortsJob(req.body?.job ?? 'shorts')));
+}));
+
+app.post('/api/shorts/plan', handle((req, res) => {
+  res.json(savePlan(String(req.body?.video ?? ''), req.body?.shorts, req.body?.rejected));
+}));
+
+app.post('/api/shorts/retention', handle((req, res) => {
+  saveRetention(String(req.body?.video ?? ''), req.body?.png);
+  res.json({ ok: true });
+}));
+
+app.post('/api/shorts/retention/remove', handle((req, res) => {
+  retireRetention(String(req.body?.video ?? ''));
+  res.json({ ok: true });
+}));
+
+// Copying the CapCut project can take minutes, so this one waits without holding up the rest of the app.
+app.post('/api/shorts/make', async (req, res) => {
+  try {
+    const { video, id, draft } = req.body ?? {};
+    res.json(await makeShort(String(video ?? ''), String(id ?? ''), String(draft ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // ---- Tools ----------------------------------------------------------------
 

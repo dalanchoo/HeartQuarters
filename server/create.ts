@@ -45,7 +45,7 @@ function highest(names: string[], re: RegExp): number {
 const pad = (n: number, width: number) => String(n).padStart(width, '0');
 
 /** "015 - NVC" -> "015", "015 - NVC/015A - Making..." -> "015A" */
-function numberOf(id: string): string {
+export function numberOf(id: string): string {
   const last = id.split('/').at(-1) ?? '';
   const m = /^(\d+[A-Z]?)\s*[-–]/.exec(last);
   if (!m) throw new Error(`Can't find a number at the start of "${last}".`);

@@ -12,6 +12,8 @@ import {
   type ProjectNode,
 } from './api';
 import { ManageButtons } from './ManageFolder';
+import { ClaudeEdit } from './ClaudeEdit';
+import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
 
@@ -229,6 +231,13 @@ function ProjectView({
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
+      {(project.kind === 'project' || project.kind === 'part') &&
+        project.videos.some((v) => v.pieces.some((p) => p.kind === 'longform')) && (
+          <>
+            <ClaudeEdit video={project.id} />
+            <ShortsPlanCard video={project.id} />
+          </>
+        )}
 
       {project.children.length > 0 ? (
         <ChildList node={project} />

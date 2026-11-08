@@ -42,6 +42,8 @@ export interface Config {
   writingDir: string;
   expressionsDir: string;
   python: string;
+  /** How to start Claude Code, as a program and its first arguments (the "Edit with Claude" button). */
+  claudeCommand: string[];
   /** Where CapCut keeps its drafts (CapCut: Settings > Draft location). */
   capcutDraftsDir: string;
   /** Empty drafts made once in CapCut, copied for each new video. */

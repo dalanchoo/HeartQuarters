@@ -62,6 +62,26 @@ Automation levels:
   that AI's skills folder; unticking removes only the link. Things installed in
   those folders some other way are listed and left alone.
 
+- "Edit with Claude" on a longform video's page: runs Claude Code in the
+  background on the longform-edit skill, writing into the video's CapCut
+  project, and shows the conversation; John's notes go to the same
+  conversation (saved in data/claude/). Tools are allowed up front
+  (acceptEdits, plus the skills and CapCut drafts folders).
+
+- "Propose shorts" on a longform video's page: Claude chooses clips with the
+  shorts skill, looking at the pictures as well as the words, and writes
+  `Shorts\Shorts Plan.json`. Each short and near miss is a collapsible row: edit
+  it, read all its words, play it from the export, move it between the two
+  lists. A retention graph pasted with Ctrl+V is saved beside the plan for
+  Claude to use. Proposing again keeps the old list as a separate file.
+- Setting a clip's range: a trim bar under the video with two drag handles (they
+  snap to word edges, and the arrow keys move them a tenth of a second), or select
+  words in the transcript and click the button to make them the clip. A button
+  goes back to the times Claude proposed, which the plan file keeps.
+- "Make this short" on a row: makes the short's folder and a copy of the
+  longform's CapCut project, then Claude cuts it to the clip and turns it 9:16,
+  with its own conversation for John's notes.
+
 ## Later (from code review)
 
 - Large-folder scans run on the engine's main thread, so a slow Drive scan can
