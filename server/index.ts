@@ -12,6 +12,7 @@ import { getJob, listTools, runTool } from './tools.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
+import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { guard, sandboxHeaders } from './security.js';
 
 const app = express();
@@ -157,6 +158,25 @@ app.get('/api/guides', handle((_req, res) => {
   res.json(
     config.guides.map((g) => ({ ...g, found: fs.existsSync(safeResolve(g.root, g.path)) })),
   );
+}));
+
+// ---- Skills (which AI gets which skill; see skills.ts) ----------------------
+
+app.get('/api/skills', handle((_req, res) => {
+  res.json(listSkills());
+}));
+
+// { skill: "HMF_Skills/longform-edit", target: "claude", on: true } -> { state: "on" }
+app.post('/api/skills/link', handle((req, res) => {
+  const state = setSkillLink(String(req.body?.skill ?? ''), String(req.body?.target ?? ''), req.body?.on === true);
+  res.json({ state });
+}));
+
+// { target: "claude" }: opens that AI's skills folder (only folders listed in config.json).
+app.post('/api/skills/open', handle((req, res) => {
+  const folder = targetFolder(String(req.body?.target ?? ''));
+  spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
+  res.json({ ok: true });
 }));
 
 // ---- Tools ----------------------------------------------------------------

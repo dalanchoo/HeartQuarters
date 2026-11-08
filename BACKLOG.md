@@ -56,6 +56,12 @@ Automation levels:
   `HMF_SYS\HeartQuarters Trash`; nothing is really deleted. Both refuse to
   touch drafts while CapCut is open.
 
+- Skills tab: every skill in `HMF_SYS\Skills` (`HMF_Skills\` and `Downloaded\`),
+  with a checkbox per AI (Claude Code, Codex, Gemini CLI; listed in
+  `skillTargets` in config.json). A tick creates a link (Windows junction) in
+  that AI's skills folder; unticking removes only the link. Things installed in
+  those folders some other way are listed and left alone.
+
 ## Later (from code review)
 
 - Large-folder scans run on the engine's main thread, so a slow Drive scan can
@@ -77,7 +83,6 @@ Automation levels:
 | 6 | Pinned comment at go-live | Remind | The API can't pin comments. HQ can post the comment and remind you to pin it, or just remind you. |
 | 7 | "Make first cut": the `longform-edit` skill run on prepared takes, ending in a CapCut project; then a button that runs it | Auto (Claude-assisted) | The skill folders exist (`HMF_SYS\Skills\HMF_Skills\`). Next: the first-cut steps in the skill, tested on short test takes in 023; then the button. |
 | 7a | "Prepare Video" button (sync, pop repair, Adobe Enhance when needed) into `Longform\Intermediate\Takes\` | Prep | Placeholder button first. Raw\ stays untouched originals. |
-| 7b | Skills page: every skill, with a checkbox per AI (Claude Code, Codex, Gemini CLI) that creates or removes its link | Auto | Links are Windows junctions from each AI's skills folder to `HMF_SYS\Skills`. |
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 

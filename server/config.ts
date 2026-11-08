@@ -17,6 +17,14 @@ export interface ToolDef {
   script: string;
 }
 
+/** An AI on this PC that reads skills from a folder (one link per skill goes in there). */
+export interface SkillTarget {
+  id: string;
+  name: string;
+  /** The AI's skills folder, e.g. C:\Users\<you>\.claude\skills */
+  dir: string;
+}
+
 export interface GuideDef {
   name: string;
   root: RootId;
@@ -29,6 +37,8 @@ export interface Config {
   toolsDir: string;
   /** The AI skills (instructions + scripts), e.g. HMF_SYS\Skills with HMF_Skills\ and Downloaded\ inside. */
   skillsDir: string;
+  /** The AIs whose skills the Skills page manages. */
+  skillTargets: SkillTarget[];
   writingDir: string;
   expressionsDir: string;
   python: string;

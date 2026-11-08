@@ -3,6 +3,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
 import { ExpressionsPage } from './ExpressionsPage';
 import { GuidesPage } from './GuidesPage';
+import { SkillsPage } from './SkillsPage';
 import { ToolsPage } from './ToolsPage';
 
 // Each tab has an id (used in the address, e.g. #Videos) and a label.
@@ -11,6 +12,7 @@ const TABS = [
   { id: 'Substack', label: 'Substack' },
   { id: 'Expressions', label: 'Expressions' },
   { id: 'Guides', label: 'Guides' },
+  { id: 'Skills', label: 'Skills' },
   { id: 'Tools', label: 'Tools' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -51,6 +53,7 @@ export function App() {
         {tab === 'Substack' && <SubstackPage />}
         {tab === 'Expressions' && <ExpressionsPage />}
         {tab === 'Guides' && <GuidesPage />}
+        {tab === 'Skills' && <SkillsPage />}
         {tab === 'Tools' && <ToolsPage />}
       </main>
     </div>
