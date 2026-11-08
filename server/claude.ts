@@ -1,7 +1,7 @@
 // Runs Claude Code in the background on one video, and keeps the conversation.
 //   "Edit with Claude": follows the longform-edit skill; John sends notes after looking at the result in CapCut.
 //   "Propose shorts": follows the shorts skill's choosing steps and writes Shorts\\Shorts Plan.json (see shorts.ts).
-//   "Make this short": cuts a copy of the longform's CapCut project down to one short and turns it portrait.
+//   "Make this short": cuts a copy of the longform's CapCut project down to one short, turns it portrait, adds captions.
 //
 // Each video has one conversation per job (a Claude Code session id), saved in data/claude/ so it survives a restart.
 // A run is one turn of that conversation: the first one starts the job, later ones send John's notes.
@@ -113,9 +113,9 @@ export function buildPrompt(videoDir: string, short: ShortToBuild): string {
     `Its folder is "Shorts\\${short.name}". Its CapCut project is "${short.name}" in "${config.capcutDraftsDir}":`,
     `HeartQuarters has just made it as a full copy of the longform's project "${short.source}", so don't copy anything.`,
     `The clip runs from ${short.start} to ${short.end} seconds on the longform's timeline.`,
-    'Build the picture only: keep that stretch on every track, moved to start at 0, then 9:16, John reframed,',
-    'and B-roll and graphics refitted to the portrait frame instead of black bars.',
-    'Leave captions, the cover and packaging until John asks. Start by checking how this project is actually built.',
+    'Build the picture and the captions: keep that stretch on every track, moved to start at 0, then 9:16, John framed',
+    "so his head stays on screen, B-roll and graphics refitted to the portrait frame, and captions, all as the skill says.",
+    'Leave the cover and packaging until John asks. Start by checking how this project is actually built.',
     'CapCut is closed now. Tell John what to look at when you are done.',
   ].join(' ');
 }

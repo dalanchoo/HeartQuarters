@@ -19,6 +19,7 @@ import {
   keepOldPlan,
   makeShort,
   readTranscript,
+  regenerateShort,
   retireRetention,
   savePlan,
   saveRetention,
@@ -254,6 +255,16 @@ app.post('/api/shorts/make', async (req, res) => {
   try {
     const { video, id, draft } = req.body ?? {};
     res.json(await makeShort(String(video ?? ''), String(id ?? ''), String(draft ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// Moves the old short to the trash, then makes it again: the same wait as above.
+app.post('/api/shorts/regenerate', async (req, res) => {
+  try {
+    const { video, id, draft } = req.body ?? {};
+    res.json(await regenerateShort(String(video ?? ''), String(id ?? ''), String(draft ?? '')));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }

@@ -100,10 +100,10 @@ export function ShortsPlanCard({ video }: { video: string }) {
       refresh();
     });
   };
-  const make = (s: PlannedShort) => {
+  const make = (s: PlannedShort, how: 'make' | 'regenerate' = 'make') => {
     setError(null);
     setMaking(s.id);
-    postJson('/api/shorts/make', { video, id: s.id, draft: source })
+    postJson(`/api/shorts/${how}`, { video, id: s.id, draft: source })
       .then(refresh, fail)
       .finally(() => setMaking(null));
   };
@@ -134,6 +134,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
           }
         }}
         onMake={() => make(s)}
+        onRegenerate={() => make(s, 'regenerate')}
         onSend={(text) => send(`short-${s.id}`, text)}
         onStop={() => stop(`short-${s.id}`)}
       />
@@ -244,6 +245,7 @@ function ShortCard({
   onDelete,
   onMove,
   onMake,
+  onRegenerate,
   onSend,
   onStop,
 }: {
@@ -258,6 +260,7 @@ function ShortCard({
   onDelete: () => void;
   onMove: () => void;
   onMake: () => void;
+  onRegenerate: () => void;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
@@ -369,6 +372,18 @@ function ShortCard({
                   Remove
                 </button>
               </>
+            )}
+            {made && build?.status !== 'running' && (
+              <button
+                disabled={!canMake}
+                onClick={() =>
+                  confirm(
+                    `Throw away "${short.made}" and make it again from a fresh copy of the longform? Anything you changed in that CapCut project is lost from the project, and its conversation starts over. The old folder and CapCut project go to the HeartQuarters Trash folder.`,
+                  ) && onRegenerate()
+                }
+              >
+                {making ? 'Copying the CapCut project…' : 'Regenerate'}
+              </button>
             )}
           </div>
 

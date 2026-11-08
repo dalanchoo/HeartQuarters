@@ -80,7 +80,8 @@ Automation levels:
   goes back to the times Claude proposed, which the plan file keeps.
 - "Make this short" on a row: makes the short's folder and a copy of the
   longform's CapCut project, then Claude cuts it to the clip and turns it 9:16,
-  with its own conversation for John's notes.
+  with its own conversation for John's notes. "Regenerate" moves that short to
+  the trash and makes it again from a fresh copy, to try changed instructions.
 
 ## Later (from code review)
 

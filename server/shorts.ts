@@ -7,7 +7,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { getRun, startShortBuild, type ClaudeRun } from './claude.js';
 import { checkDraftName, createVideoFolder, draftsForVideo, numberOf } from './create.js';
-import { system } from './manage.js';
+import { deleteFolder, system } from './manage.js';
 
 export interface PlannedShort {
   id: string;
@@ -282,6 +282,36 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
   } finally {
     making.delete(key);
   }
+}
+
+/**
+ * "Regenerate": moves the short's folder and CapCut project to the trash (nothing is really deleted), then makes the
+ * short again from a fresh copy of the longform, with a new conversation. For trying changed instructions from scratch.
+ */
+export async function regenerateShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
+  const plan = readPlan(video);
+  const row = plan && [...plan.shorts, ...plan.rejected].find((s) => s.id === id);
+  if (!plan || !row) throw new Error(`There's no ${id} in this video's list.`);
+  const old = row.made;
+  if (!old) throw new Error(`${id} hasn't been made yet.`);
+  if (getRun(video, `short-${id}`)?.status === 'running') throw new Error('Claude is still working on this short. Stop it first.');
+  if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
+  // Checked now, because after this the old short is already in the trash.
+  const source = checkDraftName(sourceDraft);
+  if (source === old) throw new Error("A short can't be remade from its own CapCut project. Choose the longform's.");
+  if (!fs.existsSync(path.join(config.capcutDraftsDir, source))) throw new Error(`There's no CapCut draft called "${source}".`);
+
+  const draftDir = path.join(config.capcutDraftsDir, old);
+  const hadDraft = fs.existsSync(draftDir);
+  if (fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', old)))) {
+    deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [old] : []);
+  }
+  if (fs.existsSync(draftDir)) {
+    throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Make this short.`);
+  }
+  const unmark = ({ made: _made, ...rest }: PlannedShort): PlannedShort => (rest.id === id ? rest : { ...rest, made: _made });
+  writePlan(video, { shorts: plan.shorts.map(unmark), rejected: plan.rejected.map(unmark) });
+  return makeShort(video, id, source);
 }
 
 // ---- What the page shows ---------------------------------------------------------

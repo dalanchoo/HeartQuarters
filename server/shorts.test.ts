@@ -13,6 +13,7 @@ import {
   makeShort,
   readPlan,
   readTranscript,
+  regenerateShort,
   retentionInfo,
   retireRetention,
   savePlan,
@@ -385,6 +386,69 @@ describe('Make this short', () => {
     fs.writeFileSync(path.join(folder, 'mine.txt'), 'keep');
     await expect(makeShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/already exists/);
     expect(fs.readFileSync(path.join(folder, 'mine.txt'), 'utf8')).toBe('keep');
+  });
+
+  describe('Regenerate', () => {
+    const folder = () => path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME);
+    const draft = () => path.join(tmp, 'Drafts', NAME);
+    let savedTrash: string;
+
+    beforeEach(() => {
+      savedTrash = config.trashDir;
+      config.trashDir = path.join(tmp, 'Trash');
+    });
+    afterEach(() => {
+      config.trashDir = savedTrash;
+    });
+
+    it('moves the old short to the trash and starts again from a fresh copy, with a new conversation', async () => {
+      await makeShort(NUMBERED, 'S01', NUMBERED);
+      const first = await settled();
+      fs.writeFileSync(path.join(folder(), 'old work.txt'), 'old');
+      fs.writeFileSync(path.join(draft(), 'old work.txt'), 'old');
+
+      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      const second = await settled();
+
+      expect(fs.existsSync(path.join(folder(), 'old work.txt'))).toBe(false);
+      expect(fs.existsSync(path.join(draft(), 'old work.txt'))).toBe(false);
+      expect(fs.existsSync(path.join(folder(), 'Exports'))).toBe(true);
+      expect(readPlan(NUMBERED)!.shorts[0].made).toBe(NAME);
+      expect(second.sessionId).not.toBe(first.sessionId);
+      expect(second.messages).toHaveLength(2);
+      const trashed = fs.readdirSync(path.join(tmp, 'Trash'), { recursive: true }).map(String);
+      expect(trashed.filter((p) => p.endsWith('old work.txt'))).toHaveLength(2);
+    });
+
+    it('leaves the other rows made', async () => {
+      savePlan(NUMBERED, [ROW, { ...ROW, id: 'S02', title: 'Other' }]);
+      await makeShort(NUMBERED, 'S02', NUMBERED);
+      for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S02')!.status === 'running'; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await settled();
+      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      await settled();
+      expect(readPlan(NUMBERED)!.shorts[1].made).toBe('777_S02 - Other');
+      fs.rmSync(path.join(appDir, 'data', 'claude', `${NUMBERED}#short-S02.json`), { force: true });
+    });
+
+    it('refuses, changing nothing, in every case it cannot finish', async () => {
+      await expect(regenerateShort(NUMBERED, 'S09', NUMBERED)).rejects.toThrow(/no S09/);
+      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/hasn't been made/);
+      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await settled();
+      await expect(regenerateShort(NUMBERED, 'S01', NAME)).rejects.toThrow(/its own CapCut project/);
+      await expect(regenerateShort(NUMBERED, 'S01', 'Nope')).rejects.toThrow(/no CapCut draft/);
+      await expect(regenerateShort(NUMBERED, 'S01', '../..')).rejects.toThrow();
+      system.isCapCutRunning = () => true;
+      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/Close CapCut/);
+      system.isCapCutRunning = () => false;
+      expect(fs.existsSync(folder())).toBe(true);
+      expect(fs.existsSync(draft())).toBe(true);
+      expect(readPlan(NUMBERED)!.shorts[0].made).toBe(NAME);
+    });
   });
 
   it('tells Claude which clip, and that the copy is already made', () => {
