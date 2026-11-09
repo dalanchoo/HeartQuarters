@@ -78,6 +78,12 @@ Automation levels:
   snap to word edges, and the arrow keys move them a tenth of a second), or select
   words in the transcript and click the button to make them the clip. A button
   goes back to the times Claude proposed, which the plan file keeps.
+- Packaging fields are edited where they're shown, for every platform: a field
+  saves when you leave it and only that field changes in the `.md` file. YouTube
+  comes first, other platforms under its Description, blank ones on one line.
+- Two checkboxes on a YouTube.md (the music is AI-generated, some B-roll is
+  AI-generated) that add or remove those lines in its Description. A line like
+  "Full video:" inside a Description no longer splits it into two fields.
 - "Make this short" on a row: makes the short's folder and a copy of the
   longform's CapCut project, then Claude cuts it to the clip and turns it 9:16,
   with its own conversation for John's notes. "Regenerate" moves that short to
@@ -93,7 +99,6 @@ Automation levels:
 
 | # | Item | Level | Notes |
 |---|---|---|---|
-| 1 | Edit Packaging fields in the app and save back to the `.md` file | Auto | Replaces Notepad++. Must keep the file's existing format. |
 | 2 | Project status (idea / editing / packaged / published) | Auto | Decide where it's stored: in Drive, not only in the app. |
 
 ## Next

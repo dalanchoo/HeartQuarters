@@ -9,6 +9,7 @@ import { listProjects, readProject } from './projects.js';
 import { deleteFolder, manageInfo, renameFolder } from './manage.js';
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
+import { savePackagingText } from './metadata.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
@@ -208,6 +209,14 @@ app.post('/api/claude/note', handle((req, res) => {
 
 app.post('/api/claude/stop', handle((req, res) => {
   res.json(stopRun(String(req.body?.video ?? '')));
+}));
+
+// ---- Packaging files (see metadata.ts) --------------------------------------
+
+// { path, text, was }: saves the file only if it still says "was".
+app.post('/api/packaging/save', handle((req, res) => {
+  savePackagingText(String(req.body?.path ?? ''), req.body?.text, req.body?.was);
+  res.json({ ok: true });
 }));
 
 // ---- Shorts plan (see shorts.ts) -------------------------------------------

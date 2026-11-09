@@ -421,13 +421,13 @@ function PieceCard({
         <div className="piece-docs">
           {!version && <p className="muted">No packaging yet.</p>}
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
-          {docs.map((d) => (
+          {docs.slice(0, 1).map((d) => (
             <PackagingDocShort key={d.file.path} doc={d} />
           ))}
         </div>
       </div>
 
-      {/* Long fields (Description) run full width under both columns. */}
+      {/* The main file's Description, then the other platforms, run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
     </details>
   );
