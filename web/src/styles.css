@@ -153,7 +153,8 @@ main { flex: 1; min-height: 0; }
 .page-section > summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
 .page-section > summary::marker { color: var(--muted); }
 .page-section .muted { font-weight: 400; }
-.piece-kind { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.capcut-message { flex-basis: 100%; }
+.section-detail { font-size: 0.9rem; margin-left: 0.4rem; }
 .write-metadata { margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
 .write-metadata .shorts-talk { margin-top: 0.5rem; }
 .piece-name { font-weight: 600; }

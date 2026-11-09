@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { checkManageable, deleteFolder, manageInfo, renameFolder, system } from './manage';
+import { checkManageable, deleteFolder, manageInfo, openInCapCut, renameFolder, system } from './manage';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -63,6 +63,46 @@ afterEach(() => {
   config.trashDir = saved.trash;
   system.isCapCutRunning = realCheck;
   removeTree(tmp);
+});
+
+describe('Open in CapCut', () => {
+  const realStart = system.startCapCut;
+  const realExe = config.capcutExe;
+  let started = 0;
+
+  beforeEach(() => {
+    started = 0;
+    system.startCapCut = () => {
+      started++;
+    };
+    config.capcutExe = path.join(tmp, 'CapCut.exe');
+    fs.writeFileSync(config.capcutExe, '');
+    fs.mkdirSync(path.join(drafts(), 'TEST-open'), { recursive: true });
+    fs.writeFileSync(path.join(drafts(), 'TEST-open', 'draft_meta_info.json'), '{}');
+  });
+
+  afterEach(() => {
+    system.startCapCut = realStart;
+    config.capcutExe = realExe;
+  });
+
+  it('starts CapCut and gives back the name to copy', () => {
+    expect(openInCapCut('TEST-open')).toBe('TEST-open');
+    expect(started).toBe(1);
+  });
+
+  it("doesn't start it for a project that isn't there, or a name reaching outside the drafts", () => {
+    expect(() => openInCapCut('No such project')).toThrow();
+    expect(() => openInCapCut('../TEST-open')).toThrow();
+    expect(() => openInCapCut('')).toThrow();
+    expect(started).toBe(0);
+  });
+
+  it("says so if CapCut isn't where the settings say", () => {
+    config.capcutExe = path.join(tmp, 'missing.exe');
+    expect(() => openInCapCut('TEST-open')).toThrow(/capcutExe/);
+    expect(started).toBe(0);
+  });
 });
 
 describe('checkManageable', () => {

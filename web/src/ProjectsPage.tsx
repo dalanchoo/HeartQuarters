@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  copyText,
   fileUrl,
   formatSize,
   getJson,
   openInExplorer,
+  postJson,
   thumbUrl,
   type Piece,
   type ProjectDetail,
@@ -248,16 +250,22 @@ function ProjectView({
             {video.pieces.length === 0 && <p className="muted">No Longform, Shorts or Reels folders found.</p>}
             {video.pieces
               .filter((p) => p.kind === 'longform' || project.kind === 'short')
-              .map((p) => (
-                <PieceCard key={p.path} piece={p} startOpen>
-                  {p.kind === 'longform' && hasJobs && (
-                    <>
-                      <ClaudeEdit video={project.id} />
-                      <LongformUrlBox video={project.id} />
-                    </>
-                  )}
-                </PieceCard>
-              ))}
+              .map((p) =>
+                p.kind === 'longform' ? (
+                  <Section key={p.path} name="longform" title="Longform" detail={pieceSummary(p)}>
+                    <PieceCard piece={p} plain draft={segments[segments.length - 1]}>
+                      {hasJobs && (
+                        <>
+                          <ClaudeEdit video={project.id} />
+                          <LongformUrlBox video={project.id} />
+                        </>
+                      )}
+                    </PieceCard>
+                  </Section>
+                ) : (
+                  <PieceCard key={p.path} piece={p} startOpen draft={segments[segments.length - 1]} />
+                ),
+              )}
             {project.kind !== 'short' && (
               <PieceGroup
                 title="Shorts"
@@ -332,6 +340,36 @@ function versionLabel(name: string): string {
   return rest.length ? `${num} · ${rest.join(' ')}` : num;
 }
 
+/** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
+function OpenInCapCut({ draft }: { draft: string }) {
+  const [message, setMessage] = useState<{ text: string; failed?: boolean } | null>(null);
+  return (
+    <>
+      <button
+        className="small"
+        title={`Starts CapCut and copies "${draft}"`}
+        onClick={() => {
+          setMessage(null);
+          postJson('/api/capcut/open', { draft }).then(
+            async () => {
+              const copied = await copyText(draft);
+              setMessage({
+                text: copied
+                  ? `CapCut is starting. "${draft}" is copied: paste it into the search box above its Projects list.`
+                  : `CapCut is starting. Look for "${draft}" in its Projects list.`,
+              });
+            },
+            (e: Error) => setMessage({ text: e.message, failed: true }),
+          );
+        }}
+      >
+        Open CapCut
+      </button>
+      {message && <span className={`capcut-message small-text ${message.failed ? 'error' : 'muted'}`}>{message.text}</span>}
+    </>
+  );
+}
+
 // Whether a part of the page was left open or closed. Only a convenience: without it, each part starts open.
 function rememberedOpen(name: string): boolean {
   try {
@@ -349,8 +387,31 @@ function rememberOpen(name: string, open: boolean) {
   }
 }
 
+/** "✓ exported · packaging V01" */
+function pieceSummary(piece: Piece): string {
+  return (
+    (piece.exports.length > 0 ? '✓ exported' : 'not exported') +
+    (piece.packagingVersion
+      ? ` · packaging ${versionLabel(piece.packagingVersion)}` + (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
+      : ' · no packaging')
+  );
+}
+
 /** A part of a video's page that folds away, and stays as it was left. */
-function Section({ name, title, count, children }: { name: string; title: string; count?: number; children: ReactNode }) {
+function Section({
+  name,
+  title,
+  count,
+  detail,
+  children,
+}: {
+  name: string;
+  title: string;
+  count?: number;
+  /** A few words beside the title, such as whether it's been exported. */
+  detail?: string;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(() => rememberedOpen(name));
   return (
     <details
@@ -365,6 +426,7 @@ function Section({ name, title, count, children }: { name: string; title: string
       <summary>
         {title}
         {count !== undefined && <span className="muted"> ({count})</span>}
+        {detail && <span className="muted section-detail"> {detail}</span>}
       </summary>
       {children}
     </details>
@@ -374,6 +436,8 @@ function Section({ name, title, count, children }: { name: string; title: string
 function PieceCard({
   piece,
   startOpen = false,
+  plain = false,
+  draft,
   video,
   onChanged,
   onManaged,
@@ -381,6 +445,10 @@ function PieceCard({
 }: {
   piece: Piece;
   startOpen?: boolean;
+  /** Inside a section that folds away by itself, so it has no heading or arrow of its own. */
+  plain?: boolean;
+  /** Its CapCut project's name, if it isn't called the same as the piece. */
+  draft?: string;
   /** Given when the AI can write this short's metadata. */
   video?: string;
   /** Called when something changed in the folders, such as a new packaging version. */
@@ -397,36 +465,15 @@ function PieceCard({
   const [docsLoads, setDocsLoads] = useState(0);
   const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const playerRef = useRef<HTMLVideoElement>(null);
-  const isLongform = piece.kind === 'longform';
-  const [open, setOpen] = useState(() => (isLongform ? rememberedOpen('longform') : startOpen));
+  const [open, setOpen] = useState(startOpen);
 
   // When you press Play, bring the player into view.
   useEffect(() => {
     if (playing) playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [playing]);
 
-  return (
-    <details
-      className="card"
-      open={open}
-      onToggle={(e) => {
-        const now = e.currentTarget.open;
-        setOpen(now);
-        if (isLongform) rememberOpen('longform', now);
-      }}
-    >
-      <summary>
-        {isLongform && <span className="piece-kind">Longform</span>}
-        <span className="piece-name">{piece.name}</span>
-        <span className="muted">
-          {piece.exports.length > 0 ? '✓ exported' : 'not exported'}
-          {piece.packagingVersion
-            ? ` · packaging ${versionLabel(piece.packagingVersion)}` +
-              (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
-            : ' · no packaging'}
-        </span>
-      </summary>
-
+  const contents = (
+    <>
       {children}
 
       {/* The player sits at the top of the card, full width, and scrolls into view. */}
@@ -489,6 +536,7 @@ function PieceCard({
           )}
 
           <div className="versions">
+            {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
             <button className="small" onClick={() => openInExplorer('projects', piece.path)}>
               Open folder
             </button>
@@ -522,6 +570,17 @@ function PieceCard({
 
       {/* The main file's Description, then the other platforms, run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
+    </>
+  );
+
+  if (plain) return <div className="card">{contents}</div>;
+  return (
+    <details className="card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>
+        <span className="piece-name">{piece.name}</span>
+        <span className="muted">{pieceSummary(piece)}</span>
+      </summary>
+      {contents}
     </details>
   );
 }

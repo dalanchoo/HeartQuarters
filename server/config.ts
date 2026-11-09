@@ -48,6 +48,8 @@ export interface Config {
   codexCommand: string[];
   /** How to start Google's Antigravity CLI (agy), the same way (when Gemini is picked). */
   geminiCommand: string[];
+  /** CapCut's program, for the "Open CapCut" button. */
+  capcutExe: string;
   /** Where CapCut keeps its drafts (CapCut: Settings > Draft location). */
   capcutDraftsDir: string;
   /** Empty drafts made once in CapCut, copied for each new video. */

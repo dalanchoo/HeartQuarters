@@ -7,7 +7,7 @@
 // Rename also fixes the links inside CapCut drafts: CapCut stores full paths
 // like "D:/Google Drive/HeartMind/Video Projects/022 - X/Longform/Raw/a.mp4",
 // which would break when "022 - X" is renamed.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
@@ -26,7 +26,22 @@ export const system = {
       return false;
     }
   },
+  /** Starts CapCut, or brings it forward if it's already open. It has no way to be told which project to open. */
+  startCapCut() {
+    spawn(config.capcutExe, [], { detached: true, stdio: 'ignore' }).unref();
+  },
 };
+
+/**
+ * "Open CapCut": checks the project exists and starts CapCut. CapCut can't be told which project to open: it has no
+ * documented way, and --draft_path= (in its program files) only shows the home screen. So the page copies the name too.
+ */
+export function openInCapCut(draft: unknown): string {
+  const name = checkDraftName(String(draft ?? ''));
+  if (!fs.existsSync(config.capcutExe)) throw new Error(`CapCut isn't at "${config.capcutExe}". Set capcutExe in config.json.`);
+  system.startCapCut();
+  return name;
+}
 
 /**
  * Only real video folders can be renamed or deleted: a project or series,

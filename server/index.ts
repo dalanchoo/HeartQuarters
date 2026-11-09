@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, config, parseRoot, safeResolve } from './config.js';
 import { listProjects, readProject } from './projects.js';
-import { deleteFolder, manageInfo, renameFolder } from './manage.js';
+import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.js';
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText } from './metadata.js';
@@ -195,6 +195,13 @@ app.post('/api/skills/open', handle((req, res) => {
   const folder = targetFolder(String(req.body?.target ?? ''));
   spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
+}));
+
+// ---- CapCut ------------------------------------------------------------------
+
+// { draft }: starts CapCut. It can't open that project by itself, so the page copies the name.
+app.post('/api/capcut/open', handle((req, res) => {
+  res.json({ name: openInCapCut(req.body?.draft) });
 }));
 
 // ---- Which AI (see ai.ts) ---------------------------------------------------
