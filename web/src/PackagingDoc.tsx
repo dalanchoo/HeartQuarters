@@ -25,10 +25,10 @@ export interface LoadedDoc {
   save: (change: (text: string) => string) => Promise<void>;
 }
 
-/** Loads a set of packaging files (e.g. one version's YouTube.md, TikTok.md...). */
-export function usePackagingDocs(found: FileRef[]): LoadedDoc[] {
+/** Loads a set of packaging files (e.g. one version's YouTube.md, TikTok.md...). A new `loads` number reads them again. */
+export function usePackagingDocs(found: FileRef[], loads = 0): LoadedDoc[] {
   const files = inPlatformOrder(found);
-  const key = files.map((f) => f.path).join('|');
+  const key = `${loads}|${files.map((f) => f.path).join('|')}`;
   const [docs, setDocs] = useState<LoadedDoc[]>([]);
 
   useEffect(() => {

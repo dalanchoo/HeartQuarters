@@ -78,6 +78,11 @@ Automation levels:
   snap to word edges, and the arrow keys move them a tenth of a second), or select
   words in the transcript and click the button to make them the clip. A button
   goes back to the times Claude proposed, which the plan file keeps.
+- A video's page runs: the longform (with Edit and its YouTube URL), the existing
+  shorts, then making more. Each part folds away and stays as you left it.
+- "Write YouTube metadata" on each short's card, beside its fields: the picked AI
+  fills in its YouTube.md from the short's words, with no export needed. The
+  longform's URL box keeps it in `Shorts\Longform URL.txt`.
 - An AI selector at the top of the app: Claude, ChatGPT (OpenAI's Codex) or Gemini
   (Antigravity CLI, limited: no CapCut builds) does the jobs the buttons start. Picking the other AI and sending a note hands over
   a conversation. Tried on small jobs, not yet on a whole CapCut project.

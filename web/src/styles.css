@@ -146,6 +146,16 @@ main { flex: 1; min-height: 0; }
         padding: 0.6rem 0.85rem; margin-bottom: 0.6rem; }
 .card summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; }
 .card summary::marker { color: var(--muted); }
+/* A summary laid out with flex loses its arrow, so it gets one drawn here. */
+.card > summary::before { content: '▸'; color: var(--muted); align-self: center; transition: transform 0.1s; }
+.card[open] > summary::before { transform: rotate(90deg); }
+.page-section { margin-top: 1rem; }
+.page-section > summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+.page-section > summary::marker { color: var(--muted); }
+.page-section .muted { font-weight: 400; }
+.piece-kind { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.write-metadata { margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
+.write-metadata .shorts-talk { margin-top: 0.5rem; }
 .piece-name { font-weight: 600; }
 .block { border-top: 1px solid var(--line); padding: 0.5rem 0; }
 
@@ -190,6 +200,8 @@ button.version.active { background: var(--accent-soft); border-color: var(--acce
 .field-input:hover { border-color: var(--line); }
 .field-input:focus { border-color: var(--muted); outline: none; background: var(--panel); }
 .not-written { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding-top: 0.4rem; }
+.longform-url { display: flex; align-items: center; gap: 0.5rem; margin: 0.4rem 0; color: var(--muted); }
+.longform-url-box { flex: 1; min-width: 0; }
 .ai-lines { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-bottom: 0.55rem; }
 .ai-lines label { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
 .ai-lines .error { flex-basis: 100%; margin: 0; }

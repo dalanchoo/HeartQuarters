@@ -390,6 +390,31 @@ export function sendNote(video: string, text: string, job: ClaudeJob = 'edit', a
   return run;
 }
 
+/** The message that asks for a short's YouTube metadata. An export isn't needed: the words and the project are enough. */
+export function metadataPrompt(shortName: string, longformUrl: string | null): string {
+  return [
+    `Write the YouTube metadata for the short "${shortName}", following the shorts-from-longform skill's "Packaging" section. YouTube only.`,
+    `Fill in Shorts\\${shortName}\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content.`,
+    "Use the short's words from its Subtitles folder or the word-by-word transcript: John may not have exported it yet, and you don't need the export.",
+    longformUrl
+      ? `The longform's YouTube URL is ${longformUrl}.`
+      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to paste the URL into the box on the video's page and click the button again.",
+    "Read the short's CapCut project to see which music and B-roll it really uses, and go by the episode's notes on where they came from.",
+    "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
+  ].join(' ');
+}
+
+/** Asks for a short's metadata in that short's conversation, or in a new one if it has none (say, after clearing old data). */
+export function askForMetadata(video: string, id: string, shortName: string, longformUrl: string | null, ai: AiId = chosenAi()): ClaudeRun {
+  const job: ClaudeJob = `short-${id}`;
+  const message = metadataPrompt(shortName, longformUrl);
+  if (getRun(video, job)) return sendNote(video, message, job, ai);
+  const { longform } = videoPlaces(video);
+  const run = newRun({ video, job, draft: shortName, prompt: message }, message, ai);
+  runTurn(run, message, true, path.dirname(longform));
+  return run;
+}
+
 /** Ends a turn, along with whatever it started. On Windows, killing only the program would leave those running. */
 function stopProcess(child: ChildProcess) {
   if (process.platform === 'win32' && child.pid) spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f']);

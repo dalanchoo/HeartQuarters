@@ -12,14 +12,18 @@ import {
   keepOldPlan,
   latestExport,
   makeShort,
+  metadataRun,
   readPlan,
   readTranscript,
+  readLongformUrl,
   regenerateShort,
   retentionInfo,
   retireRetention,
   savePlan,
+  saveLongformUrl,
   saveRetention,
   shortsOverview,
+  writeShortMetadata,
 } from './shorts';
 import { makeTree, removeTree } from './testing';
 
@@ -98,6 +102,86 @@ describe("a short's first message", () => {
       await new Promise((res) => setTimeout(res, 50));
     }
     expect(getRun(NUMBERED, 'short-S01')?.prompt).toMatch(/must follow: Drop the reveal list\. Strong hook/);
+  });
+});
+
+describe('writing a short\'s metadata', () => {
+  const settle = async () => {
+    for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')?.status === 'running'; i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+  };
+  const makeFolder = () => fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
+  const forget = () => fs.rmSync(path.join(appDir, 'data', 'claude', `${NUMBERED}#short-S01.json`), { force: true });
+
+  it('goes by the folder, so a short needs no row in the plan, and it does not need the export', async () => {
+    makeFolder();
+    expect(metadataRun(NUMBERED, NAME)).toBeNull();
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    const told = metadataRun(NUMBERED, NAME)?.prompt ?? '';
+    expect(told).toContain(`Shorts\\${NAME}\\Packaging\\V01\\YouTube.md`);
+    expect(told).toMatch(/you don't need the export/);
+    expect(told).toMatch(/YouTube only/);
+  });
+
+  it('asks in the conversation that made the short, if there is one', async () => {
+    makeFolder();
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    expect(getRun(NUMBERED, 'short-S01')?.messages.filter((m) => m.from === 'john')).toHaveLength(2);
+  });
+
+  it("tells the AI the longform's URL once it's saved, and asks for a placeholder until then", async () => {
+    makeFolder();
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    expect(getRun(NUMBERED, 'short-S01')?.prompt).toMatch(/URL isn't known: leave a clearly marked placeholder/);
+    forget();
+
+    const url = 'https://www.youtube.com/watch?v=abc123';
+    saveLongformUrl(NUMBERED, url);
+    expect(readLongformUrl(NUMBERED)).toBe(url);
+    expect(shortsOverview(NUMBERED).longformUrl).toBe(url);
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    expect(getRun(NUMBERED, 'short-S01')?.prompt).toContain(`The longform's YouTube URL is ${url}.`);
+  });
+
+  it('saves only a YouTube address, and an empty box clears it', () => {
+    expect(() => saveLongformUrl(NUMBERED, 'https://evil.example/x')).toThrow(/isn't a YouTube address/);
+    expect(() => saveLongformUrl(NUMBERED, 'javascript:alert(1)')).toThrow();
+    expect(readLongformUrl(NUMBERED)).toBeNull();
+    saveLongformUrl(NUMBERED, ' https://youtu.be/abc ');
+    expect(readLongformUrl(NUMBERED)).toBe('https://youtu.be/abc');
+    saveLongformUrl(NUMBERED, '');
+    expect(readLongformUrl(NUMBERED)).toBeNull();
+  });
+
+  it("refuses a folder that isn't there, or a name that isn't a short's, including one reaching outside", () => {
+    expect(() => writeShortMetadata(NUMBERED, NAME)).toThrow(/no short called/);
+    expect(() => writeShortMetadata(NUMBERED, 'Not a short')).toThrow(/isn't named like/);
+    expect(() => writeShortMetadata(NUMBERED, '../../x_S01 - y')).toThrow(/isn't named like/);
+    expect(() => metadataRun(NUMBERED, '..\\x_S01 - y')).toThrow(/isn't named like/);
+  });
+
+  it('is open to Gemini, which only has to write a text file', () => {
+    const file = process.env.HQ_AI_FILE;
+    process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
+    chooseAi('gemini');
+    const command = config.geminiCommand;
+    config.geminiCommand = config.claudeCommand;
+    try {
+      makeFolder();
+      expect(() => writeShortMetadata(NUMBERED, NAME)).not.toThrow();
+      expect(getRun(NUMBERED, 'short-S01')?.ai).toBe('gemini');
+      stopRun(NUMBERED, 'short-S01');
+    } finally {
+      process.env.HQ_AI_FILE = file;
+      config.geminiCommand = command;
+    }
   });
 });
 

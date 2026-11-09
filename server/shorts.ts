@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
-import { getRun, startShortBuild, type ClaudeRun } from './claude.js';
+import { askForMetadata, getRun, startShortBuild, type ClaudeRun } from './claude.js';
 import { checkDraftName, createVideoFolder, draftsForVideo, numberOf } from './create.js';
 import { deleteFolder, system } from './manage.js';
 
@@ -318,6 +318,56 @@ export async function regenerateShort(video: string, id: string, sourceDraft: st
   return makeShort(video, id, source);
 }
 
+/** A short's number from its folder's name: "022_S01 - Title" is S01. Its conversation is named after that. */
+function shortId(short: string): string {
+  const id = /^[^\\/]*_(S\d+) - [^\\/]+$/.exec(short)?.[1];
+  if (!id) throw new Error(`"${short}" isn't named like a short (022_S01 - Title).`);
+  return id;
+}
+
+/** That short's conversation, if it has one: what the card beside its fields shows. */
+export function metadataRun(video: string, short: string): ClaudeRun | null {
+  return getRun(video, `short-${shortId(short)}`);
+}
+
+/**
+ * "Write YouTube metadata", from the short's card. Any AI can do this one, since it only writes a text file in the
+ * video's folder. It goes by the folder, so it also works for a short that isn't in the plan, such as one John made himself.
+ */
+export function writeShortMetadata(video: string, short: string): ClaudeRun {
+  const id = shortId(short);
+  if (!video) throw new Error('No video given.');
+  if (!fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', short)))) {
+    throw new Error(`There's no short called "${short}" in this video.`);
+  }
+  return askForMetadata(video, id, short, readLongformUrl(video));
+}
+
+// A small file beside the plan, so it lives in Drive with the video. Every short's metadata links to this.
+function longformUrlFile(video: string): string {
+  if (!video) throw new Error('No video given.');
+  return safeResolve('projects', path.join(video, 'Shorts', 'Longform URL.txt'));
+}
+
+export function readLongformUrl(video: string): string | null {
+  try {
+    return fs.readFileSync(longformUrlFile(video), 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Saves the longform's YouTube address. Empty clears it. Anything but a YouTube address is refused. */
+export function saveLongformUrl(video: string, value: unknown) {
+  const url = String(value ?? '').trim();
+  if (url && !/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\/\S+$/.test(url)) {
+    throw new Error("That isn't a YouTube address. It should start with https://www.youtube.com/ or https://youtu.be/.");
+  }
+  const file = longformUrlFile(video);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, url);
+}
+
 // ---- What the page shows ---------------------------------------------------------
 
 export interface ShortsOverview {
@@ -330,6 +380,7 @@ export interface ShortsOverview {
   builds: Record<string, ClaudeRun>;
   exportFile: string | null;
   retention: { path: string; version: number } | null;
+  longformUrl: string | null;
   /** CapCut projects a short could be copied from, best guess first. */
   drafts: string[];
 }
@@ -360,6 +411,7 @@ export function shortsOverview(video: string): ShortsOverview {
     builds,
     exportFile: latestExport(video),
     retention: retentionInfo(video),
+    longformUrl: readLongformUrl(video),
     drafts,
   };
 }

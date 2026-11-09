@@ -20,12 +20,15 @@ import {
   hasRetention,
   keepOldPlan,
   makeShort,
+  metadataRun,
   readTranscript,
   regenerateShort,
   retireRetention,
   savePlan,
   saveRetention,
   shortsOverview,
+  saveLongformUrl,
+  writeShortMetadata,
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 
@@ -281,6 +284,22 @@ app.post('/api/shorts/make', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+// { video, url }
+app.post('/api/shorts/longform-url', handle((req, res) => {
+  saveLongformUrl(String(req.body?.video ?? ''), req.body?.url);
+  res.json({ ok: true });
+}));
+
+// ?video=&short=: that short's conversation, or null.
+app.get('/api/shorts/metadata', handle((req, res) => {
+  res.json(metadataRun(String(req.query.video ?? ''), String(req.query.short ?? '')));
+}));
+
+// { video, short }: the AI writes that short's YouTube metadata, in its conversation.
+app.post('/api/shorts/metadata', handle((req, res) => {
+  res.json(writeShortMetadata(String(req.body?.video ?? ''), String(req.body?.short ?? '')));
+}));
 
 // Moves the old short to the trash, then makes it again: the same wait as above.
 app.post('/api/shorts/regenerate', async (req, res) => {

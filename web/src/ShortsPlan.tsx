@@ -144,7 +144,6 @@ export function ShortsPlanCard({ video }: { video: string }) {
   return (
     <div className="card shorts-plan">
       <div className="tool-head">
-        <h4>Shorts from this video</h4>
         {proposing ? (
           <button onClick={() => stop('shorts')}>Stop</button>
         ) : (
@@ -228,6 +227,34 @@ export function ShortsPlanCard({ video }: { video: string }) {
         </>
       )}
     </div>
+  );
+}
+
+/** The longform's YouTube address. It's saved once, and every short's metadata links to it. */
+export function LongformUrlBox({ video }: { video: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = () =>
+    getJson<ShortsOverview>(`/api/shorts?video=${encodeURIComponent(video)}`).then((s) => setUrl(s.longformUrl ?? ''), (e) => setError(e.message));
+  useEffect(() => {
+    load();
+  }, [video]);
+  if (url === null && !error) return null;
+  return (
+    <label className="longform-url small-text">
+      Longform's YouTube URL
+      <TextField
+        className="longform-url-box"
+        value={url ?? ''}
+        disabled={false}
+        placeholder="Paste it once. Every short's metadata links to it."
+        onCommit={(next) => {
+          setError(null);
+          postJson('/api/shorts/longform-url', { video, url: next }).then(load, (e) => setError(e.message));
+        }}
+      />
+      {error && <span className="error">{error}</span>}
+    </label>
   );
 }
 
@@ -737,11 +764,13 @@ function TextField({
   className,
   value,
   disabled,
+  placeholder,
   onCommit,
 }: {
   className: string;
   value: string;
   disabled: boolean;
+  placeholder?: string;
   onCommit: (v: string) => void;
 }) {
   const [text, setText] = useState(value);
@@ -751,6 +780,7 @@ function TextField({
       className={className}
       value={text}
       disabled={disabled}
+      placeholder={placeholder}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => text !== value && onCommit(text)}
     />

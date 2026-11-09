@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   fileUrl,
   formatSize,
@@ -16,6 +16,8 @@ import { ClaudeEdit } from './ClaudeEdit';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
+import { WriteMetadata } from './ShortMetadata';
+import { LongformUrlBox } from './ShortsPlan';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -195,12 +197,17 @@ function ProjectView({
     };
   }, [id, reloads]);
 
+  // Picks up what changed in the folders, such as a new packaging version, without emptying the page first.
+  const refresh = () => getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(id)}`).then(setProject, () => {});
+
   if (error) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
 
   // Breadcrumbs: "005 - Ayahuasca › 005B - Night One"
   const segments = project.id.split('/');
   const crumbs = segments.slice(0, -1).map((name, i) => ({ name, id: segments.slice(0, i + 1).join('/') }));
+  const hasJobs =
+    (project.kind === 'project' || project.kind === 'part') && project.videos.some((v) => v.pieces.some((p) => p.kind === 'longform'));
   const kindLabel = { series: 'Series', group: 'Folder', part: 'Part of a series', short: 'Standalone short', project: '' }[
     project.kind
   ];
@@ -231,14 +238,8 @@ function ProjectView({
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
-      {(project.kind === 'project' || project.kind === 'part') &&
-        project.videos.some((v) => v.pieces.some((p) => p.kind === 'longform')) && (
-          <>
-            <ClaudeEdit video={project.id} />
-            <ShortsPlanCard video={project.id} />
-          </>
-        )}
 
+      {/* The longform, then the shorts that exist, then making more. */}
       {project.children.length > 0 ? (
         <ChildList node={project} />
       ) : (
@@ -248,14 +249,32 @@ function ProjectView({
             {video.pieces
               .filter((p) => p.kind === 'longform' || project.kind === 'short')
               .map((p) => (
-                <PieceCard key={p.path} piece={p} startOpen />
+                <PieceCard key={p.path} piece={p} startOpen>
+                  {p.kind === 'longform' && hasJobs && (
+                    <>
+                      <ClaudeEdit video={project.id} />
+                      <LongformUrlBox video={project.id} />
+                    </>
+                  )}
+                </PieceCard>
               ))}
             {project.kind !== 'short' && (
-              <PieceGroup title="Shorts" pieces={video.pieces.filter((p) => p.kind === 'short')} onManaged={onManaged} />
+              <PieceGroup
+                title="Shorts"
+                pieces={video.pieces.filter((p) => p.kind === 'short')}
+                video={hasJobs ? project.id : undefined}
+                onChanged={refresh}
+                onManaged={onManaged}
+              />
             )}
             <PieceGroup title="Reels" pieces={video.pieces.filter((p) => p.kind === 'reel')} onManaged={onManaged} />
           </div>
         ))
+      )}
+      {hasJobs && (
+        <Section name="make-shorts" title="Make shorts">
+          <ShortsPlanCard video={project.id} />
+        </Section>
       )}
     </div>
   );
@@ -286,22 +305,24 @@ function ChildList({ node }: { node: ProjectDetail }) {
 function PieceGroup({
   title,
   pieces,
+  video,
+  onChanged,
   onManaged,
 }: {
   title: string;
   pieces: Piece[];
+  /** Given when the AI can write these shorts' metadata. */
+  video?: string;
+  onChanged?: () => void;
   onManaged: (result: ManageResult) => void;
 }) {
   if (pieces.length === 0) return null;
   return (
-    <div className="piece-group">
-      <h3>
-        {title} <span className="muted">({pieces.length})</span>
-      </h3>
+    <Section name={title.toLowerCase()} title={title} count={pieces.length}>
       {pieces.map((p) => (
-        <PieceCard key={p.path} piece={p} onManaged={onManaged} />
+        <PieceCard key={p.path} piece={p} video={video} onChanged={onChanged} onManaged={onManaged} />
       ))}
-    </div>
+    </Section>
   );
 }
 
@@ -311,13 +332,61 @@ function versionLabel(name: string): string {
   return rest.length ? `${num} · ${rest.join(' ')}` : num;
 }
 
+// Whether a part of the page was left open or closed. Only a convenience: without it, each part starts open.
+function rememberedOpen(name: string): boolean {
+  try {
+    return localStorage.getItem(`hq-${name}-open`) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function rememberOpen(name: string, open: boolean) {
+  try {
+    localStorage.setItem(`hq-${name}-open`, String(open));
+  } catch {
+    // Not remembered, then.
+  }
+}
+
+/** A part of a video's page that folds away, and stays as it was left. */
+function Section({ name, title, count, children }: { name: string; title: string; count?: number; children: ReactNode }) {
+  const [open, setOpen] = useState(() => rememberedOpen(name));
+  return (
+    <details
+      className="page-section"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        rememberOpen(name, now);
+      }}
+    >
+      <summary>
+        {title}
+        {count !== undefined && <span className="muted"> ({count})</span>}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 function PieceCard({
   piece,
   startOpen = false,
+  video,
+  onChanged,
   onManaged,
+  children,
 }: {
   piece: Piece;
   startOpen?: boolean;
+  /** Given when the AI can write this short's metadata. */
+  video?: string;
+  /** Called when something changed in the folders, such as a new packaging version. */
+  onChanged?: () => void;
+  /** Shown at the top of the card when it's open. */
+  children?: ReactNode;
   /** Given for shorts and reels inside a video, which get Rename / Delete buttons. */
   onManaged?: (result: ManageResult) => void;
 }) {
@@ -325,8 +394,11 @@ function PieceCard({
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
-  const docs = usePackagingDocs(version?.docs ?? []);
+  const [docsLoads, setDocsLoads] = useState(0);
+  const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const playerRef = useRef<HTMLVideoElement>(null);
+  const isLongform = piece.kind === 'longform';
+  const [open, setOpen] = useState(() => (isLongform ? rememberedOpen('longform') : startOpen));
 
   // When you press Play, bring the player into view.
   useEffect(() => {
@@ -334,8 +406,17 @@ function PieceCard({
   }, [playing]);
 
   return (
-    <details className="card" open={startOpen}>
+    <details
+      className="card"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        if (isLongform) rememberOpen('longform', now);
+      }}
+    >
       <summary>
+        {isLongform && <span className="piece-kind">Longform</span>}
         <span className="piece-name">{piece.name}</span>
         <span className="muted">
           {piece.exports.length > 0 ? '✓ exported' : 'not exported'}
@@ -345,6 +426,8 @@ function PieceCard({
             : ' · no packaging'}
         </span>
       </summary>
+
+      {children}
 
       {/* The player sits at the top of the card, full width, and scrolls into view. */}
       {playing && (
@@ -419,6 +502,16 @@ function PieceCard({
         </div>
 
         <div className="piece-docs">
+          {video && piece.kind === 'short' && (
+            <WriteMetadata
+              video={video}
+              short={piece.name}
+              onFinished={() => {
+                setDocsLoads((n) => n + 1);
+                onChanged?.();
+              }}
+            />
+          )}
           {!version && <p className="muted">No packaging yet.</p>}
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
           {docs.slice(0, 1).map((d) => (
