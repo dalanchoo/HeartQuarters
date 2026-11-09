@@ -43,6 +43,7 @@ button.small { padding: 0.15rem 0.55rem; font-size: 0.75rem; text-transform: non
 .claude-msg { white-space: pre-wrap; padding: 0.5rem 0.7rem; border-radius: 8px; max-width: 85%; line-height: 1.4; }
 .claude-msg.claude { background: var(--bg); align-self: flex-start; }
 .claude-msg.john { background: var(--accent-soft); align-self: flex-end; }
+.claude-msg.app { align-self: center; color: var(--muted); font-size: 0.8rem; }
 .claude-reply { display: flex; gap: 0.5rem; align-items: flex-start; }
 .claude-reply textarea { flex: 1; font: inherit; padding: 0.4rem; border: 1px solid var(--line); border-radius: 6px; }
 .claude-buttons { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -117,6 +118,7 @@ button.small { padding: 0.15rem 0.55rem; font-size: 0.75rem; text-transform: non
 .brand { font-weight: 700; color: var(--accent); font-size: 1.1rem; display: flex; align-items: center; gap: 0.55rem; }
 .brand img { width: 34px; height: 34px; }
 .topbar nav { display: flex; gap: 0.25rem; }
+.ai-picker { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; color: var(--muted); white-space: nowrap; }
 .topbar nav a { padding: 0.4rem 0.9rem; border-radius: 6px; color: var(--text); text-decoration: none; }
 .topbar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 main { flex: 1; min-height: 0; }

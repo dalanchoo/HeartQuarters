@@ -1,18 +1,33 @@
-// Runs Claude Code in the background on one video, and keeps the conversation.
+// Runs the chosen AI (Claude Code, Codex or Antigravity, see ai.ts) in the background on one video, and keeps the conversation.
 //   "Edit with Claude": follows the longform-edit skill; John sends notes after looking at the result in CapCut.
 //   "Propose shorts": follows the shorts skill's choosing steps and writes Shorts\\Shorts Plan.json (see shorts.ts).
 //   "Make this short": cuts a copy of the longform's CapCut project down to one short, turns it portrait, adds captions.
 //
 // Each video has one conversation per job (a Claude Code session id), saved in data/claude/ so it survives a restart.
 // A run is one turn of that conversation: the first one starts the job, later ones send John's notes.
-import { spawn, type ChildProcess } from 'node:child_process';
+// If John picks the other AI and sends a note, that AI takes over with the conversation's text (see handoverPrompt).
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  AI_NAMES,
+  aiCommand,
+  chosenAi,
+  codexArgs,
+  codexWritableFolders,
+  geminiArgs,
+  geminiReader,
+  readCodexEvent,
+  requireCapCutAi,
+  type AiEvent,
+  type AiId,
+} from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 
 export interface ClaudeMessage {
-  from: 'john' | 'claude';
+  /** "claude" is whichever AI said it. "app" is HeartQuarters noting something, such as a change of AI. */
+  from: 'john' | 'claude' | 'app';
   text: string;
   at: string;
 }
@@ -25,7 +40,12 @@ export interface ClaudeRun {
   /** Which job this conversation is for (conversations saved before there were jobs are edits). */
   job?: ClaudeJob;
   draft: string;
+  /** Which AI has this conversation. Conversations saved before there was a choice are Claude's. */
+  ai?: AiId;
+  /** The AI's id for the conversation. Empty until Codex has started: it makes its own. */
   sessionId: string;
+  /** The job as first given, for another AI taking over. */
+  prompt?: string;
   status: 'idle' | 'running' | 'failed';
   messages: ClaudeMessage[];
   /** What it's doing right now, e.g. "Running: python plan_edit.py ..." */
@@ -104,6 +124,8 @@ export interface ShortToBuild {
   name: string;
   /** The longform's CapCut project it was copied from. */
   source: string;
+  /** What the plan says about this clip, such as what to drop. */
+  notes?: string;
 }
 
 /** The first message of one short's conversation. */
@@ -115,7 +137,9 @@ export function buildPrompt(videoDir: string, short: ShortToBuild): string {
     `The clip runs from ${short.start} to ${short.end} seconds on the longform's timeline.`,
     'Build the picture and the captions: keep that stretch on every track, moved to start at 0, then 9:16, John framed',
     "so his head stays on screen, B-roll and graphics refitted to the portrait frame, and captions, all as the skill says.",
+    ...(short.notes ? [`The plan's notes on this clip, which you must follow: ${short.notes}`] : []),
     'Leave the cover and packaging until John asks. Start by checking how this project is actually built.',
+    `Before you report, run "${path.join(config.skillsDir, 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py')}" on the project and fix every PROBLEM it prints.`,
     'CapCut is closed now. Tell John what to look at when you are done.',
   ].join(' ');
 }
@@ -140,8 +164,49 @@ export function claudeArgs(run: ClaudeRun, message: string, first: boolean): str
   ];
 }
 
+/** What Gemini needs to be told on top: why a job may not be possible for it. */
+const GEMINI_LIMITS =
+  "Your shell commands run in a sandbox that can read everywhere but can't write to this video's folder or Drive. " +
+  'To write a file there, use your file-writing tool, which can only write in this video\'s folder. ' +
+  "If the job needs a script to write there, or anything outside that folder, don't try another way around it: stop and tell John, so he can pick another AI.";
+
+/** What an AI without Claude's Skill tool needs to be told. Neither can add to its instructions on the command line. */
+function otherAiNote(ai: AiId): string {
+  const skills = path.join(config.skillsDir, 'HMF_Skills');
+  return [
+    SYSTEM_NOTE,
+    `Skills are plain instruction files. When told to use a skill, first read "${path.join(skills, 'channel-basics', 'SKILL.md')}",`,
+    `then "${path.join(skills, '<skill name>', 'SKILL.md')}", and follow them. They were written with Claude in mind:`,
+    'where they say Claude, that means you, and folders called Claude keep that name.',
+    'In PowerShell on this PC, run npx as npx.cmd.',
+    ai === 'gemini'
+      ? GEMINI_LIMITS
+      : "You can only write in this video's folder, CapCut's drafts folder and your temporary and download folders. If you need to write anywhere else, stop and tell John.",
+  ].join(' ');
+}
+
+/**
+ * For an AI taking over: it has none of the earlier AI's memory, only what was said and what's in the files. So it's
+ * told not to take a mention as proof that something was done.
+ */
+export function handoverPrompt(run: ClaudeRun, note: string): string {
+  const said = run.messages
+    .filter((m) => m.from !== 'app')
+    .map((m) => `${m.from === 'john' ? 'John' : 'AI'}: ${m.text}`)
+    .join('\n\n')
+    .slice(-12000);
+  return [
+    "This job was started in an earlier conversation that can't be continued, possibly by a different AI, so you are taking over. " +
+      "You don't have its memory, only the text below. Check the real files to see how far it got, don't redo finished work, " +
+      "and don't assume something was done just because it's mentioned.",
+    ...(run.prompt ? [`The job, as first given:\n${run.prompt}`] : []),
+    `The conversation so far:\n${said}`,
+    `John's newest message, which is what to act on now:\n${note}`,
+  ].join('\n\n');
+}
+
 /** Turns one line of Claude's stream-json output into what the page shows. */
-export function readEvent(line: string): { text?: string; activity?: string; done?: boolean; error?: string } {
+export function readEvent(line: string): AiEvent {
   let e: { type?: string; subtype?: string; is_error?: boolean; result?: string; message?: { content?: unknown } };
   try {
     e = JSON.parse(line);
@@ -171,9 +236,9 @@ export function getRun(video: string, job: ClaudeJob = 'edit'): ClaudeRun | null
   const key = keyOf(video, job);
   const run = load(key);
   if (run && run.status === 'running' && !running.has(key)) {
-    // The app restarted while Claude was working: that turn was cut off.
+    // The app restarted while the AI was working: that turn was cut off.
     run.status = 'failed';
-    run.error = 'HeartQuarters restarted while Claude was working. Send a note to carry on.';
+    run.error = `HeartQuarters restarted while ${AI_NAMES[run.ai ?? 'claude']} was working. Send a note to carry on.`;
     save(run);
   }
   return run;
@@ -181,8 +246,20 @@ export function getRun(video: string, job: ClaudeJob = 'edit'): ClaudeRun | null
 
 function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
   const key = keyOf(run.video, run.job);
-  const [cmd, ...pre] = config.claudeCommand;
-  const child = spawn(cmd, [...pre, ...claudeArgs(run, message, first)], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  const ai = run.ai ?? 'claude';
+  const name = AI_NAMES[ai];
+  const [cmd, ...pre] = aiCommand(ai);
+  const videoDir = safeResolve('projects', run.video);
+  const said = first ? `${otherAiNote(ai)}\n\n${message}` : message;
+  const session = first ? null : run.sessionId;
+  const args =
+    ai === 'codex'
+      ? codexArgs(session, said, codexWritableFolders(videoDir))
+      : ai === 'gemini'
+        ? geminiArgs(session, said, [videoDir])
+        : claudeArgs(run, message, first);
+  const read = ai === 'codex' ? readCodexEvent : ai === 'gemini' ? geminiReader() : readEvent;
+  const child = spawn(cmd, [...pre, ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
   running.set(key, child);
   run.status = 'running';
   run.activity = 'Starting…';
@@ -197,15 +274,16 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) >= 0) {
-      const ev = readEvent(buffer.slice(0, nl));
+      const ev = read(buffer.slice(0, nl));
       buffer = buffer.slice(nl + 1);
+      if (ev.sessionId) run.sessionId = ev.sessionId;
       if (ev.text) run.messages.push({ from: 'claude', text: ev.text, at: new Date().toISOString() });
       if (ev.activity) run.activity = ev.activity;
       if (ev.done) {
         sawResult = true;
         run.error = ev.error;
       }
-      if (ev.text || ev.activity || ev.done) save(run);
+      if (ev.text || ev.activity || ev.done || ev.sessionId) save(run);
     }
   });
   child.stderr.setEncoding('utf8');
@@ -220,91 +298,111 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
     if (why) run.error = why;
     save(run);
   };
-  child.on('error', (e) => finish(true, `Couldn't start Claude: ${e.message}`));
-  child.on('close', (code) => {
+  child.on('error', (e) => finish(true, `Couldn't start ${name}: ${e.message}`));
+  const finishUp = (code: number | null) => {
     if (code === 0 && sawResult && !run.error) finish(false);
-    else finish(true, run.error || stderr.trim() || `Claude stopped (exit code ${code}).`);
+    else finish(true, run.error || stderr.trim() || `${name} stopped (exit code ${code}).`);
+  };
+  child.on('close', finishUp);
+  // "close" waits until nothing can still write to the output, and a helper the AI left running can hold that open for
+  // minutes (Codex's sandbox setup does). So a few seconds after the AI itself has exited, the turn counts as over.
+  child.on('exit', (code) => {
+    setTimeout(() => finishUp(code), 3000).unref();
   });
 }
 
-/** Starts a new conversation for this video: Claude edits it following the longform-edit skill. */
-export function startEdit(video: string): ClaudeRun {
+/** A conversation about to start, with the chosen AI. Claude is given an id for it; Codex makes its own. */
+function newRun(fields: Pick<ClaudeRun, 'video' | 'job' | 'draft' | 'prompt'>, said: string, ai: AiId): ClaudeRun {
+  return {
+    ...fields,
+    ai,
+    sessionId: ai === 'claude' ? randomUUID() : '',
+    status: 'idle',
+    activity: '',
+    messages: [{ from: 'john', text: said, at: new Date().toISOString() }],
+  };
+}
+
+/** Starts a new conversation for this video: the AI edits it following the longform-edit skill. */
+export function startEdit(video: string, ai: AiId = chosenAi()): ClaudeRun {
+  requireCapCutAi(ai);
   const { longform, draft } = videoPlaces(video);
-  if (running.has(video)) throw new Error('Claude is already working on this video.');
+  if (running.has(video)) throw new Error('The AI is already working on this video.');
   if (!fs.existsSync(path.join(config.capcutDraftsDir, draft))) {
     throw new Error(`There's no CapCut project called "${draft}".`);
   }
   const message = firstPrompt(longform, draft);
-  const run: ClaudeRun = {
-    video,
-    draft,
-    sessionId: randomUUID(),
-    status: 'idle',
-    activity: '',
-    messages: [{ from: 'john', text: 'Edit this video with the longform-edit skill.', at: new Date().toISOString() }],
-  };
+  const run = newRun({ video, draft, prompt: message }, 'Edit this video with the longform-edit skill.', ai);
   runTurn(run, message, true, longform);
   return run;
 }
 
-/** Starts a shorts conversation: Claude proposes shorts into the plan file. Any earlier plan is kept by the caller. */
-export function startShortsProposal(video: string, retentionGraph = false): ClaudeRun {
+/** Starts a shorts conversation: the AI proposes shorts into the plan file. Any earlier plan is kept by the caller. */
+export function startShortsProposal(video: string, retentionGraph = false, ai: AiId = chosenAi()): ClaudeRun {
   const { longform, draft } = videoPlaces(video);
-  if (running.has(keyOf(video, 'shorts'))) throw new Error('Claude is already proposing shorts for this video.');
+  if (running.has(keyOf(video, 'shorts'))) throw new Error('The AI is already proposing shorts for this video.');
   const videoDir = path.dirname(longform);
-  const run: ClaudeRun = {
-    video,
-    job: 'shorts',
-    draft,
-    sessionId: randomUUID(),
-    status: 'idle',
-    activity: '',
-    messages: [{ from: 'john', text: 'Propose shorts for this video.', at: new Date().toISOString() }],
-  };
-  runTurn(run, shortsPrompt(videoDir, retentionGraph), true, videoDir);
+  const message = shortsPrompt(videoDir, retentionGraph);
+  const run = newRun({ video, job: 'shorts', draft, prompt: message }, 'Propose shorts for this video.', ai);
+  runTurn(run, message, true, videoDir);
   return run;
 }
 
-/** Starts one short's conversation: Claude cuts its CapCut project down. The project was copied before this (shorts.ts). */
-export function startShortBuild(video: string, short: ShortToBuild): ClaudeRun {
+/** Starts one short's conversation: the AI cuts its CapCut project down. The project was copied before this (shorts.ts). */
+export function startShortBuild(video: string, short: ShortToBuild, ai: AiId = chosenAi()): ClaudeRun {
+  requireCapCutAi(ai);
   const { longform } = videoPlaces(video);
   const job: ClaudeJob = `short-${short.id}`;
-  if (running.has(keyOf(video, job))) throw new Error('Claude is already making this short.');
+  if (running.has(keyOf(video, job))) throw new Error('The AI is already making this short.');
   const videoDir = path.dirname(longform);
-  const run: ClaudeRun = {
-    video,
-    job,
-    draft: short.name,
-    sessionId: randomUUID(),
-    status: 'idle',
-    activity: '',
-    messages: [{ from: 'john', text: `Make this short: ${short.name}`, at: new Date().toISOString() }],
-  };
-  runTurn(run, buildPrompt(videoDir, short), true, videoDir);
+  const message = buildPrompt(videoDir, short);
+  const run = newRun({ video, job, draft: short.name, prompt: message }, `Make this short: ${short.name}`, ai);
+  runTurn(run, message, true, videoDir);
   return run;
 }
 
-/** Sends John's note to one of the video's conversations; Claude carries on from where it was. */
-export function sendNote(video: string, text: string, job: ClaudeJob = 'edit'): ClaudeRun {
+/**
+ * Sends John's note to one of the video's conversations, and the AI carries on from where it was. If he has picked the
+ * other AI since, that one takes over. So does a new conversation of the same AI if the first never got started.
+ */
+export function sendNote(video: string, text: string, job: ClaudeJob = 'edit', ai: AiId = chosenAi()): ClaudeRun {
   const { longform } = videoPlaces(video);
   const note = text.trim();
   if (!note) throw new Error('The note is empty.');
   const run = getRun(video, job);
   if (!run) throw new Error("There's no conversation to reply to yet.");
-  if (running.has(keyOf(video, job))) throw new Error('Claude is still working. Wait for it to finish, or stop it.');
-  run.messages.push({ from: 'john', text: note, at: new Date().toISOString() });
+  if (running.has(keyOf(video, job))) throw new Error('The AI is still working. Wait for it to finish, or stop it.');
   // A conversation can only be resumed from the folder it started in.
-  runTurn(run, note, false, job === 'edit' ? longform : path.dirname(longform));
+  const cwd = job === 'edit' ? longform : path.dirname(longform);
+  const was = run.ai ?? 'claude';
+  if (ai === was && run.sessionId) {
+    run.messages.push({ from: 'john', text: note, at: new Date().toISOString() });
+    runTurn(run, note, false, cwd);
+    return run;
+  }
+  const message = handoverPrompt(run, note);
+  const at = new Date().toISOString();
+  if (ai !== was) run.messages.push({ from: 'app', text: `${AI_NAMES[ai]} takes over from ${AI_NAMES[was]} here.`, at });
+  run.messages.push({ from: 'john', text: note, at });
+  run.ai = ai;
+  run.sessionId = ai === 'claude' ? randomUUID() : '';
+  runTurn(run, message, true, cwd);
   return run;
 }
 
-/** Stops Claude mid-turn. The conversation is kept; a note carries it on. */
+/** Ends a turn, along with whatever it started. On Windows, killing only the program would leave those running. */
+function stopProcess(child: ChildProcess) {
+  if (process.platform === 'win32' && child.pid) spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f']);
+  else child.kill();
+}
+
+/** Stops the AI mid-turn. The conversation is kept; a note carries it on. */
 export function stopRun(video: string, job: ClaudeJob = 'edit'): ClaudeRun | null {
   const key = keyOf(video, job);
   const child = running.get(key);
   if (child) {
     running.delete(key);
-    child.kill();
+    stopProcess(child);
     const run = load(key);
     if (run) {
       run.status = 'failed';

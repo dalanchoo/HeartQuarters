@@ -7,5 +7,7 @@ export default defineConfig({
     root: '.',
     include: ['server/**/*.test.ts', 'web/src/**/*.test.ts'],
     environment: 'node',
+    // Tests never read John's choice of AI. They use Claude, unless a test asks for the other one.
+    env: { HQ_AI_FILE: 'no-such-folder/ai-choice.json' },
   },
 });

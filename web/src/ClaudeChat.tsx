@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClaudeRun } from './api';
+import { chosenName, useAi } from './AiPicker';
 
-// One conversation with Claude: what's been said, what it's doing, and a box to answer in.
+// One conversation with an AI: what's been said, what it's doing, and a box to answer in.
 // Used by "Edit with Claude", the list of shorts, and each short.
 export function ClaudeChat({
   run,
@@ -15,6 +16,9 @@ export function ClaudeChat({
   onStop: () => void;
 }) {
   const [note, setNote] = useState('');
+  const { overview } = useAi();
+  const who = overview?.options.find((o) => o.id === (run.ai ?? 'claude'))?.name ?? 'The AI';
+  const switching = !!overview && overview.chosen !== (run.ai ?? 'claude');
   const listRef = useRef<HTMLDivElement>(null);
 
   // Scrolls the conversation only, never the page around it.
@@ -33,13 +37,19 @@ export function ClaudeChat({
           </div>
         ))}
       </div>
-      {busy && <p className="muted small-text">Working… {run.activity}</p>}
+      {busy && <p className="muted small-text">{who} is working… {run.activity}</p>}
+      {!busy && switching && (
+        <p className="muted small-text">
+          Your next note goes to {chosenName(overview)}, which takes over from {who}. It will only know what's written in
+          this conversation and in the files.
+        </p>
+      )}
       {run.status === 'failed' && run.error && <p className="error">{run.error}</p>}
       <div className="claude-reply">
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder={busy ? 'Claude is working…' : placeholder}
+          placeholder={busy ? `${who} is working…` : placeholder}
           disabled={busy}
           rows={3}
         />

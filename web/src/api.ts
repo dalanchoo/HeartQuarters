@@ -15,6 +15,7 @@ export type { WritingSummary, WritingDetail } from '../../server/writing';
 export type { SkillsOverview, SkillInfo, TargetInfo, LinkState } from '../../server/skills';
 export type { ClaudeRun, ClaudeMessage } from '../../server/claude';
 export type { ShortsPlan, PlannedShort, ShortsOverview, TimedWord } from '../../server/shorts';
+export type { AiId, AiOverview } from '../../server/ai';
 export type {
   ExpressionIndex,
   ExpressionCategory,

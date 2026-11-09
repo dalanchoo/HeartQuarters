@@ -44,6 +44,10 @@ export interface Config {
   python: string;
   /** How to start Claude Code, as a program and its first arguments (the "Edit with Claude" button). */
   claudeCommand: string[];
+  /** How to start OpenAI's Codex, the same way (when ChatGPT is picked at the top of the app). */
+  codexCommand: string[];
+  /** How to start Google's Antigravity CLI (agy), the same way (when Gemini is picked). */
+  geminiCommand: string[];
   /** Where CapCut keeps its drafts (CapCut: Settings > Draft location). */
   capcutDraftsDir: string;
   /** Empty drafts made once in CapCut, copied for each new video. */

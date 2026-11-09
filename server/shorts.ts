@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { chosenAi, requireCapCutAi } from './ai.js';
 import { getRun, startShortBuild, type ClaudeRun } from './claude.js';
 import { checkDraftName, createVideoFolder, draftsForVideo, numberOf } from './create.js';
 import { deleteFolder, system } from './manage.js';
@@ -257,6 +258,7 @@ const making = new Set<string>();
  * then Claude cuts that copy down and turns it portrait. Each row is made once; after that John talks to Claude.
  */
 export async function makeShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
+  requireCapCutAi(chosenAi());
   const plan = readPlan(video);
   const row = plan && [...plan.shorts, ...plan.rejected].find((s) => s.id === id);
   if (!plan || !row) throw new Error(`There's no ${id} in this video's list.`);
@@ -278,7 +280,8 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
     const now = readPlan(video) ?? plan;
     const mark = (s: PlannedShort) => (s.id === id ? { ...s, made: name } : s);
     writePlan(video, { shorts: now.shorts.map(mark), rejected: now.rejected.map(mark) });
-    return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source });
+    const notes = [row.visuals, row.why].filter(Boolean).join(' ');
+    return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source, notes });
   } finally {
     making.delete(key);
   }
@@ -289,12 +292,13 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
  * short again from a fresh copy of the longform, with a new conversation. For trying changed instructions from scratch.
  */
 export async function regenerateShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
+  requireCapCutAi(chosenAi());
   const plan = readPlan(video);
   const row = plan && [...plan.shorts, ...plan.rejected].find((s) => s.id === id);
   if (!plan || !row) throw new Error(`There's no ${id} in this video's list.`);
   const old = row.made;
   if (!old) throw new Error(`${id} hasn't been made yet.`);
-  if (getRun(video, `short-${id}`)?.status === 'running') throw new Error('Claude is still working on this short. Stop it first.');
+  if (getRun(video, `short-${id}`)?.status === 'running') throw new Error('The AI is still working on this short. Stop it first.');
   if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
   // Checked now, because after this the old short is already in the trash.
   const source = checkDraftName(sourceDraft);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AiPicker } from './AiPicker';
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
 import { ExpressionsPage } from './ExpressionsPage';
@@ -47,6 +48,7 @@ export function App() {
             </a>
           ))}
         </nav>
+        <AiPicker />
       </header>
       <main>
         {tab === 'Videos' && <ProjectsPage />}

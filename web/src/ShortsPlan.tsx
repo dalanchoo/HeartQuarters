@@ -20,7 +20,7 @@ import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trim
 
 type Transcript = { file: string; words: TimedWord[] } | null;
 
-// The shorts of a longform, on its page: Claude proposes a list (Shorts\Shorts Plan.json), John edits it here (every
+// The shorts of a longform, on its page: the AI proposes a list (Shorts\Shorts Plan.json), John edits it here (every
 // change is saved to that file straight away) and makes each short from its row.
 export function ShortsPlanCard({ video }: { video: string }) {
   const [state, setState] = useState<ShortsOverview | null>(null);
@@ -50,7 +50,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
     getJson<Transcript>(`/api/shorts/transcript?video=${encodeURIComponent(video)}`).then(setTranscript, fail);
   }, [video, hasPlan]);
 
-  // While Claude works on anything here, check for news every 2 seconds.
+  // While the AI works on anything here, check for news every 2 seconds.
   const busy = proposing || Object.values(state?.builds ?? {}).some((b) => b.status === 'running');
   useEffect(() => {
     if (!busy) return;
@@ -159,7 +159,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
               <img src={`${fileUrl('projects', retention.path)}&v=${retention.version}`} alt="Retention graph" />
             </a>
             <div>
-              <div>Retention graph. Claude looks at it the next time you click Propose.</div>
+              <div>Retention graph. The AI looks at it the next time you click Propose.</div>
               <div className="muted">Paste another screenshot to replace it.</div>
               <button
                 className="small"
@@ -174,13 +174,13 @@ export function ShortsPlanCard({ video }: { video: string }) {
         )}
       </div>
 
-      {!proposing && !plan && run?.status === 'idle' && <p className="error">Claude finished without writing a list.</p>}
+      {!proposing && !plan && run?.status === 'idle' && <p className="error">The AI finished without writing a list.</p>}
       {state.planError && <p className="error">{state.planError}</p>}
       {error && <p className="error">{error}</p>}
 
       {run && (
         <details className="shorts-talk" open={proposing || undefined}>
-          <summary className="small-text">Talk to Claude about this list</summary>
+          <summary className="small-text">Talk to the AI about this list</summary>
           <ClaudeChat
             run={run}
             placeholder="An answer, or what to change in the list"
@@ -273,7 +273,7 @@ function ShortCard({
   const clip = dragged ?? short;
   const length = clip.end - clip.start;
   const total = Math.max(clip.end, duration ?? words?.[words.length - 1]?.end ?? clip.end + 60);
-  // The engine remembers Claude's times too (and has the last word). This shows the button straight away.
+  // The engine remembers the AI's times too (and has the last word). This shows the button straight away.
   const proposed = short.proposed === undefined ? { start: short.start, end: short.end } : short.proposed;
   const setClip = ({ start, end }: Clip) => {
     setDragged(null);
@@ -283,7 +283,7 @@ function ShortCard({
   const status = making
     ? 'copying the CapCut project…'
     : build?.status === 'running'
-      ? 'Claude is working…'
+      ? 'AI is working…'
       : made
         ? 'made'
         : null;
@@ -301,7 +301,7 @@ function ShortCard({
       </summary>
       {open && (
         <div className="short-card-body">
-          {made && <p className="small-text">Made as "{short.made}". To change it now, tell Claude below.</p>}
+          {made && <p className="small-text">Made as "{short.made}". To change it now, tell the AI below.</p>}
           <div className="short-fields">
             <label>
               Title
@@ -355,7 +355,7 @@ function ShortCard({
           )}
           {!made && proposed && (proposed.start !== clip.start || proposed.end !== clip.end) && (
             <button className="small" onClick={() => setClip(proposed)}>
-              Back to Claude's clip ({showTime(proposed.start)} to {showTime(proposed.end)})
+              Back to the proposed clip ({showTime(proposed.start)} to {showTime(proposed.end)})
             </button>
           )}
 

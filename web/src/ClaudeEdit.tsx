@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson, type ClaudeRun } from './api';
+import { chosenName, useAi } from './AiPicker';
 import { ClaudeChat } from './ClaudeChat';
 
-// "Edit with Claude" on a video's page: starts Claude on the longform-edit skill, shows what it says, and lets John
+// "Edit with ..." on a video's page: starts the chosen AI on the longform-edit skill, shows what it says, and lets John
 // send notes to the same conversation after looking at the result in CapCut.
 export function ClaudeEdit({ video }: { video: string }) {
   const [run, setRun] = useState<ClaudeRun | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const name = chosenName(useAi().overview);
 
   const refresh = () =>
     getJson<ClaudeRun | null>(`/api/claude?video=${encodeURIComponent(video)}`).then(
@@ -24,7 +26,7 @@ export function ClaudeEdit({ video }: { video: string }) {
     refresh();
   }, [video]);
 
-  // While Claude works, check for news every 2 seconds.
+  // While the AI works, check for news every 2 seconds.
   useEffect(() => {
     if (run?.status !== 'running') return;
     const timer = setInterval(refresh, 2000);
@@ -41,8 +43,8 @@ export function ClaudeEdit({ video }: { video: string }) {
   if (!run) {
     return (
       <div className="card claude-edit">
-        <button onClick={() => act('/api/claude/start', {})}>Edit with Claude</button>
-        <span className="muted small-text"> Claude edits this video's CapCut project, following the longform-edit skill.</span>
+        <button onClick={() => act('/api/claude/start', {})}>Edit with {name}</button>
+        <span className="muted small-text"> {name} edits this video's CapCut project, following the longform-edit skill.</span>
         {error && <p className="error">{error}</p>}
       </div>
     );
@@ -50,7 +52,7 @@ export function ClaudeEdit({ video }: { video: string }) {
 
   return (
     <div className="card claude-edit">
-      <h4>Edit with Claude · CapCut project "{run.draft}"</h4>
+      <h4>AI edit · CapCut project "{run.draft}"</h4>
       <ClaudeChat
         run={run}
         placeholder="Your notes after looking in CapCut, or an answer"

@@ -14,6 +14,7 @@ import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
+import { aiOverview, chooseAi } from './ai.js';
 import { getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
 import {
   hasRetention,
@@ -193,6 +194,18 @@ app.post('/api/skills/open', handle((req, res) => {
   res.json({ ok: true });
 }));
 
+// ---- Which AI (see ai.ts) ---------------------------------------------------
+
+app.get('/api/ai', handle((_req, res) => {
+  res.json(aiOverview());
+}));
+
+// { id: "claude" or "codex" }
+app.post('/api/ai', handle((req, res) => {
+  chooseAi(req.body?.id);
+  res.json(aiOverview());
+}));
+
 // ---- Edit with Claude (see claude.ts) --------------------------------------
 
 app.get('/api/claude', handle((req, res) => {
@@ -231,7 +244,7 @@ app.get('/api/shorts/transcript', handle((req, res) => {
 
 app.post('/api/shorts/propose', handle((req, res) => {
   const video = String(req.body?.video ?? '');
-  if (getRun(video, 'shorts')?.status === 'running') throw new Error('Claude is already proposing shorts for this video.');
+  if (getRun(video, 'shorts')?.status === 'running') throw new Error('The AI is already proposing shorts for this video.');
   keepOldPlan(video);
   res.json(startShortsProposal(video, hasRetention(video)));
 }));

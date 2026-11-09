@@ -78,6 +78,9 @@ Automation levels:
   snap to word edges, and the arrow keys move them a tenth of a second), or select
   words in the transcript and click the button to make them the clip. A button
   goes back to the times Claude proposed, which the plan file keeps.
+- An AI selector at the top of the app: Claude, ChatGPT (OpenAI's Codex) or Gemini
+  (Antigravity CLI, limited: no CapCut builds) does the jobs the buttons start. Picking the other AI and sending a note hands over
+  a conversation. Tried on small jobs, not yet on a whole CapCut project.
 - Packaging fields are edited where they're shown, for every platform: a field
   saves when you leave it and only that field changes in the `.md` file. YouTube
   comes first, other platforms under its Description, blank ones on one line.

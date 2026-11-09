@@ -76,14 +76,31 @@ the same, current version.
 | Cache | None yet. SQLite later if needed; always rebuildable from Drive. |
 | Tools | Python scripts run as-is from the tools folder |
 
-## AI inside the app (open decision)
+## AI inside the app
 
-A chat panel where you talk to an AI about the project you're looking at.
-To decide when we get there:
+Buttons run an AI program John already has, in the background, using his own
+subscription rather than an API key: Claude Code, OpenAI's Codex (ChatGPT) or
+Google's Antigravity CLI (Gemini; the older Gemini CLI no longer serves personal accounts).
+He picks one at the top of the app; the choice is kept in `data/ai-choice.json`.
 
-- **Option A:** HeartQuarters runs the Claude Code you already use behind the scenes.
-- **Option B:** HeartQuarters uses the Claude Agent SDK. More control, but
-  billed separately through an API key.
+- Each job has one conversation, saved in `data/claude/`. It stays with its AI.
+  If John picks the other AI and sends a note, that AI takes over with the
+  conversation's text and the files, but none of the first AI's memory. So
+  anything that must last belongs in Drive, not only in a conversation.
+- Codex can only write in the video's folder, CapCut's drafts folder, and its
+  temporary and download folders. `server/ai.ts` sets this.
+- Gemini is limited. Its commands run in a sandbox that can't write to Drive, and
+  only its file-writing tool can write, only in the video's folder. So it can
+  choose clips and write text, and Edit, Make and Regenerate refuse it up front.
+  Never give it a `command(...)` allow rule: tested, that lets it re-run refused
+  commands outside the sandbox. `geminiArgs` in `server/ai.ts` sets this.
+- Claude has no such limit today: only its instructions keep it in its folders.
+- Codex is installed in `C:\Progs\codex`, not with `npm install -g`. Run from
+  inside the Claude desktop app (a Windows Store app), a global install lands in
+  a private copy of `AppData` that HeartQuarters can't see. To update it:
+  `npm install --prefix C:\Progs\codex @openai/codex@latest`.
+- The names `claude.ts`, `ClaudeChat` and `/api/claude` are from before there
+  was a choice. They now mean whichever AI is picked.
 
 ## Rules
 

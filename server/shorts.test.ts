@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { chooseAi } from './ai';
 import { appDir, config } from './config';
 import { buildPrompt, getRun, parseShortsJob, sendNote, shortsPrompt, startShortsProposal, stopRun } from './claude';
 import { system } from './manage';
@@ -73,6 +74,50 @@ afterEach(() => {
   config.capcutDraftsDir = saved.drafts;
   config.claudeCommand = saved.cmd;
   removeTree(tmp);
+});
+
+describe("a short's first message", () => {
+  const SHORT = { id: 'S02', title: 'T', start: 100, end: 150, name: '777_S02 - T', source: '777 - TEST' };
+
+  it("passes on the plan's notes, as something to follow", () => {
+    const told = buildPrompt('D:/V', { ...SHORT, notes: 'Drop the reveal list.' });
+    expect(told).toMatch(/notes on this clip, which you must follow: Drop the reveal list\./);
+    expect(buildPrompt('D:/V', SHORT)).not.toMatch(/notes on this clip/);
+  });
+
+  it('asks for the project to be checked before reporting', () => {
+    expect(buildPrompt('D:/V', SHORT)).toMatch(/check_short\.py.*fix every PROBLEM/);
+  });
+
+  it("gets the row's notes when a short is made", async () => {
+    const shorts = path.join(tmp, 'Videos', NUMBERED, 'Shorts');
+    fs.mkdirSync(shorts, { recursive: true });
+    fs.writeFileSync(path.join(shorts, 'Shorts Plan.json'), JSON.stringify({ shorts: [{ ...ROW, visuals: 'Drop the reveal list.', why: 'Strong hook' }] }));
+    await makeShort(NUMBERED, 'S01', NUMBERED);
+    for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')?.status === 'running'; i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    expect(getRun(NUMBERED, 'short-S01')?.prompt).toMatch(/must follow: Drop the reveal list\. Strong hook/);
+  });
+});
+
+describe('Gemini, which is limited', () => {
+  const file = process.env.HQ_AI_FILE;
+  afterEach(() => {
+    process.env.HQ_AI_FILE = file;
+  });
+
+  it("refuses to make or regenerate a short, before touching anything", async () => {
+    process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
+    chooseAi('gemini');
+    const shorts = path.join(tmp, 'Videos', NUMBERED, 'Shorts');
+    fs.mkdirSync(path.join(shorts, NAME), { recursive: true });
+    fs.writeFileSync(path.join(shorts, 'Shorts Plan.json'), JSON.stringify({ shorts: [{ ...ROW, made: NAME }, { ...ROW, id: 'S02', title: 'Other' }] }));
+    await expect(makeShort(NUMBERED, 'S02', NUMBERED)).rejects.toThrow(/limited/);
+    await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/limited/);
+    expect(fs.existsSync(path.join(shorts, NAME))).toBe(true);
+    expect(fs.readdirSync(shorts).sort()).toEqual([NAME, 'Shorts Plan.json'].sort());
+  });
 });
 
 describe('checkShorts', () => {
