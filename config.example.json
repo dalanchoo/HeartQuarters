@@ -16,7 +16,7 @@
   "geminiCommand": ["C:\\Users\\dalan\\AppData\\Local\\agy\\bin\\agy.exe"],
   "capcutExe": "C:\\Users\\dalan\\AppData\\Local\\CapCut\\Apps\\CapCut.exe",
   "capcutDraftsDir": "D:\\Google Drive\\HeartMind\\HMF_SYS\\Tools\\Capcut\\CapCut Drafts",
-  "trashDir": "D:\\Google Drive\\HeartMind\\HMF_SYS\\HeartQuarters Trash",
+  "trashDir": "D:\\HeartQuarters Trash",
   "capcutTemplates": { "longform": "--- LONGFORM TEMPLATE", "short": "--- SHORTS TEMPLATE" },
   "guides": [
     { "name": "Channel basics (skill)", "root": "skills", "path": "HMF_Skills/channel-basics/SKILL.md" },

@@ -40,6 +40,7 @@ see your projects, edit metadata, watch videos, and run jobs
 | Photo previews (cache) | `C:\Dev\HeartQuarters\data\thumbs` (made by FFmpeg; safe to delete) |
 | Downloaded Substack archive | `HMF_SYS\Generated\Substack` (made by SubstackDownloader.py; not shown in the app yet) |
 | Tools (standalone Python scripts the Tools tab runs) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |
+| Things deleted in the app | `D:\HeartQuarters Trash`, outside Drive so it isn't synced. Keep it on the same drive as Drive: deleting moves folders by renaming them. |
 | HeartQuarters code | `C:\Dev\HeartQuarters` (Git), outside Drive |
 | App cache / database (later) | `C:\Dev\HeartQuarters\data\` (ignored by Git; can be deleted) |
 | Per-machine settings | `C:\Dev\HeartQuarters\config.json` (made from `config.example.json`) |

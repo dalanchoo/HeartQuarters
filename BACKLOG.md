@@ -53,7 +53,7 @@ Automation levels:
   shorts, each with a confirmation box. Rename also renames the matching
   CapCut drafts and fixes the file links inside every draft that uses the
   folder. Delete moves the folder (and ticked drafts) to
-  `HMF_SYS\HeartQuarters Trash`; nothing is really deleted. Both refuse to
+  `D:\HeartQuarters Trash`, outside Google Drive; nothing is really deleted. Both refuse to
   touch drafts while CapCut is open.
 
 - Skills tab: every skill in `HMF_SYS\Skills` (`HMF_Skills\` and `Downloaded\`),
