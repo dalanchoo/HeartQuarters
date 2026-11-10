@@ -17,6 +17,8 @@ export function savePackagingThumbnail(piece: string, version: string, proposedN
   if (!((png && /\.png$/i.test(name)) || (jpeg && /\.jpe?g$/i.test(name)))) throw new Error('The filename must match the image format (.png or .jpg).');
   const folder = safeResolve('projects', path.join(version, 'Covers'));
   fs.mkdirSync(folder, { recursive: true });
+  const folderStat = fs.lstatSync(folder);
+  if (!folderStat.isDirectory() || folderStat.isSymbolicLink()) throw new Error('The Covers folder must be a real folder, not a shortcut.');
   const file = safeResolve('projects', path.join(version, 'Covers', name));
   try { fs.writeFileSync(file, data, { flag: 'wx' }); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('A thumbnail with that name already exists. Choose another name; nothing was overwritten.'); throw e; }

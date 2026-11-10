@@ -26,4 +26,10 @@ describe('saving thumbnails', () => {
     await expect(fetchYoutubeThumbnail('http://127.0.0.1:4321/')).rejects.toThrow(/unsupported/);
     await expect(fetchYoutubeThumbnail('https://i.ytimg.com.example.com/x')).rejects.toThrow(/unsupported/);
   });
+  it('refuses a Covers junction even if its target is inside the projects folder', () => {
+    const target = path.join(tmp, 'Videos/other/Packaging/V01');
+    fs.symlinkSync(target, path.join(tmp, 'Videos/piece/Packaging/V01/Covers'), 'junction');
+    expect(() => savePackagingThumbnail('piece', 'piece/Packaging/V01', 'x.png', png)).toThrow(/shortcut/);
+    expect(fs.existsSync(path.join(target, 'x.png'))).toBe(false);
+  });
 });
