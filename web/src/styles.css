@@ -270,8 +270,6 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .youtube-form textarea { min-height: 7rem; }
 .youtube-form textarea.youtube-tags { min-height: 0; }
 .youtube-link-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin: 0.6rem 0; }
-.youtube-link-row > details { flex: 1; min-width: min(20rem, 100%); }
-.youtube-link-row > details > summary { cursor: pointer; }
 .youtube-loading { min-height: 12rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem; margin: 0.6rem 0; color: var(--muted); background: #f7f8fa; }
 .loading-line { height: 0.75rem; max-width: 34rem; border-radius: 4px; background: #e1e5eb; margin-top: 0.7rem; }
 .loading-line.short { width: 55%; }

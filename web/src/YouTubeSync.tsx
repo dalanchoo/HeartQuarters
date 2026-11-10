@@ -8,7 +8,7 @@ import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-play
 import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 import { defaultSubtitle } from './subtitleChoice';
 import { localBoolean, localPlaylistIds, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
-import { existingYoutubeJob, shouldLinkLongform } from './youtubePanel';
+import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
 
 type FileChoice = { path: string; name: string };
@@ -38,14 +38,14 @@ function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece
     const start = async () => {
       const [connection, items] = await Promise.all([getJson<Status>('/api/youtube/status'), getJson<UploadJob[]>(`/api/youtube/uploads?piece=${encodeURIComponent(piece.path)}`)]);
       if (stale) return; setStatus(connection); setJobs(items);
-      const existing = existingYoutubeJob(items);
+      const existing = existingYoutubeJob(items, preferredYoutubeJob(localStorage, piece.path));
       if (existing) { setMode(existing.id); return; }
       if (shouldLinkLongform(items, connection.connected, longformProject)) {
         try {
           const related = await getJson<{ url: string | null }>(`/api/youtube/related?video=${encodeURIComponent(longformProject!)}`);
           if (related.url) {
             const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: related.url });
-            if (!stale) { setJobs([...items, linked]); setMode(linked.id); }
+            if (!stale) { setJobs([...items, linked]); setMode(linked.id); rememberYoutubeJob(localStorage, piece.path, linked.id); }
             return;
           }
         } catch (e) { if (!stale) setError(`Couldn't connect the saved long-form link: ${e instanceof Error ? e.message : String(e)}`); }
@@ -59,6 +59,7 @@ function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece
   useEffect(() => { if (!jobs?.some((j) => j.status === 'uploading')) return; const timer = setInterval(() => { void refreshJobs().catch((e) => setError(e.message)); }, 1500); return () => clearInterval(timer); }, [jobs]);
   const job = jobs?.find((j) => j.id === mode);
   const completed = jobs?.filter((j) => j.status === 'done' && j.videoId) ?? [];
+  useEffect(() => { setExistingUrl(job?.videoId ? youtubeVideoUrl(job.videoId, piece.kind === 'short') : ''); }, [job?.id, job?.videoId, piece.kind]);
   return <div className="youtube-form"><h4>YouTube</h4>
     {(!status || !jobs || (status.connected && mode === null)) && !error && <YouTubeLoading />}
     {status && !status.connected && <>
@@ -70,14 +71,21 @@ function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece
     {status?.connected && <>
       <p>Channel: <strong>{channel || 'Checking…'}</strong></p>
       {!status.captionAccess && <p>To save playlists and subtitles, reconnect and grant Google’s additional permission. It also allows editing and deleting YouTube content.{' '}<button disabled={busy} onClick={() => void action(async () => { setConnectUrl((await postJson<{ url: string }>('/api/youtube/connect')).url); })}>Reconnect</button>{' '}{connectUrl && <a href={connectUrl} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}<button onClick={() => void action(refreshStatus)}>I’ve signed in</button></p>}
-      {completed.length > 0 && <label>Video on YouTube<select value={mode ?? ''} onChange={(e) => setMode(e.target.value)}>{completed.map((j) => <option key={j.id} value={j.id}>Existing upload · {j.videoId}</option>)}<option value="new">Upload a new copy</option></select></label>}
-      <div className="youtube-link-row"><details><summary>Link a video already on YouTube</summary><p>Paste the video’s YouTube link to show its current settings here. It must be on the connected channel.</p><label>YouTube video link<input value={existingUrl} onChange={(e) => setExistingUrl(e.target.value)} /></label><button disabled={busy || !existingUrl.trim()} onClick={() => void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(''); })}>Link video</button></details>
+      {jobs && mode !== null && <>
+      <label>YouTube video link<input value={existingUrl} disabled={job?.status === 'uploading'} onChange={(e) => setExistingUrl(e.target.value)} placeholder="Paste a YouTube link if this video is already uploaded" /></label>
+      <div className="youtube-link-row"><button disabled={busy || job?.status === 'uploading' || !existingUrl.trim() || (!!job?.videoId && existingUrl.trim() === youtubeVideoUrl(job.videoId, piece.kind === 'short'))} onClick={() => {
+        if (job?.status === 'done' && !window.confirm('Changing the linked video will discard any unsaved changes in these YouTube settings. Continue?')) return;
+        void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(youtubeVideoUrl(linked.videoId!, piece.kind === 'short')); rememberYoutubeJob(localStorage, piece.path, linked.id); });
+      }}>{job?.status === 'done' ? 'Change linked video' : 'Link existing video'}</button>
         {job?.status === 'done' && <button onClick={() => void action(async () => { await postJson('/api/youtube/studio', { videoId: job.videoId }); })}>Open in YouTube Studio ↗</button>}
       </div>
+      <p className="muted small-text">{job?.status === 'done' ? 'This is the video whose settings are shown below. To link a different video, paste its URL and choose Change linked video.' : 'If the video is already on your connected YouTube channel, paste its link and choose Link existing video.'}</p>
+      {new Set(completed.map((j) => j.videoId)).size > 1 && <p className="error">More than one YouTube video was previously linked to this project. Check the URL above before saving changes.</p>}
+      </>}
       {job?.status === 'uploading' && <p>Uploading {Math.round(job.sent / job.total * 100)}%… Please keep HeartQuarters running.</p>}
       {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try again</button></p>}
-      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); void refreshJobs(); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
+      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
       {jobs?.filter((j) => j.status === 'unknown').map((j) => <p className="error" key={j.id}>An earlier upload has an unknown result. Check YouTube Studio before uploading another copy. <button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/studio'); })}>Open Studio</button>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>)}
     </>}
     {error && <p className="error">{error}</p>}
