@@ -4,6 +4,7 @@ import type { LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
 import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 import { VIDEO_LANGUAGES } from '../../server/youtube-language';
+import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-playlists';
 
 export function YouTubeUpload({ piece, docs, covers, longform }: { piece: Piece; docs: LoadedDoc[]; covers: { path: string; name: string }[]; longform?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
@@ -21,6 +22,8 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
   const [subtitles, setSubtitles] = useState<{ path: string; name: string }[]>([]);
   const [subtitle, setSubtitle] = useState('');
   const [related, setRelated] = useState<string | null>(null);
+  const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
+  const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
   const [title, setTitle] = useState(field('title'));
   const [description, setDescription] = useState(field('description'));
   const [tags, setTags] = useState(field('tags'));
@@ -41,9 +44,19 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
   useEffect(() => { getJson<{ path: string; name: string }[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then((files) => { setSubtitles(files); setSubtitle(files.length === 1 ? files[0].path : ''); }, (e) => setError(e.message)); }, [piece.path]);
   useEffect(() => { if (!longform) return; getJson<{ url: string | null }>(`/api/youtube/related?video=${encodeURIComponent(longform)}`).then((r) => setRelated(r.url), (e) => setError(e.message)); }, [longform]);
   useEffect(() => {
-    if (!status?.connected) { setChannel(null); return; }
+    if (!status?.connected) { setChannel(null); setPlaylists(null); return; }
     getJson<{ title: string }>('/api/youtube/channel').then(setChannel, (e) => setError(e.message));
   }, [status?.connected]);
+  useEffect(() => {
+    if (!status?.connected) return;
+    let stale = false;
+    getJson<YoutubePlaylist[]>('/api/youtube/playlists').then((list) => {
+      if (stale) return;
+      setPlaylists(list);
+      setSelectedPlaylists(longform && piece.kind === 'short' && list.some((p) => p.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []);
+    }, (e) => { if (!stale) setError(e.message); });
+    return () => { stale = true; };
+  }, [status?.connected, longform, piece.kind]);
   useEffect(() => { if (!jobs.some((j) => j.status === 'uploading')) return; const timer = setInterval(refreshJobs, 1500); return () => clearInterval(timer); }, [jobs]);
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   return <div className="youtube-form">
@@ -52,6 +65,8 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       <strong>{j.status === 'uploading' ? `Uploading ${Math.round(j.sent / j.total * 100)}%` : j.status === 'unknown' ? 'Upload result unknown' : j.status === 'checked' ? 'Uncertain upload checked' : j.status === 'failed' ? 'Upload failed' : 'Uploaded'}</strong>
       {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio', { videoId: j.videoId }); }); }}>Open in YouTube Studio ↗</a></>}
       {j.error && <p className="error">{j.error}</p>}{j.warning && <p className="error">{j.warning}</p>}
+      {j.playlistResults?.map((r) => <p key={r.id} className={r.status === 'error' ? 'error' : 'muted'}>{playlists?.find((p) => p.id === r.id)?.title ?? r.id}: {r.status === 'added' ? 'added to playlist' : r.error}</p>)}
+      {j.videoId && j.status === 'done' && <><p>Choose playlists below, then add this existing upload:</p><button className="small" disabled={busy || !selectedPlaylists.length || !status?.captionAccess} onClick={() => void action(async () => { await postJson('/api/youtube/playlists', { piece: piece.path, id: j.id, playlists: selectedPlaylists }); await refreshJobs(); })}>Add this video to selected playlists</button></>}
       {j.subtitleStatus === 'sent' && <p>English subtitles sent to YouTube; check their processing in Studio.</p>}
       {j.subtitleStatus === 'uploading' && <p>Sending subtitles…</p>}
       {j.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {j.subtitleError}. Check Studio before trying again.</p>}
@@ -85,11 +100,17 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
     </>}
     {status?.connected && <>
       <p>Channel: <strong>{channel?.title ?? 'Checking…'}</strong> <button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/disconnect'); await refresh(); })}>Disconnect</button></p>
-      {!status.captionAccess && subtitles.length > 0 && <p>To upload subtitles, reconnect YouTube and grant the additional permission Google requests. It also allows editing and deleting YouTube videos and other channel content.{' '}
+      {!status.captionAccess && (subtitles.length > 0 || selectedPlaylists.length > 0) && <p>To upload subtitles or add videos to playlists, reconnect YouTube and grant the additional permission Google requests. It also allows editing and deleting YouTube videos and other channel content.{' '}
         <button disabled={busy} onClick={() => void action(async () => { const result = await postJson<{ url: string }>('/api/youtube/connect'); setUrl(result.url); })}>Reconnect for subtitles</button>{' '}
         {url && <a href={url} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}
         <button onClick={() => void refresh()}>I’ve signed in</button></p>}
       <label>Video<select value={video} onChange={(e) => setVideo(e.target.value)}>{piece.exports.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}</select></label>
+      <fieldset><legend>YouTube playlists</legend>
+        {playlists === null && <p className="muted">Loading playlists…</p>}
+        {playlists?.length === 0 && <p className="muted">No playlists found on this channel.</p>}
+        {longform && piece.kind === 'short' && playlists && !playlists.some((p) => p.id === SHORTS_PLAYLIST) && <p className="error">The default Shorts playlist wasn't found on this channel. Choose another playlist if needed.</p>}
+        {playlists?.map((p) => <label key={p.id} style={{ display: 'block' }}><input style={{ width: 'auto' }} type="checkbox" checked={selectedPlaylists.includes(p.id)} onChange={(e) => setSelectedPlaylists((current) => e.target.checked ? [...current, p.id] : current.filter((id) => id !== p.id))} /> {p.title}</label>)}
+      </fieldset>
       <label>Video language<select value={language} onChange={(e) => setLanguage(e.target.value)}>{VIDEO_LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>
       <label>Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
       <label>Description<textarea rows={7} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
@@ -102,9 +123,9 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       <label>Made for kids?<select value={kids} onChange={(e) => setKids(e.target.value)}><option value="">Choose…</option><option value="no">No</option><option value="yes">Yes</option></select></label>
       <label>Contains realistic altered or synthetic content?<select value={synthetic} onChange={(e) => setSynthetic(e.target.value)}><option value="">Choose…</option><option value="no">No</option><option value="yes">Yes</option></select></label>
       <p>Review these details before uploading. Choosing Public makes the video public on YouTube.</p>
-      <button disabled={busy || !channel || !kids || !synthetic || !title.trim() || (!!subtitle && !status.captionAccess) || jobs.some((j) => j.status === 'uploading')} onClick={() => void action(async () => {
+      <button disabled={busy || !channel || !kids || !synthetic || !title.trim() || ((!!subtitle || selectedPlaylists.length > 0) && !status.captionAccess) || jobs.some((j) => j.status === 'uploading')} onClick={() => void action(async () => {
         if (jobs.some((j) => j.video === video && j.status === 'done') && !window.confirm('This export has already been uploaded. Upload another copy?')) return;
-        await postJson('/api/youtube/upload', { piece: piece.path, video, cover, subtitle, language, title, description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy, madeForKids: kids === 'yes', synthetic: synthetic === 'yes' }); await refreshJobs();
+        await postJson('/api/youtube/upload', { piece: piece.path, video, cover, subtitle, language, playlistIds: selectedPlaylists, title, description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy, madeForKids: kids === 'yes', synthetic: synthetic === 'yes' }); await refreshJobs();
       })}>Upload {privacy === 'public' ? 'publicly' : privacy === 'unlisted' ? 'as unlisted' : 'privately'}</button>
     </>}
     {error && <p className="error">{error}</p>}

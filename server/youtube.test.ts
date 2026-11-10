@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { acknowledgeUpload, addSubtitle, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
+import { acknowledgeUpload, addPlaylists, addSubtitle, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
 
 vi.mock('./youtube-auth', () => ({ youtubeAccessToken: vi.fn(async () => 'fake-token'), youtubeStatus: vi.fn(() => ({ captionAccess: true })) }));
 vi.mock('./youtube-language', () => ({ videoLanguage: (language?: string) => language ?? 'en-US', setVideoLanguage: vi.fn(async () => {}) }));
@@ -94,5 +94,20 @@ describe('YouTube uploads', () => {
     startUpload({ ...input, subtitle: '001 - Test/Longform/Subtitles/test.vtt' });
     for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
     expect(uploadsFor(input.piece)[0]).toMatchObject({ status: 'done', videoId: 'youtube-id', subtitleStatus: 'error', subtitleError: 'caption connection lost' });
+  });
+  it('adds an existing upload to selected playlists without uploading the video again', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'playlist', snippet: { title: 'My playlist' } }] }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: 'added' }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    await addPlaylists(input.piece, job.id, ['playlist']);
+    expect(uploadsFor(input.piece)[0].playlistResults).toEqual([{ id: 'playlist', status: 'added' }]);
+    expect(mock).toHaveBeenCalledTimes(6);
   });
 });

@@ -24,6 +24,8 @@ Review the export, title, description, tags, optional thumbnail, audience, alter
 
 Timed `.vtt`, `.srt`, or `.sbv` files in the video's `Subtitles` folder can be sent as English captions along with an upload or added afterwards to an upload recorded in HeartQuarters. If there is exactly one file it is selected automatically; if there are several, choose one. Google requires a broader permission for captions, including editing and deleting YouTube content, so reconnect and review Google's consent screen before using this feature. Check YouTube Studio if caption upload is uncertain. YouTube does not expose a related-Shorts-video setting in its public API; select the long-form video in Studio after upload.
 
+The video language defaults to English (United States) and can be changed in the upload panel. HeartQuarters loads the connected channel's playlists so you can select them; Shorts belonging to a long-form video default to the HeartMindFusion Shorts playlist by its permanent ID. Previously uploaded videos can also be added to selected playlists from the same panel.
+
 ## Settings
 
 `config.json` holds this machine's folder paths, the Python to use, the guides

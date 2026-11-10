@@ -6,9 +6,10 @@ import { appDir, isInside, safeResolve } from './config.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
+import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists } from './youtube-playlists.js';
 
-export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
-export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string }
+export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
+export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
 function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
@@ -43,6 +44,7 @@ export function validateUpload(input: UploadInput) {
   if (!stat.size || stat.size > 256 * 1024 ** 3) throw new Error('The video is empty or larger than YouTube’s 256 GB limit.');
   if (input.subtitle !== undefined && typeof input.subtitle !== 'string') throw new Error('Choose a subtitle file.');
   videoLanguage(input.language);
+  checkPlaylistIds(input.playlistIds);
   if (input.subtitle) readSubtitle(input.piece, input.subtitle);
   return { video, cover, size: stat.size };
 }
@@ -58,11 +60,36 @@ export async function youtubeChannel() {
 export function startUpload(input: UploadInput): UploadJob {
   const files = validateUpload(input);
   if (input.subtitle && !youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant caption permission before uploading subtitles.');
+  if (input.playlistIds?.length && !youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant playlist permission first.');
   if (uploadsFor(input.piece).some((j) => j.video === input.video && (j.status === 'uploading' || j.status === 'unknown'))) throw new Error('An upload of this file is still running or its result is unknown. Check YouTube Studio before trying again.');
   const job: UploadJob = { id: randomUUID(), piece: input.piece, video: input.video, status: 'uploading', sent: 0, total: files.size };
   record(job); jobs.set(job.id, job);
   void upload(job, input, files).catch((e: unknown) => { job.status = job.videoId ? 'done' : 'unknown'; job.error = e instanceof Error ? e.message : String(e); record(job); });
   return job;
+}
+export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
+
+async function putInPlaylists(job: UploadJob, token: string, ids: string[]) {
+  const allowed = new Set((await listYoutubePlaylists(token)).map((p) => p.id));
+  for (const id of ids) {
+    try {
+      if (!allowed.has(id)) throw new Error('This playlist is no longer available on the connected channel.');
+      await addYoutubePlaylist(token, id, job.videoId!);
+      job.playlistResults = [...(job.playlistResults ?? []).filter((r) => r.id !== id), { id, status: 'added' }];
+    } catch (e) {
+      job.playlistResults = [...(job.playlistResults ?? []).filter((r) => r.id !== id), { id, status: 'error', error: e instanceof Error ? e.message : String(e) }];
+    }
+    record(job);
+  }
+}
+
+export async function addPlaylists(piece: string, id: string, value: unknown): Promise<void> {
+  const ids = checkPlaylistIds(value);
+  if (!ids.length) throw new Error('Choose at least one playlist.');
+  const job = uploadsFor(piece).find((j) => j.id === id);
+  if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
+  if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to allow playlist changes.');
+  await putInPlaylists(job, await youtubeAccessToken(), ids);
 }
 /** Add captions to a video already uploaded by HeartQuarters, without re-uploading the video. */
 export async function addSubtitle(piece: string, id: string, subtitle: string, language: unknown = 'en-US'): Promise<void> {
@@ -107,6 +134,10 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
     }
   } finally { await handle.close(); }
   if (!job.videoId) throw new Error('YouTube did not confirm the completed upload.');
+  if (input.playlistIds?.length) {
+    try { await putInPlaylists(job, token, checkPlaylistIds(input.playlistIds)); }
+    catch (e) { job.playlistResults = input.playlistIds.map((id) => ({ id, status: 'error', error: e instanceof Error ? e.message : String(e) })); record(job); }
+  }
   if (files.cover) {
     try {
       const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
