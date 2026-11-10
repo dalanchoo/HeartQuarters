@@ -46,6 +46,26 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   return <div className="youtube-form">
     <h4>Upload to YouTube</h4>
+    {jobs.map((j) => <div key={j.id} className="youtube-job">
+      <strong>{j.status === 'uploading' ? `Uploading ${Math.round(j.sent / j.total * 100)}%` : j.status === 'unknown' ? 'Upload result unknown' : j.status === 'checked' ? 'Uncertain upload checked' : j.status === 'failed' ? 'Upload failed' : 'Uploaded'}</strong>
+      {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio', { videoId: j.videoId }); }); }}>Open in YouTube Studio ↗</a></>}
+      {j.error && <p className="error">{j.error}</p>}{j.warning && <p className="error">{j.warning}</p>}
+      {j.subtitleStatus === 'sent' && <p>English subtitles sent to YouTube; check their processing in Studio.</p>}
+      {j.subtitleStatus === 'uploading' && <p>Sending subtitles…</p>}
+      {j.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {j.subtitleError}. Check Studio before trying again.</p>}
+      {j.videoId && j.status === 'done' && j.subtitleStatus !== 'sent' && j.subtitleStatus !== 'uploading' && <>
+        <label>Subtitles for this uploaded video<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}>
+          <option value="">{subtitles.length ? 'Choose a subtitle file' : 'No subtitle files found'}</option>
+          {subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}
+        </select></label>
+        {!status?.captionAccess && <p>Reconnect for subtitles below before uploading them.</p>}
+        <button className="small" disabled={busy || !subtitle || !status?.captionAccess} onClick={() => void action(async () => {
+          if (j.subtitleStatus === 'error' && !window.confirm('Check YouTube Studio first: the previous subtitle upload may have succeeded. Try again?')) return;
+          await postJson('/api/youtube/subtitles', { piece: piece.path, id: j.id, subtitle }); await refreshJobs();
+        })}>Upload subtitles to this video</button>
+      </>}
+      {j.status === 'unknown' && <p>Check YouTube Studio before trying again; the upload may have reached YouTube.{' '}<a href="https://studio.youtube.com/" onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio'); }); }}>Open YouTube Studio ↗</a>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>}
+    </div>)}
     {!status?.connected && <>
       <p>Connect your YouTube channel using a Google Cloud desktop OAuth client. Credentials are kept in Windows Credential Manager.</p>
       {!status?.configured && <>
@@ -84,18 +104,5 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       })}>Upload {privacy === 'public' ? 'publicly' : privacy === 'unlisted' ? 'as unlisted' : 'privately'}</button>
     </>}
     {error && <p className="error">{error}</p>}
-    {jobs.map((j) => <div key={j.id} className="youtube-job">
-      <strong>{j.status === 'uploading' ? `Uploading ${Math.round(j.sent / j.total * 100)}%` : j.status === 'unknown' ? 'Upload result unknown' : j.status === 'checked' ? 'Uncertain upload checked' : j.status === 'failed' ? 'Upload failed' : 'Uploaded'}</strong>
-      {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio', { videoId: j.videoId }); }); }}>Open in YouTube Studio ↗</a></>}
-      {j.error && <p className="error">{j.error}</p>}{j.warning && <p className="error">{j.warning}</p>}
-      {j.subtitleStatus === 'sent' && <p>English subtitles sent to YouTube; check their processing in Studio.</p>}
-      {j.subtitleStatus === 'uploading' && <p>Sending subtitles…</p>}
-      {j.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {j.subtitleError}. Check Studio before trying again.</p>}
-      {j.videoId && j.status === 'done' && j.subtitleStatus !== 'sent' && j.subtitleStatus !== 'uploading' && subtitle && <button className="small" disabled={busy || !status?.captionAccess} onClick={() => void action(async () => {
-        if (j.subtitleStatus === 'error' && !window.confirm('Check YouTube Studio first: the previous subtitle upload may have succeeded. Try again?')) return;
-        await postJson('/api/youtube/subtitles', { piece: piece.path, id: j.id, subtitle }); await refreshJobs();
-      })}>Upload subtitles to this video</button>}
-      {j.status === 'unknown' && <p>Check YouTube Studio before trying again; the upload may have reached YouTube.{' '}<a href="https://studio.youtube.com/" onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio'); }); }}>Open YouTube Studio ↗</a>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>}
-    </div>)}
   </div>;
 }
