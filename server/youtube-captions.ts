@@ -26,9 +26,9 @@ export function readSubtitle(piece: string, relative: string): Buffer {
 }
 
 /** Upload a timed English track. YouTube processes it after accepting it. */
-export async function uploadSubtitle(token: string, videoId: string, bytes: Buffer): Promise<void> {
+export async function uploadSubtitle(token: string, videoId: string, bytes: Buffer, language = 'en-US'): Promise<void> {
   const boundary = `hq-${randomUUID()}`;
-  const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId, language: 'en', name: 'English' } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
+  const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId, language, name: 'HeartQuarters subtitles' } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
   const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
   const response = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body: new Uint8Array(Buffer.concat([head, bytes, tail])),

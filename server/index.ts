@@ -69,7 +69,7 @@ app.get('/api/youtube/related', handle((req, res) => {
 }));
 app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
 app.post('/api/youtube/subtitles', (req, res) => {
-  addSubtitle(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.subtitle ?? '')).then(
+  addSubtitle(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.subtitle ?? ''), req.body?.language).then(
     () => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
   );
 });

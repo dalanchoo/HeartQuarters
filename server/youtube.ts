@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { appDir, isInside, safeResolve } from './config.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
+import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 
-export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
+export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
@@ -41,6 +42,7 @@ export function validateUpload(input: UploadInput) {
   const stat = fs.statSync(video);
   if (!stat.size || stat.size > 256 * 1024 ** 3) throw new Error('The video is empty or larger than YouTube’s 256 GB limit.');
   if (input.subtitle !== undefined && typeof input.subtitle !== 'string') throw new Error('Choose a subtitle file.');
+  videoLanguage(input.language);
   if (input.subtitle) readSubtitle(input.piece, input.subtitle);
   return { video, cover, size: stat.size };
 }
@@ -63,14 +65,14 @@ export function startUpload(input: UploadInput): UploadJob {
   return job;
 }
 /** Add captions to a video already uploaded by HeartQuarters, without re-uploading the video. */
-export async function addSubtitle(piece: string, id: string, subtitle: string): Promise<void> {
+export async function addSubtitle(piece: string, id: string, subtitle: string, language: unknown = 'en-US'): Promise<void> {
   const job = uploadsFor(piece).find((j) => j.id === id);
   if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
   if (job.subtitleStatus === 'sent' || job.subtitleStatus === 'uploading') throw new Error('Subtitles have already been sent or are being uploaded.');
   if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant caption permission first.');
-  const bytes = readSubtitle(piece, subtitle);
+  const bytes = readSubtitle(piece, subtitle); const selectedLanguage = videoLanguage(language);
   job.subtitleStatus = 'uploading'; job.subtitleError = undefined; jobs.set(job.id, job); record(job);
-  try { await uploadSubtitle(await youtubeAccessToken(), job.videoId, bytes); job.subtitleStatus = 'sent'; }
+  try { const token = await youtubeAccessToken(); await setVideoLanguage(token, job.videoId, selectedLanguage); await uploadSubtitle(token, job.videoId, bytes, selectedLanguage); job.subtitleStatus = 'sent'; }
   catch (e) { job.subtitleStatus = 'error'; job.subtitleError = e instanceof Error ? e.message : String(e); }
   record(job);
 }
@@ -87,7 +89,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
   try { token = await youtubeAccessToken(); } catch (e) { job.status = 'failed'; job.error = e instanceof Error ? e.message : String(e); record(job); return; }
   const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Length': String(files.size), 'X-Upload-Content-Type': 'application/octet-stream' },
-    body: JSON.stringify({ snippet: { title: input.title.trim(), description: input.description, tags: input.tags, categoryId: '22' }, status: { privacyStatus: input.privacy, selfDeclaredMadeForKids: input.madeForKids, containsSyntheticMedia: input.synthetic } }),
+    body: JSON.stringify({ snippet: { title: input.title.trim(), description: input.description, tags: input.tags, categoryId: '22', defaultAudioLanguage: videoLanguage(input.language), defaultLanguage: videoLanguage(input.language) }, status: { privacyStatus: input.privacy, selfDeclaredMadeForKids: input.madeForKids, containsSyntheticMedia: input.synthetic } }),
   });
   if (!init.ok) { job.status = 'failed'; job.error = await responseError(init); record(job); return; }
   const url = init.headers.get('location'); if (!url || !url.startsWith('https://www.googleapis.com/')) throw new Error('YouTube did not return a valid upload address.');
@@ -113,7 +115,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
   }
   if (input.subtitle) {
     job.subtitleStatus = 'uploading'; record(job);
-    try { await uploadSubtitle(token, job.videoId, readSubtitle(input.piece, input.subtitle)); job.subtitleStatus = 'sent'; }
+    try { const language = videoLanguage(input.language); await setVideoLanguage(token, job.videoId, language); await uploadSubtitle(token, job.videoId, readSubtitle(input.piece, input.subtitle), language); job.subtitleStatus = 'sent'; }
     catch (e) { job.subtitleStatus = 'error'; job.subtitleError = e instanceof Error ? e.message : String(e); }
   }
   job.status = 'done'; record(job);

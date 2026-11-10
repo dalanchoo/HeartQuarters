@@ -3,6 +3,7 @@ import { copyText, getJson, postJson, type Piece } from './api';
 import type { LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
 import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
+import { VIDEO_LANGUAGES } from '../../server/youtube-language';
 
 export function YouTubeUpload({ piece, docs, covers, longform }: { piece: Piece; docs: LoadedDoc[]; covers: { path: string; name: string }[]; longform?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
@@ -16,6 +17,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
   const field = (name: string) => doc.fields?.find((f) => f.label.toLowerCase() === name)?.value ?? '';
   const [video, setVideo] = useState(piece.exports[0].path);
   const [cover, setCover] = useState('');
+  const [language, setLanguage] = useState('en-US');
   const [subtitles, setSubtitles] = useState<{ path: string; name: string }[]>([]);
   const [subtitle, setSubtitle] = useState('');
   const [related, setRelated] = useState<string | null>(null);
@@ -54,6 +56,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       {j.subtitleStatus === 'uploading' && <p>Sending subtitles…</p>}
       {j.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {j.subtitleError}. Check Studio before trying again.</p>}
       {j.videoId && j.status === 'done' && j.subtitleStatus !== 'sent' && j.subtitleStatus !== 'uploading' && <>
+        <label>Video language<select value={language} onChange={(e) => setLanguage(e.target.value)}>{VIDEO_LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>
         <label>Subtitles for this uploaded video<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}>
           <option value="">{subtitles.length ? 'Choose a subtitle file' : 'No subtitle files found'}</option>
           {subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}
@@ -61,7 +64,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
         {!status?.captionAccess && <p>Reconnect for subtitles below before uploading them.</p>}
         <button className="small" disabled={busy || !subtitle || !status?.captionAccess} onClick={() => void action(async () => {
           if (j.subtitleStatus === 'error' && !window.confirm('Check YouTube Studio first: the previous subtitle upload may have succeeded. Try again?')) return;
-          await postJson('/api/youtube/subtitles', { piece: piece.path, id: j.id, subtitle }); await refreshJobs();
+          await postJson('/api/youtube/subtitles', { piece: piece.path, id: j.id, subtitle, language }); await refreshJobs();
         })}>Upload subtitles to this video</button>
       </>}
       {j.status === 'unknown' && <p>Check YouTube Studio before trying again; the upload may have reached YouTube.{' '}<a href="https://studio.youtube.com/" onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio'); }); }}>Open YouTube Studio ↗</a>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>}
@@ -87,6 +90,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
         {url && <a href={url} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}
         <button onClick={() => void refresh()}>I’ve signed in</button></p>}
       <label>Video<select value={video} onChange={(e) => setVideo(e.target.value)}>{piece.exports.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}</select></label>
+      <label>Video language<select value={language} onChange={(e) => setLanguage(e.target.value)}>{VIDEO_LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>
       <label>Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
       <label>Description<textarea rows={7} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label>Tags (comma-separated)<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
@@ -100,7 +104,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       <p>Review these details before uploading. Choosing Public makes the video public on YouTube.</p>
       <button disabled={busy || !channel || !kids || !synthetic || !title.trim() || (!!subtitle && !status.captionAccess) || jobs.some((j) => j.status === 'uploading')} onClick={() => void action(async () => {
         if (jobs.some((j) => j.video === video && j.status === 'done') && !window.confirm('This export has already been uploaded. Upload another copy?')) return;
-        await postJson('/api/youtube/upload', { piece: piece.path, video, cover, subtitle, title, description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy, madeForKids: kids === 'yes', synthetic: synthetic === 'yes' }); await refreshJobs();
+        await postJson('/api/youtube/upload', { piece: piece.path, video, cover, subtitle, language, title, description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy, madeForKids: kids === 'yes', synthetic: synthetic === 'yes' }); await refreshJobs();
       })}>Upload {privacy === 'public' ? 'publicly' : privacy === 'unlisted' ? 'as unlisted' : 'privately'}</button>
     </>}
     {error && <p className="error">{error}</p>}

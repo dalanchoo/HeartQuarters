@@ -6,6 +6,7 @@ import { makeTree, removeTree } from './testing';
 import { acknowledgeUpload, addSubtitle, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
 
 vi.mock('./youtube-auth', () => ({ youtubeAccessToken: vi.fn(async () => 'fake-token'), youtubeStatus: vi.fn(() => ({ captionAccess: true })) }));
+vi.mock('./youtube-language', () => ({ videoLanguage: (language?: string) => language ?? 'en-US', setVideoLanguage: vi.fn(async () => {}) }));
 let tmp: string;
 let original: string;
 let input: UploadInput;
