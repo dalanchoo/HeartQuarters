@@ -6,7 +6,7 @@ import { appDir, isInside, safeResolve } from './config.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
-import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists } from './youtube-playlists.js';
+import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
@@ -68,6 +68,59 @@ export function startUpload(input: UploadInput): UploadJob {
   return job;
 }
 export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
+
+async function playlistSnapshot(token: string, videoId: string) {
+  const playlists = await listYoutubePlaylists(token);
+  const items = await Promise.all(playlists.map((p) => playlistVideoItems(token, p.id, videoId)));
+  return { playlists, entries: new Map(playlists.map((p, i) => [p.id, items[i]])) };
+}
+
+function completedUpload(piece: string, id: string): UploadJob {
+  const job = uploadsFor(piece).find((j) => j.id === id);
+  if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
+  return job;
+}
+
+export async function videoPlaylists(piece: string, id: string) {
+  const job = completedUpload(piece, id);
+  const snapshot = await playlistSnapshot(await youtubeAccessToken(), job.videoId!);
+  return { playlists: snapshot.playlists, selected: snapshot.playlists.filter((p) => snapshot.entries.get(p.id)!.length > 0).map((p) => p.id) };
+}
+
+/** Apply only the boxes the user changed, after checking for changes made in Studio. */
+export async function saveVideoPlaylists(piece: string, id: string, before: unknown, after: unknown) {
+  if (before === undefined || after === undefined) throw new Error('Load the video’s current playlists first.');
+  const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
+  const job = completedUpload(piece, id);
+  if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to allow playlist changes.');
+  const token = await youtubeAccessToken();
+  const snapshot = await playlistSnapshot(token, job.videoId!);
+  const allowed = new Set(snapshot.playlists.map((p) => p.id));
+  if ([...oldIds, ...newIds].some((id) => !allowed.has(id))) throw new Error('Your playlist list changed. Reload it and try again.');
+  const changed = snapshot.playlists.filter((p) => oldIds.includes(p.id) !== newIds.includes(p.id));
+  if (changed.some((p) => (snapshot.entries.get(p.id)!.length > 0) !== oldIds.includes(p.id))) throw new Error('A selected playlist changed in YouTube Studio. Reload the playlists and try again.');
+  const errors: string[] = [];
+  const applied: typeof changed = [];
+  for (const playlist of changed) {
+    try {
+      if (newIds.includes(playlist.id)) await addYoutubePlaylist(token, playlist.id, job.videoId!);
+      else for (const entry of snapshot.entries.get(playlist.id)!) await removePlaylistVideoItem(token, entry);
+      applied.push(playlist);
+    } catch (e) { errors.push(`${playlist.title}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  // YouTube's playlist reads can briefly lag behind a successful change.
+  let pending = applied;
+  for (let attempt = 0; pending.length && attempt < 4; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
+    const checks = await Promise.all(pending.map(async (p) => {
+      try { return (await playlistVideoItems(token, p.id, job.videoId!)).length > 0 === newIds.includes(p.id); }
+      catch { return false; }
+    }));
+    pending = pending.filter((_p, i) => !checks[i]);
+  }
+  for (const playlist of pending) errors.push(`${playlist.title}: YouTube has not confirmed the change yet; reload the playlists shortly`);
+  return { errors };
+}
 
 async function putInPlaylists(job: UploadJob, token: string, ids: string[]) {
   const allowed = new Set((await listYoutubePlaylists(token)).map((p) => p.id));

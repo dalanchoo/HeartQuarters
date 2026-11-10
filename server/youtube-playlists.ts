@@ -3,7 +3,7 @@ export interface YoutubePlaylist { id: string; title: string }
 
 export function checkPlaylistIds(value: unknown): string[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 100 || value.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id))) throw new Error('Choose valid playlists.');
+  if (!Array.isArray(value) || value.length > 1000 || value.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id))) throw new Error('Choose valid playlists.');
   return [...new Set(value as string[])];
 }
 
@@ -36,4 +36,27 @@ export async function addYoutubePlaylist(token: string, playlist: string, video:
   if (current.items?.length) return;
   const res = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: playlist, resourceId: { kind: 'youtube#video', videoId: video } } }) });
   if (!res.ok) throw new Error(`Couldn't add to playlist (${res.status}).`);
+}
+
+/** All matching playlist-item IDs, including any duplicate entries. */
+export async function playlistVideoItems(token: string, playlist: string, video: string): Promise<string[]> {
+  const ids: string[] = []; const seen = new Set<string>(); let page = '';
+  do {
+    const params = new URLSearchParams({ part: 'id', playlistId: playlist, videoId: video, maxResults: '50' });
+    if (page) params.set('pageToken', page);
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`Couldn't check a playlist (${res.status}).`);
+    const data = await res.json() as { items?: { id?: string }[]; nextPageToken?: string };
+    for (const item of data.items ?? []) { if (!item.id) throw new Error('YouTube returned an incomplete playlist entry.'); ids.push(item.id); }
+    page = data.nextPageToken ?? '';
+    if (page && seen.has(page)) throw new Error('YouTube repeated a playlist page. Please try again.');
+    if (page) seen.add(page);
+  } while (page);
+  return ids;
+}
+
+export async function removePlaylistVideoItem(token: string, id: string): Promise<void> {
+  const params = new URLSearchParams({ id });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Couldn't remove the video from the playlist (${res.status}).`);
 }

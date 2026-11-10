@@ -33,7 +33,7 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, addPlaylists, addSubtitle, startUpload, uploadsFor, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
+import { acknowledgeUpload, addPlaylists, addSubtitle, saveVideoPlaylists, startUpload, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 
@@ -60,6 +60,8 @@ app.get('/api/youtube/callback', (req, res) => {
 });
 app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));
 app.get('/api/youtube/subtitles', handle((req, res) => { res.json(subtitleFiles(String(req.query.piece ?? ''))); }));
 app.get('/api/youtube/related', handle((req, res) => {

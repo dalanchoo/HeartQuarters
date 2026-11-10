@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { acknowledgeUpload, addPlaylists, addSubtitle, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
+import { acknowledgeUpload, addPlaylists, addSubtitle, saveVideoPlaylists, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
 
 vi.mock('./youtube-auth', () => ({ youtubeAccessToken: vi.fn(async () => 'fake-token'), youtubeStatus: vi.fn(() => ({ captionAccess: true })) }));
 vi.mock('./youtube-language', () => ({ videoLanguage: (language?: string) => language ?? 'en-US', setVideoLanguage: vi.fn(async () => {}) }));
@@ -109,5 +109,58 @@ describe('YouTube uploads', () => {
     await addPlaylists(input.piece, job.id, ['playlist']);
     expect(uploadsFor(input.piece)[0].playlistResults).toEqual([{ id: 'playlist', status: 'added' }]);
     expect(mock).toHaveBeenCalledTimes(6);
+  });
+  it('saves additions and removals without changing other playlist entries', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'keep', snippet: { title: 'Keep' } }, { id: 'remove', snippet: { title: 'Remove' } }, { id: 'add', snippet: { title: 'Add' } }] }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'keep-item' }] }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'remove-item' }] }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ id: 'new-item' }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'new-item' }] }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await saveVideoPlaylists(input.piece, job.id, ['keep', 'remove'], ['keep', 'add'])).toEqual({ errors: [] });
+    const deletions = mock.mock.calls.filter((call) => call[1]?.method === 'DELETE');
+    expect(deletions).toHaveLength(1);
+    expect(deletions[0][0]).toContain('id=remove-item');
+    const insert = mock.mock.calls.find((call) => call[1]?.method === 'POST' && String(call[0]).includes('playlistItems'));
+    expect(JSON.parse(insert![1].body).snippet.playlistId).toBe('add');
+  });
+  it('stops if a playlist changed in Studio since it was loaded', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'one', snippet: { title: 'One' } }] }))
+      .mockResolvedValueOnce(Response.json({ items: [] }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(saveVideoPlaylists(input.piece, job.id, ['one'], [])).rejects.toThrow(/changed in YouTube Studio/);
+    expect(mock.mock.calls.some((call) => call[1]?.method === 'DELETE')).toBe(false);
+  });
+  it('waits for YouTube to show a removal before reporting success', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'one', snippet: { title: 'One' } }] }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'entry' }] }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'entry' }] }))
+      .mockResolvedValueOnce(Response.json({ items: [] }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await saveVideoPlaylists(input.piece, job.id, ['one'], [])).toEqual({ errors: [] });
+    expect(mock).toHaveBeenCalledTimes(8);
   });
 });

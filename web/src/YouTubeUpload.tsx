@@ -65,8 +65,8 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
       <strong>{j.status === 'uploading' ? `Uploading ${Math.round(j.sent / j.total * 100)}%` : j.status === 'unknown' ? 'Upload result unknown' : j.status === 'checked' ? 'Uncertain upload checked' : j.status === 'failed' ? 'Upload failed' : 'Uploaded'}</strong>
       {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio', { videoId: j.videoId }); }); }}>Open in YouTube Studio ↗</a></>}
       {j.error && <p className="error">{j.error}</p>}{j.warning && <p className="error">{j.warning}</p>}
-      {j.playlistResults?.map((r) => <p key={r.id} className={r.status === 'error' ? 'error' : 'muted'}>{playlists?.find((p) => p.id === r.id)?.title ?? r.id}: {r.status === 'added' ? 'added to playlist' : r.error}</p>)}
-      {j.videoId && j.status === 'done' && <><p>Choose playlists below, then add this existing upload:</p><button className="small" disabled={busy || !selectedPlaylists.length || !status?.captionAccess} onClick={() => void action(async () => { await postJson('/api/youtube/playlists', { piece: piece.path, id: j.id, playlists: selectedPlaylists }); await refreshJobs(); })}>Add this video to selected playlists</button></>}
+      {j.playlistResults?.filter((r) => r.status === 'error').map((r) => <p key={r.id} className="error">{playlists?.find((p) => p.id === r.id)?.title ?? r.id}: {r.error}</p>)}
+      {j.videoId && j.status === 'done' && status?.connected && <PlaylistManager piece={piece.path} jobId={j.id} canEdit={status.captionAccess} />}
       {j.subtitleStatus === 'sent' && <p>English subtitles sent to YouTube; check their processing in Studio.</p>}
       {j.subtitleStatus === 'uploading' && <p>Sending subtitles…</p>}
       {j.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {j.subtitleError}. Check Studio before trying again.</p>}
@@ -105,7 +105,7 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
         {url && <a href={url} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}
         <button onClick={() => void refresh()}>I’ve signed in</button></p>}
       <label>Video<select value={video} onChange={(e) => setVideo(e.target.value)}>{piece.exports.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}</select></label>
-      <fieldset><legend>YouTube playlists</legend>
+      <fieldset><legend>Playlists for a new upload</legend>
         {playlists === null && <p className="muted">Loading playlists…</p>}
         {playlists?.length === 0 && <p className="muted">No playlists found on this channel.</p>}
         {longform && piece.kind === 'short' && playlists && !playlists.some((p) => p.id === SHORTS_PLAYLIST) && <p className="error">The default Shorts playlist wasn't found on this channel. Choose another playlist if needed.</p>}
@@ -130,4 +130,39 @@ function UploadForm({ piece, doc, covers, longform }: { piece: Piece; doc: Loade
     </>}
     {error && <p className="error">{error}</p>}
   </div>;
+}
+
+function PlaylistManager({ piece, jobId, canEdit }: { piece: string; jobId: string; canEdit: boolean }) {
+  const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
+  const [saved, setSaved] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const load = async () => {
+    const data = await getJson<{ playlists: YoutubePlaylist[]; selected: string[] }>(`/api/youtube/video-playlists?piece=${encodeURIComponent(piece)}&id=${encodeURIComponent(jobId)}`);
+    setPlaylists(data.playlists); setSaved(data.selected); setSelected(data.selected);
+  };
+  useEffect(() => { let stale = false; getJson<{ playlists: YoutubePlaylist[]; selected: string[] }>(`/api/youtube/video-playlists?piece=${encodeURIComponent(piece)}&id=${encodeURIComponent(jobId)}`).then((data) => {
+    if (!stale) { setPlaylists(data.playlists); setSaved(data.selected); setSelected(data.selected); }
+  }, (e) => { if (!stale) setError(e.message); }); return () => { stale = true; }; }, [piece, jobId]);
+  const changed = playlists !== null && playlists.some((p) => saved.includes(p.id) !== selected.includes(p.id));
+  return <fieldset><legend>Playlists for this uploaded video</legend>
+    {!playlists && !error && <p>Loading current playlists from YouTube…</p>}
+    {playlists?.map((p) => <label key={p.id} style={{ display: 'block' }}><input style={{ width: 'auto' }} type="checkbox" checked={selected.includes(p.id)} onChange={(e) => { const checked = e.target.checked; setSelected((current) => checked ? [...current, p.id] : current.filter((id) => id !== p.id)); setMessage(''); }} /> {p.title}</label>)}
+    {playlists?.length === 0 && <p>No playlists found on this channel.</p>}
+    {!canEdit && <p>Reconnect YouTube below to change playlists.</p>}
+    {error && <p className="error">{error}</p>}{message && <p>{message}</p>}
+    {playlists && <button className="small" disabled={busy || !canEdit || !changed} onClick={async () => {
+      setBusy(true); setError(''); setMessage('');
+      try {
+        const result = await postJson<{ errors: string[] }>('/api/youtube/video-playlists', { piece, id: jobId, before: saved, after: selected });
+        await load();
+        if (result.errors.length) setError(`Some changes could not be saved: ${result.errors.join('; ')}`);
+        else setMessage('Playlists saved on YouTube.');
+      } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+      finally { setBusy(false); }
+    }}>Save playlist changes</button>}
+    {error && <button className="small" disabled={busy} onClick={() => { setError(''); void load().catch((e) => setError(e.message)); }}>Reload playlists</button>}
+  </fieldset>;
 }
