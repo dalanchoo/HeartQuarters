@@ -165,7 +165,7 @@ export function PackagingDocShort({ doc }: { doc: LoadedDoc }) {
   return (
     <div className="block">
       <h4>
-        {file.name}
+        Local file · {file.name}
         {text && !isEmpty && <CopyButton text={text} label="Copy all" />}
       </h4>
       {error && <p className="error">{error}</p>}

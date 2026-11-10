@@ -30,7 +30,7 @@ export function inPlatformOrder<T extends { name: string }>(files: T[]): T[] {
 const LABEL_RE = /^([A-Z][A-Za-z ]{0,30}):\s*$/;
 
 // A description has lines of its own that look like labels ("Full video:", above a link). Only these end it.
-const AFTER_DESCRIPTION = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'accessibility', 'purpose']);
+const AFTER_DESCRIPTION = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'accessibility', 'purpose', 'video language', 'visibility', 'made for kids', 'altered content', 'playlists']);
 
 /** True for a file nobody has filled in: nothing but headings, labels and the template's "#tags". */
 export function isBlankPackaging(text: string): boolean {

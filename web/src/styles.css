@@ -257,12 +257,24 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .action-menu > summary { cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.8rem; background: var(--panel); font-size: 0.85rem; }
 .action-menu-items { position: absolute; z-index: 4; right: 0; top: calc(100% + 4px); min-width: 160px; padding: 0.4rem; display: flex; flex-direction: column; gap: 0.3rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px #0002; }
 .action-menu-items button { text-align: left; }
+.new-version { position: relative; }
+.new-version > summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; padding: 0.25rem 0.4rem; }
+.new-version[open] { flex-basis: 100%; padding: 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
+.new-version input { font: inherit; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
 .yt-section { border: 1px solid var(--line); border-radius: 8px; margin: 0.65rem 0; padding: 0.6rem 0.8rem; }
 .yt-section > summary { cursor: pointer; font-weight: 600; }
+.yt-section > summary::before, .compare-field > summary::before { content: '▸'; display: inline-block; color: var(--muted); margin-right: 0.4rem; }
+.yt-section[open] > summary::before, .compare-field[open] > summary::before { transform: rotate(90deg); }
 .yt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; margin-top: 0.5rem; }
 .yt-grid > * { min-width: 0; }
 .yt-grid .yt-full { grid-column: 1 / -1; }
+.compare-field { border-top: 1px solid var(--line); padding: 0.5rem 0; }
+.compare-field summary { cursor: pointer; }
+.compare-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+.compare-columns pre { background: var(--bg); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; padding: 0.6rem; font: inherit; }
+.compare-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 @media (max-width: 850px) { .yt-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .compare-columns { grid-template-columns: 1fr; } }
 
 /* Expressions */
 .search { width: 100%; font: inherit; padding: 0.45rem 0.6rem; border: 1px solid var(--line); border-radius: 6px;
