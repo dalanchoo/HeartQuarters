@@ -1,12 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   copyText,
-  fileUrl,
-  formatSize,
   getJson,
   openInExplorer,
   postJson,
-  thumbUrl,
   type Piece,
   type ProjectDetail,
   type CreateResult,
@@ -21,6 +18,7 @@ import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './Packag
 import { WriteMetadata } from './ShortMetadata';
 import { LongformUrlBox } from './ShortsPlan';
 import { YouTubeUpload } from './YouTubeUpload';
+import { VideoPreview } from './VideoPreview';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -473,66 +471,21 @@ function PieceCard({
   /** Given for shorts and reels inside a video, which get Rename / Delete buttons. */
   onManaged?: (result: ManageResult) => void;
 }) {
-  const [playing, setPlaying] = useState<string | null>(null);
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
   const [docsLoads, setDocsLoads] = useState(0);
   const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
-  const playerRef = useRef<HTMLVideoElement>(null);
   const [open, setOpen] = useState(startOpen);
-
-  // When you press Play, bring the player into view.
-  useEffect(() => {
-    if (playing) playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [playing]);
 
   const contents = (
     <>
       {children}
 
-      {/* The player sits at the top of the card, full width, and scrolls into view. */}
-      {playing && (
-        <video
-          key={playing}
-          className="player"
-          src={fileUrl('projects', playing)}
-          controls
-          autoPlay
-          preload="metadata"
-          ref={playerRef}
-        />
-      )}
-
       {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
       <div className="piece-body">
         <div className="piece-media">
-          {version && version.covers.length > 0 && (
-            <div className="cover-stack">
-              {version.covers.map((f, i) => (
-                <a
-                  key={f.path}
-                  className={i === 0 ? 'cover-main' : 'cover-extra'}
-                  href={fileUrl('projects', f.path)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`${f.name} (click for full size)`}
-                >
-                  <img src={thumbUrl('projects', f.path, i === 0 ? 640 : 240)} alt={f.name} loading="lazy" />
-                </a>
-              ))}
-            </div>
-          )}
-
-          {piece.exports.map((f) => (
-            <div key={f.path} className="export-row" title={f.name}>
-              <button className="small" onClick={() => setPlaying(playing === f.path ? null : f.path)}>
-                {playing === f.path ? '■ Hide' : '▶ Play'}
-              </button>
-              <span className="ellipsis">{f.name}</span>
-              <span className="muted">{formatSize(f.size)}</span>
-            </div>
-          ))}
+          <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
 
           {version && (
             <div className="versions">
