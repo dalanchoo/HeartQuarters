@@ -14,6 +14,12 @@ describe('YouTube video settings', () => {
     const { settings } = await readYoutubeVideo('token', 'id');
     expect(settings).toMatchObject({ title: 'Original', madeForKids: false, synthetic: true, privacy: 'private' });
   });
+  it('prefers the portrait Short image, then the largest available thumbnail', async () => {
+    const withThumbnails = { ...resource, snippet: { ...resource.snippet, thumbnails: { medium: { url: 'medium' }, maxres: { url: 'large' }, shortsAspectRatio: { url: 'portrait' } } } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ items: [withThumbnails] })).mockResolvedValueOnce(Response.json({ items: [{ ...withThumbnails, snippet: { ...withThumbnails.snippet, thumbnails: { medium: { url: 'medium' }, maxres: { url: 'large' } } } }] })));
+    expect((await readYoutubeVideo('token', 'id')).settings.thumbnail).toBe('portrait');
+    expect((await readYoutubeVideo('token', 'id')).settings.thumbnail).toBe('large');
+  });
   it('preserves other status properties and sends the original etag when saving', async () => {
     const mock = vi.fn().mockResolvedValueOnce(Response.json({ items: [resource] })).mockResolvedValueOnce(Response.json({ status: resource.status }));
     vi.stubGlobal('fetch', mock);

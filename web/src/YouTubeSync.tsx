@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { copyText, getJson, getText, postJson, type Piece } from './api';
+import { copyText, fileUrl, getJson, getText, postJson, type Piece } from './api';
 import type { LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
@@ -15,14 +15,14 @@ type FileChoice = { path: string; name: string };
 type Status = { configured: boolean; connected: boolean; captionAccess: boolean };
 type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; captions: { language: string; name: string; status: string; kind: string }[] | null; captionError: string | null };
 
-export function YouTubeUpload({ piece, docs, covers, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; longform?: string; longformProject?: string }) {
+export function YouTubeUpload({ piece, docs, covers, version, onChanged, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; version?: string; onChanged?: () => void; longform?: string; longformProject?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
   return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube upload & settings</summary>
-    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} longformProject={longformProject} />}</details>;
+    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} version={version} onChanged={onChanged} longform={longform} longformProject={longformProject} />}</details>;
 }
 
-function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece: Piece; doc?: LoadedDoc; covers: FileChoice[]; longform?: string; longformProject?: string }) {
+function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longformProject }: { piece: Piece; doc?: LoadedDoc; covers: FileChoice[]; version?: string; onChanged?: () => void; longform?: string; longformProject?: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [jobs, setJobs] = useState<UploadJob[] | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -83,7 +83,7 @@ function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece
       {new Set(completed.map((j) => j.videoId)).size > 1 && <p className="error">More than one YouTube video was previously linked to this project. Check the URL above before saving changes.</p>}
       </>}
       {job?.status === 'uploading' && <p>Uploading {Math.round(job.sent / job.total * 100)}%… Please keep HeartQuarters running.</p>}
-      {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} canEdit={status.captionAccess} longform={longform} />}
+      {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} version={version} onChanged={onChanged} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try again</button></p>}
       {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
       {jobs?.filter((j) => j.status === 'unknown').map((j) => <p className="error" key={j.id}>An earlier upload has an unknown result. Check YouTube Studio before uploading another copy. <button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/studio'); })}>Open Studio</button>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>)}
@@ -167,12 +167,13 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
   </div>;
 }
 
-function ExistingForm({ piece, job, doc, covers, canEdit, longform }: { piece: Piece; job: UploadJob; doc?: LoadedDoc; covers: FileChoice[]; canEdit: boolean; longform?: string }) {
+function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, longform }: { piece: Piece; job: UploadJob; doc?: LoadedDoc; covers: FileChoice[]; version?: string; onChanged?: () => void; canEdit: boolean; longform?: string }) {
   const [data, setData] = useState<Existing | null>(null); const [draft, setDraft] = useState<YoutubeVideoSettings | null>(null);
   const [tagsText, setTagsText] = useState('');
   const [selected, setSelected] = useState<string[]>([]); const [subtitles, setSubtitles] = useState<FileChoice[]>([]);
   const [subtitle, setSubtitle] = useState(''); const [cover, setCover] = useState(''); const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  const [downloadName, setDownloadName] = useState('YouTube thumbnail');
   const load = async () => { const r = await getJson<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`); setData(r); setDraft(r.video); setTagsText(r.video.tags.join(', ')); setSelected(r.selected); setSubtitle(''); setCover(''); };
   useEffect(() => { void load().catch((e) => setError(e.message)); getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then(setSubtitles, (e) => setError(e.message)); }, [piece.path, job.id]);
   if (!data || !draft) return <div>{error ? <p className="error">{error} <button className="small" onClick={() => void load().catch((e) => setError(e.message))}>Retry</button></p> : <YouTubeLoading />}</div>;
@@ -211,8 +212,9 @@ function ExistingForm({ piece, job, doc, covers, canEdit, longform }: { piece: P
     <Choices label="Contains realistic altered or synthetic content?" value={draft.synthetic === null ? '' : draft.synthetic ? 'yes' : 'no'} setValue={(v) => change({ synthetic: v === '' ? null : v === 'yes' })} />
     </div><Related longform={longform} /></details>
     <details className="yt-section"><summary>Thumbnail & subtitles</summary><div className="yt-grid">
-    <p>Current YouTube thumbnail: {data.video.thumbnail ? <a href={data.video.thumbnail} target="_blank" rel="noreferrer">View ↗</a> : 'not available'}</p>
-    <label>Thumbnail<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">Keep current thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
+    <div className="yt-full thumbnail-compare"><div><strong>Local thumbnail</strong>{cover ? <img src={fileUrl('projects', cover)} alt="Selected local thumbnail" /> : <p>Choose a local thumbnail below to compare.</p>}</div><div><strong>On YouTube</strong>{data.video.thumbnail ? <img src={data.video.thumbnail} alt="Current YouTube thumbnail" /> : <p>Not available</p>}</div></div>
+    <label>Local thumbnail to push<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">Keep current thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
+    <div><label>Save YouTube copy as (without extension)<input value={downloadName} onChange={(e) => setDownloadName(e.target.value)} /></label><button disabled={busy || !version || !data.video.thumbnail || !downloadName.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try { await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version, name: downloadName }); setMessage('YouTube thumbnail saved in this packaging version.'); onChanged?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Download YouTube thumbnail</button><p className="muted small-text">Saves YouTube’s available copy, which may differ in quality from the original.</p></div>
     {data.captions === null ? <p className="error">{data.captionError} Check subtitles in Studio.</p> : <><p>YouTube captions: {data.captions.length ? data.captions.map((c) => `${c.language || 'unknown language'} (${c.kind === 'ASR' || c.kind === 'asr' ? 'automatic' : 'uploaded'}, ${c.status || 'status unknown'})`).join(', ') : 'none'}</p>
       {!hasManualCaptions && <label>Add subtitles<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}><option value="">Keep current captions</option>{subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}</select></label>}</>}
     </div></details>

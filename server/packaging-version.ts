@@ -3,7 +3,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { checkFolderName } from './create.js';
 
-function versionFolder(piece: string, source: string): string {
+export function versionFolder(piece: string, source: string): string {
   if (!piece || !source) throw new Error('Choose a packaging version.');
   const parent = safeResolve('projects', path.join(piece, 'Packaging'));
   const from = safeResolve('projects', source);

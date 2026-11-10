@@ -192,6 +192,9 @@ main { flex: 1; min-height: 0; }
 .video-preview-tools button:hover:not(:disabled) { color: white; background: #3b4350; }
 .video-preview-select { display: flex; flex-direction: column; gap: 0.25rem; }
 .video-preview-select select { width: 100%; min-width: 0; font: inherit; }
+.thumbnail-import > summary { cursor: pointer; font-weight: 600; }
+.thumbnail-import label { display: block; margin: 0.4rem 0; }
+.thumbnail-import input { max-width: 100%; font: inherit; }
 .cover-main { display: block; width: 100%; }
 .cover-main img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; display: block;
                   border: 1px solid var(--line); background: var(--bg); }
@@ -306,6 +309,8 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .comparison-same { color: #236a41; }
 .comparison-different { color: #a8221d; }
 .compare-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+.thumbnail-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.thumbnail-compare img { display: block; margin-top: 0.4rem; width: 100%; max-height: 260px; object-fit: contain; object-position: left top; }
 .compare-columns pre { background: var(--bg); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; padding: 0.6rem; font: inherit; }
 .diff-local { background: #ffd9d4; color: #801f19; border-radius: 3px; }
 .diff-youtube { background: #d4edda; color: #16562e; border-radius: 3px; }

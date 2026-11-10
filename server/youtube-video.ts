@@ -24,7 +24,7 @@ export async function readYoutubeVideo(token: string, id: string): Promise<{ set
   const data = await res.json() as { items?: VideoResource[] };
   const resource = data.items?.[0]; const snippet = resource?.snippet; const status = resource?.status;
   if (!resource?.etag || !snippet || !status || typeof snippet.title !== 'string' || typeof snippet.categoryId !== 'string' || !['private', 'unlisted', 'public'].includes(String(status.privacyStatus))) throw new Error('YouTube did not return complete video settings.');
-  const thumbs = snippet.thumbnails as { medium?: { url?: string }; default?: { url?: string } } | undefined;
+  const thumbs = snippet.thumbnails as Record<string, { url?: string } | undefined> | undefined;
   return { resource, settings: {
     etag: resource.etag, title: snippet.title, description: typeof snippet.description === 'string' ? snippet.description : '',
     tags: Array.isArray(snippet.tags) ? snippet.tags.filter((t): t is string => typeof t === 'string') : [],
@@ -32,7 +32,7 @@ export async function readYoutubeVideo(token: string, id: string): Promise<{ set
     privacy: status.privacyStatus as YoutubeVideoSettings['privacy'],
     madeForKids: typeof status.selfDeclaredMadeForKids === 'boolean' ? status.selfDeclaredMadeForKids : null,
     synthetic: typeof status.containsSyntheticMedia === 'boolean' ? status.containsSyntheticMedia : null,
-    thumbnail: thumbs?.medium?.url ?? thumbs?.default?.url ?? null,
+    thumbnail: thumbs?.shortsAspectRatio?.url ?? thumbs?.uhd?.url ?? thumbs?.qhd?.url ?? thumbs?.fhd?.url ?? thumbs?.maxres?.url ?? thumbs?.standard?.url ?? thumbs?.high?.url ?? thumbs?.medium?.url ?? thumbs?.default?.url ?? null,
   } };
 }
 

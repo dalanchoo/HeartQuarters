@@ -19,6 +19,7 @@ import { WriteMetadata } from './ShortMetadata';
 import { LongformUrlBox } from './ShortsPlan';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
+import { ThumbnailImport } from './ThumbnailImport';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -506,6 +507,7 @@ function PieceCard({
       <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
         <div className="piece-media">
           <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
+          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} onSaved={() => onChanged?.()} />}
 
           {version && (
             <div className="versions">
@@ -554,7 +556,7 @@ function PieceCard({
 
       {/* The main file's Description, then the other platforms, run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} longformProject={longformProject} />}
+      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={video} longformProject={longformProject} />}
     </>
   );
 

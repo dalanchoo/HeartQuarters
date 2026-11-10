@@ -8,6 +8,7 @@ import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings } from './youtube-video.js';
+import { fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
@@ -92,6 +93,15 @@ function completedUpload(piece: string, id: string): UploadJob {
   const job = uploadsFor(piece).find((j) => j.id === id);
   if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
   return job;
+}
+
+export async function downloadYoutubeThumbnail(piece: string, id: string, version: string, name: unknown) {
+  const job = completedUpload(piece, id);
+  const video = await readYoutubeVideo(await youtubeAccessToken(), job.videoId!);
+  if (!video.settings.thumbnail) throw new Error('YouTube did not provide a thumbnail for this video.');
+  const data = await fetchYoutubeThumbnail(video.settings.thumbnail);
+  const extension = data[0] === 0xff && data[1] === 0xd8 ? '.jpg' : '.png';
+  return savePackagingThumbnail(piece, version, `${String(name ?? '').trim()}${extension}`, data);
 }
 
 export async function existingYoutubeSettings(piece: string, id: string) {
