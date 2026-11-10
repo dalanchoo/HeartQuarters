@@ -16,6 +16,12 @@ rebuilt. Just refresh the browser tab. (Changes to `package.json`, like new
 libraries, still need a full restart. A tool that's running when the engine
 restarts loses its on-screen output, though the tool itself finishes.)
 
+## Upload to YouTube
+
+In Google Cloud, enable the YouTube Data API v3 and create an OAuth client of type **Desktop app**. Configure the OAuth consent screen and add your Google account as a test user if your app is in testing. In HeartQuarters, open a video or Short with an export and YouTube packaging, choose **Upload to YouTube**, and enter that client's ID and secret on your own PC. Sign in with Google and select the intended channel. The credentials and Google refresh token are stored in Windows Credential Manager, not in Drive or Git.
+
+Review the export, title, description, tags, optional thumbnail, audience, altered-content answer and visibility before uploading. Private is selected initially; Public publishes to your channel. The app never changes the export or packaging when uploading. A record of uploads is kept locally in `data/youtube-uploads`; if an upload is interrupted, check YouTube Studio before trying again so you don't accidentally make a duplicate. Google may require you to reconnect if its authorization expires.
+
 ## Settings
 
 `config.json` holds this machine's folder paths, the Python to use, the guides

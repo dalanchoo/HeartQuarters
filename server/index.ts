@@ -31,11 +31,34 @@ import {
   writeShortMetadata,
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
+import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
+import { acknowledgeUpload, startUpload, uploadsFor, youtubeChannel, type UploadInput } from './youtube.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use(express.json());
+
+// YouTube sign-in and uploads. The callback is a Google browser redirect; its
+// one-use state and PKCE verifier are checked before accepting the response.
+app.get('/api/youtube/status', handle((_req, res) => { res.json(youtubeStatus()); }));
+app.post('/api/youtube/configure', handle((req, res) => { configureYoutube(req.body?.clientId, req.body?.clientSecret); res.json({ ok: true }); }));
+app.post('/api/youtube/disconnect', handle((_req, res) => { disconnectYoutube(); res.json({ ok: true }); }));
+app.post('/api/youtube/connect', handle((req, res) => {
+  const address = req.socket.localAddress;
+  if (address !== '127.0.0.1') throw new Error('Connect using 127.0.0.1.');
+  res.json({ url: authorizationUrl(req.socket.localPort!) });
+}));
+app.get('/api/youtube/callback', (req, res) => {
+  finishYoutubeAuth(String(req.query.state ?? ''), String(req.query.code ?? '')).then(
+    () => res.type('text/plain').send('YouTube is connected. You can close this tab and return to HeartQuarters.'),
+    () => res.status(400).type('text/plain').send('YouTube sign-in was not completed. Return to HeartQuarters and try again.'),
+  );
+});
+app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));
+app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
+app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
 
 /** Runs a route handler and turns any error into a readable JSON message. */
 function handle(fn: (req: Request, res: Response) => void) {

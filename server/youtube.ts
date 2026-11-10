@@ -1,0 +1,92 @@
+// Uploads only a selected export. Original files are opened for reading, never changed.
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { appDir, isInside, safeResolve } from './config.js';
+import { youtubeAccessToken } from './youtube-auth.js';
+
+export interface UploadInput { piece: string; video: string; cover: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
+export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string }
+const jobs = new Map<string, UploadJob>();
+const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
+function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
+export function uploadsFor(piece: string): UploadJob[] {
+  if (!fs.existsSync(jobsDir())) return [];
+  return fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
+    try { const j = JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8')) as UploadJob; if (j.piece !== piece) return []; return [jobs.get(j.id) ?? (j.status === 'uploading' ? { ...j, status: j.videoId ? 'done' as const : 'unknown' as const, warning: j.videoId ? 'The upload completed, but the thumbnail step may have been interrupted. Check YouTube Studio.' : undefined } : j)]; } catch { return []; }
+  }).reverse();
+}
+export function validateUpload(input: UploadInput) {
+  if (!input || typeof input.piece !== 'string' || !input.piece || typeof input.video !== 'string' || typeof input.cover !== 'string') throw new Error('Choose a video and packaging.');
+  const piece = safeResolve('projects', input.piece);
+  const video = safeResolve('projects', input.video);
+  const exports = safeResolve('projects', path.join(input.piece, 'Exports'));
+  if (!isInside(exports, video) || !/\.(mp4|mov|mkv|webm)$/i.test(video) || !fs.statSync(video).isFile()) throw new Error('Choose a video from this project’s Exports folder.');
+  let cover = '';
+  if (input.cover) {
+    cover = safeResolve('projects', input.cover);
+    if (!isInside(path.join(piece, 'Packaging'), cover) || !/\.(png|jpe?g)$/i.test(cover) || !fs.statSync(cover).isFile() || fs.statSync(cover).size > 2_000_000) throw new Error('Choose a PNG or JPEG cover under 2 MB from this project’s packaging.');
+  }
+  if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 100 || typeof input.description !== 'string' || input.description.length > 5000) throw new Error('A title is required (up to 100 characters); descriptions can be up to 5,000 characters.');
+  if (!Array.isArray(input.tags) || input.tags.some((t) => typeof t !== 'string') || input.tags.join(',').length > 500) throw new Error('Tags must be text, with at most 500 characters in total.');
+  if (!['private', 'unlisted', 'public'].includes(input.privacy) || typeof input.madeForKids !== 'boolean' || typeof input.synthetic !== 'boolean') throw new Error('Choose visibility, audience and altered-content settings.');
+  const stat = fs.statSync(video);
+  if (!stat.size || stat.size > 256 * 1024 ** 3) throw new Error('The video is empty or larger than YouTube’s 256 GB limit.');
+  return { video, cover, size: stat.size };
+}
+async function responseError(res: Response) { const s = await res.text(); try { const j = JSON.parse(s) as { error?: { message?: string } }; return j.error?.message ?? `YouTube returned ${res.status}`; } catch { return `YouTube returned ${res.status}`; } }
+export async function youtubeChannel() {
+  const token = await youtubeAccessToken();
+  const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(await responseError(res));
+  const data = await res.json() as { items?: { id: string; snippet: { title: string } }[] };
+  if (data.items?.length !== 1) throw new Error('Google did not return one YouTube channel. Check which channel you selected when signing in.');
+  return { id: data.items[0].id, title: data.items[0].snippet.title };
+}
+export function startUpload(input: UploadInput): UploadJob {
+  const files = validateUpload(input);
+  if (uploadsFor(input.piece).some((j) => j.video === input.video && (j.status === 'uploading' || j.status === 'unknown'))) throw new Error('An upload of this file is still running or its result is unknown. Check YouTube Studio before trying again.');
+  const job: UploadJob = { id: randomUUID(), piece: input.piece, video: input.video, status: 'uploading', sent: 0, total: files.size };
+  record(job); jobs.set(job.id, job);
+  void upload(job, input, files).catch((e: unknown) => { job.status = job.videoId ? 'done' : 'unknown'; job.error = e instanceof Error ? e.message : String(e); record(job); });
+  return job;
+}
+/** Explicitly acknowledge an uncertain upload only after checking YouTube Studio. */
+export function acknowledgeUpload(piece: string, id: string) {
+  const job = uploadsFor(piece).find((j) => j.id === id);
+  if (!job || job.status !== 'unknown') throw new Error('That upload is not awaiting a check.');
+  job.status = 'checked';
+  jobs.delete(job.id);
+  record(job);
+}
+async function upload(job: UploadJob, input: UploadInput, files: { video: string; cover: string; size: number }) {
+  let token: string;
+  try { token = await youtubeAccessToken(); } catch (e) { job.status = 'failed'; job.error = e instanceof Error ? e.message : String(e); record(job); return; }
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Length': String(files.size), 'X-Upload-Content-Type': 'application/octet-stream' },
+    body: JSON.stringify({ snippet: { title: input.title.trim(), description: input.description, tags: input.tags, categoryId: '22' }, status: { privacyStatus: input.privacy, selfDeclaredMadeForKids: input.madeForKids, containsSyntheticMedia: input.synthetic } }),
+  });
+  if (!init.ok) { job.status = 'failed'; job.error = await responseError(init); record(job); return; }
+  const url = init.headers.get('location'); if (!url || !url.startsWith('https://www.googleapis.com/')) throw new Error('YouTube did not return a valid upload address.');
+  const handle = await fs.promises.open(files.video, 'r');
+  try {
+    const chunk = Buffer.alloc(8 * 1024 * 1024);
+    while (job.sent < files.size) {
+      const n = Math.min(chunk.length, files.size - job.sent);
+      const { bytesRead } = await handle.read(chunk, 0, n, job.sent);
+      if (bytesRead !== n) throw new Error('The export changed or could not be read during upload.');
+      const res = await fetch(url, { method: 'PUT', headers: { 'Content-Length': String(n), 'Content-Range': `bytes ${job.sent}-${job.sent + n - 1}/${files.size}` }, body: new Uint8Array(chunk.buffer, chunk.byteOffset, n) });
+      if (res.status === 308) { const range = /^bytes=0-(\d+)$/.exec(res.headers.get('range') ?? ''); if (!range || Number(range[1]) + 1 !== job.sent + n) throw new Error('YouTube reported an unexpected upload position.'); job.sent += n; }
+      else if (res.ok) { const result = await res.json() as { id?: string }; if (!result.id) throw new Error('YouTube did not return a video ID.'); job.videoId = result.id; job.sent = files.size; record(job); }
+      else throw new Error(await responseError(res));
+    }
+  } finally { await handle.close(); }
+  if (!job.videoId) throw new Error('YouTube did not confirm the completed upload.');
+  if (files.cover) {
+    try {
+      const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
+      if (!res.ok) throw new Error(await responseError(res));
+    } catch (e) { job.warning = `The video uploaded, but its thumbnail did not: ${e instanceof Error ? e.message : String(e)}. Set it in YouTube Studio.`; }
+  }
+  job.status = 'done'; record(job);
+}

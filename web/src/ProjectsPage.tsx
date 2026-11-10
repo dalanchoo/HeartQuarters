@@ -20,6 +20,7 @@ import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
 import { WriteMetadata } from './ShortMetadata';
 import { LongformUrlBox } from './ShortsPlan';
+import { YouTubeUpload } from './YouTubeUpload';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -547,6 +548,7 @@ function PieceCard({
             )}
             {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
           </div>
+          {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} />}
         </div>
 
         <div className="piece-docs">
