@@ -246,7 +246,7 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
       const remote = online[field];
       const diff = local !== null && remote !== null ? metadataDiff(field, local, remote) : null;
       const state = issue ? 'Needs attention' : local === null && remote === null ? 'Not provided' : diff?.same ? 'Same' : 'Different';
-      return <details className="compare-field" key={field}><summary>{field} <span className={`comparison-status ${state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span></summary>
+      return <details className="compare-field" key={field}><summary><span>{field}</span><span className={`comparison-status ${state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span></summary>
         {issue && <p className="error">{issue}</p>}
         {diff?.reordered && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
         {diff?.limited && <p className="muted small-text">This text is too long to highlight individual words, so both values are highlighted.</p>}
