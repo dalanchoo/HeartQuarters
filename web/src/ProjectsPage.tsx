@@ -235,7 +235,7 @@ function ProjectView({
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
           <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
-          {project.kind !== 'group' && <details className="action-menu"><summary>Manage</summary><div className="action-menu-items"><ManageButtons path={project.id} onDone={onManaged} /></div></details>}
+          {project.kind !== 'group' && <ManageButtons path={project.id} onDone={onManaged} />}
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
@@ -509,11 +509,9 @@ function PieceCard({
 
           <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-            <details className="action-menu"><summary>More actions</summary><div className="action-menu-items">
-              <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
-              {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
-              {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
-            </div></details>
+            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
+            {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
+            {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
           </div>
         </div>
 
