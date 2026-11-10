@@ -9,6 +9,7 @@ import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 import { defaultSubtitle } from './subtitleChoice';
 import { localBoolean, localPlaylistIds, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, shouldLinkLongform } from './youtubePanel';
+import { metadataDiff, type DiffPart } from './metadataDiff';
 
 type FileChoice = { path: string; name: string };
 type Status = { configured: boolean; connected: boolean; captionAccess: boolean };
@@ -243,9 +244,13 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
       let local: string | null = null; let issue = '';
       try { local = localValue(snapshot, field); } catch (e) { issue = e instanceof Error ? e.message : String(e); }
       const remote = online[field];
-      return <details className="compare-field" key={field}><summary>{field} <span className="muted small-text">{issue ? 'needs attention' : local === null && remote === null ? 'not provided' : local === remote ? 'same' : 'different'}</span></summary>
+      const diff = local !== null && remote !== null ? metadataDiff(field, local, remote) : null;
+      const state = issue ? 'Needs attention' : local === null && remote === null ? 'Not provided' : diff?.same ? 'Same' : 'Different';
+      return <details className="compare-field" key={field}><summary>{field} <span className={`comparison-status ${state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span></summary>
         {issue && <p className="error">{issue}</p>}
-        <div className="compare-columns"><div><strong>Local file</strong><pre>{local === null ? '(not in this file)' : local || '(empty)'}</pre></div><div><strong>YouTube</strong><pre>{remote === null ? '(not provided by YouTube)' : remote || '(empty)'}</pre></div></div>
+        {diff?.reordered && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
+        {diff?.limited && <p className="muted small-text">This text is too long to highlight individual words, so both values are highlighted.</p>}
+        <div className="compare-columns"><div><strong>Local file</strong><pre>{local === null ? '(not in this file)' : local === '' ? '(empty)' : diff ? <DiffText parts={diff.left} side="local" /> : local}</pre></div><div><strong>YouTube</strong><pre>{remote === null ? '(not provided by YouTube)' : remote === '' ? '(empty)' : diff ? <DiffText parts={diff.right} side="youtube" /> : remote}</pre></div></div>
         <div className="compare-actions"><button disabled={busy || !!issue || local === null} onClick={async () => { if (local === null) return; setBusy(true); setError(''); setMessage(''); try { const current = await getText('projects', doc.file.path); if (current.replace(/^\uFEFF/, '') !== snapshot.replace(/^\uFEFF/, '')) throw new Error('The local file changed outside HeartQuarters. Reload the project and compare again.'); if (useLocal(field, local)) setMessage(`${field} is ready in the YouTube form. Click Push changes to YouTube to apply it.`); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Use local on YouTube →</button>
           <button disabled={busy || !!issue || remote === null} onClick={async () => { if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return; setBusy(true); setError(''); setMessage(''); try {
             await verifyOnline([field]); await doc.save((text) => { if (text !== snapshot) throw new Error('The local file changed. Review it again before copying.'); return setLocalValue(text, field, remote); }); setMessage(`${field} saved to the local file.`);
@@ -254,4 +259,8 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
     })}
     {message && <p>{message}</p>}{error && <p className="error">{error}</p>}
   </details>;
+}
+
+function DiffText({ parts, side }: { parts: DiffPart[]; side: 'local' | 'youtube' }) {
+  return <>{parts.map((part, i) => <span key={i} className={part.changed ? `diff-${side}` : undefined}>{part.text}</span>)}</>;
 }
