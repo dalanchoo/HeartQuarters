@@ -7,6 +7,7 @@ import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
+import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings } from './youtube-video.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
@@ -69,6 +70,18 @@ export function startUpload(input: UploadInput): UploadJob {
 }
 export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
 
+/** Link a video the owner identifies, after verifying it belongs to the connected channel. */
+export async function linkYoutubeVideo(piece: string, value: unknown): Promise<UploadJob> {
+  if (!piece || !fs.statSync(safeResolve('projects', piece)).isDirectory()) throw new Error('Choose a project folder.');
+  const videoId = youtubeVideoId(value);
+  const existing = uploadsFor(piece).find((j) => j.videoId === videoId && j.status === 'done');
+  if (existing) return existing;
+  const [video, channel] = await Promise.all([readYoutubeVideo(await youtubeAccessToken(), videoId), youtubeChannel()]);
+  if (video.resource.snippet?.channelId !== channel.id) throw new Error('That video is not on the connected YouTube channel.');
+  const job: UploadJob = { id: randomUUID(), piece, video: '', status: 'done', videoId, sent: 0, total: 0 };
+  record(job); jobs.set(job.id, job); return job;
+}
+
 async function playlistSnapshot(token: string, videoId: string) {
   const playlists = await listYoutubePlaylists(token);
   const items = await Promise.all(playlists.map((p) => playlistVideoItems(token, p.id, videoId)));
@@ -79,6 +92,51 @@ function completedUpload(piece: string, id: string): UploadJob {
   const job = uploadsFor(piece).find((j) => j.id === id);
   if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
   return job;
+}
+
+export async function existingYoutubeSettings(piece: string, id: string) {
+  const job = completedUpload(piece, id); const token = await youtubeAccessToken();
+  const [video, playlists] = await Promise.all([readYoutubeVideo(token, job.videoId!), videoPlaylists(piece, id)]);
+  let captions: Awaited<ReturnType<typeof youtubeCaptionTracks>> | null = null;
+  let captionError: string | null = null;
+  try { captions = await youtubeCaptionTracks(token, job.videoId!); } catch (e) { captionError = e instanceof Error ? e.message : String(e); }
+  return { video: video.settings, ...playlists, captions, captionError };
+}
+
+export async function syncYoutubeSettings(piece: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings, before: unknown, after: unknown, subtitle: unknown, cover: unknown) {
+  const job = completedUpload(piece, id);
+  if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to save changes.');
+  if (typeof subtitle !== 'string' || typeof cover !== 'string') throw new Error('Check the subtitle and thumbnail choices.');
+  if (!Array.isArray(before) || !Array.isArray(after)) throw new Error('Load the current YouTube playlists first.');
+  if (subtitle && job.subtitleStatus === 'sent') throw new Error('HeartQuarters already sent subtitles to this video. Check YouTube Studio before adding another track.');
+  if (subtitle) readSubtitle(piece, subtitle);
+  let coverPath = '';
+  if (cover) {
+    const folder = safeResolve('projects', path.join(piece, 'Packaging'));
+    coverPath = safeResolve('projects', cover);
+    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > 2_000_000) throw new Error('Choose a PNG or JPEG cover under 2 MB from this project’s packaging.');
+  }
+  const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
+  const current = await videoPlaylists(piece, id);
+  const available = new Set(current.playlists.map((p) => p.id));
+  if ([...oldIds, ...newIds].some((p) => !available.has(p))) throw new Error('Your playlist list changed. Reload the YouTube settings before saving.');
+  if (current.playlists.some((p) => oldIds.includes(p.id) !== newIds.includes(p.id) && current.selected.includes(p.id) !== oldIds.includes(p.id))) throw new Error('A playlist changed in Studio. Reload the YouTube settings before saving.');
+  const token = await youtubeAccessToken();
+  await updateYoutubeVideo(token, job.videoId!, baseline, desired);
+  const errors: string[] = [];
+  try { const result = await saveVideoPlaylists(piece, id, oldIds, newIds); errors.push(...result.errors); }
+  catch (e) { errors.push(`Playlists: ${e instanceof Error ? e.message : String(e)}`); }
+  if (coverPath) {
+    try {
+      const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId!)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(coverPath)) });
+      if (!response.ok) throw new Error(await responseError(response));
+    } catch (e) { errors.push(`Thumbnail: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  if (subtitle) {
+    try { await addSubtitle(piece, id, subtitle, desired.language ?? 'en-US'); const updated = uploadsFor(piece).find((j) => j.id === id); if (updated?.subtitleStatus !== 'sent') throw new Error(updated?.subtitleError ?? 'YouTube did not confirm the subtitle upload.'); }
+    catch (e) { errors.push(`Subtitles: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  return { errors };
 }
 
 export async function videoPlaylists(piece: string, id: string) {
