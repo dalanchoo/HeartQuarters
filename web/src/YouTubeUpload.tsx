@@ -73,9 +73,9 @@ function UploadForm({ piece, doc, covers }: { piece: Piece; doc: LoadedDoc; cove
     {error && <p className="error">{error}</p>}
     {jobs.map((j) => <div key={j.id} className="youtube-job">
       <strong>{j.status === 'uploading' ? `Uploading ${Math.round(j.sent / j.total * 100)}%` : j.status === 'unknown' ? 'Upload result unknown' : j.status === 'checked' ? 'Uncertain upload checked' : j.status === 'failed' ? 'Upload failed' : 'Uploaded'}</strong>
-      {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} target="_blank" rel="noreferrer">Open in YouTube Studio ↗</a></>}
+      {j.videoId && <> · <a href={`https://studio.youtube.com/video/${encodeURIComponent(j.videoId)}/edit`} onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio', { videoId: j.videoId }); }); }}>Open in YouTube Studio ↗</a></>}
       {j.error && <p className="error">{j.error}</p>}{j.warning && <p className="error">{j.warning}</p>}
-      {j.status === 'unknown' && <p>Check YouTube Studio before trying again; the upload may have reached YouTube.{' '}<a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Open YouTube Studio ↗</a>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>}
+      {j.status === 'unknown' && <p>Check YouTube Studio before trying again; the upload may have reached YouTube.{' '}<a href="https://studio.youtube.com/" onClick={(e) => { e.preventDefault(); void action(async () => { await postJson('/api/youtube/studio'); }); }}>Open YouTube Studio ↗</a>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>}
     </div>)}
   </div>;
 }

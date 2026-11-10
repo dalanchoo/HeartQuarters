@@ -33,6 +33,7 @@ import {
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
 import { acknowledgeUpload, startUpload, uploadsFor, youtubeChannel, type UploadInput } from './youtube.js';
+import { openYouTubeStudio } from './youtube-studio.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -59,6 +60,11 @@ app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel)
 app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));
 app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
 app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
+app.post('/api/youtube/studio', (req, res) => {
+  try {
+    openYouTubeStudio(req.body?.videoId).then(() => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+  } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : String(e) }); }
+});
 
 /** Runs a route handler and turns any error into a readable JSON message. */
 function handle(fn: (req: Request, res: Response) => void) {
