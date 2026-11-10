@@ -20,6 +20,7 @@ import { LongformUrlBox } from './ShortsPlan';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
+import { addThumbnailPlanningFields } from './packaging';
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -371,6 +372,14 @@ function ManagePackagingVersion({ piece, version, onChanged }: { piece: Piece; v
   </details>;
 }
 
+function ThumbnailPlanning({ doc }: { doc: import('./PackagingDoc').LoadedDoc }) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  if (doc.text === null || !doc.fields || addThumbnailPlanningFields(doc.text) === doc.text) return null;
+  return <div className="thumbnail-planning"><button className="small" disabled={busy} onClick={async () => {
+    setBusy(true); setError(''); try { await doc.save(addThumbnailPlanningFields); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  }}>Add thumbnail planning fields</button><span className="muted small-text"> Add thumbnail text and idea to {doc.file.name}.</span>{error && <p className="error">{error}</p>}</div>;
+}
+
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
 function OpenInCapCut({ draft }: { draft: string }) {
   const [message, setMessage] = useState<{ text: string; failed?: boolean } | null>(null);
@@ -551,6 +560,7 @@ function PieceCard({
           {docs.slice(0, 1).map((d) => (
             <PackagingDocShort key={d.file.path} doc={d} />
           ))}
+          {docs.filter((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? '')).map((d) => <ThumbnailPlanning key={d.file.path} doc={d} />)}
         </div>
       </div>
 

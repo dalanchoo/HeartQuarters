@@ -30,7 +30,20 @@ export function inPlatformOrder<T extends { name: string }>(files: T[]): T[] {
 const LABEL_RE = /^([A-Z][A-Za-z ]{0,30}):\s*$/;
 
 // A description has lines of its own that look like labels ("Full video:", above a link). Only these end it.
-const AFTER_DESCRIPTION = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'accessibility', 'purpose', 'video language', 'visibility', 'made for kids', 'altered content', 'playlists']);
+const AFTER_DESCRIPTION = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'thumbnail idea', 'thumbnail prompt', 'accessibility', 'purpose', 'video language', 'visibility', 'made for kids', 'altered content', 'playlists']);
+
+/** Add missing planning fields, leaving the existing document and its values alone. */
+export function addThumbnailPlanningFields(text: string): string {
+  const parsed = parseFields(text);
+  if (!parsed && text.replace(/^#.*$/gm, '').trim()) throw new Error('This file is not in the usual labeled format. Add thumbnail fields in the file manually.');
+  const fields = parsed ?? [];
+  const existing = new Set(fields.map((field) => field.label.toLowerCase()));
+  const missing = ['Thumbnail text', 'Thumbnail idea'].filter((label) => !existing.has(label.toLowerCase()));
+  if (!missing.length) return text;
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const prefix = text && !text.endsWith('\n') ? `${eol}${eol}` : text ? eol : '';
+  return text + prefix + missing.map((label) => `${label}:${eol}`).join(eol);
+}
 
 /** True for a file nobody has filled in: nothing but headings, labels and the template's "#tags". */
 export function isBlankPackaging(text: string): boolean {

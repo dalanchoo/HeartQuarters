@@ -1,6 +1,20 @@
 // Splitting YouTube.md and similar files into fields for the Copy buttons.
 import { describe, expect, it } from 'vitest';
-import { inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue } from './packaging';
+import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue } from './packaging';
+
+describe('thumbnail planning', () => {
+  it('adds missing fields without changing existing metadata or duplicating fields', () => {
+    const original = 'Title:\nA title\n\nThumbnail text:\nKeep this\n\nDescription:\nDescription text\n';
+    const result = addThumbnailPlanningFields(original);
+    expect(result.startsWith(original)).toBe(true);
+    expect(parseFields(result)?.find((field) => field.label === 'Thumbnail idea')).toBeDefined();
+    expect(addThumbnailPlanningFields(result)).toBe(result);
+    expect(parseFields(result)?.find((field) => field.label === 'Thumbnail text')?.value).toBe('Keep this');
+  });
+  it('does not add fields to an unstructured file', () => {
+    expect(() => addThumbnailPlanningFields('Some unstructured notes')).toThrow(/labeled format/);
+  });
+});
 
 describe('setFieldValue', () => {
   const FILE = '# YouTube Info\n\nTitle:\nOld title\n\nDescription:\nHook.\n\nFull video:\nhttps://a\n\nTags:\nx, y\n\nPinned Comment:\nA question?\n';
