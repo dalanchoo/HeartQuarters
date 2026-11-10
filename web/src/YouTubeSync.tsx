@@ -18,8 +18,8 @@ type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; sel
 export function YouTubeUpload({ piece, docs, covers, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; longform?: string; longformProject?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
-  return <div className="youtube-upload"><button className="youtube-toggle" aria-expanded={open} onClick={() => { const next = !open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}>{open ? '▾' : '▸'} YouTube upload & settings</button>
-    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} longformProject={longformProject} />}</div>;
+  return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube upload & settings</summary>
+    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} longformProject={longformProject} />}</details>;
 }
 
 function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece: Piece; doc?: LoadedDoc; covers: FileChoice[]; longform?: string; longformProject?: string }) {
