@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { getJson, postJson, type Piece } from './api';
 import type { LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
+import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 
 export function YouTubeUpload({ piece, docs, covers }: { piece: Piece; docs: LoadedDoc[]; covers: { path: string; name: string }[] }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
   if (!piece.exports.length || !doc?.fields) return null;
-  return <div className="youtube-upload"><button className="small" onClick={() => setOpen(!open)}>Upload to YouTube</button>
+  return <div className="youtube-upload"><button className="small" onClick={() => { const next = !open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}>Upload to YouTube</button>
     {open && <UploadForm key={doc.file.path} piece={piece} doc={doc} covers={covers} />}</div>;
 }
 
