@@ -36,7 +36,7 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3
 const realCheck = system.isCapCutRunning;
 
 let tmp: string;
-let saved: { projects: string; drafts: string; cmd: string[] };
+let saved: { projects: string; drafts: string; cmd: string[]; skills: string; python: string };
 const planPath = () => path.join(tmp, 'Videos', VIDEO, 'Shorts', 'Shorts Plan.json');
 
 beforeEach(() => {
@@ -61,7 +61,10 @@ beforeEach(() => {
       process.stdout.write(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'One short.' }] } }) + '\\n');
       process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false }) + '\\n');`,
   });
-  saved = { projects: config.videoProjectsDir, drafts: config.capcutDraftsDir, cmd: config.claudeCommand };
+  saved = { projects: config.videoProjectsDir, drafts: config.capcutDraftsDir, cmd: config.claudeCommand, skills: config.skillsDir, python: config.python };
+  // No checker here unless a test writes one, and it runs with node: never the real skill or the real project.
+  config.skillsDir = path.join(tmp, 'Skills');
+  config.python = process.execPath;
   config.videoProjectsDir = path.join(tmp, 'Videos');
   config.capcutDraftsDir = path.join(tmp, 'Drafts');
   config.claudeCommand = [process.execPath, path.join(tmp, 'fake-claude.cjs')];
@@ -77,7 +80,57 @@ afterEach(() => {
   config.videoProjectsDir = saved.projects;
   config.capcutDraftsDir = saved.drafts;
   config.claudeCommand = saved.cmd;
+  config.skillsDir = saved.skills;
+  config.python = saved.python;
   removeTree(tmp);
+});
+
+describe('checking a short after each turn', () => {
+  const settle = async () => {
+    for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')?.status === 'running'; i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    return getRun(NUMBERED, 'short-S01')!;
+  };
+  const setUp = (checker: string) => {
+    const script = path.join(tmp, 'Skills', 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, checker);
+    fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Drafts', NAME), { recursive: true });
+  };
+
+  it("shows the problems it finds, whatever the AI said, and isn't finished until it has", async () => {
+    setUp("console.log('Note: ignore me'); console.log('PROBLEM: The voice is silent.'); console.log('PROBLEM: No captions.'); process.exit(1);");
+    writeShortMetadata(NUMBERED, NAME);
+    const run = await settle();
+    expect(run.status).toBe('idle');
+    const said = run.messages.at(-1)!;
+    expect(said.from).toBe('app');
+    expect(said.text).toMatch(/found 2 problem\(s\)/);
+    expect(said.text).toMatch(/- The voice is silent\.\n- No captions\./);
+    expect(said.text).not.toMatch(/ignore me/);
+  });
+
+  it('says the settings are fine when they are, without claiming more', async () => {
+    setUp("console.log('No problems found.');");
+    writeShortMetadata(NUMBERED, NAME);
+    const said = (await settle()).messages.at(-1)!;
+    expect(said.from).toBe('app');
+    expect(said.text).toMatch(/no problems in its settings.*how it looks or sounds/);
+  });
+
+  it('says so if the checker itself fails', async () => {
+    setUp("process.exit(3);");
+    writeShortMetadata(NUMBERED, NAME);
+    expect((await settle()).messages.at(-1)!.text).toMatch(/couldn't check/);
+  });
+
+  it('adds nothing when there is no checker', async () => {
+    fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
+    writeShortMetadata(NUMBERED, NAME);
+    expect((await settle()).messages.some((m) => m.from === 'app')).toBe(false);
+  });
 });
 
 describe("a short's first message", () => {

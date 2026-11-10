@@ -78,6 +78,8 @@ Automation levels:
   snap to word edges, and the arrow keys move them a tenth of a second), or select
   words in the transcript and click the button to make them the clip. A button
   goes back to the times Claude proposed, which the plan file keeps.
+- After each turn on a short, HeartQuarters runs `check_short.py` itself and shows
+  the result in the conversation, not relying on the AI's report of it.
 - "Open CapCut" on a longform and each short: starts CapCut and copies the
   project's name. CapCut can't be told which project to open.
 - A video's page runs: the longform (with Edit and its YouTube URL), the existing

@@ -6,7 +6,7 @@
 // Each video has one conversation per job (a Claude Code session id), saved in data/claude/ so it survives a restart.
 // A run is one turn of that conversation: the first one starts the job, later ones send John's notes.
 // If John picks the other AI and sends a note, that AI takes over with the conversation's text (see handoverPrompt).
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -290,13 +290,25 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
   child.stderr.on('data', (chunk: string) => {
     stderr = (stderr + chunk).slice(-2000);
   });
+  let finishing = false;
   const finish = (failed: boolean, why?: string) => {
-    if (running.get(key) !== child) return;
-    running.delete(key);
-    run.status = failed ? 'failed' : 'idle';
-    run.activity = '';
-    if (why) run.error = why;
+    if (running.get(key) !== child || finishing) return;
+    finishing = true;
+    const end = () => {
+      if (running.get(key) !== child) return; // stopped while the project was being checked
+      running.delete(key);
+      run.status = failed ? 'failed' : 'idle';
+      run.activity = '';
+      if (why) run.error = why;
+      save(run);
+    };
+    if (failed || !run.job?.startsWith('short-')) return end();
+    run.activity = 'HeartQuarters is checking the project…';
     save(run);
+    checkShortProject(run.draft, (said) => {
+      if (said) run.messages.push({ from: 'app', text: said, at: new Date().toISOString() });
+      end();
+    });
   };
   child.on('error', (e) => finish(true, `Couldn't start ${name}: ${e.message}`));
   const finishUp = (code: number | null) => {
@@ -321,6 +333,24 @@ function newRun(fields: Pick<ClaudeRun, 'video' | 'job' | 'draft' | 'prompt'>, s
     activity: '',
     messages: [{ from: 'john', text: said, at: new Date().toISOString() }],
   };
+}
+
+/**
+ * Runs the skill's checker on a short's CapCut project after each turn, so the result comes from HeartQuarters and not
+ * only from the AI's report of it. Says nothing if there's no checker or project to check.
+ */
+function checkShortProject(draft: string, done: (said: string | null) => void) {
+  const script = path.join(config.skillsDir, 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py');
+  const project = path.join(config.capcutDraftsDir, draft);
+  if (!fs.existsSync(script) || !fs.existsSync(project)) return done(null);
+  execFile(config.python, [script, project], { encoding: 'utf8', timeout: 60000 }, (error, stdout) => {
+    const problems = stdout.split(/\r?\n/).filter((line) => line.startsWith('PROBLEM: ')).map((line) => line.slice('PROBLEM: '.length));
+    if (problems.length > 0) {
+      return done(`HeartQuarters checked this CapCut project and found ${problems.length} problem(s). Don't trust it until they're fixed:\n- ${problems.join('\n- ')}`);
+    }
+    if (error) return done(`HeartQuarters couldn't check this CapCut project: ${error.message.split('\n')[0]}`);
+    done('HeartQuarters checked this CapCut project: no problems in its settings. That says nothing about how it looks or sounds, so check it in CapCut.');
+  });
 }
 
 /** Starts a new conversation for this video: the AI edits it following the longform-edit skill. */
