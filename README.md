@@ -26,6 +26,10 @@ Timed `.vtt`, `.srt`, or `.sbv` files in the video's `Subtitles` folder can be s
 
 The video language defaults to English (United States) and can be changed in the upload panel. HeartQuarters loads the connected channel's playlists so you can select them; Shorts belonging to a long-form video default to the HeartMindFusion Shorts playlist by its permanent ID. For an existing upload, HeartQuarters reads the current video settings, captions and playlists from YouTube and saves your edits together. To use this with a video originally uploaded elsewhere, link its YouTube address in the panel. The local Packaging files are not changed when YouTube settings are saved.
 
+To compare the selected version's `YouTube.md` with an existing YouTube video, open **YouTube upload & settings**, then **Compare local file and YouTube**. Open a field to see both values. **Use local on YouTube** puts the local value into the YouTube form; use **Push changes to YouTube** to actually send it. **Save YouTube value to file** asks before changing that local field. The settings button can also add language, visibility, audience, altered-content and playlist fields to the local file; settings YouTube does not return are left alone. The app checks for changes made elsewhere before copying.
+
+To preserve a packaging version, choose **+ New version** beside its version buttons, name the new version, and click **Create version**. This copies the selected version's entire folder into a new folder. Existing versions are not overwritten. If a copy is interrupted, HeartQuarters reports that the new folder may be incomplete so you can inspect it.
+
 ## Settings
 
 `config.json` holds this machine's folder paths, the Python to use, the guides
