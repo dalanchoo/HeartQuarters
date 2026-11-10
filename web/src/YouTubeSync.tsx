@@ -15,7 +15,7 @@ type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; sel
 export function YouTubeUpload({ piece, docs, covers, longform }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; longform?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
-  return <div className="youtube-upload"><button className="small" onClick={() => { const next = !open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}>Upload to YouTube</button>
+  return <div className="youtube-upload"><button className="youtube-toggle" aria-expanded={open} onClick={() => { const next = !open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}>{open ? '▾' : '▸'} YouTube upload & settings</button>
     {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} />}</div>;
 }
 
@@ -58,7 +58,8 @@ function YouTubePanel({ piece, doc, covers, longform }: { piece: Piece; doc?: Lo
 }
 
 function PlaylistChoices({ playlists, selected, setSelected }: { playlists: YoutubePlaylist[]; selected: string[]; setSelected: (ids: string[]) => void }) {
-  return <fieldset><legend>YouTube playlists</legend>{playlists.length === 0 && <p>No playlists found.</p>}{playlists.map((p) => <label key={p.id} style={{ display: 'block' }}><input style={{ width: 'auto' }} type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, p.id] : selected.filter((id) => id !== p.id))} /> {p.title}</label>)}</fieldset>;
+  const names = playlists.filter((p) => selected.includes(p.id)).map((p) => p.title);
+  return <div className="playlist-select"><span className="setting-label">Playlists</span><details><summary>{names.length ? `${names.length} selected · ${names.join(', ')}` : 'Select playlists'}</summary><div className="playlist-options">{playlists.length === 0 && <p>No playlists found.</p>}{playlists.map((p) => <label key={p.id}><input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, p.id] : selected.filter((id) => id !== p.id))} /> {p.title}</label>)}</div></details></div>;
 }
 function Language({ value, setValue }: { value: string; setValue: (value: string) => void }) {
   return <label>Video language<select value={value} onChange={(e) => setValue(e.target.value)}><option value="" disabled={value !== ''}>Unknown</option>{value && !VIDEO_LANGUAGES.some((l) => l.value === value) && <option value={value}>{value}</option>}{VIDEO_LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>;
@@ -84,17 +85,22 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
   useEffect(() => { getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then((s) => { setSubtitles(s); setSubtitle(defaultSubtitle(s)); }, (e) => setError(e.message));
     getJson<YoutubePlaylist[]>('/api/youtube/playlists').then((p) => { setPlaylists(p); setSelected(longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []); }, (e) => setError(e.message)); }, [piece.path, longform, piece.kind]);
   return <div><h4>New upload</h4>
+    <details className="yt-section" open><summary>Video details</summary><div className="yt-grid">
     <label>Video<select value={video} onChange={(e) => setVideo(e.target.value)}>{piece.exports.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}</select></label>
     <Language value={language} setValue={setLanguage} />
-    <label>Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
-    <label>Description<textarea rows={7} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-    <label>Tags (comma-separated)<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+    <label className="yt-full">Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
+    <label className="yt-full">Description<textarea rows={7} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+    <label className="yt-full">Tags (comma-separated)<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+    </div></details>
+    <details className="yt-section" open><summary>Media</summary><div className="yt-grid">
     <label>Thumbnail<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">No custom thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
     <label>Subtitles<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}><option value="">{subtitles.length > 1 ? 'Choose a subtitle file or none' : 'No subtitles'}</option>{subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}</select></label>
+    </div></details>
+    <details className="yt-section" open><summary>Publishing</summary><div className="yt-grid">
     {playlists ? <PlaylistChoices playlists={playlists} selected={selected} setSelected={setSelected} /> : <p>Loading playlists…</p>}
-    <Related longform={longform} />
     <label>Visibility<select value={privacy} onChange={(e) => setPrivacy(e.target.value)}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
     <Choices label="Made for kids?" value={kids} setValue={setKids} /><Choices label="Contains realistic altered or synthetic content?" value={synthetic} setValue={setSynthetic} />
+    </div><Related longform={longform} /></details>
     <p>Upload sends your chosen video, settings, playlists, thumbnail and subtitles. Public makes the video public.</p>
     <button disabled={busy || !channel || !playlists || !title.trim() || !kids || !synthetic || ((!!subtitle || selected.length > 0) && !canEdit)} onClick={async () => {
       if (existing.length && !window.confirm('This project already has a video linked on YouTube. Upload another copy?')) return;
@@ -120,19 +126,24 @@ function ExistingForm({ piece, job, covers, canEdit, longform }: { piece: Piece;
     {job.error && <p className="error">{job.error}</p>}
     {job.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {job.subtitleError}. Check Studio before trying again.</p>}
     {job.playlistResults?.filter((r) => r.status === 'error').map((r) => <p key={r.id} className="error">Playlist {r.id}: {r.error}</p>)}
+    <details className="yt-section" open><summary>Video details on YouTube</summary><div className="yt-grid">
     <Language value={draft.language ?? ''} setValue={(language) => change({ language: language || null })} />
     <label>Title<input maxLength={100} value={draft.title} onChange={(e) => change({ title: e.target.value })} /></label>
-    <label>Description<textarea rows={7} maxLength={5000} value={draft.description} onChange={(e) => change({ description: e.target.value })} /></label>
-    <label>Tags (comma-separated)<input value={tagsText} onChange={(e) => { setTagsText(e.target.value); setMessage(''); }} /></label>
+    <label className="yt-full">Description<textarea rows={7} maxLength={5000} value={draft.description} onChange={(e) => change({ description: e.target.value })} /></label>
+    <label className="yt-full">Tags (comma-separated)<input value={tagsText} onChange={(e) => { setTagsText(e.target.value); setMessage(''); }} /></label>
+    </div></details>
+    <details className="yt-section" open><summary>Publishing</summary><div className="yt-grid">
     <PlaylistChoices playlists={data.playlists} selected={selected} setSelected={setSelected} />
     <label>Visibility<select value={draft.privacy} onChange={(e) => change({ privacy: e.target.value as YoutubeVideoSettings['privacy'] })}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
     <Choices label="Made for kids?" value={draft.madeForKids === null ? '' : draft.madeForKids ? 'yes' : 'no'} setValue={(v) => change({ madeForKids: v === '' ? null : v === 'yes' })} />
     <Choices label="Contains realistic altered or synthetic content?" value={draft.synthetic === null ? '' : draft.synthetic ? 'yes' : 'no'} setValue={(v) => change({ synthetic: v === '' ? null : v === 'yes' })} />
+    </div><Related longform={longform} /></details>
+    <details className="yt-section"><summary>Thumbnail & subtitles</summary><div className="yt-grid">
     <p>Current YouTube thumbnail: {data.video.thumbnail ? <a href={data.video.thumbnail} target="_blank" rel="noreferrer">View ↗</a> : 'not available'}</p>
     <label>Thumbnail<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">Keep current thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
     {data.captions === null ? <p className="error">{data.captionError} Check subtitles in Studio.</p> : <><p>YouTube captions: {data.captions.length ? data.captions.map((c) => `${c.language || 'unknown language'} (${c.kind === 'ASR' || c.kind === 'asr' ? 'automatic' : 'uploaded'}, ${c.status || 'status unknown'})`).join(', ') : 'none'}</p>
       {!hasManualCaptions && <label>Add subtitles<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}><option value="">Keep current captions</option>{subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}</select></label>}</>}
-    <Related longform={longform} />
+    </div></details>
     <button disabled={busy || !canEdit || !draft.title.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try {
       const result = await postJson<{ errors: string[] }>('/api/youtube/video-settings', { piece: piece.path, id: job.id, baseline: data.video, desired: { ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }, before: data.selected, after: selected, subtitle, cover });
       await load(); if (result.errors.length) setError(`Some changes were not confirmed: ${result.errors.join('; ')}`); else setMessage('Changes saved to YouTube.');

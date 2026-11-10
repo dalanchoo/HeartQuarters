@@ -236,8 +236,8 @@ function ProjectView({
           {(project.kind === 'project' || project.kind === 'part') && (
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
-          {project.kind !== 'group' && <ManageButtons path={project.id} onDone={onManaged} />}
           <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
+          {project.kind !== 'group' && <details className="action-menu"><summary>Manage</summary><div className="action-menu-items"><ManageButtons path={project.id} onDone={onManaged} /></div></details>}
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
@@ -536,19 +536,14 @@ function PieceCard({
             </div>
           )}
 
-          <div className="versions">
+          <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>
-              Open folder
-            </button>
-            {version && (
-              <button className="small" onClick={() => openInExplorer('projects', version.path)}>
-                Open {versionLabel(version.name)} folder
-              </button>
-            )}
-            {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
+            <details className="action-menu"><summary>More actions</summary><div className="action-menu-items">
+              <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
+              {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
+              {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
+            </div></details>
           </div>
-          {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} />}
         </div>
 
         <div className="piece-docs">
@@ -572,6 +567,7 @@ function PieceCard({
 
       {/* The main file's Description, then the other platforms, run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
+      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} />}
     </>
   );
 
