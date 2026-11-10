@@ -82,7 +82,7 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
       <p className="muted small-text">{job?.status === 'done' ? 'This is the video whose settings are shown below. To link a different video, paste its URL and choose Change linked video.' : 'If the video is already on your connected YouTube channel, paste its link and choose Link existing video.'}</p>
       {new Set(completed.map((j) => j.videoId)).size > 1 && <p className="error">More than one YouTube video was previously linked to this project. Check the URL above before saving changes.</p>}
       </>}
-      {job?.status === 'uploading' && <p>Uploading {Math.round(job.sent / job.total * 100)}%… Please keep HeartQuarters running.</p>}
+      {job?.status === 'uploading' && <p>{job.phase === 'waiting-thumbnail' ? 'Video uploaded. Waiting for YouTube to finish processing before sending its thumbnail…' : `Uploading ${Math.round(job.sent / job.total * 100)}%…`} Please keep HeartQuarters running.</p>}
       {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} version={version} onChanged={onChanged} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try again</button></p>}
       {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}

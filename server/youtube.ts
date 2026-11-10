@@ -9,9 +9,10 @@ import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings } from './youtube-video.js';
 import { fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
+import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
-export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
+export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
 function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
@@ -138,6 +139,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   catch (e) { errors.push(`Playlists: ${e instanceof Error ? e.message : String(e)}`); }
   if (coverPath) {
     try {
+      if (isShortPiece(piece) && await youtubeProcessingStatus(token, job.videoId!) !== 'succeeded') throw new Error('YouTube is still processing this Short. Choose the thumbnail again after processing finishes.');
       const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId!)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(coverPath)) });
       if (!response.ok) throw new Error(await responseError(response));
     } catch (e) { errors.push(`Thumbnail: ${e instanceof Error ? e.message : String(e)}`); }
@@ -261,9 +263,14 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
   }
   if (files.cover) {
     try {
+      if (isShortPiece(job.piece)) {
+        job.phase = 'waiting-thumbnail'; record(job);
+        await waitForShortProcessing(() => youtubeProcessingStatus(token, job.videoId!), () => new Promise((resolve) => setTimeout(resolve, 5000)));
+        delete job.phase; record(job);
+      }
       const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
       if (!res.ok) throw new Error(await responseError(res));
-    } catch (e) { job.warning = `The video uploaded, but its thumbnail did not: ${e instanceof Error ? e.message : String(e)}. Set it in YouTube Studio.`; }
+    } catch (e) { delete job.phase; job.warning = `The video uploaded, but its thumbnail did not: ${e instanceof Error ? e.message : String(e)}. Try the thumbnail again after processing or set it in YouTube Studio.`; }
   }
   if (input.subtitle) {
     job.subtitleStatus = 'uploading'; record(job);
