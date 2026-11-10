@@ -140,7 +140,7 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
     <Language value={language} setValue={setLanguage} />
     <label className="yt-full">Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
     <label className="yt-full">Description<textarea rows={7} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-    <label className="yt-full">Tags (comma-separated)<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+    <label className="yt-full">Tags (comma-separated)<textarea className="youtube-tags" rows={3} value={tags} onChange={(e) => setTags(e.target.value)} /></label>
     </div></details>
     <details className="yt-section" open><summary>Media</summary><div className="yt-grid">
     <label>Thumbnail<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">No custom thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
@@ -194,7 +194,7 @@ function ExistingForm({ piece, job, doc, covers, canEdit, longform }: { piece: P
     <Language value={draft.language ?? ''} setValue={(language) => change({ language: language || null })} />
     <label>Title<input maxLength={100} value={draft.title} onChange={(e) => change({ title: e.target.value })} /></label>
     <label className="yt-full">Description<textarea rows={7} maxLength={5000} value={draft.description} onChange={(e) => change({ description: e.target.value })} /></label>
-    <label className="yt-full">Tags (comma-separated)<input value={tagsText} onChange={(e) => { setTagsText(e.target.value); setMessage(''); }} /></label>
+    <label className="yt-full">Tags (comma-separated)<textarea className="youtube-tags" rows={3} value={tagsText} onChange={(e) => { setTagsText(e.target.value); setMessage(''); }} /></label>
     </div></details>
     <details className="yt-section" open><summary>Publishing</summary><div className="yt-grid">
     <PlaylistChoices playlists={data.playlists} selected={selected} setSelected={setSelected} />
