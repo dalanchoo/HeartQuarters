@@ -10,6 +10,7 @@ import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.j
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText } from './metadata.js';
+import { copyPackagingVersion } from './packaging-version.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
@@ -291,6 +292,11 @@ app.post('/api/packaging/save', handle((req, res) => {
   savePackagingText(String(req.body?.path ?? ''), req.body?.text, req.body?.was);
   res.json({ ok: true });
 }));
+app.post('/api/packaging/copy-version', (req, res) => {
+  copyPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name).then(
+    (result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
 
 // ---- Shorts plan (see shorts.ts) -------------------------------------------
 

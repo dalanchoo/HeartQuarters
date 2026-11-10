@@ -254,7 +254,7 @@ function ProjectView({
               .map((p) =>
                 p.kind === 'longform' ? (
                   <Section key={p.path} name="longform" title="Longform" detail={pieceSummary(p)}>
-                    <PieceCard piece={p} plain draft={segments[segments.length - 1]}>
+                    <PieceCard piece={p} plain draft={segments[segments.length - 1]} onChanged={refresh}>
                       {hasJobs && (
                         <>
                           <ClaudeEdit video={project.id} />
@@ -264,7 +264,7 @@ function ProjectView({
                     </PieceCard>
                   </Section>
                 ) : (
-                  <PieceCard key={p.path} piece={p} startOpen draft={segments[segments.length - 1]} />
+                  <PieceCard key={p.path} piece={p} startOpen draft={segments[segments.length - 1]} onChanged={refresh} />
                 ),
               )}
             {project.kind !== 'short' && (
@@ -339,6 +339,20 @@ function PieceGroup({
 function versionLabel(name: string): string {
   const [num, ...rest] = name.split('_');
   return rest.length ? `${num} · ${rest.join(' ')}` : num;
+}
+
+function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; source: { name: string; path: string }; onCreated: (name: string) => void }) {
+  const next = Math.max(0, ...piece.versions.map((v) => Number(/^V(\d+)/i.exec(v.name)?.[1] ?? 0))) + 1;
+  const [name, setName] = useState(`V${String(next).padStart(2, '0')}`);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  return <details className="new-version"><summary>+ New version</summary>
+    <p className="muted small-text">Copy all files and subfolders from {source.name} into a new version. Existing versions stay untouched.</p>
+    <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
+    <button disabled={busy || !name.trim()} onClick={async () => { setBusy(true); setError(''); try {
+      const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path, name }); onCreated(result.name);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : 'Create version'}</button>
+    {error && <p className="error">{error}</p>}
+  </details>;
 }
 
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
@@ -533,6 +547,7 @@ function PieceCard({
                   {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
                 </button>
               ))}
+              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); onChanged?.(); }} />
             </div>
           )}
 
