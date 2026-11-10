@@ -486,7 +486,7 @@ function PieceCard({
       {children}
 
       {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
-      <div className="piece-body">
+      <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
         <div className="piece-media">
           <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
 
