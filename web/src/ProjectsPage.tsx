@@ -252,7 +252,7 @@ function ProjectView({
               .map((p) =>
                 p.kind === 'longform' ? (
                   <Section key={p.path} name="longform" title="Longform" detail={pieceSummary(p)}>
-                    <PieceCard piece={p} plain draft={segments[segments.length - 1]} onChanged={refresh}>
+                    <PieceCard piece={p} plain draft={segments[segments.length - 1]} longformProject={project.id} onChanged={refresh}>
                       {hasJobs && (
                         <>
                           <ClaudeEdit video={project.id} />
@@ -452,6 +452,7 @@ function PieceCard({
   plain = false,
   draft,
   video,
+  longformProject,
   onChanged,
   onManaged,
   children,
@@ -464,6 +465,8 @@ function PieceCard({
   draft?: string;
   /** Given when the AI can write this short's metadata. */
   video?: string;
+  /** The long-form's project, used to find its saved YouTube link. */
+  longformProject?: string;
   /** Called when something changed in the folders, such as a new packaging version. */
   onChanged?: () => void;
   /** Shown at the top of the card when it's open. */
@@ -535,7 +538,7 @@ function PieceCard({
 
       {/* The main file's Description, then the other platforms, run full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} />}
+      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} longformProject={longformProject} />}
     </>
   );
 

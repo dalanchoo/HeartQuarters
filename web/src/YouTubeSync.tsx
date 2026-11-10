@@ -8,19 +8,20 @@ import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-play
 import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 import { defaultSubtitle } from './subtitleChoice';
 import { localBoolean, localPlaylistIds, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
+import { existingYoutubeJob, shouldLinkLongform } from './youtubePanel';
 
 type FileChoice = { path: string; name: string };
 type Status = { configured: boolean; connected: boolean; captionAccess: boolean };
 type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; captions: { language: string; name: string; status: string; kind: string }[] | null; captionError: string | null };
 
-export function YouTubeUpload({ piece, docs, covers, longform }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; longform?: string }) {
+export function YouTubeUpload({ piece, docs, covers, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; longform?: string; longformProject?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
   return <div className="youtube-upload"><button className="youtube-toggle" aria-expanded={open} onClick={() => { const next = !open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}>{open ? '▾' : '▸'} YouTube upload & settings</button>
-    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} />}</div>;
+    {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} longform={longform} longformProject={longformProject} />}</div>;
 }
 
-function YouTubePanel({ piece, doc, covers, longform }: { piece: Piece; doc?: LoadedDoc; covers: FileChoice[]; longform?: string }) {
+function YouTubePanel({ piece, doc, covers, longform, longformProject }: { piece: Piece; doc?: LoadedDoc; covers: FileChoice[]; longform?: string; longformProject?: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [jobs, setJobs] = useState<UploadJob[] | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -31,12 +32,34 @@ function YouTubePanel({ piece, doc, covers, longform }: { piece: Piece; doc?: Lo
   const refreshStatus = async () => setStatus(await getJson<Status>('/api/youtube/status'));
   const refreshJobs = async () => { const items = await getJson<UploadJob[]>(`/api/youtube/uploads?piece=${encodeURIComponent(piece.path)}`); setJobs(items); return items; };
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
-  useEffect(() => { void refreshStatus().catch((e) => setError(e.message)); void refreshJobs().then((items) => setMode(items.find((j) => j.status === 'uploading' || (j.status === 'done' && j.videoId))?.id ?? 'new')).catch((e) => setError(e.message)); }, [piece.path]);
+  useEffect(() => {
+    let stale = false;
+    const start = async () => {
+      const [connection, items] = await Promise.all([getJson<Status>('/api/youtube/status'), getJson<UploadJob[]>(`/api/youtube/uploads?piece=${encodeURIComponent(piece.path)}`)]);
+      if (stale) return; setStatus(connection); setJobs(items);
+      const existing = existingYoutubeJob(items);
+      if (existing) { setMode(existing.id); return; }
+      if (shouldLinkLongform(items, connection.connected, longformProject)) {
+        try {
+          const related = await getJson<{ url: string | null }>(`/api/youtube/related?video=${encodeURIComponent(longformProject!)}`);
+          if (related.url) {
+            const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: related.url });
+            if (!stale) { setJobs([...items, linked]); setMode(linked.id); }
+            return;
+          }
+        } catch (e) { if (!stale) setError(`Couldn't connect the saved long-form link: ${e instanceof Error ? e.message : String(e)}`); }
+      }
+      if (!stale) setMode('new');
+    };
+    void start().catch((e) => { if (!stale) setError(e.message); });
+    return () => { stale = true; };
+  }, [piece.path, longformProject]);
   useEffect(() => { if (!status?.connected) { setChannel(''); return; } getJson<{ title: string }>('/api/youtube/channel').then((c) => setChannel(c.title), (e) => setError(e.message)); }, [status?.connected]);
   useEffect(() => { if (!jobs?.some((j) => j.status === 'uploading')) return; const timer = setInterval(() => { void refreshJobs().catch((e) => setError(e.message)); }, 1500); return () => clearInterval(timer); }, [jobs]);
   const job = jobs?.find((j) => j.id === mode);
   const completed = jobs?.filter((j) => j.status === 'done' && j.videoId) ?? [];
   return <div className="youtube-form"><h4>YouTube</h4>
+    {(!status || !jobs || (status.connected && mode === null)) && !error && <YouTubeLoading />}
     {status && !status.connected && <>
       <p>Connect your YouTube channel. Credentials are kept in Windows Credential Manager.</p>
       {!status.configured && <><label>Client ID<input value={clientId} onChange={(e) => setClientId(e.target.value)} /></label><label>Client secret<input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} /></label>
@@ -47,7 +70,9 @@ function YouTubePanel({ piece, doc, covers, longform }: { piece: Piece; doc?: Lo
       <p>Channel: <strong>{channel || 'Checking…'}</strong></p>
       {!status.captionAccess && <p>To save playlists and subtitles, reconnect and grant Google’s additional permission. It also allows editing and deleting YouTube content.{' '}<button disabled={busy} onClick={() => void action(async () => { setConnectUrl((await postJson<{ url: string }>('/api/youtube/connect')).url); })}>Reconnect</button>{' '}{connectUrl && <a href={connectUrl} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}<button onClick={() => void action(refreshStatus)}>I’ve signed in</button></p>}
       {completed.length > 0 && <label>Video on YouTube<select value={mode ?? ''} onChange={(e) => setMode(e.target.value)}>{completed.map((j) => <option key={j.id} value={j.id}>Existing upload · {j.videoId}</option>)}<option value="new">Upload a new copy</option></select></label>}
-      <details><summary>Link a video already on YouTube</summary><p>Paste the video’s YouTube link to show its current settings here. It must be on the connected channel.</p><label>YouTube video link<input value={existingUrl} onChange={(e) => setExistingUrl(e.target.value)} /></label><button className="small" disabled={busy || !existingUrl.trim()} onClick={() => void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(''); })}>Link video</button></details>
+      <div className="youtube-link-row"><details><summary>Link a video already on YouTube</summary><p>Paste the video’s YouTube link to show its current settings here. It must be on the connected channel.</p><label>YouTube video link<input value={existingUrl} onChange={(e) => setExistingUrl(e.target.value)} /></label><button disabled={busy || !existingUrl.trim()} onClick={() => void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(''); })}>Link video</button></details>
+        {job?.status === 'done' && <button onClick={() => void action(async () => { await postJson('/api/youtube/studio', { videoId: job.videoId }); })}>Open in YouTube Studio ↗</button>}
+      </div>
       {job?.status === 'uploading' && <p>Uploading {Math.round(job.sent / job.total * 100)}%… Please keep HeartQuarters running.</p>}
       {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try again</button></p>}
@@ -56,6 +81,10 @@ function YouTubePanel({ piece, doc, covers, longform }: { piece: Piece; doc?: Lo
     </>}
     {error && <p className="error">{error}</p>}
   </div>;
+}
+
+function YouTubeLoading() {
+  return <div className="youtube-loading" role="status" aria-busy="true"><strong>Loading YouTube settings…</strong><div className="loading-line" /><div className="loading-line short" /></div>;
 }
 
 function PlaylistChoices({ playlists, selected, setSelected }: { playlists: YoutubePlaylist[]; selected: string[]; setSelected: (ids: string[]) => void }) {
@@ -89,6 +118,7 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
   useEffect(() => { getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then((s) => { setSubtitles(s); setSubtitle(defaultSubtitle(s)); }, (e) => setError(e.message));
     getJson<YoutubePlaylist[]>('/api/youtube/playlists').then((p) => { setPlaylists(p); try { const local = doc.text === null ? null : localValue(doc.text, 'Playlists'); setSelected(local === null ? (longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []) : localPlaylistIds(local, p)); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } }, (e) => setError(e.message)); }, [piece.path, longform, piece.kind]);
   return <div><h4>New upload</h4>
+    <p className="muted small-text">To compare with a video already on YouTube, link it above.</p>
     <p className="muted small-text">Starting from {doc.file.name}. Edits here are sent to YouTube when you upload; they do not change the local file.</p>
     {doc.text !== loadedText && <p className="error">The local file changed after this form was opened. Load its latest values before uploading.</p>}
     <button className="small" onClick={() => {
@@ -136,7 +166,7 @@ function ExistingForm({ piece, job, doc, covers, canEdit, longform }: { piece: P
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
   const load = async () => { const r = await getJson<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`); setData(r); setDraft(r.video); setTagsText(r.video.tags.join(', ')); setSelected(r.selected); setSubtitle(''); setCover(''); };
   useEffect(() => { void load().catch((e) => setError(e.message)); getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then(setSubtitles, (e) => setError(e.message)); }, [piece.path, job.id]);
-  if (!data || !draft) return <div>{error ? <p className="error">{error} <button className="small" onClick={() => void load().catch((e) => setError(e.message))}>Retry</button></p> : <p>Loading current settings from YouTube…</p>}</div>;
+  if (!data || !draft) return <div>{error ? <p className="error">{error} <button className="small" onClick={() => void load().catch((e) => setError(e.message))}>Retry</button></p> : <YouTubeLoading />}</div>;
   const change = (value: Partial<YoutubeVideoSettings>) => { setDraft({ ...draft, ...value }); setMessage(''); };
   const hasManualCaptions = data.captions?.some((c) => c.kind !== 'ASR' && c.kind !== 'asr') ?? false;
   const useLocal = (field: SyncField, value: string): boolean => {
@@ -154,7 +184,6 @@ function ExistingForm({ piece, job, doc, covers, canEdit, longform }: { piece: P
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); return false; }
   };
   return <div><h4>Existing YouTube video</h4>
-    <button className="small" onClick={() => void postJson('/api/youtube/studio', { videoId: job.videoId }).catch((e) => setError(e.message))}>Open in YouTube Studio ↗</button>
     {job.warning && <p className="error">{job.warning}</p>}
     {job.error && <p className="error">{job.error}</p>}
     {job.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {job.subtitleError}. Check Studio before trying again.</p>}
