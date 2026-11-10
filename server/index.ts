@@ -10,7 +10,7 @@ import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.j
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText } from './metadata.js';
-import { copyPackagingVersion } from './packaging-version.js';
+import { copyPackagingVersion, renamePackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
@@ -104,6 +104,8 @@ function handle(fn: (req: Request, res: Response) => void) {
 app.get('/api/projects', handle((_req, res) => {
   res.json(listProjects());
 }));
+app.post('/api/packaging/rename-version', handle((req, res) => { res.json(renamePackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name)); }));
+app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
 app.get('/api/project', handle((req, res) => {

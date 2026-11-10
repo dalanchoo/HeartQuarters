@@ -1,7 +1,38 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { safeResolve } from './config.js';
+import { config, safeResolve } from './config.js';
 import { checkFolderName } from './create.js';
+
+function versionFolder(piece: string, source: string): string {
+  if (!piece || !source) throw new Error('Choose a packaging version.');
+  const parent = safeResolve('projects', path.join(piece, 'Packaging'));
+  const from = safeResolve('projects', source);
+  if (path.dirname(from).toLowerCase() !== parent.toLowerCase() || !/^(?:V\d+.*|Legacy)$/i.test(path.basename(from))) throw new Error('Choose a version in this video’s Packaging folder.');
+  const stat = fs.lstatSync(from);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('The version must be a real folder.');
+  return from;
+}
+
+/** Rename only a version folder, never an existing destination. */
+export function renamePackagingVersion(piece: string, source: string, requestedName: unknown): { name: string } {
+  const from = versionFolder(piece, source);
+  const name = checkFolderName(requestedName);
+  if (!/^(?:V\d+(?:[ _-].*)?|Legacy)$/i.test(name)) throw new Error('Use Legacy or a version name such as V02 - Alternative.');
+  if (fs.readdirSync(path.dirname(from)).some((entry) => entry.toLowerCase() === name.toLowerCase())) throw new Error('A version with that name already exists.');
+  const to = safeResolve('projects', path.join(piece, 'Packaging', name));
+  fs.renameSync(from, to);
+  return { name };
+}
+
+/** Move a version to a unique recoverable folder in HeartQuarters Trash. */
+export function trashPackagingVersion(piece: string, source: string): { trashPath: string } {
+  const from = versionFolder(piece, source);
+  fs.mkdirSync(config.trashDir, { recursive: true });
+  const holder = fs.mkdtempSync(path.join(config.trashDir, 'Packaging-'));
+  const to = path.join(holder, path.basename(from));
+  fs.renameSync(from, to);
+  return { trashPath: to };
+}
 
 /** Create an independent copy of one packaging version; never replace an existing file. */
 export async function copyPackagingVersion(piece: string, source: string, requestedName: unknown): Promise<{ name: string; path: string }> {

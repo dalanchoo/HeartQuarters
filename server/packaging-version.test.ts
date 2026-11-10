@@ -3,10 +3,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { copyPackagingVersion } from './packaging-version';
-let tmp: string; let old: string;
-beforeEach(() => { tmp = makeTree({ 'Videos/piece/Packaging/V01/YouTube.md': 'original', 'Videos/piece/Packaging/V01/Covers/image.png': 'cover', 'Videos/piece/Packaging/V02/YouTube.md': 'existing', 'Videos/other/Packaging/V01/YouTube.md': 'other' }); old = config.videoProjectsDir; config.videoProjectsDir = path.join(tmp, 'Videos'); });
-afterEach(() => { config.videoProjectsDir = old; removeTree(tmp); });
+import { copyPackagingVersion, renamePackagingVersion, trashPackagingVersion } from './packaging-version';
+let tmp: string; let old: string; let oldTrash: string;
+beforeEach(() => { tmp = makeTree({ 'Videos/piece/Packaging/V01/YouTube.md': 'original', 'Videos/piece/Packaging/V01/Covers/image.png': 'cover', 'Videos/piece/Packaging/V02/YouTube.md': 'existing', 'Videos/other/Packaging/V01/YouTube.md': 'other' }); old = config.videoProjectsDir; oldTrash = config.trashDir; config.videoProjectsDir = path.join(tmp, 'Videos'); config.trashDir = path.join(tmp, 'Trash'); });
+afterEach(() => { config.videoProjectsDir = old; config.trashDir = oldTrash; removeTree(tmp); });
 describe('copying a packaging version', () => {
   it('copies all files to a new version and leaves the source alone', async () => {
     const result = await copyPackagingVersion('piece', 'piece/Packaging/V01', 'V03 - Alternative');
@@ -28,5 +28,22 @@ describe('copying a packaging version', () => {
     fs.symlinkSync(outside, path.join(tmp, 'Videos/piece/Packaging/V01/shortcut'), 'junction');
     await expect(copyPackagingVersion('piece', 'piece/Packaging/V01', 'V03')).rejects.toThrow(/shortcut or junction/);
     expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V03'))).toBe(false);
+  });
+});
+describe('managing a packaging version', () => {
+  it('renames a version without changing its files', () => {
+    expect(renamePackagingVersion('piece', 'piece/Packaging/V01', 'Legacy').name).toBe('Legacy');
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/Legacy/YouTube.md'), 'utf8')).toBe('original');
+  });
+  it('rejects collisions, invalid names, and another video’s version', () => {
+    expect(() => renamePackagingVersion('piece', 'piece/Packaging/V01', 'V02')).toThrow(/already exists/);
+    expect(() => renamePackagingVersion('piece', 'piece/Packaging/V01', '../bad')).toThrow();
+    expect(() => trashPackagingVersion('piece', 'other/Packaging/V01')).toThrow(/version in this video/);
+    expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V01/YouTube.md'))).toBe(true);
+  });
+  it('moves only the selected version into a recoverable trash folder', () => {
+    const result = trashPackagingVersion('piece', 'piece/Packaging/V01');
+    expect(fs.readFileSync(path.join(result.trashPath, 'YouTube.md'), 'utf8')).toBe('original');
+    expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V02/YouTube.md'))).toBe(true);
   });
 });

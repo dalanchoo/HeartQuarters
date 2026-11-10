@@ -353,6 +353,23 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
   </details>;
 }
 
+function ManagePackagingVersion({ piece, version, onChanged }: { piece: Piece; version: { name: string; path: string }; onChanged: (name?: string) => void }) {
+  const [name, setName] = useState(version.name); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  return <details className="new-version"><summary>Manage version</summary>
+    <p className="muted small-text">These actions affect only packaging version {version.name}, not the video or Short.</p>
+    <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
+    <button disabled={busy || !name.trim() || name === version.name} onClick={async () => {
+      if (!window.confirm(`Rename packaging version ${version.name} to ${name}?`)) return;
+      setBusy(true); setError(''); try { const result = await postJson<{ name: string }>('/api/packaging/rename-version', { piece: piece.path, source: version.path, name }); onChanged(result.name); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }}>Rename version</button>{' '}
+    <button className="danger-outline" disabled={busy} onClick={async () => {
+      if (!window.confirm(`Move packaging version ${version.name} and all its files to HeartQuarters Trash? The video and other versions will remain.`)) return;
+      setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    }}>Delete version</button>
+    {error && <p className="error">{error}</p>}
+  </details>;
+}
+
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
 function OpenInCapCut({ draft }: { draft: string }) {
   const [message, setMessage] = useState<{ text: string; failed?: boolean } | null>(null);
@@ -504,6 +521,7 @@ function PieceCard({
                 </button>
               ))}
               <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); onChanged?.(); }} />
+              <ManagePackagingVersion key={`manage-${version.path}`} piece={piece} version={version} onChanged={(name) => { setVersionName(name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
             </div>
           )}
 
@@ -511,11 +529,11 @@ function PieceCard({
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
             <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
             {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
-            {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
           </div>
         </div>
 
         <div className="piece-docs">
+          {onManaged && <div className="versions piece-actions"><span className="muted small-text">Short:</span><ManageButtons path={piece.path} onDone={onManaged} /></div>}
           {video && piece.kind === 'short' && (
             <WriteMetadata
               video={video}
