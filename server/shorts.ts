@@ -8,6 +8,7 @@ import { config, safeResolve } from './config.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
 import { askForMetadata, getRun, startShortBuild, type ClaudeRun } from './claude.js';
 import { checkDraftName, createVideoFolder, draftsForVideo, numberOf } from './create.js';
+import { writeFileSafely } from './files.js';
 import { deleteFolder, system } from './manage.js';
 
 export interface PlannedShort {
@@ -113,9 +114,7 @@ export function readPlan(video: string): ShortsPlan | null {
 function writePlan(video: string, plan: ShortsPlan) {
   const file = planFile(video);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(plan, null, 1));
-  fs.renameSync(tmp, file); // all or nothing: a crash can't leave half a plan
+  writeFileSafely(file, JSON.stringify(plan, null, 1));
 }
 
 /**

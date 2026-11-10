@@ -11,6 +11,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { writeFileSafely } from './files.js';
 import { STANDALONE_GROUP, checkDraftName, checkFolderName, listDrafts, plainDraftName } from './create.js';
 
 const PROJECT_RE = /^\d+\s*[-–]/; // "022 - ..."
@@ -150,33 +151,41 @@ function parentPage(segments: string[]): string {
 
 const forwardSlashes = (p: string) => p.split(path.sep).join('/');
 
+/** Updates one draft's text files. Throws if any of them can't be read or written. */
+function relinkDraft(dir: string, from: string, to: string) {
+  for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!e.isFile() || !/\.(json|bak|tmp)$/i.test(e.name)) continue;
+    const file = path.join(e.parentPath, e.name);
+    if (fs.statSync(file).size > 200_000_000) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    if (!text.includes(from)) continue;
+    writeFileSafely(file, text.split(from).join(to));
+  }
+}
+
 /**
- * Replaces "<Video Projects>/<old>/" with "<Video Projects>/<new>/" in the text
- * files of every CapCut draft that refers to the old folder. Returns how many
- * drafts were updated.
+ * Replaces "<Video Projects>/<old>/" with "<Video Projects>/<new>/" in the text files of every CapCut draft that
+ * refers to the old folder. A draft that can't be read or updated is skipped and named, and the rest are still done:
+ * by now the folder has already been renamed, so stopping would leave the others pointing at the old name.
  */
-function relinkDrafts(oldId: string, newId: string): number {
+function relinkDrafts(oldId: string, newId: string): { updated: number; failed: string[] } {
   const base = forwardSlashes(config.videoProjectsDir);
   const from = `${base}/${oldId}/`;
   const to = `${base}/${newId}/`;
-  let count = 0;
+  let updated = 0;
+  const failed: string[] = [];
   for (const d of listDrafts()) {
     const dir = path.join(config.capcutDraftsDir, d);
-    // Every draft lists the files it uses in draft_meta_info.json: a quick way to skip the others.
-    if (!fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8').includes(from)) continue;
-    for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
-      if (!e.isFile() || !/\.(json|bak|tmp)$/i.test(e.name)) continue;
-      const file = path.join(e.parentPath, e.name);
-      if (fs.statSync(file).size > 200_000_000) continue;
-      const text = fs.readFileSync(file, 'utf8');
-      if (!text.includes(from)) continue;
-      const tmp = file + '.hq-tmp';
-      fs.writeFileSync(tmp, text.split(from).join(to));
-      fs.renameSync(tmp, file);
+    try {
+      // Every draft lists the files it uses in draft_meta_info.json: a quick way to skip the others.
+      if (!fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8').includes(from)) continue;
+      relinkDraft(dir, from, to);
+      updated++;
+    } catch (e) {
+      failed.push(`"${d}" (${e instanceof Error ? e.message.split('\n')[0] : e})`);
     }
-    count++;
   }
-  return count;
+  return { updated, failed };
 }
 
 /** Renames a draft folder and updates its own name and path inside draft_meta_info.json. */
@@ -190,7 +199,7 @@ function renameDraft(oldDraft: string, newDraft: string) {
     .readFileSync(metaFile, 'utf8')
     .replace(/("draft_name"\s*:\s*)"(?:[^"\\]|\\.)*"/, (_m, h: string) => h + JSON.stringify(newDraft))
     .replace(/("draft_fold_path"\s*:\s*)"(?:[^"\\]|\\.)*"/, (_m, h: string) => h + JSON.stringify(forwardSlashes(to)));
-  fs.writeFileSync(metaFile, meta);
+  writeFileSafely(metaFile, meta);
 }
 
 export interface ManageResult {
@@ -236,11 +245,13 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
       notes.push(`Couldn't rename the CapCut draft "${d}": ${e instanceof Error ? e.message : e}`);
     }
   }
-  try {
-    const n = relinkDrafts(segments.join('/'), newId);
-    if (n) notes.push(`Updated the links in ${n} CapCut draft${n === 1 ? '' : 's'} that use files from this folder.`);
-  } catch (e) {
-    notes.push(`Couldn't update links in the CapCut drafts: ${e instanceof Error ? e.message : e}`);
+  const { updated, failed } = relinkDrafts(segments.join('/'), newId);
+  if (updated) notes.push(`Updated the links in ${updated} CapCut draft${updated === 1 ? '' : 's'} that use files from this folder.`);
+  if (failed.length) {
+    notes.push(
+      `Couldn't check or update the links in ${failed.length === 1 ? 'this CapCut draft' : 'these CapCut drafts'}, so ` +
+        `${failed.length === 1 ? 'it' : 'they'} may still point at the old name: ${failed.join(', ')}.`,
+    );
   }
   const isPiece = segments.length >= 3 && segments[0] !== STANDALONE_GROUP;
   return { showId: isPiece ? parentPage(segments) : newId, message: notes.join(' ') };

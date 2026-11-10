@@ -162,6 +162,19 @@ describe('renameFolder', () => {
     expect(JSON.parse(read(path.join(drafts(), '022_S01 - One', 'Timelines', 'T1', 'draft_content.json'))).path).toBe(newMedia);
   });
 
+  it('keeps fixing links past a draft it cannot read, and names that draft', () => {
+    // There, but unreadable: a folder where the file should be.
+    fs.rmSync(path.join(drafts(), 'Unrelated', 'draft_meta_info.json'));
+    fs.mkdirSync(path.join(drafts(), 'Unrelated', 'draft_meta_info.json'));
+    const result = renameFolder('022 - Worth Telling Them', '022 - Renamed', []);
+    const link = `${vp()}/022 - Renamed/Longform/Raw/a.mp4`;
+    expect(read(path.join(drafts(), '022_S01 - One', 'Timelines', 'T1', 'draft_content.json'))).toContain(link);
+    expect(read(path.join(drafts(), '022 - Worth Telling Them(2)', 'draft_meta_info.json'))).toContain(link);
+    expect(result.message).toMatch(/Updated the links in 2 CapCut drafts/);
+    expect(result.message).toMatch(/may still point at the old name: "Unrelated"/);
+    expect(fs.readdirSync(path.join(drafts(), '022_S01 - One')).filter((n) => n.endsWith('.hq-tmp'))).toEqual([]);
+  });
+
   it('leaves drafts alone if they are not ticked (but still fixes links)', () => {
     renameFolder('022 - Worth Telling Them', '022 - Worth Saying', []);
     expect(fs.existsSync(path.join(drafts(), '022 - Worth Telling Them(2)'))).toBe(true);
