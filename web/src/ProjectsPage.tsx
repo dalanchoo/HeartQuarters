@@ -548,7 +548,7 @@ function PieceCard({
             )}
             {onManaged && <ManageButtons path={piece.path} onDone={onManaged} />}
           </div>
-          {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} />}
+          {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} longform={video} />}
         </div>
 
         <div className="piece-docs">

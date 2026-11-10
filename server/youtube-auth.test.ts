@@ -14,14 +14,16 @@ describe('YouTube sign-in', () => {
     configureYoutube('123.apps.googleusercontent.com', 'secret');
     const url = new URL(authorizationUrl(4321));
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('scope')).toContain('youtube.force-ssl');
     expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:4321/api/youtube/callback');
     await expect(finishYoutubeAuth('wrong', 'code')).rejects.toThrow(/match/);
     expect(youtubeStatus().connected).toBe(false);
     const next = new URL(authorizationUrl(4321));
-    const mock = vi.fn().mockImplementation(async () => Response.json({ access_token: 'access', refresh_token: 'refresh' }));
+    const mock = vi.fn().mockImplementation(async () => Response.json({ access_token: 'access', refresh_token: 'refresh', scope: 'https://www.googleapis.com/auth/youtube.force-ssl' }));
     vi.stubGlobal('fetch', mock);
     await finishYoutubeAuth(next.searchParams.get('state')!, 'code');
     expect(youtubeStatus().connected).toBe(true);
+    expect(youtubeStatus().captionAccess).toBe(true);
     expect(String(mock.mock.calls[0][1].body)).toContain('code_verifier=');
     expect(await youtubeAccessToken()).toBe('access');
     await expect(finishYoutubeAuth(next.searchParams.get('state')!, 'code')).rejects.toThrow(/match/);

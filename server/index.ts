@@ -22,6 +22,7 @@ import {
   makeShort,
   metadataRun,
   readTranscript,
+  readLongformUrl,
   regenerateShort,
   retireRetention,
   savePlan,
@@ -32,7 +33,8 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, startUpload, uploadsFor, youtubeChannel, type UploadInput } from './youtube.js';
+import { acknowledgeUpload, addSubtitle, startUpload, uploadsFor, youtubeChannel, type UploadInput } from './youtube.js';
+import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 
 const app = express();
@@ -58,7 +60,19 @@ app.get('/api/youtube/callback', (req, res) => {
 });
 app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));
+app.get('/api/youtube/subtitles', handle((req, res) => { res.json(subtitleFiles(String(req.query.piece ?? ''))); }));
+app.get('/api/youtube/related', handle((req, res) => {
+  const video = String(req.query.video ?? '');
+  const uploaded = uploadsFor(path.posix.join(video, 'Longform')).find((j) => j.videoId && j.status === 'done');
+  const url = readLongformUrl(video) ?? (uploaded?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(uploaded.videoId)}` : null);
+  res.json({ url });
+}));
 app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
+app.post('/api/youtube/subtitles', (req, res) => {
+  addSubtitle(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.subtitle ?? '')).then(
+    () => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
 app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
 app.post('/api/youtube/studio', (req, res) => {
   try {
