@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ClipboardEvent } from 'react';
 import { AiPicker } from './AiPicker';
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
@@ -6,6 +6,18 @@ import { ExpressionsPage } from './ExpressionsPage';
 import { GuidesPage } from './GuidesPage';
 import { SkillsPage } from './SkillsPage';
 import { ToolsPage } from './ToolsPage';
+import { cleanYoutubeLinks } from './cleanYoutubeLinks';
+
+/** Preserve normal paste (including images) unless a recognized YouTube link can be cleaned. */
+function cleanPaste(event: ClipboardEvent<HTMLDivElement>) {
+  if (event.defaultPrevented || [...event.clipboardData.items].some((item) => item.kind === 'file')) return;
+  const target = event.target;
+  if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement && ['text', 'search', 'url', 'tel'].includes(target.type))) return;
+  if (target.disabled || target.readOnly || document.activeElement !== target) return;
+  const original = event.clipboardData.getData('text/plain');
+  const cleaned = cleanYoutubeLinks(original);
+  if (original !== cleaned && document.execCommand('insertText', false, cleaned)) event.preventDefault();
+}
 
 // Each tab has an id (used in the address, e.g. #Videos) and a label.
 const TABS = [
@@ -35,7 +47,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className="app" onPasteCapture={cleanPaste}>
       <header className="topbar">
         <div className="brand">
           <img src="/icon.png" alt="" />
