@@ -10,6 +10,7 @@ import { defaultSubtitle } from './subtitleChoice';
 import { localBoolean, localPlaylistIds, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
+import { checkYoutubeVideo } from './videoChecks';
 
 type FileChoice = { path: string; name: string };
 type Status = { configured: boolean; connected: boolean; captionAccess: boolean };
@@ -59,6 +60,7 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
   useEffect(() => { if (!jobs?.some((j) => j.status === 'uploading')) return; const timer = setInterval(() => { void refreshJobs().catch((e) => setError(e.message)); }, 1500); return () => clearInterval(timer); }, [jobs]);
   const job = jobs?.find((j) => j.id === mode);
   const completed = jobs?.filter((j) => j.status === 'done' && j.videoId) ?? [];
+  useEffect(() => { if (job?.status === 'done') window.dispatchEvent(new CustomEvent('hq-video-status-changed')); }, [job?.status, job?.videoId]);
   useEffect(() => { setExistingUrl(job?.videoId ? youtubeVideoUrl(job.videoId, piece.kind === 'short') : ''); }, [job?.id, job?.videoId, piece.kind]);
   return <div className="youtube-form"><h4>YouTube</h4>
     {(!status || !jobs || (status.connected && mode === null)) && !error && <YouTubeLoading />}
@@ -75,7 +77,7 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
       <label>YouTube video link<input value={existingUrl} disabled={job?.status === 'uploading'} onChange={(e) => setExistingUrl(e.target.value)} placeholder="Paste a YouTube link if this video is already uploaded" /></label>
       <div className="youtube-link-row"><button disabled={busy || job?.status === 'uploading' || !existingUrl.trim() || (!!job?.videoId && existingUrl.trim() === youtubeVideoUrl(job.videoId, piece.kind === 'short'))} onClick={() => {
         if (job?.status === 'done' && !window.confirm('Changing the linked video will discard any unsaved changes in these YouTube settings. Continue?')) return;
-        void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(youtubeVideoUrl(linked.videoId!, piece.kind === 'short')); rememberYoutubeJob(localStorage, piece.path, linked.id); });
+        void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(youtubeVideoUrl(linked.videoId!, piece.kind === 'short')); rememberYoutubeJob(localStorage, piece.path, linked.id); window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path })); });
       }}>{job?.status === 'done' ? 'Change linked video' : 'Link existing video'}</button>
         {job?.status === 'done' && <button onClick={() => void action(async () => { await postJson('/api/youtube/studio', { videoId: job.videoId }); })}>Open in YouTube Studio ↗</button>}
       </div>
@@ -85,7 +87,7 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
       {job?.status === 'uploading' && <p>{job.phase === 'waiting-thumbnail' ? 'Video uploaded. Waiting for YouTube to finish processing before sending its thumbnail…' : `Uploading ${Math.round(job.sent / job.total * 100)}%…`} Please keep HeartQuarters running.</p>}
       {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} version={version} onChanged={onChanged} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try again</button></p>}
-      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
+      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path })); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
       {jobs?.filter((j) => j.status === 'unknown').map((j) => <p className="error" key={j.id}>An earlier upload has an unknown result. Check YouTube Studio before uploading another copy. <button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/studio'); })}>Open Studio</button>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I checked Studio</button></p>)}
     </>}
     {error && <p className="error">{error}</p>}
@@ -174,7 +176,7 @@ function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, lo
   const [subtitle, setSubtitle] = useState(''); const [cover, setCover] = useState(''); const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
   const [downloadName, setDownloadName] = useState('YouTube thumbnail');
-  const load = async () => { const r = await getJson<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`); setData(r); setDraft(r.video); setTagsText(r.video.tags.join(', ')); setSelected(r.selected); setSubtitle(''); setCover(''); };
+  const load = async () => { const r = await getJson<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`); setData(r); setDraft(r.video); setTagsText(r.video.tags.join(', ')); setSelected(r.selected); setSubtitle(''); setCover(''); window.dispatchEvent(new CustomEvent('hq-youtube-checked', { detail: { path: piece.path, checks: checkYoutubeVideo(r.video, r.captions, piece.kind === 'short') } })); };
   useEffect(() => { void load().catch((e) => setError(e.message)); getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then(setSubtitles, (e) => setError(e.message)); }, [piece.path, job.id]);
   if (!data || !draft) return <div>{error ? <p className="error">{error} <button className="small" onClick={() => void load().catch((e) => setError(e.message))}>Retry</button></p> : <YouTubeLoading />}</div>;
   const change = (value: Partial<YoutubeVideoSettings>) => { setDraft({ ...draft, ...value }); setMessage(''); };

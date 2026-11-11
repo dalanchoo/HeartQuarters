@@ -35,9 +35,10 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, addPlaylists, addSubtitle, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
+import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeDetails, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
+import { videoOverview } from './video-overview.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -62,6 +63,7 @@ app.get('/api/youtube/callback', (req, res) => {
   );
 });
 app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.get('/api/youtube/check-video', (req, res) => { checkYoutubeDetails(req.query.id).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
@@ -107,6 +109,7 @@ function handle(fn: (req: Request, res: Response) => void) {
 app.get('/api/projects', handle((_req, res) => {
   res.json(listProjects());
 }));
+app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.post('/api/packaging/rename-version', handle((req, res) => { res.json(renamePackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name)); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), req.body?.name, decodeThumbnail(req.body?.data))); }));

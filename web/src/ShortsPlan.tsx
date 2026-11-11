@@ -250,7 +250,7 @@ export function LongformUrlBox({ video }: { video: string }) {
         placeholder="Paste it once. Every short's metadata links to it."
         onCommit={(next) => {
           setError(null);
-          postJson('/api/shorts/longform-url', { video, url: next }).then(load, (e) => setError(e.message));
+          postJson('/api/shorts/longform-url', { video, url: next }).then(() => { window.dispatchEvent(new CustomEvent('hq-video-status-changed')); return load(); }, (e) => setError(e.message));
         }}
       />
       {error && <span className="error">{error}</span>}

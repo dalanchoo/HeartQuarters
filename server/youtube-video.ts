@@ -3,9 +3,9 @@ import { videoLanguage } from './youtube-language.js';
 export interface YoutubeVideoSettings {
   etag: string; title: string; description: string; tags: string[]; language: string | null;
   privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean | null; synthetic: boolean | null;
-  thumbnail: string | null;
+  thumbnail: string | null; customThumbnail?: boolean | null;
 }
-interface VideoResource { etag?: string; snippet?: Record<string, unknown>; status?: Record<string, unknown> }
+interface VideoResource { etag?: string; snippet?: Record<string, unknown>; status?: Record<string, unknown>; contentDetails?: Record<string, unknown> }
 export function youtubeVideoId(value: unknown): string {
   if (typeof value !== 'string') throw new Error('Enter a YouTube video link.');
   const text = value.trim();
@@ -19,7 +19,7 @@ export function youtubeVideoId(value: unknown): string {
   return id;
 }
 export async function readYoutubeVideo(token: string, id: string): Promise<{ settings: YoutubeVideoSettings; resource: VideoResource }> {
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,status&id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,status,contentDetails&id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Couldn't read this video from YouTube (${res.status}).`);
   const data = await res.json() as { items?: VideoResource[] };
   const resource = data.items?.[0]; const snippet = resource?.snippet; const status = resource?.status;
@@ -33,6 +33,7 @@ export async function readYoutubeVideo(token: string, id: string): Promise<{ set
     madeForKids: typeof status.selfDeclaredMadeForKids === 'boolean' ? status.selfDeclaredMadeForKids : null,
     synthetic: typeof status.containsSyntheticMedia === 'boolean' ? status.containsSyntheticMedia : null,
     thumbnail: thumbs?.shortsAspectRatio?.url ?? thumbs?.uhd?.url ?? thumbs?.qhd?.url ?? thumbs?.fhd?.url ?? thumbs?.maxres?.url ?? thumbs?.standard?.url ?? thumbs?.high?.url ?? thumbs?.medium?.url ?? thumbs?.default?.url ?? null,
+    customThumbnail: typeof resource.contentDetails?.hasCustomThumbnail === 'boolean' ? resource.contentDetails.hasCustomThumbnail : null,
   } };
 }
 

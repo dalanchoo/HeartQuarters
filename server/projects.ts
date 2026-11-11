@@ -273,3 +273,12 @@ export function listProjects(): ProjectNode[] {
     .filter((name) => PROJECT_RE.test(name))
     .map((name) => readNode(path.join(config.videoProjectsDir, name), 'top').node);
 }
+
+/** Read the same video tree for the status overview, once for the whole sidebar. */
+export function listProjectVideos(): { projectId: string; video: Video }[] {
+  requireFolder(config.videoProjectsDir, 'Video Projects');
+  return subfolders(config.videoProjectsDir).filter((name) => PROJECT_RE.test(name)).flatMap((name) => {
+    const { videos } = readNode(path.join(config.videoProjectsDir, name), 'top');
+    return videos.map((video) => ({ projectId: video.path, video }));
+  });
+}

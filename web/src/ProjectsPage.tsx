@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   copyText,
   getJson,
@@ -21,6 +21,30 @@ import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
 import { addThumbnailPlanningFields } from './packaging';
+import type { VideoOverview } from '../../server/video-overview';
+import type { YoutubeChecks } from './videoChecks';
+import { checkYoutubeVideo } from './videoChecks';
+import type { YoutubeVideoSettings } from '../../server/youtube-video';
+
+type Filter = 'all' | 'missing-link' | 'review' | 'legacy';
+const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null }>({ items: [], checks: {}, focus: null });
+function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
+function needsReview(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return item.link !== 'linked' || !item.localThumbnail || !!checks[item.path]?.issues.length || !!checks[item.path]?.unknown.length; }
+function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks>, filter: Filter): boolean {
+  return filter === 'all' || (filter === 'missing-link' && item.link === 'missing') || (filter === 'review' && needsReview(item, checks)) || (filter === 'legacy' && item.legacy);
+}
+function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
+  if (!item) return null;
+  const text = item.link === 'linked' ? 'YT linked' : item.link === 'missing' ? 'YT no link' : 'YT unknown';
+  const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
+  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No local cover</span>}{item.legacy && <span className="status-pill status-legacy" title="A Legacy packaging folder exists">Legacy</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check incomplete</span>}</span>;
+}
+function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
+  const { items, checks } = useContext(StatusContext);
+  const item = items.find((entry) => entry.path === path); if (!item) return null;
+  const checked = checks[path];
+  return <span className="piece-status"><StatusBadges item={item} checks={checked} />{details && <span className="status-explanation">{item.localThumbnail ? 'Local thumbnail found' : 'No local thumbnail in latest version'}{checked ? ` · YouTube: ${checked.issues.length ? checked.issues.join(', ') : 'no checked issues'}${checked.unknown.length ? `; not confirmed: ${checked.unknown.join(', ')}` : ''}` : ' · YouTube details not checked yet'}</span>}</span>;
+}
 
 // The selected folder is kept in the address, e.g.
 // #Videos/005 - Ayahuasca%2F005B - Night One  (the "/" inside is encoded)
@@ -46,16 +70,54 @@ export function ProjectsPage() {
   const [reloads, setReloads] = useState(0);
   // The note shown after making, renaming or deleting a folder.
   const [note, setNote] = useState<Note | null>(null);
+  const [overview, setOverview] = useState<VideoOverview[]>([]);
+  const [overviewError, setOverviewError] = useState('');
+  const [checks, setChecks] = useState<Record<string, YoutubeChecks>>({});
+  const [filter, setFilter] = useState<Filter>('all');
+  const [focus, setFocus] = useState<string | null>(shortFocus);
+  const [scan, setScan] = useState(''); const [scanning, setScanning] = useState(false);
+  const scanEpoch = useRef(0);
 
   useEffect(() => {
     getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
   }, [reloads]);
 
   useEffect(() => {
-    const onHash = () => setSelected(projectFromHash());
+    const onHash = () => { setSelected(projectFromHash()); setFocus(shortFocus()); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => getJson<VideoOverview[]>('/api/video-overview').then((items) => { if (active) { setOverview(items); setOverviewError(''); } }, (e) => { if (active) setOverviewError(e.message); });
+    const changed = (event: Event) => { const piece = (event as CustomEvent<string>).detail; if (piece) { scanEpoch.current++; setChecks((old) => { const next = { ...old }; delete next[piece]; return next; }); } void load(); };
+    const checked = (event: Event) => { const { path, checks: values } = (event as CustomEvent<{ path: string; checks: YoutubeChecks }>).detail; setChecks((old) => ({ ...old, [path]: values })); };
+    void load(); window.addEventListener('hq-video-status-changed', changed); window.addEventListener('hq-youtube-checked', checked);
+    return () => { active = false; window.removeEventListener('hq-video-status-changed', changed); window.removeEventListener('hq-youtube-checked', checked); };
+  }, [reloads]);
+
+  async function checkLinkedVideos() {
+    const candidates = overview.filter((item) => item.videoId);
+    const ambiguous = overview.filter((item) => item.link === 'linked' && !item.videoId).length;
+    if (!candidates.length) { setScan('No uniquely linked videos are available to check.'); return; }
+    if (!window.confirm(`Check ${candidates.length} linked video${candidates.length === 1 ? '' : 's'} on YouTube? This reads each video and its captions and uses YouTube API quota.`)) return;
+    const epoch = ++scanEpoch.current; let index = 0; let done = 0; let failures = 0;
+    setScanning(true); setScan(`Checking 0 of ${candidates.length}…`);
+    const worker = async () => {
+      while (index < candidates.length && epoch === scanEpoch.current) {
+        const item = candidates[index++];
+        try {
+          const result = await getJson<{ video: YoutubeVideoSettings; captions: { kind: string }[] | null }>(`/api/youtube/check-video?id=${encodeURIComponent(item.videoId!)}`);
+          if (epoch === scanEpoch.current) setChecks((old) => ({ ...old, [item.path]: checkYoutubeVideo(result.video, result.captions, item.kind === 'short') }));
+        } catch { failures++; if (epoch === scanEpoch.current) setChecks((old) => ({ ...old, [item.path]: { issues: [], unknown: ['YouTube check failed'] } })); }
+        done++; if (epoch === scanEpoch.current) setScan(`Checking ${done} of ${candidates.length}…`);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, candidates.length) }, () => worker()));
+    setScanning(false);
+    setScan(epoch !== scanEpoch.current ? 'Check stopped because a video link changed. Run it again to update the list.' : `Checked ${done} video${done === 1 ? '' : 's'}.${failures ? ` ${failures} could not be checked.` : ''}${ambiguous ? ` ${ambiguous} with multiple saved links need to be checked individually.` : ''}`);
+  }
 
   function afterChange(showId: string, newNote: Note) {
     setReloads((n) => n + 1);
@@ -80,16 +142,21 @@ export function ProjectsPage() {
   }
 
   return (
-    <div className="split">
+    <StatusContext.Provider value={{ items: overview, checks, focus }}><div className="split">
       <aside className="sidebar">
         <div className="sidebar-actions">
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
+        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All videos</option><option value="missing-link">No saved YouTube link</option><option value="review">Needs review</option><option value="legacy">Has Legacy packaging</option></select></label>
+        <p className="status-legend">YT linked / YT no link refers to saved links. YouTube checks last for this session; check again after changing Studio.</p>
+        <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check linked videos on YouTube'}</button>
+        {scan && <p className="status-legend" role="status">{scan}</p>}
+        {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
         {error && <p className="error">{error}</p>}
         {!projects && !error && <p className="muted">Loading…</p>}
         {projects &&
-          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} />)}
+          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} />)}
       </aside>
       <section className="content">
         {note && note.showId === (selected ?? '') && <NoteBox note={note} onDismiss={() => setNote(null)} />}
@@ -99,7 +166,7 @@ export function ProjectsPage() {
           <p className="muted">Pick a project on the left.</p>
         )}
       </section>
-    </div>
+    </div></StatusContext.Provider>
   );
 }
 
@@ -137,21 +204,28 @@ function NoteBox({ note, onDismiss }: { note: Note; onDismiss: () => void }) {
 }
 
 function NodeLink({ node, selected }: { node: ProjectNode; selected: string | null }) {
+  const { items, checks, focus } = useContext(StatusContext);
+  const primary = items.find((item) => item.projectId === node.id && (item.kind === 'longform' || node.kind === 'short'));
   return (
-    <a href={linkTo(node.id)} className={`project-link ${node.id === selected ? 'active' : ''}`}>
+    <a href={linkTo(node.id)} className={`project-link ${node.id === selected && !focus ? 'active' : ''}`}>
       {node.number && <span className="num">{node.number}</span>}
       <span className="title">{node.title}</span>
       <span className="badges">
         {node.exported && <span title="Exported">🎬</span>}
         {node.kind !== 'short' && node.shortCount > 0 && <span title="Shorts">{node.shortCount}▮</span>}
       </span>
+      <StatusBadges item={primary} checks={primary && checks[primary.path]} />
     </a>
   );
 }
 
 /** One row in the sidebar; series and groups can be expanded to show what's inside. */
-function TreeItem({ node, selected }: { node: ProjectNode; selected: string | null }) {
-  if (node.children.length === 0) {
+function TreeItem({ node, selected, filter }: { node: ProjectNode; selected: string | null; filter: Filter }) {
+  const { items, checks, focus } = useContext(StatusContext);
+  const relevant = items.filter((item) => item.projectId === node.id || item.projectId.startsWith(`${node.id}/`));
+  if (filter !== 'all' && !relevant.some((item) => matchesFilter(item, checks, filter))) return null;
+  const shorts = node.kind !== 'short' ? items.filter((item) => item.projectId === node.id && item.kind === 'short' && matchesFilter(item, checks, filter)) : [];
+  if (node.children.length === 0 && shorts.length === 0) {
     return (
       <div className="tree-leaf">
         <NodeLink node={node} selected={selected} />
@@ -166,8 +240,9 @@ function TreeItem({ node, selected }: { node: ProjectNode; selected: string | nu
       </summary>
       <div className="tree-children">
         {ordered(node, node.children).map((c) => (
-          <TreeItem key={c.id} node={c} selected={selected} />
+          <TreeItem key={c.id} node={c} selected={selected} filter={filter} />
         ))}
+        {shorts.map((short) => <a key={short.path} href={`${linkTo(node.id)}/${encodeURIComponent(short.path)}`} className={`project-link short-tree-link ${focus === short.path && selected === node.id ? 'active' : ''}`}><span className="title">{short.name}</span><StatusBadges item={short} checks={checks[short.path]} /></a>)}
       </div>
     </details>
   );
@@ -201,7 +276,7 @@ function ProjectView({
   }, [id, reloads]);
 
   // Picks up what changed in the folders, such as a new packaging version, without emptying the page first.
-  const refresh = () => getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(id)}`).then(setProject, () => {});
+  const refresh = () => { window.dispatchEvent(new CustomEvent('hq-video-status-changed')); return getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(id)}`).then(setProject, () => {}); };
 
   if (error) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
@@ -253,7 +328,7 @@ function ProjectView({
               .filter((p) => p.kind === 'longform' || project.kind === 'short')
               .map((p) =>
                 p.kind === 'longform' ? (
-                  <Section key={p.path} name="longform" title="Longform" detail={pieceSummary(p)}>
+                  <Section key={p.path} name="longform" title="Longform" detail={<>{pieceSummary(p)} <PieceStatus path={p.path} /></>}>
                     <PieceCard piece={p} plain draft={segments[segments.length - 1]} longformProject={project.id} onChanged={refresh}>
                       {hasJobs && (
                         <>
@@ -449,10 +524,12 @@ function Section({
   title: string;
   count?: number;
   /** A few words beside the title, such as whether it's been exported. */
-  detail?: string;
+  detail?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(() => rememberedOpen(name));
+  const { focus } = useContext(StatusContext);
+  useEffect(() => { if (name === 'shorts' && focus) setOpen(true); }, [name, focus]);
   return (
     <details
       className="page-section"
@@ -507,10 +584,14 @@ function PieceCard({
   const [docsLoads, setDocsLoads] = useState(0);
   const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const [open, setOpen] = useState(startOpen);
+  const { focus } = useContext(StatusContext);
+  const card = useRef<HTMLDetailsElement>(null);
+  useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
   const contents = (
     <>
       {children}
+      {piece.kind !== 'reel' && <PieceStatus path={piece.path} details />}
 
       {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
       <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
@@ -572,10 +653,11 @@ function PieceCard({
 
   if (plain) return <div className="card">{contents}</div>;
   return (
-    <details className="card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details ref={card} className="card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
         <span className="piece-name">{piece.name}</span>
         <span className="muted">{pieceSummary(piece)}</span>
+        {piece.kind !== 'reel' && <PieceStatus path={piece.path} />}
       </summary>
       {contents}
     </details>

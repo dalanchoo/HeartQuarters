@@ -72,6 +72,15 @@ export function startUpload(input: UploadInput): UploadJob {
 }
 export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
 
+/** Read-only review: a caption permission failure is reported as unknown. */
+export async function checkYoutubeDetails(value: unknown) {
+  const id = youtubeVideoId(value); const token = await youtubeAccessToken();
+  const { settings } = await readYoutubeVideo(token, id);
+  let captions: Awaited<ReturnType<typeof youtubeCaptionTracks>> | null = null;
+  try { captions = await youtubeCaptionTracks(token, id); } catch { /* Do not mistake a permissions error for no captions. */ }
+  return { video: settings, captions };
+}
+
 /** Link a video the owner identifies, after verifying it belongs to the connected channel. */
 export async function linkYoutubeVideo(piece: string, value: unknown): Promise<UploadJob> {
   if (!piece || !fs.statSync(safeResolve('projects', piece)).isDirectory()) throw new Error('Choose a project folder.');
