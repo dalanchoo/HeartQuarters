@@ -9,14 +9,14 @@ let tmp: string;
 beforeEach(() => { tmp = makeTree({ 'jobs/111.json': JSON.stringify({ piece: 'p/Shorts/s', status: 'done', videoId: '8rpVGGL5N10' }), 'jobs/222.json': 'broken' }); });
 afterEach(() => removeTree(tmp));
 const videos: { projectId: string; video: Video }[] = [{ projectId: 'p', video: { name: 'p', path: 'p', pieces: [
-  { name: 'Longform', kind: 'longform', path: 'p/Longform', exports: [], packagingVersion: 'V01', versions: [{ name: 'Legacy', path: 'legacy', docs: [], covers: [], notes: null }, { name: 'V01', path: 'v1', docs: [], covers: [{ name: 'cover', path: 'cover', size: 1 }], notes: null }] },
+  { name: 'Longform', kind: 'longform', path: 'p/Longform', exports: [], packagingVersion: 'V01', versions: [{ name: 'V01', path: 'v1', docs: [], covers: [{ name: 'cover', path: 'cover', size: 1 }], notes: null }] },
   { name: 's', kind: 'short', path: 'p/Shorts/s', exports: [], packagingVersion: null, versions: [] },
 ] } }];
 describe('video overview', () => {
   it('reports saved longform links, known Short uploads, and local packaging separately', () => {
     const result = makeVideoOverview(videos, { jobs: [{ piece: 'p/Shorts/s', status: 'done', videoId: '8rpVGGL5N10' }], complete: true }, () => ({ state: 'linked', id: '8rpVGGL5N10' }));
-    expect(result[0]).toMatchObject({ link: 'linked', legacy: true, localThumbnail: true });
-    expect(result[1]).toMatchObject({ link: 'linked', legacy: false, localThumbnail: false });
+    expect(result[0]).toMatchObject({ link: 'linked', localThumbnail: true });
+    expect(result[1]).toMatchObject({ link: 'linked', localThumbnail: false });
   });
   it('does not call an unreadable record or unknown upload missing', () => {
     const result = makeVideoOverview(videos, { jobs: [{ piece: 'p/Shorts/s', status: 'unknown' }], complete: false }, () => ({ state: 'missing' }));

@@ -25,18 +25,18 @@ import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 
-type Filter = 'all' | 'missing-link' | 'review' | 'legacy';
+type Filter = 'all' | 'missing-link' | 'review';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null }>({ items: [], checks: {}, focus: null });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 function needsReview(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return item.link !== 'linked' || !item.localThumbnail || !!checks[item.path]?.issues.length || !!checks[item.path]?.unknown.length; }
 function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks>, filter: Filter): boolean {
-  return filter === 'all' || (filter === 'missing-link' && item.link === 'missing') || (filter === 'review' && needsReview(item, checks)) || (filter === 'legacy' && item.legacy);
+  return filter === 'all' || (filter === 'missing-link' && item.link === 'missing') || (filter === 'review' && needsReview(item, checks));
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
   const text = item.link === 'linked' ? 'YT linked' : item.link === 'missing' ? 'YT no link' : 'YT unknown';
   const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
-  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No local cover</span>}{item.legacy && <span className="status-pill status-legacy" title="A Legacy packaging folder exists">Legacy</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check incomplete</span>}</span>;
+  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No local cover</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check incomplete</span>}</span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -147,7 +147,7 @@ export function ProjectsPage() {
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
-        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All videos</option><option value="missing-link">No saved YouTube link</option><option value="review">Needs review</option><option value="legacy">Has Legacy packaging</option></select></label>
+        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All videos</option><option value="missing-link">No saved YouTube link</option><option value="review">Needs review</option></select></label>
         <p className="status-legend">YT linked / YT no link refers to saved links. YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         {scan && <p className="status-legend" role="status">{scan}</p>}

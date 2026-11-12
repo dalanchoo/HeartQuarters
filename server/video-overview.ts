@@ -5,7 +5,7 @@ import { listProjectVideos, type Video } from './projects.js';
 import { youtubeVideoId } from './youtube-video.js';
 
 export type LinkState = 'linked' | 'missing' | 'unknown';
-export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; legacy: boolean; localThumbnail: boolean; }
+export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; }
 type RecordInfo = { piece?: string; status?: string; videoId?: string };
 type SavedLink = { state: LinkState; id?: string };
 
@@ -31,7 +31,7 @@ export function makeVideoOverview(videos: { projectId: string; video: Video }[],
     const saved = piece.kind === 'longform' ? savedUrl(projectId) : { state: 'missing' as LinkState };
     if (saved.id) ids.add(saved.id);
     const uncertain = jobs.some((job) => job.status === 'unknown' || job.status === 'uploading' || (job.status === 'done' && !job.videoId)) || !records.complete || saved.state === 'unknown';
-    return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, legacy: piece.versions.some((v) => v.name.toLowerCase() === 'legacy'), localThumbnail: (piece.versions.at(-1)?.covers.length ?? 0) > 0 };
+    return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (piece.versions.at(-1)?.covers.length ?? 0) > 0 };
   }));
 }
 

@@ -149,7 +149,6 @@ main { flex: 1; min-height: 0; }
 .status-linked { background: #e0f3e6; color: #21673d; }
 .status-missing, .status-review { background: #fff0d5; color: #865000; }
 .status-unknown { background: #e9edf1; color: #4b5968; }
-.status-legacy { background: #e9e3f6; color: #5d4285; }
 .piece-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .status-explanation { color: var(--muted); font-size: 0.8rem; }
 .short-tree-link { padding-left: 0.45rem; font-size: 0.9rem; }
