@@ -11,7 +11,7 @@ import { chosenName, useAi } from './AiPicker';
 import { ClaudeChat } from './ClaudeChat';
 
 // The AI box at the top of every card on a video's page, the same for the longform and each short: the piece's
-// conversation, Generate / Regenerate and "Write YouTube metadata". Changes to a piece are notes in the conversation. A standalone short has no longform, so no AI jobs yet.
+// conversation, Generate / Regenerate and "Write YouTube Metadata". Changes to a piece are notes in the conversation. A standalone short has no longform, so no AI jobs yet.
 export function PieceAI({
   video,
   piece,
@@ -111,7 +111,7 @@ export function PieceAI({
           {starting ? 'Starting…' : state?.generated ? 'Regenerate' : 'Generate'}
         </button>
         <button disabled={busy} onClick={() => act('/api/piece-ai/metadata')}>
-          Write YouTube metadata
+          Write YouTube Metadata
         </button>
         {!busy && <span className="muted small-text">{name} fills in YouTube.md. You don't need to export first.</span>}
       </div>
@@ -123,7 +123,7 @@ export function PieceAI({
             postJson('/api/piece-ai/clear', { video, piece }).then(() => setRun(null), fail);
           }}
         >
-          Clear conversation
+          Clear Conversation
         </button>
       )}
       {run ? (

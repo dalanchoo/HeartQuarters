@@ -34,7 +34,7 @@ export function VersionNotes({ version }: { version: PackagingVersion }) {
         <h4>Notes</h4>
         {draft === null && (
           <button className="small" onClick={() => setDraft(saved)}>
-            {saved.trim() ? 'Edit' : 'Add notes'}
+            {saved.trim() ? 'Edit' : 'Add Notes'}
           </button>
         )}
       </div>

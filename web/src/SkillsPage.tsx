@@ -51,7 +51,7 @@ export function SkillsPage() {
                       className="small"
                       onClick={() => postJson('/api/skills/open', { target: t.id }).catch((e) => setError(e.message))}
                     >
-                      Open folder
+                      Open Folder
                     </button>
                   </div>
                 ) : (
@@ -68,7 +68,7 @@ export function SkillsPage() {
                 <h4>
                   {g.title}
                   <button className="small" onClick={() => openInExplorer('skills', g.folder).catch((e) => setError(e.message))}>
-                    Open folder
+                    Open Folder
                   </button>
                 </h4>
               </td>

@@ -110,7 +110,7 @@ export function ExpressionsPage() {
             {current.definition && <p className="expr-def">{current.definition}</p>}
             <div className="versions">
               <button className="small" onClick={() => openInExplorer('expressions', current.path)}>
-                Open folder
+                Open Folder
               </button>
               {subs.length > 0 && (
                 <label className="muted small-label">
@@ -269,12 +269,12 @@ function Lightbox({
             </div>
           )}
           <div className="versions">
-            <CopyButton text={fullPath} label="Copy file path" />
+            <CopyButton text={fullPath} label="Copy File Path" />
             <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>
-              Open folder
+              Open Folder
             </button>
             <a className="small button-link" href={fileUrl('expressions', photo.path)} target="_blank" rel="noreferrer">
-              Full size ↗
+              View Full Size ↗
             </a>
             <button className="small" onClick={onClose}>Close (Esc)</button>
           </div>

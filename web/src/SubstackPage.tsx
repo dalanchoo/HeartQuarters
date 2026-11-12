@@ -100,7 +100,7 @@ function PieceView({ id }: { id: string }) {
           <span className="h1-note">{piece.section}</span>
         </h1>
         <button className="small" onClick={() => openInExplorer('writing', piece.id)}>
-          Open folder
+          Open Folder
         </button>
       </div>
 
@@ -189,7 +189,7 @@ function DraftView({ path }: { path: string }) {
     <div className="draft">
       <div className="draft-actions">
         <button className="small" onClick={() => openInExplorer('writing', path)}>
-          Open folder
+          Open Folder
         </button>
         <a className="small button-link" href={fileUrl('writing', path)} download>
           Download .docx

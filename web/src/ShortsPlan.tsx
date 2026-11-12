@@ -147,7 +147,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
         {proposing ? (
           <button onClick={() => stop('shorts')}>Stop</button>
         ) : (
-          <button onClick={propose}>{plan ? 'Propose again' : 'Propose shorts'}</button>
+          <button onClick={propose}>{plan ? 'Propose Again' : 'Propose Shorts'}</button>
         )}
       </div>
 
@@ -164,7 +164,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
                 className="small"
                 onClick={() => postJson('/api/shorts/retention/remove', { video }).then(refresh, fail)}
               >
-                Stop using it
+                Stop Using It
               </button>
             </div>
           </>
@@ -215,7 +215,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
               save([...plan.shorts, { id, title: 'New Short', start, end: start + 45, proposed: null }], plan.rejected);
             }}
           >
-            Add a short
+            Add a Short
           </button>
 
           {plan.rejected.length > 0 && (
@@ -354,7 +354,7 @@ function ShortCard({
           )}
           {!made && proposed && (proposed.start !== clip.start || proposed.end !== clip.end) && (
             <button className="small" onClick={() => setClip(proposed)}>
-              Back to the proposed clip ({showTime(proposed.start)} to {showTime(proposed.end)})
+              Back to the Proposed Clip ({showTime(proposed.start)} to {showTime(proposed.end)})
             </button>
           )}
 
@@ -362,10 +362,10 @@ function ShortCard({
             {!made && (
               <>
                 <button disabled={!canMake} onClick={onMake}>
-                  {making ? 'Copying the CapCut project…' : 'Make this short'}
+                  {making ? 'Copying the CapCut Project…' : 'Make This Short'}
                 </button>
                 <button className="small" onClick={onMove}>
-                  {nearMiss ? 'Move to shorts' : 'Move to near misses'}
+                  {nearMiss ? 'Move to Shorts' : 'Move to Near Misses'}
                 </button>
                 <button className="small" onClick={() => confirm(`Remove "${short.title}" from the list?`) && onDelete()}>
                   Remove
@@ -381,7 +381,7 @@ function ShortCard({
                   ) && onRegenerate()
                 }
               >
-                {making ? 'Copying the CapCut project…' : 'Regenerate'}
+                {making ? 'Copying the CapCut Project…' : 'Regenerate'}
               </button>
             )}
           </div>
@@ -400,7 +400,7 @@ function ShortCard({
   );
 }
 
-/** The longform's export, queued up at the clip. "Play this clip" stops at its end; the normal controls don't. */
+/** The longform's export, queued up at the clip. "Play This Clip" stops at its end; the normal controls don't. */
 function ClipPlayer({
   videoRef,
   src,
@@ -463,7 +463,7 @@ function ClipPlayer({
           void v.play().then(stopAtEnd);
         }}
       >
-        Play this clip
+        Play This Clip
       </button>
     </div>
   );
@@ -721,7 +721,7 @@ function TranscriptPicker({
               onPick(range);
             }}
           >
-            Use the selected words as the clip ({showTime(range.start)} to {showTime(range.end)},{' '}
+            Use the Selected Words as the Clip ({showTime(range.start)} to {showTime(range.end)},{' '}
             {(range.end - range.start).toFixed(1)} seconds)
           </button>
         ) : (

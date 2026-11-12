@@ -44,7 +44,7 @@ function ManageDialog({
   function load() {
     getJson<ManageInfo>(`/api/manage/info?path=${encodeURIComponent(path)}`).then(
       (i) => {
-        // First load: fill in the name and tick all the drafts. ("Check again" keeps your choices.)
+        // First load: fill in the name and tick all the drafts. ("Check Again" keeps your choices.)
         if (!loaded.current) {
           loaded.current = true;
           setName(i.name);
@@ -168,9 +168,9 @@ function ManageDialog({
 
             {blockedByCapCut && (
               <p className="warn">
-                CapCut is open. Close CapCut, then click Check again. (If CapCut is open, it can save its old copy of a draft and wipe out the change.){' '}
+                CapCut is open. Close CapCut, then click Check Again. (If CapCut is open, it can save its old copy of a draft and wipe out the change.){' '}
                 <button type="button" className="small" onClick={load}>
-                  Check again
+                  Check Again
                 </button>
               </p>
             )}
@@ -180,7 +180,7 @@ function ManageDialog({
                 Cancel
               </button>
               <button type="submit" className={mode === 'delete' ? 'danger' : ''} disabled={!ready}>
-                {busy ? 'Working…' : mode === 'rename' ? 'Rename' : 'Move to trash'}
+                {busy ? 'Working…' : mode === 'rename' ? 'Rename' : 'Move to Trash'}
               </button>
             </div>
           </form>

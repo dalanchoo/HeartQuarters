@@ -17,7 +17,7 @@ export function VideoPreview({ exports, covers }: { exports: FileRef[]; covers: 
       {playing && current ? <>
         <video key={current.path} ref={video} className="inline-video" src={fileUrl('projects', current.path)} controls autoPlay playsInline preload="metadata" onError={() => setError('This video could not be played in the browser.')} />
         <div className="video-preview-tools">
-          {typeof document !== 'undefined' && document.pictureInPictureEnabled && <button type="button" onClick={() => { void video.current?.requestPictureInPicture().catch(() => setError('Could not pop out this video.')); }}>Pop out</button>}
+          {typeof document !== 'undefined' && document.pictureInPictureEnabled && <button type="button" onClick={() => { void video.current?.requestPictureInPicture().catch(() => setError('Could not pop out this video.')); }}>Pop Out</button>}
           <button type="button" onClick={() => { setPlaying(false); setError(''); }}>■ Stop</button>
         </div>
       </> : <>

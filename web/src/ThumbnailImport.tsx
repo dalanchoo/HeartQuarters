@@ -15,7 +15,7 @@ export function ThumbnailImport({ piece, version, onSaved }: { piece: string; ve
           await postJson('/api/packaging/import-thumbnail', { piece, version, name, data });
           setFile(null); setMessage('Thumbnail saved in this packaging version.'); onSaved();
         } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-      }}>{busy ? 'Saving…' : 'Save thumbnail'}</button></>}
+      }}>{busy ? 'Saving…' : 'Save Thumbnail'}</button></>}
     {message && <p role="status">{message}</p>}
   </details>;
 }

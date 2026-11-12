@@ -201,7 +201,7 @@ export function PackagingDocShort({ doc }: { doc: LoadedDoc }) {
     <div className="block">
       <h4>
         Local file · {file.name}
-        {text && !isEmpty && <CopyButton text={text} label="Copy all" />}
+        {text && !isEmpty && <CopyButton text={text} label="Copy All" />}
       </h4>
       {error && <p className="error">{error}</p>}
       {text === null && !error && <p className="muted">Loading…</p>}
@@ -221,7 +221,7 @@ function PackagingDocWhole({ doc }: { doc: LoadedDoc }) {
     <div className="block">
       <h4>
         {file.name}
-        {text && !isBlankPackaging(text) && <CopyButton text={text} label="Copy all" />}
+        {text && !isBlankPackaging(text) && <CopyButton text={text} label="Copy All" />}
       </h4>
       {error && <p className="error">{error}</p>}
       {fields?.map((f, i) => <FieldView key={i} doc={doc} index={i} field={f} />)}
@@ -286,7 +286,7 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
         setTimeout(() => setResult(null), 1500);
       }}
     >
-      {result === 'copied' ? 'Copied ✓' : result === 'failed' ? 'Copy failed' : label}
+      {result === 'copied' ? 'Copied ✓' : result === 'failed' ? 'Copy Failed' : label}
     </button>
   );
 }

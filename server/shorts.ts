@@ -314,7 +314,7 @@ export async function regenerateShort(video: string, id: string, sourceDraft: st
     deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [old] : []);
   }
   if (fs.existsSync(draftDir)) {
-    throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Make this short.`);
+    throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Make This Short.`);
   }
   const unmark = ({ made: _made, ...rest }: PlannedShort): PlannedShort => (rest.id === id ? rest : { ...rest, made: _made });
   writePlan(video, { shorts: plan.shorts.map(unmark), rejected: plan.rejected.map(unmark) });

@@ -149,7 +149,7 @@ export function ProjectsPage() {
         </div>
         <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All videos</option><option value="missing-link">No saved YouTube link</option><option value="review">Needs review</option><option value="legacy">Has Legacy packaging</option></select></label>
         <p className="status-legend">YT linked / YT no link refers to saved links. YouTube checks last for this session; check again after changing Studio.</p>
-        <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check linked videos on YouTube'}</button>
+        <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
         {error && <p className="error">{error}</p>}
@@ -188,7 +188,7 @@ function NoteBox({ note, onDismiss }: { note: Note; onDismiss: () => void }) {
               <>
                 {' '}
                 <button className="small" onClick={() => openInExplorer('projects', note.openPath!)}>
-                  Open folder
+                  Open Folder
                 </button>
               </>
             )}
@@ -310,7 +310,7 @@ function ProjectView({
           {(project.kind === 'project' || project.kind === 'part') && (
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
-          <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
+          <button onClick={() => openInExplorer('projects', project.path)}>Open Folder</button>
           {project.kind === 'series' && <ManageButtons path={project.id} onDone={onManaged} />}
         </div>
       </div>
@@ -425,7 +425,7 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
     <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
     <button disabled={busy || !name.trim()} onClick={async () => { setBusy(true); setError(''); try {
       const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path, name }); onCreated(result.name);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : 'Create version'}</button>
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : 'Create Version'}</button>
     {error && <p className="error">{error}</p>}
   </details>;
 }
@@ -438,11 +438,11 @@ function ManagePackagingVersion({ piece, version, onChanged }: { piece: Piece; v
     <button disabled={busy || !name.trim() || name === version.name} onClick={async () => {
       if (!window.confirm(`Rename packaging version ${version.name} to ${name}?`)) return;
       setBusy(true); setError(''); try { const result = await postJson<{ name: string }>('/api/packaging/rename-version', { piece: piece.path, source: version.path, name }); onChanged(result.name); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>Rename version</button>{' '}
+    }}>Rename Version</button>{' '}
     <button className="danger-outline" disabled={busy} onClick={async () => {
       if (!window.confirm(`Move packaging version ${version.name} and all its files to HeartQuarters Trash? The video and other versions will remain.`)) return;
       setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>Delete version</button>
+    }}>Delete Version</button>
     {error && <p className="error">{error}</p>}
   </details>;
 }
@@ -452,7 +452,7 @@ function ThumbnailPlanning({ doc }: { doc: import('./PackagingDoc').LoadedDoc })
   if (doc.text === null || !doc.fields || addThumbnailPlanningFields(doc.text) === doc.text) return null;
   return <div className="thumbnail-planning"><button className="small" disabled={busy} onClick={async () => {
     setBusy(true); setError(''); try { await doc.save(addThumbnailPlanningFields); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-  }}>Add thumbnail planning fields</button><span className="muted small-text"> Add thumbnail text and idea to {doc.file.name}.</span>{error && <p className="error">{error}</p>}</div>;
+  }}>Add Thumbnail Planning Fields</button><span className="muted small-text"> Add thumbnail text and idea to {doc.file.name}.</span>{error && <p className="error">{error}</p>}</div>;
 }
 
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
@@ -631,8 +631,8 @@ function PieceCard({
 
           <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
-            {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
+            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open Folder</button>
+            {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>}
             {manage && <ManageButtons path={manage.path} onDone={manage.onDone} />}
           </div>
         </div>

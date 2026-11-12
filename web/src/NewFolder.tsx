@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { getJson, postJson, type CreateResult, type NewKind } from './api';
 
 const WHAT: Record<NewKind, { button: string; title: string }> = {
-  top: { button: '+ New video', title: 'New video project' },
-  part: { button: '+ New part', title: 'New part of this series' },
-  short: { button: '+ New short', title: 'New short for this video' },
-  standalone: { button: '+ New standalone short', title: 'New standalone short' },
+  top: { button: '+ New Video', title: 'New video project' },
+  part: { button: '+ New Part', title: 'New part of this series' },
+  short: { button: '+ New Short', title: 'New short for this video' },
+  standalone: { button: '+ New Standalone Short', title: 'New standalone short' },
 };
 
 /** Where the new folder will go, e.g. "015 - NVC › 015B - Title › Longform". */
