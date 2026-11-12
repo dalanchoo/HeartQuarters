@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appDir, isInside, safeResolve } from './config.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
-import { readSubtitle, uploadSubtitle } from './youtube-captions.js';
+import { readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings } from './youtube-video.js';
@@ -12,7 +12,7 @@ import { fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
-export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
+export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
 function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
@@ -128,7 +128,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to save changes.');
   if (typeof subtitle !== 'string' || typeof cover !== 'string') throw new Error('Check the subtitle and thumbnail choices.');
   if (!Array.isArray(before) || !Array.isArray(after)) throw new Error('Load the current YouTube playlists first.');
-  if (subtitle && job.subtitleStatus === 'sent') throw new Error('HeartQuarters already sent subtitles to this video. Check YouTube Studio before adding another track.');
+  if (subtitle && job.subtitleStatus === 'uploading') throw new Error('Subtitles are still being sent to this video. Wait for that to finish.');
   if (subtitle) readSubtitle(piece, subtitle);
   let coverPath = '';
   if (cover) {
@@ -223,15 +223,15 @@ export async function addPlaylists(piece: string, id: string, value: unknown): P
   if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to allow playlist changes.');
   await putInPlaylists(job, await youtubeAccessToken(), ids);
 }
-/** Add captions to a video already uploaded by HeartQuarters, without re-uploading the video. */
+/** Add or replace captions on a video already on YouTube, without re-uploading the video (see sendSubtitle). */
 export async function addSubtitle(piece: string, id: string, subtitle: string, language: unknown = 'en-US'): Promise<void> {
   const job = uploadsFor(piece).find((j) => j.id === id);
   if (!job?.videoId || job.status !== 'done') throw new Error('That completed upload was not found.');
-  if (job.subtitleStatus === 'sent' || job.subtitleStatus === 'uploading') throw new Error('Subtitles have already been sent or are being uploaded.');
+  if (job.subtitleStatus === 'uploading') throw new Error('Subtitles are still being sent to this video. Wait for that to finish.');
   if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant caption permission first.');
   const bytes = readSubtitle(piece, subtitle); const selectedLanguage = videoLanguage(language);
   job.subtitleStatus = 'uploading'; job.subtitleError = undefined; jobs.set(job.id, job); record(job);
-  try { const token = await youtubeAccessToken(); await setVideoLanguage(token, job.videoId, selectedLanguage); await uploadSubtitle(token, job.videoId, bytes, selectedLanguage); job.subtitleStatus = 'sent'; }
+  try { const token = await youtubeAccessToken(); await setVideoLanguage(token, job.videoId, selectedLanguage); job.subtitleAction = await sendSubtitle(token, job.videoId, bytes, selectedLanguage); job.subtitleFile = subtitle; job.subtitleStatus = 'sent'; }
   catch (e) { job.subtitleStatus = 'error'; job.subtitleError = e instanceof Error ? e.message : String(e); }
   record(job);
 }
@@ -283,7 +283,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
   }
   if (input.subtitle) {
     job.subtitleStatus = 'uploading'; record(job);
-    try { const language = videoLanguage(input.language); await setVideoLanguage(token, job.videoId, language); await uploadSubtitle(token, job.videoId, readSubtitle(input.piece, input.subtitle), language); job.subtitleStatus = 'sent'; }
+    try { const language = videoLanguage(input.language); await setVideoLanguage(token, job.videoId, language); await uploadSubtitle(token, job.videoId, readSubtitle(input.piece, input.subtitle), language); job.subtitleFile = input.subtitle; job.subtitleAction = 'added'; job.subtitleStatus = 'sent'; }
     catch (e) { job.subtitleStatus = 'error'; job.subtitleError = e instanceof Error ? e.message : String(e); }
   }
   job.status = 'done'; record(job);

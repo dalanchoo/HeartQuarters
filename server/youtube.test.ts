@@ -79,10 +79,45 @@ describe('YouTube uploads', () => {
     vi.stubGlobal('fetch', mock);
     const job = startUpload(input);
     for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    mock.mockResolvedValueOnce(Response.json({ items: [] })).mockResolvedValueOnce(Response.json({ id: 'caption-id' }));
     await addSubtitle(input.piece, job.id, '001 - Test/Longform/Subtitles/test.vtt');
-    expect(uploadsFor(input.piece)[0].subtitleStatus).toBe('sent');
+    expect(uploadsFor(input.piece)[0]).toMatchObject({ subtitleStatus: 'sent', subtitleAction: 'added', subtitleFile: '001 - Test/Longform/Subtitles/test.vtt' });
+    expect(mock).toHaveBeenCalledTimes(5);
+    expect(mock.mock.calls[4][1].method).toBe('POST');
+  });
+  it('replaces the captions it finds instead of adding a second track, and leaves automatic captions alone', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'auto-track', snippet: { language: 'en', trackKind: 'asr' } }, { id: 'mine', snippet: { language: 'en', trackKind: 'standard' } }, { id: 'french', snippet: { language: 'fr', trackKind: 'standard' } }] }))
+      .mockResolvedValueOnce(Response.json({ id: 'mine' }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    await addSubtitle(input.piece, job.id, '001 - Test/Longform/Subtitles/test.vtt', 'en-US');
+    expect(uploadsFor(input.piece)[0]).toMatchObject({ subtitleStatus: 'sent', subtitleAction: 'replaced' });
+    const [url, init] = mock.mock.calls[4];
+    expect(url).toContain('/upload/youtube/v3/captions?');
+    expect(init.method).toBe('PUT');
+    const body = Buffer.from(init.body).toString();
+    expect(body).toContain('"id":"mine"');
+    expect(body).toContain('WEBVTT');
+    expect(mock).toHaveBeenCalledTimes(5);
+  });
+  it('stops if more than one uploaded track would need replacing, sending nothing', async () => {
+    const mock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
+      .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 'a', snippet: { language: 'en-US', trackKind: 'standard' } }, { id: 'b', snippet: { language: 'en', trackKind: 'standard' } }] }));
+    vi.stubGlobal('fetch', mock);
+    const job = startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    await addSubtitle(input.piece, job.id, '001 - Test/Longform/Subtitles/test.vtt');
+    expect(uploadsFor(input.piece)[0]).toMatchObject({ subtitleStatus: 'error' });
+    expect(uploadsFor(input.piece)[0].subtitleError).toMatch(/2 uploaded caption tracks.*Studio/);
     expect(mock).toHaveBeenCalledTimes(4);
-    await expect(addSubtitle(input.piece, job.id, '001 - Test/Longform/Subtitles/test.vtt')).rejects.toThrow(/already/);
   });
   it('reports subtitle failure separately from the completed video upload', async () => {
     const mock = vi.fn()

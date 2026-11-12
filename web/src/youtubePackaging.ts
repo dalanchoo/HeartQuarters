@@ -1,8 +1,8 @@
 import { parseFields, setFieldValue } from './packaging';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
-import type { YoutubePlaylist } from '../../server/youtube-playlists';
 
-export const SYNC_FIELDS = ['Title', 'Description', 'Tags', 'Video language', 'Visibility', 'Made for kids', 'Altered content', 'Playlists'] as const;
+// Visibility and playlists aren't kept in the file (John, 2026-11-12): YouTube is their only home.
+export const SYNC_FIELDS = ['Title', 'Description', 'Tags', 'Video language', 'Made for kids', 'Altered content'] as const;
 export type SyncField = (typeof SYNC_FIELDS)[number];
 
 export function localValue(text: string, label: SyncField): string | null {
@@ -24,24 +24,32 @@ export function setLocalValue(text: string, label: SyncField, value: string): st
   return `${text.replace(/(?:\r?\n)*$/, '')}${eol}${eol}${label}:${eol}${value}${eol}`;
 }
 
-export function youtubeValues(video: YoutubeVideoSettings, playlists: YoutubePlaylist[], selected: string[]): Record<SyncField, string | null> {
+export function youtubeValues(video: YoutubeVideoSettings): Record<SyncField, string | null> {
   return {
     Title: video.title, Description: video.description, Tags: video.tags.join(', '),
-    'Video language': video.language, Visibility: video.privacy,
+    'Video language': video.language,
     'Made for kids': video.madeForKids === null ? null : video.madeForKids ? 'Yes' : 'No',
     'Altered content': video.synthetic === null ? null : video.synthetic ? 'Yes' : 'No',
-    Playlists: selected.map((id) => `${playlists.find((p) => p.id === id)?.title ?? 'Playlist'} [${id}]`).join('\n'),
   };
 }
 
-export function localPlaylistIds(value: string, available: YoutubePlaylist[]): string[] {
-  if (!value.trim()) return [];
-  const ids = value.split(/\r?\n/).map((line) => {
-    const id = /\[([A-Za-z0-9_-]+)\]\s*$/.exec(line.trim())?.[1];
-    if (!id || !available.some((p) => p.id === id)) throw new Error('Each local playlist must end with its YouTube ID in brackets and exist on this channel.');
-    return id;
-  });
-  return [...new Set(ids)];
+/**
+ * The Altered content answer to keep in YouTube.md. YouTube doesn't report this setting back when reading a video, so
+ * the file keeps the answer HeartQuarters sent. Null means no answer was chosen, and nothing should be written.
+ */
+export function alteredContentValue(synthetic: boolean | null): string | null {
+  return synthetic === null ? null : synthetic ? 'Yes' : 'No';
+}
+
+/**
+ * How one field compares. A value YouTube doesn't report, such as Altered content, isn't a difference: the file only
+ * records what was sent, and there's nothing on YouTube's side to compare it with.
+ */
+export function comparisonState(local: string | null, remote: string | null, same: boolean | undefined, issue: string): string {
+  if (issue) return 'Needs attention';
+  if (local === null && remote === null) return 'Not provided';
+  if (remote === null) return "YouTube doesn't report this";
+  return same ? 'Same' : 'Different';
 }
 
 export function localBoolean(value: string): boolean {

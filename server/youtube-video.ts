@@ -71,9 +71,9 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
   if (snippetChanged && desired.language !== baseline.language && desired.language !== null && updated.snippet?.defaultAudioLanguage !== desired.language) throw new Error('YouTube saved the changes but did not confirm the video language. Check it in Studio.');
 }
 
-export async function youtubeCaptionTracks(token: string, id: string): Promise<{ language: string; name: string; status: string; kind: string }[]> {
+export async function youtubeCaptionTracks(token: string, id: string): Promise<{ id: string; language: string; name: string; status: string; kind: string }[]> {
   const res = await fetch(`https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Couldn't read caption tracks from YouTube (${res.status}).`);
-  const body = await res.json() as { items?: { snippet?: { language?: string; name?: string; status?: string; trackKind?: string } }[] };
-  return (body.items ?? []).map((c) => ({ language: c.snippet?.language ?? '', name: c.snippet?.name ?? '', status: c.snippet?.status ?? '', kind: c.snippet?.trackKind ?? '' }));
+  const body = await res.json() as { items?: { id?: string; snippet?: { language?: string; name?: string; status?: string; trackKind?: string } }[] };
+  return (body.items ?? []).map((c) => ({ id: c.id ?? '', language: c.snippet?.language ?? '', name: c.snippet?.name ?? '', status: c.snippet?.status ?? '', kind: c.snippet?.trackKind ?? '' }));
 }
