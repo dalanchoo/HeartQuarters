@@ -19,7 +19,7 @@ type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; sel
 export function YouTubeUpload({ piece, docs, covers, version, onChanged, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; version?: string; onChanged?: () => void; longform?: string; longformProject?: string }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
-  return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube upload & settings</summary>
+  return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube Upload & Settings</summary>
     {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} version={version} onChanged={onChanged} longform={longform} longformProject={longformProject} />}</details>;
 }
 
@@ -100,7 +100,7 @@ function YouTubeLoading() {
 
 function PlaylistChoices({ playlists, selected, setSelected }: { playlists: YoutubePlaylist[]; selected: string[]; setSelected: (ids: string[]) => void }) {
   const names = playlists.filter((p) => selected.includes(p.id)).map((p) => p.title);
-  return <div className="playlist-select"><span className="setting-label">Playlists</span><details><summary>{names.length ? `${names.length} selected · ${names.join(', ')}` : 'Select playlists'}</summary><div className="playlist-options">{playlists.length === 0 && <p>No playlists found.</p>}{playlists.map((p) => <label key={p.id}><input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, p.id] : selected.filter((id) => id !== p.id))} /> {p.title}</label>)}</div></details></div>;
+  return <div className="playlist-select"><span className="setting-label">Playlists</span><details><summary>{names.length ? `${names.length} selected · ${names.join(', ')}` : 'Select Playlists'}</summary><div className="playlist-options">{playlists.length === 0 && <p>No playlists found.</p>}{playlists.map((p) => <label key={p.id}><input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, p.id] : selected.filter((id) => id !== p.id))} /> {p.title}</label>)}</div></details></div>;
 }
 function Language({ value, setValue }: { value: string; setValue: (value: string) => void }) {
   return <label>Video language<select value={value} onChange={(e) => setValue(e.target.value)}><option value="" disabled={value !== ''}>Unknown</option>{value && !VIDEO_LANGUAGES.some((l) => l.value === value) && <option value={value}>{value}</option>}{VIDEO_LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>;
@@ -143,7 +143,7 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
         setLoadedText(doc.text); setError('');
       } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     }}>Load Values from Local File</button>
-    <details className="yt-section" open><summary>Video details</summary><div className="yt-grid">
+    <details className="yt-section" open><summary>Video Details</summary><div className="yt-grid">
     <label>Video<select value={video} onChange={(e) => setVideo(e.target.value)}>{piece.exports.map((f) => <option key={f.path} value={f.path}>{f.name}</option>)}</select></label>
     <Language value={language} setValue={setLanguage} />
     <label className="yt-full">Title<input maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
@@ -199,7 +199,7 @@ function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, lo
     {job.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {job.subtitleError}. Check Studio before trying again.</p>}
     {job.playlistResults?.filter((r) => r.status === 'error').map((r) => <p key={r.id} className="error">Playlist {r.id}: {r.error}</p>)}
     {doc?.text !== null && doc?.text !== undefined && <MetadataComparison doc={doc} video={data.video} playlists={data.playlists} selected={data.selected} piece={piece.path} jobId={job.id} useLocal={useLocal} />}
-    <details className="yt-section" open><summary>Video details on YouTube</summary><div className="yt-grid">
+    <details className="yt-section" open><summary>Video Details on YouTube</summary><div className="yt-grid">
     <Language value={draft.language ?? ''} setValue={(language) => change({ language: language || null })} />
     <label>Title<input maxLength={100} value={draft.title} onChange={(e) => change({ title: e.target.value })} /></label>
     <label className="yt-full">Description<textarea rows={7} maxLength={5000} value={draft.description} onChange={(e) => change({ description: e.target.value })} /></label>
@@ -211,7 +211,7 @@ function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, lo
     <Choices label="Made for kids?" value={draft.madeForKids === null ? '' : draft.madeForKids ? 'yes' : 'no'} setValue={(v) => change({ madeForKids: v === '' ? null : v === 'yes' })} />
     <Choices label="Contains realistic altered or synthetic content?" value={draft.synthetic === null ? '' : draft.synthetic ? 'yes' : 'no'} setValue={(v) => change({ synthetic: v === '' ? null : v === 'yes' })} />
     </div><Related longform={longform} /></details>
-    <details className="yt-section"><summary>Thumbnail & subtitles</summary><div className="yt-grid">
+    <details className="yt-section"><summary>Thumbnail & Subtitles</summary><div className="yt-grid">
     <div className="yt-full thumbnail-compare"><div><strong>Local thumbnail</strong>{cover ? <img src={fileUrl('projects', cover)} alt="Selected local thumbnail" /> : <p>Choose a local thumbnail below to compare.</p>}</div><div><strong>On YouTube</strong>{data.video.thumbnail ? <img src={data.video.thumbnail} alt="Current YouTube thumbnail" /> : <p>Not available</p>}</div></div>
     <label>Local thumbnail to push<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">Keep current thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
     <div><label>Save YouTube copy as (without extension)<input value={downloadName} onChange={(e) => setDownloadName(e.target.value)} /></label><button disabled={busy || !version || !data.video.thumbnail || !downloadName.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try { await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version, name: downloadName }); setMessage('YouTube thumbnail saved in this packaging version.'); onChanged?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Download YouTube Thumbnail</button><p className="muted small-text">Saves YouTube’s available copy, which may differ in quality from the original.</p></div>
@@ -244,7 +244,7 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
     const values = youtubeValues(current.video);
     if (fields.some((field) => values[field] !== online[field])) throw new Error('The YouTube value changed since it was loaded. Reload from YouTube and compare again.');
   };
-  return <details className="yt-section metadata-compare"><summary>Compare local file and YouTube</summary>
+  return <details className="yt-section metadata-compare"><summary>Compare Local File and YouTube</summary>
     <p className="muted small-text">Local means {doc.file.path}. YouTube shows the last values loaded from your channel. Copying to YouTube stages the change until you save; copying to the file saves that field immediately.</p>
     <button disabled={busy} onClick={async () => {
       const fields: SyncField[] = ['Video language', 'Made for kids', 'Altered content'];

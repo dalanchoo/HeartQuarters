@@ -179,7 +179,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
 
       {run && (
         <details className="shorts-talk" open={proposing || undefined}>
-          <summary className="small-text">Talk to the AI about this list</summary>
+          <summary className="small-text">Talk to the AI About This List</summary>
           <ClaudeChat
             run={run}
             placeholder="An answer, or what to change in the list"
@@ -220,7 +220,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
 
           {plan.rejected.length > 0 && (
             <details className="near-misses" open>
-              <summary>Near misses ({plan.rejected.length})</summary>
+              <summary>Near Misses ({plan.rejected.length})</summary>
               {plan.rejected.map((s) => card(s, true))}
             </details>
           )}

@@ -4,7 +4,7 @@ import { postJson } from './api';
 export function ThumbnailImport({ piece, version, onSaved }: { piece: string; version: string; onSaved: () => void }) {
   const [file, setFile] = useState<File | null>(null); const [name, setName] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  return <details className="thumbnail-import"><summary>Import thumbnail</summary>
+  return <details className="thumbnail-import"><summary>Import Thumbnail</summary>
     <p className="muted small-text">Add a PNG or JPEG up to 2 MB to this version’s Covers folder. Existing files are never replaced.</p>
     <label>Image <input type="file" accept="image/png,image/jpeg" onChange={(e) => { const selected = e.target.files?.[0] ?? null; setFile(selected); setName(selected?.name ?? ''); setMessage(''); }} /></label>
     {file && <><label>Save as <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}

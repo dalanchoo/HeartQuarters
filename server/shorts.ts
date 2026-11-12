@@ -477,7 +477,7 @@ function longformUrlFile(video: string): string {
 }
 
 /**
- * The longform's YouTube address. The one place to set it is the longform's "YouTube upload & settings": the video
+ * The longform's YouTube address. The one place to set it is the longform's "YouTube Upload & Settings": the video
  * linked there wins. Shorts\Longform URL.txt, from an earlier version of the page, is the fallback.
  */
 export function readLongformUrl(video: string): string | null {

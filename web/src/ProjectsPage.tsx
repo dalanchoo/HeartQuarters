@@ -356,7 +356,7 @@ function ProjectView({
         ))
       )}
       {hasJobs && (
-        <Section name="make-shorts" title="Make shorts">
+        <Section name="make-shorts" title="Make Shorts">
           <ShortsPlanCard video={project.id} />
         </Section>
       )}
@@ -420,7 +420,7 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
   const next = Math.max(0, ...piece.versions.map((v) => Number(/^V(\d+)/i.exec(v.name)?.[1] ?? 0))) + 1;
   const [name, setName] = useState(`V${String(next).padStart(2, '0')}`);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <details className="new-version"><summary>+ New version</summary>
+  return <details className="new-version"><summary>+ New Version</summary>
     <p className="muted small-text">Copy all files and subfolders from {source.name} into a new version. Existing versions stay untouched.</p>
     <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
     <button disabled={busy || !name.trim()} onClick={async () => { setBusy(true); setError(''); try {
@@ -432,7 +432,7 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
 
 function ManagePackagingVersion({ piece, version, onChanged }: { piece: Piece; version: { name: string; path: string }; onChanged: (name?: string) => void }) {
   const [name, setName] = useState(version.name); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <details className="new-version"><summary>Manage version</summary>
+  return <details className="new-version"><summary>Manage Version</summary>
     <p className="muted small-text">These actions affect only packaging version {version.name}, not the video or Short.</p>
     <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
     <button disabled={busy || !name.trim() || name === version.name} onClick={async () => {

@@ -432,7 +432,7 @@ export function metadataPrompt(shortName: string, longformUrl: string | null): s
     "Use the short's words from its Subtitles folder or the word-by-word transcript: John may not have exported it yet, and you don't need the export.",
     longformUrl
       ? `The longform's YouTube URL is ${longformUrl}.`
-      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to link the longform's YouTube video in its \"YouTube upload & settings\" and click the button again.",
+      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to link the longform's YouTube video in its \"YouTube Upload & Settings\" and click the button again.",
     "Read the short's CapCut project to see which music and B-roll it really uses, and go by the episode's notes on where they came from.",
     "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
   ].join(' ');
