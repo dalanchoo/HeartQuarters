@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chooseAi } from './ai';
 import { appDir, config } from './config';
-import { buildPrompt, getRun, parseShortsJob, sendNote, shortsPrompt, startShortsProposal, stopRun } from './claude';
+import { buildPrompt, forgetRun, getRun, parseShortsJob, sendNote, shortsPrompt, startShortsProposal, stopRun } from './claude';
 import { system } from './manage';
 import {
   checkShorts,
@@ -24,6 +24,11 @@ import {
   saveRetention,
   shortsOverview,
   writeShortMetadata,
+  generatePiece,
+  notePiece,
+  pieceState,
+  pieceJob,
+  writePieceMetadata,
 } from './shorts';
 import { makeTree, removeTree } from './testing';
 
@@ -74,8 +79,8 @@ beforeEach(() => {
 afterEach(() => {
   stopRun(VIDEO, 'shorts');
   stopRun(NUMBERED, 'short-S01');
-  fs.rmSync(path.join(appDir, 'data', 'claude', `${VIDEO}#shorts.json`), { force: true });
-  fs.rmSync(path.join(appDir, 'data', 'claude', `${NUMBERED}#short-S01.json`), { force: true });
+  forgetRun(VIDEO, 'shorts');
+  forgetRun(NUMBERED, 'short-S01');
   system.isCapCutRunning = realCheck;
   config.videoProjectsDir = saved.projects;
   config.capcutDraftsDir = saved.drafts;
@@ -83,6 +88,117 @@ afterEach(() => {
   config.skillsDir = saved.skills;
   config.python = saved.python;
   removeTree(tmp);
+});
+
+describe("a card's AI box, the same for the longform and each short", () => {
+  const settle = async (job: 'edit' | 'short-S01') => {
+    for (let i = 0; i < 100 && getRun(NUMBERED, job)?.status === 'running'; i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    return getRun(NUMBERED, job)!;
+  };
+  const makeShortFolder = () => fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
+  afterEach(() => {
+    stopRun(NUMBERED, 'edit');
+    forgetRun(NUMBERED);
+    delete process.env.HQ_YOUTUBE_JOBS_DIR;
+  });
+
+  it("finds the right conversation and CapCut project for each card, and refuses anything else", () => {
+    makeShortFolder();
+    expect(pieceJob(NUMBERED, 'Longform')).toEqual({ job: 'edit', draft: NUMBERED });
+    expect(pieceJob(NUMBERED, NAME)).toEqual({ job: 'short-S01', draft: NAME });
+    expect(() => pieceJob(NUMBERED, '777_S09 - Missing')).toThrow(/no short called/);
+    expect(() => pieceJob(NUMBERED, '../outside')).toThrow(/isn't named like/);
+    expect(() => pieceJob(VIDEO + '-missing', 'Longform')).toThrow();
+  });
+
+  it("starts a short's conversation from a note when it has none, saying which short and skill, then continues it", async () => {
+    makeShortFolder();
+    notePiece(NUMBERED, NAME, 'Make the captions bigger');
+    let run = await settle('short-S01');
+    expect(run.messages[0]).toMatchObject({ from: 'john', text: 'Make the captions bigger' });
+    expect(run.prompt).toMatch(/the short "777_S01 - A Good Title".*shorts-from-longform.*CapCut closed.*Make the captions bigger/s);
+    notePiece(NUMBERED, NAME, 'And smaller font');
+    run = await settle('short-S01');
+    expect(run.messages.filter((m) => m.from === 'john').map((m) => m.text)).toEqual(['Make the captions bigger', 'And smaller font']);
+    expect(() => notePiece(NUMBERED, NAME, '   ')).toThrow(/empty/);
+  });
+
+  it("Generate makes the longform's first cut when it has none", async () => {
+    expect(pieceState(NUMBERED, 'Longform')).toEqual({ generated: false, canGenerate: true });
+    await generatePiece(NUMBERED, 'Longform', false);
+    const run = await settle('edit');
+    expect(run.messages[0].text).toBe('Edit this video with the longform-edit skill.');
+  });
+
+  describe('Regenerate', () => {
+    const draftDir = () => path.join(tmp, 'Drafts', NUMBERED);
+    const savedTrash = config.trashDir;
+    beforeEach(() => {
+      config.trashDir = path.join(tmp, 'Trash');
+      fs.writeFileSync(path.join(draftDir(), 'draft_content.json'), JSON.stringify({ tracks: [{ segments: [{ id: 'my work' }] }] }));
+      fs.mkdirSync(path.join(tmp, 'Drafts', '--- LONGFORM TEMPLATE'));
+      fs.writeFileSync(path.join(tmp, 'Drafts', '--- LONGFORM TEMPLATE', 'draft_meta_info.json'), fs.readFileSync(path.join(draftDir(), 'draft_meta_info.json')));
+    });
+    afterEach(() => {
+      config.trashDir = savedTrash;
+    });
+
+    it('needs confirming once the longform has a first cut', async () => {
+      expect(pieceState(NUMBERED, 'Longform').generated).toBe(true);
+      await expect(generatePiece(NUMBERED, 'Longform', false)).rejects.toThrow(/Confirm/);
+      expect(fs.existsSync(path.join(draftDir(), 'draft_content.json'))).toBe(true);
+    });
+
+    it('moves the CapCut project to the trash and starts again from a fresh copy of the template', async () => {
+      await generatePiece(NUMBERED, 'Longform', true);
+      await settle('edit');
+      const [slot] = fs.readdirSync(path.join(tmp, 'Trash'));
+      expect(slot).toMatch(/\(regenerated\)$/);
+      expect(fs.readFileSync(path.join(tmp, 'Trash', slot, 'CapCut Drafts', NUMBERED, 'draft_content.json'), 'utf8')).toContain('my work');
+      expect(fs.existsSync(path.join(draftDir(), 'draft_content.json'))).toBe(false);
+      expect(JSON.parse(fs.readFileSync(path.join(draftDir(), 'draft_meta_info.json'), 'utf8')).draft_name).toBe(NUMBERED);
+      expect(pieceState(NUMBERED, 'Longform').generated).toBe(false);
+    });
+
+    it('changes nothing while CapCut is open, or with Gemini', async () => {
+      system.isCapCutRunning = () => true;
+      await expect(generatePiece(NUMBERED, 'Longform', true)).rejects.toThrow(/Close CapCut/);
+      system.isCapCutRunning = () => false;
+      const file = process.env.HQ_AI_FILE;
+      process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
+      chooseAi('gemini');
+      try {
+        await expect(generatePiece(NUMBERED, 'Longform', true)).rejects.toThrow(/limited/);
+      } finally {
+        process.env.HQ_AI_FILE = file;
+      }
+      expect(fs.readFileSync(path.join(draftDir(), 'draft_content.json'), 'utf8')).toContain('my work');
+      expect(fs.existsSync(path.join(tmp, 'Trash'))).toBe(false);
+    });
+  });
+
+  it("can't regenerate a short made by hand, which has no clip times in the plan", async () => {
+    makeShortFolder();
+    expect(pieceState(NUMBERED, NAME)).toMatchObject({ generated: true, canGenerate: false });
+    await expect(generatePiece(NUMBERED, NAME, true)).rejects.toThrow(/isn't in the shorts plan/);
+  });
+
+  it("writes the longform's metadata in the longform's own conversation", async () => {
+    writePieceMetadata(NUMBERED, 'Longform');
+    const run = await settle('edit');
+    expect(run.prompt).toMatch(/longform-edit.*Longform\\Packaging\\V01\\YouTube\.md/s);
+  });
+
+  it("takes the longform's URL from its linked YouTube video first, then the older saved file", () => {
+    saveLongformUrl(NUMBERED, 'https://youtu.be/from-file');
+    expect(readLongformUrl(NUMBERED)).toBe('https://youtu.be/from-file');
+    process.env.HQ_YOUTUBE_JOBS_DIR = path.join(tmp, 'jobs');
+    fs.mkdirSync(process.env.HQ_YOUTUBE_JOBS_DIR);
+    fs.writeFileSync(path.join(process.env.HQ_YOUTUBE_JOBS_DIR, 'abc.json'), JSON.stringify({ id: 'abc', piece: `${NUMBERED}/Longform`, status: 'done', videoId: 'linkedVideo' }));
+    expect(readLongformUrl(NUMBERED)).toBe('https://www.youtube.com/watch?v=linkedVideo');
+  });
 });
 
 describe('checking a short after each turn', () => {
@@ -165,7 +281,7 @@ describe('writing a short\'s metadata', () => {
     }
   };
   const makeFolder = () => fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
-  const forget = () => fs.rmSync(path.join(appDir, 'data', 'claude', `${NUMBERED}#short-S01.json`), { force: true });
+  const forget = () => forgetRun(NUMBERED, 'short-S01');
 
   it('goes by the folder, so a short needs no row in the plan, and it does not need the export', async () => {
     makeFolder();
@@ -178,13 +294,17 @@ describe('writing a short\'s metadata', () => {
     expect(told).toMatch(/YouTube only/);
   });
 
-  it('asks in the conversation that made the short, if there is one', async () => {
+  it('starts a clean conversation every time, dropping the one before', async () => {
     makeFolder();
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'An earlier note');
     await settle();
     writeShortMetadata(NUMBERED, NAME);
     await settle();
-    expect(getRun(NUMBERED, 'short-S01')?.messages.filter((m) => m.from === 'john')).toHaveLength(2);
+    writeShortMetadata(NUMBERED, NAME);
+    await settle();
+    const john = getRun(NUMBERED, 'short-S01')!.messages.filter((m) => m.from === 'john');
+    expect(john).toHaveLength(1);
+    expect(john[0].text).toMatch(/Write the YouTube metadata/);
   });
 
   it("tells the AI the longform's URL once it's saved, and asks for a placeholder until then", async () => {
@@ -403,6 +523,16 @@ describe('the transcript of a clip', () => {
     expect(found.words).toEqual([{ start: 1, end: 2, word: 'finished' }]);
   });
 
+  it("prefers the final video's transcript in Subtitles over older places", () => {
+    write('Intermediate/Transcript', 'Video - edit.words.json', words('older place'));
+    write('Claude/transcript', 'Video - final.words.json', words('work in progress'));
+    expect(readTranscript(VIDEO)!.words[0].word).toBe('older place');
+    write('Subtitles', '777-captions.words.json', words('final video'));
+    const found = readTranscript(VIDEO)!;
+    expect(found.file).toBe('777-captions.words.json');
+    expect(found.words[0].word).toBe('final video');
+  });
+
   it('reads a flat list of words too', () => {
     write('Claude/transcript', 'Flat.words.json', { words: [{ start: 0, end: 1, word: 'flat' }] });
     expect(readTranscript(VIDEO)!.words[0].word).toBe('flat');
@@ -613,7 +743,7 @@ describe('Make this short', () => {
       await regenerateShort(NUMBERED, 'S01', NUMBERED);
       await settled();
       expect(readPlan(NUMBERED)!.shorts[1].made).toBe('777_S02 - Other');
-      fs.rmSync(path.join(appDir, 'data', 'claude', `${NUMBERED}#short-S02.json`), { force: true });
+      forgetRun(NUMBERED, 'short-S02');
     });
 
     it('refuses, changing nothing, in every case it cannot finish', async () => {

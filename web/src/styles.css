@@ -171,6 +171,12 @@ main { flex: 1; min-height: 0; }
 .page-section > summary::marker { color: var(--muted); }
 .page-section .muted { font-weight: 400; }
 .capcut-message { flex-basis: 100%; }
+.piece-ai { margin: 0 0 0.8rem; }
+.missing-setting .field-head { cursor: default; }
+.missing-setting .field-head::before { visibility: hidden; }
+.piece-ai h4 { margin: 0 0 0.4rem; }
+.piece-ai-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.other-platforms > h4 { margin: 0 0 0.4rem; }
 .section-detail { font-size: 0.9rem; margin-left: 0.4rem; }
 .write-metadata { margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
 .write-metadata .shorts-talk { margin-top: 0.5rem; }

@@ -267,6 +267,17 @@ function trashSlot(name: string): string {
   return slot;
 }
 
+/** Regenerate: moves one CapCut project into the trash, so a fresh copy can take its name. Returns where it went. */
+export function trashDraft(name: string): string {
+  const draft = checkDraftName(name);
+  requireCapCutClosed();
+  if (!config.trashDir) throw new Error('No trash folder is set in config.json. Nothing was changed.');
+  const slot = trashSlot(`${draft} (regenerated)`);
+  fs.mkdirSync(path.join(slot, 'CapCut Drafts'));
+  fs.renameSync(path.join(config.capcutDraftsDir, draft), path.join(slot, 'CapCut Drafts', draft));
+  return slot;
+}
+
 /** Moves a video folder, and the ticked CapCut drafts, into the trash folder. */
 export function deleteFolder(id: string, drafts: unknown): ManageResult {
   const segments = checkManageable(id);

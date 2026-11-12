@@ -84,7 +84,8 @@ subscription rather than an API key: Claude Code, OpenAI's Codex (ChatGPT) or
 Google's Antigravity CLI (Gemini; the older Gemini CLI no longer serves personal accounts).
 He picks one at the top of the app; the choice is kept in `data/ai-choice.json`.
 
-- Each job has one conversation, saved in `data/claude/`. It stays with its AI.
+- Each job has one conversation, kept only in the engine's memory, never in a file. Reloading the page clears
+  them, and so does Clear conversation on a card. A conversation stays with its AI.
   If John picks the other AI and sends a note, that AI takes over with the
   conversation's text and the files, but none of the first AI's memory. So
   anything that must last belongs in Drive, not only in a conversation.

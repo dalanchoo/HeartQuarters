@@ -65,7 +65,7 @@ Automation levels:
 - "Edit with Claude" on a longform video's page: runs Claude Code in the
   background on the longform-edit skill, writing into the video's CapCut
   project, and shows the conversation; John's notes go to the same
-  conversation (saved in data/claude/). Tools are allowed up front
+  conversation (kept in memory only; a page reload clears it). Tools are allowed up front
   (acceptEdits, plus the skills and CapCut drafts folders).
 
 - "Propose shorts" on a longform video's page: Claude chooses clips with the

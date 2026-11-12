@@ -230,34 +230,6 @@ export function ShortsPlanCard({ video }: { video: string }) {
   );
 }
 
-/** The longform's YouTube address. It's saved once, and every short's metadata links to it. */
-export function LongformUrlBox({ video }: { video: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = () =>
-    getJson<ShortsOverview>(`/api/shorts?video=${encodeURIComponent(video)}`).then((s) => setUrl(s.longformUrl ?? ''), (e) => setError(e.message));
-  useEffect(() => {
-    load();
-  }, [video]);
-  if (url === null && !error) return null;
-  return (
-    <label className="longform-url small-text">
-      Longform's YouTube URL
-      <TextField
-        className="longform-url-box"
-        value={url ?? ''}
-        disabled={false}
-        placeholder="Paste it once. Every short's metadata links to it."
-        onCommit={(next) => {
-          setError(null);
-          postJson('/api/shorts/longform-url', { video, url: next }).then(() => { window.dispatchEvent(new CustomEvent('hq-video-status-changed')); return load(); }, (e) => setError(e.message));
-        }}
-      />
-      {error && <span className="error">{error}</span>}
-    </label>
-  );
-}
-
 type Clip = { start: number; end: number };
 
 function ShortCard({

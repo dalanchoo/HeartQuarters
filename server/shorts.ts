@@ -6,10 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
-import { askForMetadata, getRun, startShortBuild, type ClaudeRun } from './claude.js';
-import { checkDraftName, createVideoFolder, draftsForVideo, numberOf } from './create.js';
+import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
+import { uploadsFor } from './youtube.js';
+import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, numberOf } from './create.js';
 import { writeFileSafely } from './files.js';
-import { deleteFolder, system } from './manage.js';
+import { deleteFolder, system, trashDraft } from './manage.js';
 
 export interface PlannedShort {
   id: string;
@@ -165,13 +166,16 @@ export interface TimedWord {
 }
 
 /**
- * The longform's word-by-word transcript, for showing what each clip says. The one kept for the finished cut is named
- * "... - edit" or "... - final"; otherwise the newest. The takes' own transcripts aren't on the longform's timeline.
+ * The longform's word-by-word transcript, for showing what each clip says. The final video's is in Subtitles, named
+ * "NNN-captions.words.json"; older episodes kept it elsewhere as "... - edit" or "... - final". Otherwise the newest.
+ * The takes' own transcripts aren't on the longform's timeline.
  */
 export function readTranscript(video: string): { file: string; words: TimedWord[] } | null {
   const longform = safeResolve('projects', path.join(video, 'Longform'));
-  const found: { name: string; full: string; time: number }[] = [];
-  for (const dir of [path.join('Intermediate', 'Transcript'), path.join('Claude', 'transcript')]) {
+  const found: { name: string; full: string; time: number; rank: number }[] = [];
+  // Subtitles first: that's where the final video's transcript lives now. The others hold older episodes' and work in progress.
+  const dirs = ['Subtitles', path.join('Intermediate', 'Transcript'), path.join('Claude', 'transcript')];
+  for (const dir of dirs) {
     let names: string[] = [];
     try {
       names = fs.readdirSync(path.join(longform, dir));
@@ -181,11 +185,11 @@ export function readTranscript(video: string): { file: string; words: TimedWord[
     for (const name of names) {
       if (!name.endsWith('.words.json') || /^take\b/i.test(name)) continue;
       const full = path.join(longform, dir, name);
-      found.push({ name, full, time: fs.statSync(full).mtimeMs });
+      found.push({ name, full, time: fs.statSync(full).mtimeMs, rank: dirs.indexOf(dir) });
     }
   }
-  const finished = (name: string) => (/ - (edit|final)\.words\.json$/i.test(name) ? 1 : 0);
-  found.sort((a, b) => finished(b.name) - finished(a.name) || b.time - a.time);
+  const finished = (name: string) => (/(-captions| - (edit|final))\.words\.json$/i.test(name) ? 1 : 0);
+  found.sort((a, b) => finished(b.name) - finished(a.name) || a.rank - b.rank || b.time - a.time);
   if (!found[0]) return null;
   const raw = JSON.parse(fs.readFileSync(found[0].full, 'utf8').replace(/^﻿/, '')) as {
     words?: TimedWord[];
@@ -324,22 +328,146 @@ function shortId(short: string): string {
   return id;
 }
 
-/** That short's conversation, if it has one: what the card beside its fields shows. */
-export function metadataRun(video: string, short: string): ClaudeRun | null {
-  return getRun(video, `short-${shortId(short)}`);
+// ---- One piece's AI conversation: the longform's or a short's --------------------
+// Every card on a video's page has the same AI box. "Longform" means the longform's conversation (the "edit" job);
+// anything else is a short's folder name, whose conversation is named after its number.
+
+interface PieceJob {
+  job: ClaudeJob;
+  /** Its CapCut project's name. */
+  draft: string;
+}
+
+/** Which conversation a card talks to. A short goes by its folder, so one John made by hand works too. */
+export function pieceJob(video: string, piece: string): PieceJob {
+  if (!video) throw new Error('No video given.');
+  if (piece === 'Longform') {
+    if (!fs.existsSync(safeResolve('projects', path.join(video, 'Longform')))) throw new Error(`"${video}" has no Longform folder.`);
+    return { job: 'edit', draft: path.basename(video) };
+  }
+  const id = shortId(piece);
+  if (!fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', piece)))) {
+    throw new Error(`There's no short called "${piece}" in this video.`);
+  }
+  return { job: `short-${id}`, draft: piece };
+}
+
+/** That piece's conversation, if it has one. */
+export function pieceRun(video: string, piece: string): ClaudeRun | null {
+  return getRun(video, pieceJob(video, piece).job);
+}
+
+/** John's note to a piece's AI. Without a conversation yet, it starts one that knows which piece and skill it's about. */
+export function notePiece(video: string, piece: string, text: unknown): ClaudeRun {
+  const note = String(text ?? '').trim();
+  if (!note) throw new Error('The note is empty.');
+  const { job, draft } = pieceJob(video, piece);
+  if (getRun(video, job)) return askInConversation(video, job, draft, note);
+  const videoDir = safeResolve('projects', video);
+  return askInConversation(video, job, draft, pieceNotePrompt(videoDir, job, draft, note), note);
 }
 
 /**
- * "Write YouTube metadata", from the short's card. Any AI can do this one, since it only writes a text file in the
- * video's folder. It goes by the folder, so it also works for a short that isn't in the plan, such as one John made himself.
+ * "Write YouTube metadata", the same button on every card. Any AI can do this one, since it only writes a text file
+ * in the video's folder.
  */
-export function writeShortMetadata(video: string, short: string): ClaudeRun {
-  const id = shortId(short);
-  if (!video) throw new Error('No video given.');
-  if (!fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', short)))) {
-    throw new Error(`There's no short called "${short}" in this video.`);
+export function writePieceMetadata(video: string, piece: string): ClaudeRun {
+  const { job, draft } = pieceJob(video, piece);
+  // A clean conversation every time: metadata doesn't need what came before, and a long history costs tokens.
+  forgetRun(video, job);
+  const message = job === 'edit' ? longformMetadataPrompt() : metadataPrompt(piece, readLongformUrl(video));
+  return askInConversation(video, job, draft, message);
+}
+
+// ---- Generate and Regenerate, the same button on every card -----------------------
+
+export interface PieceState {
+  /** True once the piece exists: the longform has a first cut, or the short has been made. */
+  generated: boolean;
+  canGenerate: boolean;
+  /** Why the button can't be used, when it can't. */
+  reason?: string;
+}
+
+/** Whether a CapCut project has anything on its timeline. A copy of the empty template has nothing. */
+function hasFirstCut(draft: string): boolean {
+  const file = path.join(config.capcutDraftsDir, draft, 'draft_content.json');
+  try {
+    return /"segments"\s*:\s*\[\s*\{/.test(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return false;
   }
-  return askForMetadata(video, id, short, readLongformUrl(video));
+}
+
+/** The plan's row for a short made from it, or null for one John made by hand. */
+function plannedRowFor(video: string, short: string): PlannedShort | null {
+  try {
+    const plan = readPlan(video);
+    return [...(plan?.shorts ?? []), ...(plan?.rejected ?? [])].find((s) => s.made === short) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function pieceState(video: string, piece: string): PieceState {
+  const { job, draft } = pieceJob(video, piece);
+  if (job === 'edit') return { generated: hasFirstCut(draft), canGenerate: true };
+  if (plannedRowFor(video, piece)) return { generated: true, canGenerate: true };
+  return {
+    generated: true,
+    canGenerate: false,
+    reason: "This short isn't in the shorts plan, so where its clip starts and ends isn't known. Only shorts made from the plan can be regenerated.",
+  };
+}
+
+/**
+ * The card's Generate / Regenerate button. A longform without a first cut gets one, made from its takes. Regenerate,
+ * which the page only sends after "Are you sure?", moves the current CapCut project to the trash and starts again:
+ * the longform from a fresh copy of the template, a short from a fresh copy of the longform's project. Changes go in
+ * as notes instead.
+ */
+export async function generatePiece(video: string, piece: string, regenerate: unknown): Promise<ClaudeRun> {
+  const { job, draft } = pieceJob(video, piece);
+  const confirmed = regenerate === true;
+  if (job !== 'edit') {
+    const row = plannedRowFor(video, piece);
+    if (!row) throw new Error(pieceState(video, piece).reason);
+    if (!confirmed) throw new Error('This short has already been made. Confirm to regenerate it.');
+    const source = fs.existsSync(path.join(config.capcutDraftsDir, path.basename(video))) ? path.basename(video) : draftsForVideo(video).find((d) => d !== draft) ?? '';
+    return regenerateShort(video, row.id, source);
+  }
+  requireCapCutAi(chosenAi());
+  if (getRun(video, 'edit')?.status === 'running') throw new Error('The AI is still working on this longform. Stop it first.');
+  if (hasFirstCut(draft)) {
+    if (!confirmed) throw new Error('This longform already has a first cut. Confirm to regenerate it.');
+    if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
+    forgetRun(video, 'edit');
+    const slot = trashDraft(draft);
+    const made = await createCapCutDraft(draft, 'longform');
+    if (!made.created) throw new Error(`The old CapCut project is in ${slot}, but a new one couldn't be made: ${made.message}`);
+  } else {
+    forgetRun(video, 'edit');
+  }
+  return startEdit(video);
+}
+
+export function clearPiece(video: string, piece: string) {
+  forgetRun(video, pieceJob(video, piece).job);
+}
+
+export function stopPiece(video: string, piece: string): ClaudeRun | null {
+  return stopRun(video, pieceJob(video, piece).job);
+}
+
+/** Kept for the old page's calls: a short's conversation and its metadata. */
+export function metadataRun(video: string, short: string): ClaudeRun | null {
+  shortId(short);
+  return pieceRun(video, short);
+}
+
+export function writeShortMetadata(video: string, short: string): ClaudeRun {
+  shortId(short);
+  return writePieceMetadata(video, short);
 }
 
 // A small file beside the plan, so it lives in Drive with the video. Every short's metadata links to this.
@@ -348,7 +476,13 @@ function longformUrlFile(video: string): string {
   return safeResolve('projects', path.join(video, 'Shorts', 'Longform URL.txt'));
 }
 
+/**
+ * The longform's YouTube address. The one place to set it is the longform's "YouTube upload & settings": the video
+ * linked there wins. Shorts\Longform URL.txt, from an earlier version of the page, is the fallback.
+ */
 export function readLongformUrl(video: string): string | null {
+  const linked = uploadsFor(path.posix.join(video, 'Longform')).find((j) => j.status === 'done' && j.videoId);
+  if (linked?.videoId) return `https://www.youtube.com/watch?v=${encodeURIComponent(linked.videoId)}`;
   try {
     return fs.readFileSync(longformUrlFile(video), 'utf8').trim() || null;
   } catch {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { copyText, getText, postJson, type FileRef } from './api';
+import { setLocalValue } from './youtubePackaging';
 import {
   inPlatformOrder,
   isBlankPackaging,
@@ -158,6 +159,40 @@ function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
   );
 }
 
+// Every YouTube.md shows these, so a longform and a short look the same even when one file doesn't have them yet.
+const YOUTUBE_SETTINGS = ['Video language', 'Made for kids', 'Altered content'] as const;
+
+/** The YouTube settings a YouTube.md doesn't have yet, each with a button that adds it to the file. */
+function MissingYoutubeSettings({ doc }: { doc: LoadedDoc }) {
+  const [error, setError] = useState<string | null>(null);
+  if (!doc.fields || !/(^|\/)youtube\b/i.test(doc.file.name)) return null;
+  const has = new Set(doc.fields.map((f) => f.label.toLowerCase()));
+  const missing = YOUTUBE_SETTINGS.filter((label) => !has.has(label.toLowerCase()));
+  if (missing.length === 0) return null;
+  return (
+    <>
+      {missing.map((label) => (
+        <div className="field missing-setting" key={label}>
+          <div className="field-head">
+            <strong>{label}</strong>
+            <span className="muted small-text">Not in this file yet</span>
+            <button
+              className="small"
+              onClick={() => {
+                setError(null);
+                doc.save((text) => setLocalValue(text, label, '')).catch((e: Error) => setError(e.message));
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      ))}
+      {error && <p className="error small-text">{error}</p>}
+    </>
+  );
+}
+
 /** One file's heading and its short fields (Title, Tags, Pinned Comment...). */
 export function PackagingDocShort({ doc }: { doc: LoadedDoc }) {
   const { file, text, error, fields } = doc;
@@ -173,6 +208,7 @@ export function PackagingDocShort({ doc }: { doc: LoadedDoc }) {
       {isEmpty && <p className="muted">Empty.</p>}
       <AiLineBoxes doc={doc} />
       {fields?.map((f, i) => !isWideField(f.label) && <FieldView key={i} doc={doc} index={i} field={f} />)}
+      <MissingYoutubeSettings doc={doc} />
       {text && !fields && !isEmpty && <pre className="raw">{text}</pre>}
     </div>
   );
@@ -195,21 +231,31 @@ function PackagingDocWhole({ doc }: { doc: LoadedDoc }) {
   );
 }
 
-/**
- * Full width, below the card's columns: the main file's Description, then the other platforms. Files nobody has filled
- * in share one line, so they take no room until you click one to write it.
- */
+/** Full width, below the card's columns: the main file's Description. */
 export function PackagingDocsWide({ docs }: { docs: LoadedDoc[] }) {
+  const main = docs[0];
+  if (!main?.fields?.some((f) => isWideField(f.label))) return null;
+  return (
+    <div className="piece-wide">
+      {main.fields.map((f, i) => isWideField(f.label) && <FieldView key={main.file.path + i} doc={main} index={i} field={f} />)}
+    </div>
+  );
+}
+
+/**
+ * At the very bottom of the card, below YouTube's settings: the other platforms' files. Files nobody has filled in
+ * share one line, so they take no room until you click one to write it.
+ */
+export function PackagingOtherPlatforms({ docs }: { docs: LoadedDoc[] }) {
   const [opened, setOpened] = useState<string[]>([]);
-  const [main, ...others] = docs;
+  const others = docs.slice(1);
   const isClosed = (d: LoadedDoc) => d.text !== null && isBlankPackaging(d.text) && !opened.includes(d.file.path);
   const closed = others.filter(isClosed);
   const shown = others.filter((d) => !isClosed(d) && (d.error || d.text !== null));
-  const hasDescription = main?.fields?.some((f) => isWideField(f.label));
-  if (!hasDescription && others.length === 0) return null;
+  if (others.length === 0) return null;
   return (
-    <div className="piece-wide">
-      {main?.fields?.map((f, i) => isWideField(f.label) && <FieldView key={main.file.path + i} doc={main} index={i} field={f} />)}
+    <div className="piece-wide other-platforms">
+      <h4>Other platforms</h4>
       {shown.map((d) => (
         <PackagingDocWhole key={d.file.path} doc={d} />
       ))}

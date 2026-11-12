@@ -1,5 +1,9 @@
 import { useEffect, useState, type ClipboardEvent } from 'react';
 import { AiPicker } from './AiPicker';
+import { postJson } from './api';
+
+// A page load starts with no old AI conversations (John, 2026-11-12). Done once here, not on every tab change.
+void postJson('/api/conversations/forget').catch(() => {});
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
 import { ExpressionsPage } from './ExpressionsPage';

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appDir, config } from './config';
-import { claudeArgs, firstPrompt, getRun, handoverPrompt, readEvent, sendNote, startEdit, stopRun, type ClaudeRun } from './claude';
+import { claudeArgs, firstPrompt, forgetIdleRuns, forgetRun, getRun, handoverPrompt, readEvent, sendNote, startEdit, stopRun, type ClaudeRun } from './claude';
 import { aiOverview, chooseAi, chosenAi, codexArgs, geminiArgs, geminiReader, readCodexEvent } from './ai';
 import { makeTree, removeTree } from './testing';
 
@@ -79,7 +79,7 @@ beforeEach(() => {
 
 afterEach(() => {
   stopRun(VIDEO);
-  fs.rmSync(path.join(appDir, 'data', 'claude', `${VIDEO}.json`), { force: true });
+  forgetRun(VIDEO);
   config.videoProjectsDir = saved.projects;
   config.capcutDraftsDir = saved.drafts;
   config.claudeCommand = saved.cmd;
@@ -255,8 +255,7 @@ describe('another AI taking over', () => {
   it('starts over with the job if the first turn never got going', async () => {
     startEdit(VIDEO, 'codex');
     await settle();
-    const file = path.join(appDir, 'data', 'claude', `${VIDEO}.json`);
-    fs.writeFileSync(file, JSON.stringify({ ...getRun(VIDEO), sessionId: '', status: 'failed' }));
+    Object.assign(getRun(VIDEO)!, { sessionId: '', status: 'failed' });
     sendNote(VIDEO, 'Try again', 'edit', 'codex');
     const run = await settle();
     expect(run.messages.at(-1)?.text).toMatch(/^New: .*The job, as first given.*Try again/s);
@@ -266,6 +265,28 @@ describe('another AI taking over', () => {
   it('keeps only the end of a very long conversation', () => {
     const long = { messages: [{ from: 'john', text: 'x'.repeat(50000), at: '' }] } as ClaudeRun;
     expect(handoverPrompt(long, 'note').length).toBeLessThan(13000);
+  });
+});
+
+describe('conversations live in memory only', () => {
+  it('writes no file, and forgets on Clear and on a page load', async () => {
+    startEdit(VIDEO, 'claude');
+    await settle();
+    expect(fs.existsSync(path.join(appDir, 'data', 'claude', `${VIDEO}.json`))).toBe(false);
+    expect(getRun(VIDEO)).not.toBeNull();
+    forgetRun(VIDEO);
+    expect(getRun(VIDEO)).toBeNull();
+    startEdit(VIDEO, 'claude');
+    await settle();
+    forgetIdleRuns();
+    expect(getRun(VIDEO)).toBeNull();
+  });
+
+  it("keeps a turn that's still running, and won't clear it", () => {
+    startEdit(VIDEO, 'claude');
+    expect(() => forgetRun(VIDEO)).toThrow(/still working/);
+    forgetIdleRuns();
+    expect(getRun(VIDEO)?.status).toBe('running');
   });
 });
 

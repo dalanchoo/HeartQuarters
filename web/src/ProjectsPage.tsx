@@ -11,12 +11,10 @@ import {
   type ProjectNode,
 } from './api';
 import { ManageButtons } from './ManageFolder';
-import { ClaudeEdit } from './ClaudeEdit';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
-import { PackagingDocShort, PackagingDocsWide, usePackagingDocs } from './PackagingDoc';
-import { WriteMetadata } from './ShortMetadata';
-import { LongformUrlBox } from './ShortsPlan';
+import { PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
+import { PieceAI } from './PieceAI';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
@@ -312,7 +310,7 @@ function ProjectView({
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
           <button onClick={() => openInExplorer('projects', project.path)}>Open folder</button>
-          {project.kind !== 'group' && <ManageButtons path={project.id} onDone={onManaged} />}
+          {project.kind === 'series' && <ManageButtons path={project.id} onDone={onManaged} />}
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
@@ -329,17 +327,18 @@ function ProjectView({
               .map((p) =>
                 p.kind === 'longform' ? (
                   <Section key={p.path} name="longform" title="Longform" detail={<>{pieceSummary(p)} <PieceStatus path={p.path} /></>}>
-                    <PieceCard piece={p} plain draft={segments[segments.length - 1]} longformProject={project.id} onChanged={refresh}>
-                      {hasJobs && (
-                        <>
-                          <ClaudeEdit video={project.id} />
-                          <LongformUrlBox video={project.id} />
-                        </>
-                      )}
-                    </PieceCard>
+                    <PieceCard
+                      piece={p}
+                      plain
+                      draft={segments[segments.length - 1]}
+                      video={hasJobs ? project.id : undefined}
+                      longformProject={project.id}
+                      manage={{ path: project.id, onDone: onManaged }}
+                      onChanged={refresh}
+                    />
                   </Section>
                 ) : (
-                  <PieceCard key={p.path} piece={p} startOpen draft={segments[segments.length - 1]} onChanged={refresh} />
+                  <PieceCard key={p.path} piece={p} startOpen draft={segments[segments.length - 1]} manage={{ path: project.id, onDone: onManaged }} onChanged={refresh} />
                 ),
               )}
             {project.kind !== 'short' && (
@@ -404,7 +403,7 @@ function PieceGroup({
   return (
     <Section name={title.toLowerCase()} title={title} count={pieces.length}>
       {pieces.map((p) => (
-        <PieceCard key={p.path} piece={p} video={video} onChanged={onChanged} onManaged={onManaged} />
+        <PieceCard key={p.path} piece={p} video={video} onChanged={onChanged} manage={{ path: p.path, onDone: onManaged }} />
       ))}
     </Section>
   );
@@ -558,8 +557,7 @@ function PieceCard({
   video,
   longformProject,
   onChanged,
-  onManaged,
-  children,
+  manage,
 }: {
   piece: Piece;
   startOpen?: boolean;
@@ -567,16 +565,14 @@ function PieceCard({
   plain?: boolean;
   /** Its CapCut project's name, if it isn't called the same as the piece. */
   draft?: string;
-  /** Given when the AI can write this short's metadata. */
+  /** The video's id when AI jobs can run on this piece: not for a standalone short or a reel. */
   video?: string;
   /** The long-form's project, used to find its saved YouTube link. */
   longformProject?: string;
   /** Called when something changed in the folders, such as a new packaging version. */
   onChanged?: () => void;
-  /** Shown at the top of the card when it's open. */
-  children?: ReactNode;
-  /** Given for shorts and reels inside a video, which get Rename / Delete buttons. */
-  onManaged?: (result: ManageResult) => void;
+  /** What Rename and Delete act on: the whole video for its longform or a standalone short, else the piece itself. */
+  manage?: { path: string; onDone: (result: ManageResult) => void };
 }) {
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
@@ -588,9 +584,23 @@ function PieceCard({
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
+  const reloadDocs = () => {
+    setDocsLoads((n) => n + 1);
+    onChanged?.();
+  };
+  // Every card has the same layout, top to bottom: the AI box, then the thumbnail beside YouTube's fields, the
+  // description, YouTube's upload and settings, and last the other platforms.
   const contents = (
     <>
-      {children}
+      {piece.kind !== 'reel' && (
+        <PieceAI
+          video={video}
+          piece={piece.kind === 'longform' ? 'Longform' : piece.name}
+          draft={draft ?? piece.name}
+          canEdit={piece.kind === 'longform'}
+          onFinished={reloadDocs}
+        />
+      )}
       {piece.kind !== 'reel' && <PieceStatus path={piece.path} details />}
 
       {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
@@ -621,21 +631,11 @@ function PieceCard({
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
             <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open folder</button>
             {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} folder</button>}
+            {manage && <ManageButtons path={manage.path} onDone={manage.onDone} />}
           </div>
         </div>
 
         <div className="piece-docs">
-          {onManaged && <div className="versions piece-actions"><span className="muted small-text">Short:</span><ManageButtons path={piece.path} onDone={onManaged} /></div>}
-          {video && piece.kind === 'short' && (
-            <WriteMetadata
-              video={video}
-              short={piece.name}
-              onFinished={() => {
-                setDocsLoads((n) => n + 1);
-                onChanged?.();
-              }}
-            />
-          )}
           {!version && <p className="muted">No packaging yet.</p>}
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
           {docs.slice(0, 1).map((d) => (
@@ -645,9 +645,10 @@ function PieceCard({
         </div>
       </div>
 
-      {/* The main file's Description, then the other platforms, run full width under both columns. */}
+      {/* The main file's Description runs full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={video} longformProject={longformProject} />}
+      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
+      <PackagingOtherPlatforms docs={docs} />
     </>
   );
 

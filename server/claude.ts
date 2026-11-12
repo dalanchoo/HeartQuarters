@@ -3,7 +3,8 @@
 //   "Propose shorts": follows the shorts skill's choosing steps and writes Shorts\\Shorts Plan.json (see shorts.ts).
 //   "Make this short": cuts a copy of the longform's CapCut project down to one short, turns it portrait, adds captions.
 //
-// Each video has one conversation per job (a Claude Code session id), saved in data/claude/ so it survives a restart.
+// Each video has one conversation per job (a Claude Code session id). They live only in the engine's memory, never in a
+// file (John, 2026-11-12): reloading the page clears them, and so does Clear on a card.
 // A run is one turn of that conversation: the first one starts the job, later ones send John's notes.
 // If John picks the other AI and sends a note, that AI takes over with the conversation's text (see handoverPrompt).
 import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -60,22 +61,25 @@ function keyOf(video: string, job: ClaudeJob = 'edit'): string {
   return job === 'edit' ? video : `${video}#${job}`;
 }
 
-function stateFile(key: string): string {
-  return path.join(appDir, 'data', 'claude', `${key.replace(/[\\/:*?"<>|]/g, '_')}.json`);
-}
+const runs = new Map<string, ClaudeRun>();
 
 function load(key: string): ClaudeRun | null {
-  try {
-    return JSON.parse(fs.readFileSync(stateFile(key), 'utf8')) as ClaudeRun;
-  } catch {
-    return null;
-  }
+  return runs.get(key) ?? null;
 }
 
 function save(run: ClaudeRun) {
-  const file = stateFile(keyOf(run.video, run.job));
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(run, null, 1));
+  runs.set(keyOf(run.video, run.job), run);
+}
+
+/** Clear on a card: forgets that conversation. A turn still running has to be stopped first. */
+export function forgetRun(video: string, job: ClaudeJob = 'edit') {
+  if (running.has(keyOf(video, job))) throw new Error('The AI is still working. Stop it first.');
+  runs.delete(keyOf(video, job));
+}
+
+/** When the page loads: forgets every conversation that isn't in the middle of a turn. */
+export function forgetIdleRuns() {
+  for (const key of [...runs.keys()]) if (!running.has(key)) runs.delete(key);
 }
 
 /** The video's Longform folder (checked to be inside the video projects) and its CapCut project's name. */
@@ -428,20 +432,45 @@ export function metadataPrompt(shortName: string, longformUrl: string | null): s
     "Use the short's words from its Subtitles folder or the word-by-word transcript: John may not have exported it yet, and you don't need the export.",
     longformUrl
       ? `The longform's YouTube URL is ${longformUrl}.`
-      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to paste the URL into the box on the video's page and click the button again.",
+      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to link the longform's YouTube video in its \"YouTube upload & settings\" and click the button again.",
     "Read the short's CapCut project to see which music and B-roll it really uses, and go by the episode's notes on where they came from.",
     "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
   ].join(' ');
 }
 
-/** Asks for a short's metadata in that short's conversation, or in a new one if it has none (say, after clearing old data). */
-export function askForMetadata(video: string, id: string, shortName: string, longformUrl: string | null, ai: AiId = chosenAi()): ClaudeRun {
-  const job: ClaudeJob = `short-${id}`;
-  const message = metadataPrompt(shortName, longformUrl);
+/** The message that asks for the longform's YouTube metadata. */
+export function longformMetadataPrompt(): string {
+  return [
+    `Write the YouTube metadata for this video's longform, following the longform-edit skill's packaging rules. YouTube only.`,
+    `Fill in Longform\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content.`,
+    "Use the final video's words: the transcript in Longform\\Subtitles, or the export if there isn't one.",
+    "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
+  ].join(' ');
+}
+
+/** The first message of a conversation John starts with a note of his own, about one piece of a video. */
+export function pieceNotePrompt(videoDir: string, job: ClaudeJob, draft: string, note: string): string {
+  const what =
+    job === 'edit'
+      ? `This conversation is about the longform of the video in "${videoDir}". Follow the longform-edit skill.`
+      : `This conversation is about the short "${draft}" of the video in "${videoDir}": its folder is Shorts\\${draft}. Follow the shorts-from-longform skill.`;
+  return [
+    what,
+    `Its CapCut project is "${draft}" in "${config.capcutDraftsDir}". Before changing anything, check how it's actually built, and only write to it with CapCut closed.`,
+    `John's request:\n${note}`,
+  ].join(' ');
+}
+
+/**
+ * Sends a message in a piece's conversation, the longform's ("edit") or a short's, or starts one if it has none: a
+ * short John made by hand has no conversation yet. `said` is what the page shows for John's side.
+ */
+export function askInConversation(video: string, job: ClaudeJob, draft: string, message: string, said = message, ai: AiId = chosenAi()): ClaudeRun {
   if (getRun(video, job)) return sendNote(video, message, job, ai);
   const { longform } = videoPlaces(video);
-  const run = newRun({ video, job, draft: shortName, prompt: message }, message, ai);
-  runTurn(run, message, true, path.dirname(longform));
+  if (running.has(keyOf(video, job))) throw new Error('The AI is still working. Wait for it to finish, or stop it.');
+  const run = newRun({ video, job, draft, prompt: message }, said, ai);
+  runTurn(run, message, true, job === 'edit' ? longform : path.dirname(longform));
   return run;
 }
 

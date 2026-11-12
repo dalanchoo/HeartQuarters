@@ -17,7 +17,7 @@ import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
-import { getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
+import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
 import {
   hasRetention,
   keepOldPlan,
@@ -32,6 +32,13 @@ import {
   shortsOverview,
   saveLongformUrl,
   writeShortMetadata,
+  clearPiece,
+  generatePiece,
+  notePiece,
+  pieceState,
+  pieceRun,
+  stopPiece,
+  writePieceMetadata,
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
@@ -356,6 +363,52 @@ app.post('/api/shorts/make', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+// ---- A piece's AI box: the longform's or a short's conversation (see shorts.ts) ------
+// ?video=&piece= ("Longform", or a short's folder name)
+app.get('/api/piece-ai', handle((req, res) => {
+  res.json(pieceRun(String(req.query.video ?? ''), String(req.query.piece ?? '')));
+}));
+
+// { video, piece, text }: a note, which starts a conversation if the piece has none.
+app.post('/api/piece-ai/note', handle((req, res) => {
+  res.json(notePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.text));
+}));
+
+// ?video=&piece=: whether the card's button says Generate or Regenerate, and whether it can be used.
+app.get('/api/piece-ai/state', handle((req, res) => {
+  res.json(pieceState(String(req.query.video ?? ''), String(req.query.piece ?? '')));
+}));
+
+// { video, piece, regenerate }: copying a CapCut project can take minutes, so this waits without holding up the rest.
+app.post('/api/piece-ai/generate', async (req, res) => {
+  try {
+    res.json(await generatePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.regenerate));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// { video, piece }: forgets that card's conversation.
+app.post('/api/piece-ai/clear', handle((req, res) => {
+  clearPiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''));
+  res.json({ ok: true });
+}));
+
+// The page calls this when it loads, so a reload starts with no old conversations. Turns still running carry on.
+app.post('/api/conversations/forget', handle((_req, res) => {
+  forgetIdleRuns();
+  res.json({ ok: true });
+}));
+
+// { video, piece }
+app.post('/api/piece-ai/metadata', handle((req, res) => {
+  res.json(writePieceMetadata(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
+}));
+
+app.post('/api/piece-ai/stop', handle((req, res) => {
+  res.json(stopPiece(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
+}));
 
 // { video, url }
 app.post('/api/shorts/longform-url', handle((req, res) => {
