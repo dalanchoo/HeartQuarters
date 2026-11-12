@@ -34,9 +34,9 @@ function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
-  const text = item.link === 'linked' ? 'YT linked' : item.link === 'missing' ? 'YT no link' : 'YT unknown';
+  const text = item.link === 'linked' ? 'YT Linked' : item.link === 'missing' ? 'YT No Link' : 'YT Unknown';
   const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
-  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No local cover</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check incomplete</span>}</span>;
+  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No Local Cover</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}</span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -147,8 +147,8 @@ export function ProjectsPage() {
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
-        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All videos</option><option value="missing-link">No saved YouTube link</option><option value="review">Needs review</option></select></label>
-        <p className="status-legend">YT linked / YT no link refers to saved links. YouTube checks last for this session; check again after changing Studio.</p>
+        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="missing-link">No Saved YouTube Link</option><option value="review">Needs Review</option></select></label>
+        <p className="status-legend">YT Linked / YT No Link refer to saved links. YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
