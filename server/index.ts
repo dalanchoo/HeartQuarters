@@ -9,7 +9,7 @@ import { listProjects, readProject } from './projects.js';
 import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.js';
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
-import { savePackagingText } from './metadata.js';
+import { savePackagingText, saveVersionNotes } from './metadata.js';
 import { copyPackagingVersion, renamePackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
@@ -306,6 +306,11 @@ app.post('/api/claude/stop', handle((req, res) => {
 // { path, text, was }: saves the file only if it still says "was".
 app.post('/api/packaging/save', handle((req, res) => {
   savePackagingText(String(req.body?.path ?? ''), req.body?.text, req.body?.was);
+  res.json({ ok: true });
+}));
+// { version, text, was }: saves a version's Notes.md, making it if needed.
+app.post('/api/packaging/notes', handle((req, res) => {
+  saveVersionNotes(String(req.body?.version ?? ''), req.body?.text, req.body?.was);
   res.json({ ok: true });
 }));
 app.post('/api/packaging/copy-version', (req, res) => {

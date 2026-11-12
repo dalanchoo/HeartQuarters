@@ -426,3 +426,10 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 button.danger:hover:not(:disabled) { color: #fff; background: #94221b; border-color: #94221b; }
 button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); background: #fff0ef; }
+
+/* The Notes box under a card's packaging versions. */
+.version-notes { margin-top: 0.6rem; }
+.version-notes-head { display: flex; align-items: center; gap: 0.5rem; }
+.version-notes-head h4 { margin: 0; }
+.version-notes-text { white-space: pre-wrap; margin: 0.3rem 0; }
+.version-notes textarea { width: 100%; box-sizing: border-box; margin-top: 0.3rem; }

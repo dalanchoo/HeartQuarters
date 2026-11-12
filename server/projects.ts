@@ -15,6 +15,8 @@ import { config, safeResolve } from './config.js';
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const DOC_EXTS = new Set(['.md', '.txt']);
+/** Each packaging version's notes: what it tried, where it came from. Shown in its own box, not as a platform's file. */
+export const NOTES_FILE = 'Notes.md';
 const PROJECT_RE = /^(\d+)\s*[-–]\s*(.+)$/; // "022 - Worth Telling Them" (hyphen or en-dash)
 const SERIES_RE = /^\d+[A-Z]\s*[-–]/; // "005A - Night One"
 
@@ -29,8 +31,10 @@ export interface PackagingVersion {
   /** Folder name: "Legacy", "V01", "V05_Shock", ... */
   name: string;
   path: string;
-  /** Text files anywhere in the version (e.g. YouTube.md, Metadata/YouTube v01.md). */
+  /** Text files anywhere in the version (e.g. YouTube.md, Metadata/YouTube v01.md), except its Notes.md. */
   docs: FileRef[];
+  /** John's notes about this version (Notes.md in the version folder), or null if it has none yet. */
+  notes: FileRef | null;
   /** Images anywhere in the version, except Source folders. */
   covers: FileRef[];
 }
@@ -147,10 +151,13 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
     .sort((a, b) => versionOrder(a) - versionOrder(b))
     .map((v): PackagingVersion => {
       const vDir = path.join(packagingRoot, v);
+      const docs = filesDeep(vDir, DOC_EXTS);
+      const isNotes = (f: FileRef) => f.name.toLowerCase() === NOTES_FILE.toLowerCase();
       return {
         name: v,
         path: rel(vDir),
-        docs: filesDeep(vDir, DOC_EXTS),
+        docs: docs.filter((f) => !isNotes(f)),
+        notes: docs.find(isNotes) ?? null,
         covers: filesDeep(vDir, IMAGE_EXTS),
       };
     });

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { savePackagingText } from './metadata';
+import { savePackagingText, saveVersionNotes } from './metadata';
 import { makeTree, removeTree } from './testing';
 
 const FILE = '777 - Test/Packaging/V01/YouTube.md';
@@ -25,6 +25,32 @@ beforeEach(() => {
 afterEach(() => {
   config.videoProjectsDir = saved;
   removeTree(tmp);
+});
+
+describe('saveVersionNotes', () => {
+  const NOTES = '777 - Test/Packaging/V01/Notes.md';
+
+  it("makes Notes.md when the version has none, then saves changes to it", () => {
+    saveVersionNotes('777 - Test/Packaging/V01', 'NoImages', '');
+    expect(onDisk(NOTES)).toBe('NoImages');
+    saveVersionNotes('777 - Test/Packaging/V01', 'NoImages, tried a darker look', 'NoImages');
+    expect(onDisk(NOTES)).toBe('NoImages, tried a darker look');
+  });
+
+  it('refuses if the notes changed since the page read them', () => {
+    saveVersionNotes('777 - Test/Packaging/V01', 'mine', '');
+    expect(() => saveVersionNotes('777 - Test/Packaging/V01', 'new', '')).toThrow(/changed/);
+    expect(onDisk(NOTES)).toBe('mine');
+  });
+
+  it('only writes into a version folder inside Packaging, and nowhere outside the video projects', () => {
+    expect(() => saveVersionNotes('777 - Test', 'x', '')).toThrow(/version folder/);
+    expect(() => saveVersionNotes('777 - Test/Packaging', 'x', '')).toThrow(/version folder/);
+    expect(() => saveVersionNotes('777 - Test/Packaging/V02', 'x', '')).toThrow(/version folder/);
+    expect(() => saveVersionNotes('../Outside/Packaging', 'x', '')).toThrow();
+    expect(onDisk('777 - Test/notes.md')).toBe('notes');
+    expect(fs.existsSync(path.join(tmp, 'Videos/777 - Test/Packaging/V02'))).toBe(false);
+  });
 });
 
 describe('savePackagingText', () => {

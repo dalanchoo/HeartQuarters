@@ -15,6 +15,7 @@ import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { PieceAI } from './PieceAI';
+import { VersionNotes } from './VersionNotes';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
@@ -626,6 +627,7 @@ function PieceCard({
               <ManagePackagingVersion key={`manage-${version.path}`} piece={piece} version={version} onChanged={(name) => { setVersionName(name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
             </div>
           )}
+          {version && <VersionNotes key={`notes-${version.path}`} version={version} />}
 
           <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}

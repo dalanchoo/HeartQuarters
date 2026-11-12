@@ -4,6 +4,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
 import { writeFileSafely } from './files.js';
+import { NOTES_FILE } from './projects.js';
+
+/**
+ * The Notes box of a packaging version: saves its Notes.md, making it if the version has none yet. Like the other
+ * files, it only saves if the file still says "was" ("" for a file that doesn't exist yet).
+ */
+export function saveVersionNotes(version: string, text: unknown, was: unknown) {
+  if (typeof text !== 'string' || typeof was !== 'string') throw new Error('Nothing to save.');
+  const dir = safeResolve('projects', version);
+  const parts = dir.split(path.sep);
+  // Only a version folder straight inside a Packaging folder: Packaging\V01.
+  if (parts.at(-2) !== 'Packaging' || !/^(V\d+.*|Legacy)$/i.test(parts.at(-1) ?? '') || !fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error("That isn't a packaging version folder.");
+  }
+  const file = path.join(dir, NOTES_FILE);
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') : '';
+  if (current !== was) throw new Error('These notes changed since the page loaded them, so nothing was saved. Reload the page and try again.');
+  writeFileSafely(file, text);
+}
 
 export function savePackagingText(file: string, text: unknown, was: unknown) {
   if (typeof text !== 'string' || typeof was !== 'string') throw new Error('Nothing to save.');
