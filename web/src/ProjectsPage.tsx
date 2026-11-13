@@ -465,13 +465,14 @@ function OpenInCapCut({ draft }: { draft: string }) {
         title={`Starts CapCut and copies "${draft}"`}
         onClick={() => {
           setMessage(null);
-          postJson('/api/capcut/open', { draft }).then(
-            async () => {
-              const copied = await copyText(draft);
+          postJson<{ name: string }>('/api/capcut/open', { draft }).then(
+            async ({ name }) => {
+              // The real name: CapCut may have renamed it to "003 - SDAM(1)".
+              const copied = await copyText(name);
               setMessage({
                 text: copied
-                  ? `CapCut is starting. "${draft}" is copied: paste it into the search box above its Projects list.`
-                  : `CapCut is starting. Look for "${draft}" in its Projects list.`,
+                  ? `CapCut is starting. "${name}" is copied: paste it into the search box above its Projects list.`
+                  : `CapCut is starting. Look for "${name}" in its Projects list.`,
               });
             },
             (e: Error) => setMessage({ text: e.message, failed: true }),

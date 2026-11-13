@@ -9,7 +9,9 @@ import {
   createCapCutDraft,
   createSeries,
   createVideoFolder,
+  checkDraftName,
   draftsForVideo,
+  findDraft,
   plainDraftName,
   suggestPrefix,
 } from './create';
@@ -135,6 +137,32 @@ describe('createVideoFolder', () => {
     fs.rmSync(path.join(projects(), '--- LONGFORM TEMPLATE'), { recursive: true });
     await expect(createVideoFolder('top', '', '023 - X')).rejects.toThrow(/template/);
     expect(exists('023 - X')).toBe(false);
+  });
+});
+
+describe('findDraft: CapCut renames drafts it syncs or copies, like "003 - SDAM(1)"', () => {
+  it('finds the draft with the exact name, or the same name with a number in brackets', () => {
+    expect(findDraft('022_S01 - One')).toBe('022_S01 - One');
+    expect(findDraft('022 - Worth Telling Them')).toBe('022 - Worth Telling Them(2)');
+    expect(checkDraftName('022 - Worth Telling Them')).toBe('022 - Worth Telling Them(2)');
+  });
+
+  it('prefers the exact name, then the most recently changed copy', () => {
+    fs.mkdirSync(path.join(drafts(), '022_S01 - One(3)'));
+    fs.writeFileSync(path.join(drafts(), '022_S01 - One(3)', 'draft_meta_info.json'), META);
+    expect(findDraft('022_S01 - One')).toBe('022_S01 - One');
+    fs.mkdirSync(path.join(drafts(), '022 - Worth Telling Them(1) (2)'));
+    fs.writeFileSync(path.join(drafts(), '022 - Worth Telling Them(1) (2)', 'draft_meta_info.json'), META);
+    const later = new Date(Date.now() + 60000);
+    fs.utimesSync(path.join(drafts(), '022 - Worth Telling Them(1) (2)', 'draft_meta_info.json'), later, later);
+    expect(findDraft('022 - Worth Telling Them')).toBe('022 - Worth Telling Them(1) (2)');
+  });
+
+  it('finds nothing for a different name, a folder that is not a draft, or a template', () => {
+    expect(findDraft('022 - Worth Telling')).toBeNull();
+    expect(findDraft('Not A Draft')).toBeNull();
+    expect(findDraft('--- SHORTS TEMPLATE(1)')).toBeNull();
+    expect(() => checkDraftName('023 - Missing')).toThrow(/no CapCut draft/);
   });
 });
 

@@ -232,11 +232,24 @@ export function listDrafts(): string[] {
     .map((x) => x.d);
 }
 
-/** A draft name must be one existing draft, nothing else. */
+/** A draft name must be one existing draft, nothing else. Returns its real name, which may end in "(1)" (see findDraft). */
 export function checkDraftName(name: string): string {
   const n = checkFolderName(name);
-  if (!isDraft(path.join(config.capcutDraftsDir, n))) throw new Error(`There's no CapCut draft called "${n}".`);
-  return n;
+  const found = findDraft(n);
+  if (!found) throw new Error(`There's no CapCut draft called "${n}".`);
+  return found;
+}
+
+/**
+ * The real folder of a CapCut draft. CapCut renames drafts it syncs or copies to "003 - SDAM(1)", "(2) (2)" and so on,
+ * so the draft for "003 - SDAM" may have any of those endings. The exact name wins; otherwise the most recently
+ * changed draft with the same plain name. Null if there's none. Never the templates.
+ */
+export function findDraft(name: string): string | null {
+  if (!name) return null;
+  if (isDraft(path.join(config.capcutDraftsDir, name))) return name;
+  const plain = plainDraftName(name).toLowerCase();
+  return listDrafts().find((d) => !d.startsWith('---') && plainDraftName(d).toLowerCase() === plain) ?? null;
 }
 
 /**

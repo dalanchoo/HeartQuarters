@@ -8,7 +8,7 @@ import { config, safeResolve } from './config.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
 import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
 import { uploadsFor } from './youtube.js';
-import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, numberOf } from './create.js';
+import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, findDraft, numberOf } from './create.js';
 import { writeFileSafely } from './files.js';
 import { deleteFolder, system, trashDraft } from './manage.js';
 
@@ -308,10 +308,11 @@ export async function regenerateShort(video: string, id: string, sourceDraft: st
   if (source === old) throw new Error("A short can't be remade from its own CapCut project. Choose the longform's.");
   if (!fs.existsSync(path.join(config.capcutDraftsDir, source))) throw new Error(`There's no CapCut draft called "${source}".`);
 
-  const draftDir = path.join(config.capcutDraftsDir, old);
+  const oldDraft = findDraft(old) ?? old;
+  const draftDir = path.join(config.capcutDraftsDir, oldDraft);
   const hadDraft = fs.existsSync(draftDir);
   if (fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', old)))) {
-    deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [old] : []);
+    deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [oldDraft] : []);
   }
   if (fs.existsSync(draftDir)) {
     throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Make This Short.`);
@@ -343,7 +344,7 @@ export function pieceJob(video: string, piece: string): PieceJob {
   if (!video) throw new Error('No video given.');
   if (piece === 'Longform') {
     if (!fs.existsSync(safeResolve('projects', path.join(video, 'Longform')))) throw new Error(`"${video}" has no Longform folder.`);
-    return { job: 'edit', draft: path.basename(video) };
+    return { job: 'edit', draft: findDraft(path.basename(video)) ?? path.basename(video) };
   }
   const id = shortId(piece);
   if (!fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', piece)))) {
@@ -433,7 +434,7 @@ export async function generatePiece(video: string, piece: string, regenerate: un
     const row = plannedRowFor(video, piece);
     if (!row) throw new Error(pieceState(video, piece).reason);
     if (!confirmed) throw new Error('This short has already been made. Confirm to regenerate it.');
-    const source = fs.existsSync(path.join(config.capcutDraftsDir, path.basename(video))) ? path.basename(video) : draftsForVideo(video).find((d) => d !== draft) ?? '';
+    const source = findDraft(path.basename(video)) ?? draftsForVideo(video).find((d) => d !== draft) ?? '';
     return regenerateShort(video, row.id, source);
   }
   requireCapCutAi(chosenAi());

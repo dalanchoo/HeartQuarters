@@ -25,6 +25,7 @@ import {
   type AiId,
 } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
+import { findDraft } from './create.js';
 
 export interface ClaudeMessage {
   /** "claude" is whichever AI said it. "app" is HeartQuarters noting something, such as a change of AI. */
@@ -87,7 +88,7 @@ function videoPlaces(video: string): { longform: string; draft: string } {
   if (!video) throw new Error('No video given.');
   const longform = safeResolve('projects', path.join(video, 'Longform'));
   if (!fs.existsSync(longform)) throw new Error(`"${video}" has no Longform folder.`);
-  return { longform, draft: path.basename(video) };
+  return { longform, draft: findDraft(path.basename(video)) ?? path.basename(video) };
 }
 
 /** The first message of a video's conversation. */
