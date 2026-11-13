@@ -6,15 +6,16 @@ import { formatSize, getJson, postJson, type ManageInfo, type ManageResult } fro
 
 type Mode = 'rename' | 'delete';
 
-export function ManageButtons({ path, onDone }: { path: string; onDone: (r: ManageResult) => void }) {
+/** what: what the buttons act on, for their labels: the whole video, a short, or a series. */
+export function ManageButtons({ path, onDone, what = 'Video' }: { path: string; onDone: (r: ManageResult) => void; what?: 'Video' | 'Short' | 'Series' }) {
   const [mode, setMode] = useState<Mode | null>(null);
   return (
     <>
       <button className="small" onClick={() => setMode('rename')}>
-        Rename
+        Rename {what}
       </button>
       <button className="small danger-outline" onClick={() => setMode('delete')}>
-        Delete
+        Delete {what}
       </button>
       {mode && <ManageDialog mode={mode} path={path} onDone={onDone} onClose={() => setMode(null)} />}
     </>

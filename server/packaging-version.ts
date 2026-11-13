@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
-import { checkFolderName } from './create.js';
 
 export function versionFolder(piece: string, source: string): string {
   if (!piece || !source) throw new Error('Choose a packaging version.');
@@ -11,17 +10,6 @@ export function versionFolder(piece: string, source: string): string {
   const stat = fs.lstatSync(from);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('The version must be a real folder.');
   return from;
-}
-
-/** Rename only a version folder, never an existing destination. */
-export function renamePackagingVersion(piece: string, source: string, requestedName: unknown): { name: string } {
-  const from = versionFolder(piece, source);
-  const name = checkFolderName(requestedName);
-  if (!/^(?:V\d+(?:[ _-].*)?|Legacy)$/i.test(name)) throw new Error('Use Legacy or a version name such as V02 - Alternative.');
-  if (fs.readdirSync(path.dirname(from)).some((entry) => entry.toLowerCase() === name.toLowerCase())) throw new Error('A version with that name already exists.');
-  const to = safeResolve('projects', path.join(piece, 'Packaging', name));
-  fs.renameSync(from, to);
-  return { name };
 }
 
 /** Move a version to a unique recoverable folder in HeartQuarters Trash. */
@@ -34,11 +22,17 @@ export function trashPackagingVersion(piece: string, source: string): { trashPat
   return { trashPath: to };
 }
 
-/** Create an independent copy of one packaging version; never replace an existing file. */
-export async function copyPackagingVersion(piece: string, source: string, requestedName: unknown): Promise<{ name: string; path: string }> {
+/** The next version's name: one more than the highest V number there, V01 if there's none. Never a name with words. */
+export function nextVersionName(piece: string): string {
+  const parent = safeResolve('projects', path.join(piece, 'Packaging'));
+  const numbers = fs.existsSync(parent) ? fs.readdirSync(parent).map((d) => Number(/^V(\d+)$/i.exec(d)?.[1] ?? 0)) : [];
+  return `V${String(Math.max(0, ...numbers) + 1).padStart(2, '0')}`;
+}
+
+/** Create an independent copy of one packaging version, as the next version (V01, V02...); never replace a file. */
+export async function copyPackagingVersion(piece: string, source: string): Promise<{ name: string; path: string }> {
   if (!piece || !source) throw new Error('Choose a packaging version to copy.');
-  const name = checkFolderName(requestedName);
-  if (!/^V\d+(?:[ _-].*)?$/i.test(name)) throw new Error('Use a version name such as V02 or V02 - Alternative.');
+  const name = nextVersionName(piece);
   const parent = safeResolve('projects', path.join(piece, 'Packaging'));
   const from = safeResolve('projects', source);
   if (path.dirname(from).toLowerCase() !== parent.toLowerCase() || !/^(?:V\d+|Legacy)/i.test(path.basename(from))) throw new Error('Choose a version in this video’s Packaging folder.');

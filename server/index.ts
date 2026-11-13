@@ -10,7 +10,7 @@ import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.j
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText, saveVersionNotes } from './metadata.js';
-import { copyPackagingVersion, renamePackagingVersion, trashPackagingVersion } from './packaging-version.js';
+import { copyPackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
@@ -121,7 +121,6 @@ app.get('/api/projects', handle((_req, res) => {
   res.json(listProjects());
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
-app.post('/api/packaging/rename-version', handle((req, res) => { res.json(renamePackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name)); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
 
@@ -318,7 +317,7 @@ app.post('/api/packaging/notes', handle((req, res) => {
   res.json({ ok: true });
 }));
 app.post('/api/packaging/copy-version', (req, res) => {
-  copyPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name).then(
+  copyPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? '')).then(
     (result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
   );
 });

@@ -37,7 +37,7 @@ function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: Youtube
   if (!item) return null;
   const text = item.link === 'linked' ? 'YT Linked' : item.link === 'missing' ? 'YT No Link' : 'YT Unknown';
   const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
-  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="No thumbnail was found in the latest local packaging version">No Local Cover</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}</span>;
+  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="The newest packaging version has no Thumbnail\Thumbnail.png or .jpg">No Local Thumbnail</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}</span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -320,8 +320,8 @@ function ProjectView({
           {(project.kind === 'project' || project.kind === 'part') && (
             <NewFolderButton kind="short" parent={project.id} onCreated={onCreated} />
           )}
-          <button onClick={() => openInExplorer('projects', project.path)}>Open Folder</button>
-          {project.kind === 'series' && <ManageButtons path={project.id} onDone={onManaged} />}
+          <button onClick={() => openInExplorer('projects', project.path)}>Open {project.kind === 'series' ? 'Series' : 'Video'} Folder</button>
+          {project.kind === 'series' && <ManageButtons what="Series" path={project.id} onDone={onManaged} />}
         </div>
       </div>
       {kindLabel && <p className="muted">{kindLabel}</p>}
@@ -426,35 +426,27 @@ function versionLabel(name: string): string {
   return rest.length ? `${num} · ${rest.join(' ')}` : num;
 }
 
+// Versions are always V01, V02...: a new one takes the next number, and none is ever renamed.
 function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; source: { name: string; path: string }; onCreated: (name: string) => void }) {
-  const next = Math.max(0, ...piece.versions.map((v) => Number(/^V(\d+)/i.exec(v.name)?.[1] ?? 0))) + 1;
-  const [name, setName] = useState(`V${String(next).padStart(2, '0')}`);
+  const next = `V${String(Math.max(0, ...piece.versions.map((v) => Number(/^V(\d+)/i.exec(v.name)?.[1] ?? 0))) + 1).padStart(2, '0')}`;
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <details className="new-version"><summary>+ New Version</summary>
-    <p className="muted small-text">Copy all files and subfolders from {source.name} into a new version. Existing versions stay untouched.</p>
-    <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
-    <button disabled={busy || !name.trim()} onClick={async () => { setBusy(true); setError(''); try {
-      const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path, name }); onCreated(result.name);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : 'Create Version'}</button>
+  return <>
+    <button className="small" disabled={busy} title={`Copies everything in ${source.name} into a new version, ${next}`} onClick={async () => { setBusy(true); setError(''); try {
+      const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path }); onCreated(result.name);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : '+ New Version'}</button>
     {error && <p className="error">{error}</p>}
-  </details>;
+  </>;
 }
 
-function ManagePackagingVersion({ piece, version, onChanged }: { piece: Piece; version: { name: string; path: string }; onChanged: (name?: string) => void }) {
-  const [name, setName] = useState(version.name); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <details className="new-version"><summary>Manage Version</summary>
-    <p className="muted small-text">These actions affect only packaging version {version.name}, not the video or Short.</p>
-    <label>Version name <input value={name} onChange={(e) => setName(e.target.value)} /></label>{' '}
-    <button disabled={busy || !name.trim() || name === version.name} onClick={async () => {
-      if (!window.confirm(`Rename packaging version ${version.name} to ${name}?`)) return;
-      setBusy(true); setError(''); try { const result = await postJson<{ name: string }>('/api/packaging/rename-version', { piece: piece.path, source: version.path, name }); onChanged(result.name); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>Rename Version</button>{' '}
-    <button className="danger-outline" disabled={busy} onClick={async () => {
-      if (!window.confirm(`Move packaging version ${version.name} and all its files to HeartQuarters Trash? The video and other versions will remain.`)) return;
+function DeletePackagingVersion({ piece, version, onChanged }: { piece: Piece; version: { name: string; path: string }; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  return <>
+    <button className="small danger-outline" disabled={busy} onClick={async () => {
+      if (!window.confirm(`Delete packaging version ${version.name}? It moves to HeartQuarters Trash with all its files. The video and the other versions stay.`)) return;
       setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }}>Delete Version</button>
     {error && <p className="error">{error}</p>}
-  </details>;
+  </>;
 }
 
 function ThumbnailPlanning({ doc }: { doc: import('./PackagingDoc').LoadedDoc }) {
@@ -635,16 +627,16 @@ function PieceCard({
                 </button>
               ))}
               <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); onChanged?.(); }} />
-              <ManagePackagingVersion key={`manage-${version.path}`} piece={piece} version={version} onChanged={(name) => { setVersionName(name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+              <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+              <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
             </div>
           )}
           {version && <VersionNotes key={`notes-${version.path}`} version={version} />}
 
           <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open Folder</button>
-            {version && <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>}
-            {manage && <ManageButtons path={manage.path} onDone={manage.onDone} />}
+            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open {piece.kind === 'short' ? 'Short' : 'Video'} Folder</button>
+            {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
           </div>
         </div>
 
