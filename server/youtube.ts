@@ -7,9 +7,10 @@ import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
-import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings } from './youtube-video.js';
+import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings, readYoutubeVideos } from './youtube-video.js';
 import { fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
+import { youtubeFetch } from './youtube-quota.js';
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
@@ -54,7 +55,7 @@ export function validateUpload(input: UploadInput) {
 async function responseError(res: Response) { const s = await res.text(); try { const j = JSON.parse(s) as { error?: { message?: string } }; return j.error?.message ?? `YouTube returned ${res.status}`; } catch { return `YouTube returned ${res.status}`; } }
 export async function youtubeChannel() {
   const token = await youtubeAccessToken();
-  const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${token}` } });
+  const res = await youtubeFetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await responseError(res));
   const data = await res.json() as { items?: { id: string; snippet: { title: string } }[] };
   if (data.items?.length !== 1) throw new Error('Google did not return one YouTube channel. Check which channel you selected when signing in.');
@@ -72,13 +73,14 @@ export function startUpload(input: UploadInput): UploadJob {
 }
 export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
 
-/** Read-only review: a caption permission failure is reported as unknown. */
-export async function checkYoutubeDetails(value: unknown) {
-  const id = youtubeVideoId(value); const token = await youtubeAccessToken();
-  const { settings } = await readYoutubeVideo(token, id);
-  let captions: Awaited<ReturnType<typeof youtubeCaptionTracks>> | null = null;
-  try { captions = await youtubeCaptionTracks(token, id); } catch { /* Do not mistake a permissions error for no captions. */ }
-  return { video: settings, captions };
+/**
+ * Read-only review of many videos (up to 50) in one YouTube request. Captions aren't read here: YouTube charges 50 units
+ * per video for them, so they're checked only on one video's card, in its YouTube Upload & Settings.
+ */
+export async function checkYoutubeVideos(value: unknown) {
+  const ids = String(value ?? '').split(',').filter(Boolean).map(youtubeVideoId);
+  if (!ids.length || ids.length > 50) throw new Error('Check between 1 and 50 videos at a time.');
+  return { videos: await readYoutubeVideos(await youtubeAccessToken(), ids) };
 }
 
 /** Link a video the owner identifies, after verifying it belongs to the connected channel. */
@@ -148,7 +150,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   if (coverPath) {
     try {
       if (isShortPiece(piece) && await youtubeProcessingStatus(token, job.videoId!) !== 'succeeded') throw new Error('YouTube is still processing this Short. Choose the thumbnail again after processing finishes.');
-      const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId!)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(coverPath)) });
+      const response = await youtubeFetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId!)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(coverPath)) });
       if (!response.ok) throw new Error(await responseError(response));
     } catch (e) { errors.push(`Thumbnail: ${e instanceof Error ? e.message : String(e)}`); }
   }
@@ -245,7 +247,7 @@ export function acknowledgeUpload(piece: string, id: string) {
 async function upload(job: UploadJob, input: UploadInput, files: { video: string; cover: string; size: number }) {
   let token: string;
   try { token = await youtubeAccessToken(); } catch (e) { job.status = 'failed'; job.error = e instanceof Error ? e.message : String(e); record(job); return; }
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+  const init = await youtubeFetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Length': String(files.size), 'X-Upload-Content-Type': 'application/octet-stream' },
     body: JSON.stringify({ snippet: { title: input.title.trim(), description: input.description, tags: input.tags, categoryId: '22', defaultAudioLanguage: videoLanguage(input.language), defaultLanguage: videoLanguage(input.language) }, status: { privacyStatus: input.privacy, selfDeclaredMadeForKids: input.madeForKids, containsSyntheticMedia: input.synthetic } }),
   });
@@ -258,7 +260,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
       const n = Math.min(chunk.length, files.size - job.sent);
       const { bytesRead } = await handle.read(chunk, 0, n, job.sent);
       if (bytesRead !== n) throw new Error('The export changed or could not be read during upload.');
-      const res = await fetch(url, { method: 'PUT', headers: { 'Content-Length': String(n), 'Content-Range': `bytes ${job.sent}-${job.sent + n - 1}/${files.size}` }, body: new Uint8Array(chunk.buffer, chunk.byteOffset, n) });
+      const res = await youtubeFetch(url, { method: 'PUT', headers: { 'Content-Length': String(n), 'Content-Range': `bytes ${job.sent}-${job.sent + n - 1}/${files.size}` }, body: new Uint8Array(chunk.buffer, chunk.byteOffset, n) });
       if (res.status === 308) { const range = /^bytes=0-(\d+)$/.exec(res.headers.get('range') ?? ''); if (!range || Number(range[1]) + 1 !== job.sent + n) throw new Error('YouTube reported an unexpected upload position.'); job.sent += n; }
       else if (res.ok) { const result = await res.json() as { id?: string }; if (!result.id) throw new Error('YouTube did not return a video ID.'); job.videoId = result.id; job.sent = files.size; record(job); }
       else throw new Error(await responseError(res));
@@ -276,7 +278,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
         await waitForShortProcessing(() => youtubeProcessingStatus(token, job.videoId!), () => new Promise((resolve) => setTimeout(resolve, 5000)));
         delete job.phase; record(job);
       }
-      const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
+      const res = await youtubeFetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
       if (!res.ok) throw new Error(await responseError(res));
     } catch (e) { delete job.phase; job.warning = `The video uploaded, but its thumbnail did not: ${e instanceof Error ? e.message : String(e)}. Try the thumbnail again after processing or set it in YouTube Studio.`; }
   }

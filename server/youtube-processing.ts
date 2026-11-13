@@ -1,3 +1,4 @@
+import { youtubeFetch } from './youtube-quota.js';
 /** The two supported Short layouts: a video's Shorts folder and the standalone Shorts group. */
 export function isShortPiece(piece: string): boolean {
   const parts = piece.replace(/\\/g, '/').split('/').map((part) => part.toLowerCase());
@@ -5,7 +6,7 @@ export function isShortPiece(piece: string): boolean {
 }
 
 export async function youtubeProcessingStatus(token: string, id: string): Promise<string> {
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=processingDetails&id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await youtubeFetch(`https://www.googleapis.com/youtube/v3/videos?part=processingDetails&id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Could not check YouTube processing (${res.status}).`);
   const body = await res.json() as { items?: { processingDetails?: { processingStatus?: string } }[] };
   const status = body.items?.[0]?.processingDetails?.processingStatus;

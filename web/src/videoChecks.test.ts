@@ -7,6 +7,9 @@ describe('YouTube checks', () => {
     const result = checkYoutubeVideo({ ...video, description: '', tags: [], customThumbnail: false }, [{ kind: 'ASR' }], false);
     expect(result.issues).toEqual(['description is empty', 'no tags', 'no custom thumbnail', 'only automatic captions', 'chapters may be missing']);
   });
+  it('says nothing about captions when they were not checked', () => {
+    expect(checkYoutubeVideo(video, undefined, false)).toEqual({ issues: [], unknown: [] });
+  });
   it('does not guess unknown captions or thumbnails, or require chapters for Shorts', () => {
     const result = checkYoutubeVideo({ ...video, description: 'hello', customThumbnail: null }, null, true);
     expect(result.issues).toEqual([]); expect(result.unknown).toEqual(['custom thumbnail', 'captions']);

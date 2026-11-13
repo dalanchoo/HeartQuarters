@@ -42,10 +42,11 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeDetails, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
+import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
+import { youtubeQuota } from './youtube-quota.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -56,6 +57,8 @@ app.use(express.json());
 // YouTube sign-in and uploads. The callback is a Google browser redirect; its
 // one-use state and PKCE verifier are checked before accepting the response.
 app.get('/api/youtube/status', handle((_req, res) => { res.json(youtubeStatus()); }));
+// How much of today's YouTube quota HeartQuarters has used (it counts its own requests).
+app.get('/api/youtube/quota', handle((_req, res) => { res.json(youtubeQuota()); }));
 app.post('/api/youtube/configure', handle((req, res) => { configureYoutube(req.body?.clientId, req.body?.clientSecret); res.json({ ok: true }); }));
 app.post('/api/youtube/disconnect', handle((_req, res) => { disconnectYoutube(); res.json({ ok: true }); }));
 app.post('/api/youtube/connect', handle((req, res) => {
@@ -70,7 +73,8 @@ app.get('/api/youtube/callback', (req, res) => {
   );
 });
 app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.get('/api/youtube/check-video', (req, res) => { checkYoutubeDetails(req.query.id).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+// ?ids=a,b,c (up to 50): video details for the review tags, without captions.
+app.get('/api/youtube/check-videos', (req, res) => { checkYoutubeVideos(req.query.ids).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });

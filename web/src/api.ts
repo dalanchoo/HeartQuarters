@@ -24,8 +24,14 @@ export type {
 } from '../../server/expressions';
 export type { RootId };
 
+/** After any request that may have spent YouTube quota, the quota meter re-reads the count (see youtubeQuota.tsx). */
+function afterYoutube(url: string) {
+  if (url.startsWith('/api/youtube/') && !url.startsWith('/api/youtube/quota')) window.dispatchEvent(new Event('hq-youtube-used'));
+}
+
 export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
+  afterYoutube(url);
   const body = await res.json();
   if (!res.ok) throw new Error(body.error ?? res.statusText);
   return body as T;
@@ -38,6 +44,7 @@ export async function postJson<T>(url: string, data: unknown = {}): Promise<T> {
     headers: { 'Content-Type': 'application/json', 'X-HeartQuarters': '1' },
     body: JSON.stringify(data),
   });
+  afterYoutube(url);
   const body = await res.json();
   if (!res.ok) throw new Error(body.error ?? res.statusText);
   return body as T;

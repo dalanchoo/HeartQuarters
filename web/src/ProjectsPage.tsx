@@ -15,6 +15,7 @@ import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { PieceAI } from './PieceAI';
+import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
@@ -76,6 +77,7 @@ export function ProjectsPage() {
   const [focus, setFocus] = useState<string | null>(shortFocus);
   const [scan, setScan] = useState(''); const [scanning, setScanning] = useState(false);
   const scanEpoch = useRef(0);
+  const quota = useYoutubeQuota();
 
   useEffect(() => {
     getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
@@ -100,22 +102,28 @@ export function ProjectsPage() {
     const candidates = overview.filter((item) => item.videoId);
     const ambiguous = overview.filter((item) => item.link === 'linked' && !item.videoId).length;
     if (!candidates.length) { setScan('No uniquely linked videos are available to check.'); return; }
-    if (!window.confirm(`Check ${candidates.length} linked video${candidates.length === 1 ? '' : 's'} on YouTube? This reads each video and its captions and uses YouTube API quota.`)) return;
-    const epoch = ++scanEpoch.current; let index = 0; let done = 0; let failures = 0;
+    // Title, description, tags, thumbnail and chapters, 50 videos to a YouTube request (about 1 unit each). Captions
+    // cost 50 units per video, so they're checked on one video's card instead.
+    const epoch = ++scanEpoch.current; let done = 0; let missing = 0; let stopped = '';
     setScanning(true); setScan(`Checking 0 of ${candidates.length}…`);
-    const worker = async () => {
-      while (index < candidates.length && epoch === scanEpoch.current) {
-        const item = candidates[index++];
-        try {
-          const result = await getJson<{ video: YoutubeVideoSettings; captions: { kind: string }[] | null }>(`/api/youtube/check-video?id=${encodeURIComponent(item.videoId!)}`);
-          if (epoch === scanEpoch.current) setChecks((old) => ({ ...old, [item.path]: checkYoutubeVideo(result.video, result.captions, item.kind === 'short') }));
-        } catch { failures++; if (epoch === scanEpoch.current) setChecks((old) => ({ ...old, [item.path]: { issues: [], unknown: ['YouTube check failed'] } })); }
-        done++; if (epoch === scanEpoch.current) setScan(`Checking ${done} of ${candidates.length}…`);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(3, candidates.length) }, () => worker()));
+    for (let i = 0; i < candidates.length && epoch === scanEpoch.current; i += 50) {
+      const batch = candidates.slice(i, i + 50);
+      try {
+        const { videos } = await getJson<{ videos: Record<string, YoutubeVideoSettings> }>(`/api/youtube/check-videos?ids=${batch.map((item) => encodeURIComponent(item.videoId!)).join(',')}`);
+        if (epoch !== scanEpoch.current) break;
+        const found = batch.filter((item) => videos[item.videoId!]);
+        missing += batch.length - found.length;
+        setChecks((old) => ({
+          ...old,
+          ...Object.fromEntries(batch.map((item) => [item.path, videos[item.videoId!] ? checkYoutubeVideo(videos[item.videoId!], undefined, item.kind === 'short') : { issues: [], unknown: ['YouTube did not return this video'] }])),
+        }));
+        done += batch.length; setScan(`Checking ${done} of ${candidates.length}…`);
+      } catch (e) { stopped = e instanceof Error ? e.message : String(e); break; }
+    }
     setScanning(false);
-    setScan(epoch !== scanEpoch.current ? 'Check stopped because a video link changed. Run it again to update the list.' : `Checked ${done} video${done === 1 ? '' : 's'}.${failures ? ` ${failures} could not be checked.` : ''}${ambiguous ? ` ${ambiguous} with multiple saved links need to be checked individually.` : ''}`);
+    setScan(epoch !== scanEpoch.current ? 'Check stopped because a video link changed. Run it again to update the list.'
+      : stopped ? `Checked ${done} of ${candidates.length}, then stopped: ${stopped}`
+      : `Checked ${done} video${done === 1 ? '' : 's'}, without captions (open a video's YouTube Upload & Settings to see its captions).${missing ? ` YouTube did not return ${missing}.` : ''}${ambiguous ? ` ${ambiguous} with multiple saved links need to be checked individually.` : ''}`);
   }
 
   function afterChange(showId: string, newNote: Note) {
@@ -149,7 +157,9 @@ export function ProjectsPage() {
         </div>
         <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="missing-link">No Saved YouTube Link</option><option value="review">Needs Review</option></select></label>
         <p className="status-legend">YT Linked / YT No Link refer to saved links. YouTube checks last for this session; check again after changing Studio.</p>
-        <button className="small" disabled={scanning || !overview.length} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
+        <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
+        <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
+        <QuotaMeter />
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
         {error && <p className="error">{error}</p>}
@@ -582,7 +592,7 @@ function PieceCard({
   const [docsLoads, setDocsLoads] = useState(0);
   const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const [open, setOpen] = useState(startOpen);
-  const { focus } = useContext(StatusContext);
+  const { focus, items } = useContext(StatusContext);
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
@@ -650,7 +660,7 @@ function PieceCard({
 
       {/* The main file's Description runs full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-      {piece.kind !== 'reel' && <YouTubeUpload piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
+      {piece.kind !== 'reel' && <YouTubeUpload linked={items.find((item) => item.path === piece.path)?.link === 'linked'} piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );

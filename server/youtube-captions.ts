@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { safeResolve } from './config.js';
 import { youtubeCaptionTracks } from './youtube-video.js';
+import { youtubeFetch } from './youtube-quota.js';
 
 const MAX_SIZE = 10 * 1024 * 1024;
 const EXT = /\.(vtt|srt|sbv)$/i;
@@ -31,7 +32,7 @@ export async function uploadSubtitle(token: string, videoId: string, bytes: Buff
   const boundary = `hq-${randomUUID()}`;
   const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId, language, name: 'HeartQuarters subtitles' } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
   const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const response = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', {
+  const response = await youtubeFetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body: new Uint8Array(Buffer.concat([head, bytes, tail])),
   });
   if (!response.ok) {
@@ -49,7 +50,7 @@ async function replaceSubtitle(token: string, captionId: string, bytes: Buffer):
   const boundary = `hq-${randomUUID()}`;
   const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ id: captionId, snippet: { isDraft: false } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
   const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const response = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', {
+  const response = await youtubeFetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', {
     method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body: new Uint8Array(Buffer.concat([head, bytes, tail])),
   });
   if (!response.ok) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { copyText, fileUrl, getJson, getText, postJson, type Piece } from './api';
 import type { LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
@@ -11,15 +11,20 @@ import { alteredContentValue, comparisonState, localBoolean, localValue, setLoca
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo } from './videoChecks';
+import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 
 type FileChoice = { path: string; name: string };
 type Status = { configured: boolean; connected: boolean; captionAccess: boolean };
 type Existing = { video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; captions: { language: string; name: string; status: string; kind: string }[] | null; captionError: string | null };
 
-export function YouTubeUpload({ piece, docs, covers, version, onChanged, longform, longformProject }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; version?: string; onChanged?: () => void; longform?: string; longformProject?: string }) {
+export function YouTubeUpload({ piece, docs, covers, version, onChanged, longform, longformProject, linked }: { piece: Piece; docs: LoadedDoc[]; covers: FileChoice[]; version?: string; onChanged?: () => void; longform?: string; longformProject?: string; linked?: boolean }) {
   const doc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const [open, setOpen] = useState(() => uploadPanelOpen(localStorage, piece.path));
-  return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube Upload & Settings</summary>
+  const quota = useYoutubeQuota();
+  // Opening a linked video reads it with its playlists and captions, plus the channel's name; otherwise the channel
+  // and the playlists for a new upload.
+  const openCost = linked ? readVideoCost(quota) + 1 : 2;
+  return <details className="youtube-upload" open={open} onToggle={(e) => { const next = e.currentTarget.open; setOpen(next); rememberUploadPanel(localStorage, piece.path, next); }}><summary>YouTube Upload & Settings <span className="muted small-text">· opening uses {units(openCost)} of YouTube quota</span></summary>
     {open && <YouTubePanel key={doc?.file.path ?? piece.path} piece={piece} doc={doc} covers={covers} version={version} onChanged={onChanged} longform={longform} longformProject={longformProject} />}</details>;
 }
 
@@ -31,6 +36,8 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
   const [clientId, setClientId] = useState(''); const [secret, setSecret] = useState('');
   const [existingUrl, setExistingUrl] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  // Reload from YouTube, at the top of the section: the channel, and whichever form is showing, read again.
+  const [reloads, setReloads] = useState(0);
   const refreshStatus = async () => setStatus(await getJson<Status>('/api/youtube/status'));
   const refreshJobs = async () => { const items = await getJson<UploadJob[]>(`/api/youtube/uploads?piece=${encodeURIComponent(piece.path)}`); setJobs(items); return items; };
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
@@ -56,13 +63,19 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
     void start().catch((e) => { if (!stale) setError(e.message); });
     return () => { stale = true; };
   }, [piece.path, longformProject]);
-  useEffect(() => { if (!status?.connected) { setChannel(''); return; } getJson<{ title: string }>('/api/youtube/channel').then((c) => setChannel(c.title), (e) => setError(e.message)); }, [status?.connected]);
+  useEffect(() => { if (!status?.connected) { setChannel(''); return; } getJson<{ title: string }>('/api/youtube/channel').then((c) => setChannel(c.title), (e) => { setChannel('(not available right now)'); setError(e.message); }); }, [status?.connected, reloads]);
   useEffect(() => { if (!jobs?.some((j) => j.status === 'uploading')) return; const timer = setInterval(() => { void refreshJobs().catch((e) => setError(e.message)); }, 1500); return () => clearInterval(timer); }, [jobs]);
   const job = jobs?.find((j) => j.id === mode);
   const completed = jobs?.filter((j) => j.status === 'done' && j.videoId) ?? [];
   useEffect(() => { if (job?.status === 'done') window.dispatchEvent(new CustomEvent('hq-video-status-changed')); }, [job?.status, job?.videoId]);
   useEffect(() => { setExistingUrl(job?.videoId ? youtubeVideoUrl(job.videoId, piece.kind === 'short') : ''); }, [job?.id, job?.videoId, piece.kind]);
+  const quota = useYoutubeQuota(); const out = quotaUsedUp(quota);
+  const shownError = out && isQuotaError(error) ? '' : plainYoutubeError(error, quota);
+  const reloadCost = job?.status === 'done' ? readVideoCost(quota) + 1 : 2;
   return <div className="youtube-form"><h4>YouTube</h4>
+    <div className="yt-topbar"><button className="small" disabled={busy || out || !status?.connected} onClick={() => { setError(''); setReloads((n) => n + 1); }}>Reload from YouTube</button> <span className="muted small-text">{units(reloadCost)}</span></div>
+    {out && <p className="error">{quotaMessage(quota)}</p>}
+    {shownError && <p className="error">{shownError}</p>}
     {(!status || !jobs || (status.connected && mode === null)) && !error && <YouTubeLoading />}
     {status && !status.connected && <>
       <p>Connect your YouTube channel. Credentials are kept in Windows Credential Manager.</p>
@@ -75,22 +88,21 @@ function YouTubePanel({ piece, doc, covers, version, onChanged, longform, longfo
       {!status.captionAccess && <p>To save playlists and subtitles, reconnect and grant Google’s additional permission. It also allows editing and deleting YouTube content.{' '}<button disabled={busy} onClick={() => void action(async () => { setConnectUrl((await postJson<{ url: string }>('/api/youtube/connect')).url); })}>Reconnect</button>{' '}{connectUrl && <a href={connectUrl} target="_blank" rel="noreferrer">Open Google sign-in ↗</a>}{' '}<button onClick={() => void action(refreshStatus)}>I’ve Signed In</button></p>}
       {jobs && mode !== null && <>
       <label>YouTube video link<input value={existingUrl} disabled={job?.status === 'uploading'} onChange={(e) => setExistingUrl(e.target.value)} placeholder="Paste a YouTube link if this video is already uploaded" /></label>
-      <div className="youtube-link-row"><button disabled={busy || job?.status === 'uploading' || !existingUrl.trim() || (!!job?.videoId && existingUrl.trim() === youtubeVideoUrl(job.videoId, piece.kind === 'short'))} onClick={() => {
+      <div className="youtube-link-row"><button disabled={busy || out || job?.status === 'uploading' || !existingUrl.trim() || (!!job?.videoId && existingUrl.trim() === youtubeVideoUrl(job.videoId, piece.kind === 'short'))} onClick={() => {
         if (job?.status === 'done' && !window.confirm('Changing the linked video will discard any unsaved changes in these YouTube settings. Continue?')) return;
         void action(async () => { const linked = await postJson<UploadJob>('/api/youtube/link', { piece: piece.path, url: existingUrl }); await refreshJobs(); setMode(linked.id); setExistingUrl(youtubeVideoUrl(linked.videoId!, piece.kind === 'short')); rememberYoutubeJob(localStorage, piece.path, linked.id); window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path })); });
-      }}>{job?.status === 'done' ? 'Change Linked Video' : 'Link Existing Video'}</button>
+      }}>{job?.status === 'done' ? 'Change Linked Video' : 'Link Existing Video'}</button> <span className="muted small-text">{units(2)}</span>
         {job?.status === 'done' && <button onClick={() => void action(async () => { await postJson('/api/youtube/studio', { videoId: job.videoId }); })}>Open in YouTube Studio ↗</button>}
       </div>
       <p className="muted small-text">{job?.status === 'done' ? 'This is the video whose settings are shown below. To link a different video, paste its URL and choose Change linked video.' : 'If the video is already on your connected YouTube channel, paste its link and choose Link existing video.'}</p>
       {new Set(completed.map((j) => j.videoId)).size > 1 && <p className="error">More than one YouTube video was previously linked to this project. Check the URL above before saving changes.</p>}
       </>}
       {job?.status === 'uploading' && <p>{job.phase === 'waiting-thumbnail' ? 'Video uploaded. Waiting for YouTube to finish processing before sending its thumbnail…' : `Uploading ${Math.round(job.sent / job.total * 100)}%…`} Please keep HeartQuarters running.</p>}
-      {job?.status === 'done' && <ExistingForm key={job.id} piece={piece} job={job} doc={doc} covers={covers} version={version} onChanged={onChanged} canEdit={status.captionAccess} longform={longform} />}
+      {job?.status === 'done' && <ExistingForm key={job.id} reloads={reloads} piece={piece} job={job} doc={doc} covers={covers} version={version} onChanged={onChanged} canEdit={status.captionAccess} longform={longform} />}
       {job?.status === 'failed' && <p className="error">Upload failed: {job.error} <button className="small" onClick={() => setMode('new')}>Try Again</button></p>}
-      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path })); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
+      {mode === 'new' && (doc?.fields && piece.exports.length ? <NewForm reloads={reloads} piece={piece} doc={doc} covers={covers} canEdit={status.captionAccess} channel={channel} longform={longform} existing={completed} onStarted={(j) => { setMode(j.id); rememberYoutubeJob(localStorage, piece.path, j.id); void refreshJobs(); window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path })); }} /> : <p>A video export and YouTube packaging are needed for a new upload.</p>)}
       {jobs?.filter((j) => j.status === 'unknown').map((j) => <p className="error" key={j.id}>An earlier upload has an unknown result. Check YouTube Studio before uploading another copy. <button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/studio'); })}>Open Studio</button>{' '}<button className="small" onClick={() => void action(async () => { await postJson('/api/youtube/acknowledge', { piece: piece.path, id: j.id }); await refreshJobs(); })}>I Checked Studio</button></p>)}
     </>}
-    {error && <p className="error">{error}</p>}
   </div>;
 }
 
@@ -115,7 +127,7 @@ function Related({ longform }: { longform?: string }) {
   return <p>Related video must be chosen in YouTube Studio. {url ? <button className="small" onClick={() => void copyText(url)}>Copy Long-Form Link</button> : 'Add the long-form YouTube link on its video page to have it handy here.'}</p>;
 }
 
-function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onStarted }: { piece: Piece; doc: LoadedDoc; covers: FileChoice[]; canEdit: boolean; channel: string; longform?: string; existing: UploadJob[]; onStarted: (j: UploadJob) => void }) {
+function NewForm({ reloads, piece, doc, covers, canEdit, channel, longform, existing, onStarted }: { reloads: number; piece: Piece; doc: LoadedDoc; covers: FileChoice[]; canEdit: boolean; channel: string; longform?: string; existing: UploadJob[]; onStarted: (j: UploadJob) => void }) {
   const field = (name: string) => doc.fields?.find((f) => f.label.toLowerCase() === name)?.value ?? '';
   const storedLanguage = field('video language');
   const initialAnswer = (name: string) => { const value = field(name).toLowerCase(); return value === 'yes' || value === 'no' ? value : ''; };
@@ -126,9 +138,10 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null); const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [loadedText, setLoadedText] = useState(doc.text);
+  const quota = useYoutubeQuota();
   useEffect(() => { getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then((s) => { setSubtitles(s); setSubtitle(defaultSubtitle(s)); }, (e) => setError(e.message));
     // Playlists aren't kept in the file: a short of a longform starts in the Shorts playlist, anything else in none.
-    getJson<YoutubePlaylist[]>('/api/youtube/playlists').then((p) => { setPlaylists(p); setSelected(longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []); }, (e) => setError(e.message)); }, [piece.path, longform, piece.kind]);
+    getJson<YoutubePlaylist[]>('/api/youtube/playlists').then((p) => { setPlaylists(p); setSelected(longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []); }, (e) => setError(e.message)); }, [piece.path, longform, piece.kind, reloads]);
   return <div><h4>New upload</h4>
     <p className="muted small-text">To compare with a video already on YouTube, link it above.</p>
     <p className="muted small-text">Starting from {doc.file.name}. Edits here are sent to YouTube when you upload; they do not change the local file.</p>
@@ -165,19 +178,32 @@ function NewForm({ piece, doc, covers, canEdit, channel, longform, existing, onS
       setBusy(true); setError(''); try { const current = await getText('projects', doc.file.path); if (current.replace(/^\uFEFF/, '') !== (loadedText ?? '').replace(/^\uFEFF/, '')) throw new Error('The local file changed outside HeartQuarters. Reload the project and review it before uploading.'); const job = await postJson<UploadJob>('/api/youtube/upload', { piece: piece.path, video, cover, subtitle, language, playlistIds: selected, title, description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy, madeForKids: kids === 'yes', synthetic: synthetic === 'yes' }); onStarted(job);
         // YouTube doesn't report this setting back, so the file keeps the answer that was sent.
         void doc.save((text) => setLocalValue(text, 'Altered content', alteredContentValue(synthetic === 'yes')!)).catch(() => {}); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>Upload</button>{error && <p className="error">{error}</p>}
+    }}>Upload</button> <span className="muted small-text">uses 1 of today’s 100 uploads{(cover || subtitle || selected.length) ? `, plus ${units((cover ? 50 : 0) + (subtitle ? 400 : 0) + 50 * selected.length)}` : ''}</span>{error && !(quotaUsedUp(quota) && isQuotaError(error)) && <p className="error">{plainYoutubeError(error, quota)}</p>}
   </div>;
 }
 
-function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, longform }: { piece: Piece; job: UploadJob; doc?: LoadedDoc; covers: FileChoice[]; version?: string; onChanged?: () => void; canEdit: boolean; longform?: string }) {
+function ExistingForm({ reloads, piece, job, doc, covers, version, onChanged, canEdit, longform }: { reloads: number; piece: Piece; job: UploadJob; doc?: LoadedDoc; covers: FileChoice[]; version?: string; onChanged?: () => void; canEdit: boolean; longform?: string }) {
   const [data, setData] = useState<Existing | null>(null); const [draft, setDraft] = useState<YoutubeVideoSettings | null>(null);
   const [tagsText, setTagsText] = useState('');
   const [selected, setSelected] = useState<string[]>([]); const [subtitles, setSubtitles] = useState<FileChoice[]>([]);
   const [subtitle, setSubtitle] = useState(''); const [cover, setCover] = useState(''); const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const quota = useYoutubeQuota(); const out = quotaUsedUp(quota);
   const load = async () => { const r = await getJson<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`); setData(r); setDraft(r.video); setTagsText(r.video.tags.join(', ')); setSelected(r.selected); setSubtitle(''); setCover(''); window.dispatchEvent(new CustomEvent('hq-youtube-checked', { detail: { path: piece.path, checks: checkYoutubeVideo(r.video, r.captions, piece.kind === 'short') } })); };
-  useEffect(() => { void load().catch((e) => setError(e.message)); getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then(setSubtitles, (e) => setError(e.message)); }, [piece.path, job.id]);
-  if (!data || !draft) return <div>{error ? <p className="error">{error} <button className="small" onClick={() => void load().catch((e) => setError(e.message))}>Retry</button></p> : <YouTubeLoading />}</div>;
+  const reload = () => { setLoading(true); setError(''); void load().catch((e) => setError(e.message)).finally(() => setLoading(false)); };
+  useEffect(() => { reload(); getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then(setSubtitles, (e) => setError(e.message)); }, [piece.path, job.id]);
+  const shownError = out && isQuotaError(error) ? '' : plainYoutubeError(error, quota);
+  const unpushed = () => !!data && !!draft && (JSON.stringify(draft) !== JSON.stringify(data.video) || tagsText !== data.video.tags.join(', ') || [...selected].sort().join('|') !== [...data.selected].sort().join('|') || !!cover || !!subtitle);
+  const seenReloads = useRef(reloads);
+  useEffect(() => {
+    if (reloads === seenReloads.current) return;
+    seenReloads.current = reloads;
+    if (unpushed() && !window.confirm('Reloading from YouTube will discard changes in this form that you have not pushed. Continue?')) return;
+    reload();
+  }, [reloads]);
+  const messages = <>{shownError && <p className="error">{shownError}</p>}{message && <p>{message}</p>}</>;
+  if (!data || !draft) return <div>{messages}{loading && <YouTubeLoading />}</div>;
   const change = (value: Partial<YoutubeVideoSettings>) => { setDraft({ ...draft, ...value }); setMessage(''); };
   const hasManualCaptions = data.captions?.some((c) => c.kind !== 'ASR' && c.kind !== 'asr') ?? false;
   const useLocal = (field: SyncField, value: string): boolean => {
@@ -192,12 +218,18 @@ function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, lo
       return true;
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); return false; }
   };
-  return <div><h4>Existing YouTube video</h4>
+  // What Push Changes will cost, from what's changed in the form (see syncYoutubeSettings in server/youtube.ts).
+  const playlistsRead = Math.max(1, Math.ceil((quota?.playlists ?? 10) / 50)) + (quota?.playlists ?? 10);
+  const fieldsChanged = JSON.stringify({ ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }) !== JSON.stringify(data.video);
+  const playlistChanges = data.playlists.filter((p) => selected.includes(p.id) !== data.selected.includes(p.id)).length;
+  const pushCost = playlistsRead + 1 + (fieldsChanged ? 50 : 0) + playlistsRead + 50 * playlistChanges
+    + (cover ? 50 + (piece.kind === 'short' ? 1 : 0) : 0) + (subtitle ? 50 + (hasManualCaptions ? 450 : 400) : 0) + readVideoCost(quota);
+  return <div>{messages}<h4>Existing YouTube video</h4>
     {job.warning && <p className="error">{job.warning}</p>}
     {job.error && <p className="error">{job.error}</p>}
     {job.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {job.subtitleError}. Check Studio before trying again.</p>}
     {job.playlistResults?.filter((r) => r.status === 'error').map((r) => <p key={r.id} className="error">Playlist {r.id}: {r.error}</p>)}
-    {doc?.text !== null && doc?.text !== undefined && <MetadataComparison doc={doc} video={data.video} playlists={data.playlists} selected={data.selected} piece={piece.path} jobId={job.id} useLocal={useLocal} />}
+    {doc?.text !== null && doc?.text !== undefined && <MetadataComparison cost={readVideoCost(quota)} out={out} doc={doc} video={data.video} playlists={data.playlists} selected={data.selected} piece={piece.path} jobId={job.id} useLocal={useLocal} />}
     <details className="yt-section" open><summary>Video Details on YouTube</summary><div className="yt-grid">
     <Language value={draft.language ?? ''} setValue={(language) => change({ language: language || null })} />
     <label>Title<input maxLength={100} value={draft.title} onChange={(e) => change({ title: e.target.value })} /></label>
@@ -213,28 +245,22 @@ function ExistingForm({ piece, job, doc, covers, version, onChanged, canEdit, lo
     <details className="yt-section"><summary>Thumbnail & Subtitles</summary><div className="yt-grid">
     <div className="yt-full thumbnail-compare"><div><strong>Local thumbnail</strong>{cover ? <img src={fileUrl('projects', cover)} alt="Selected local thumbnail" /> : <p>Choose a local thumbnail below to compare.</p>}</div><div><strong>On YouTube</strong>{data.video.thumbnail ? <img src={data.video.thumbnail} alt="Current YouTube thumbnail" /> : <p>Not available</p>}</div></div>
     <label>Local thumbnail to push<select value={cover} onChange={(e) => setCover(e.target.value)}><option value="">Keep current thumbnail</option>{covers.filter((c) => /\.(png|jpe?g)$/i.test(c.name)).map((c) => <option key={c.path} value={c.path}>{c.name}</option>)}</select></label>
-    <div><button disabled={busy || !version || !data.video.thumbnail} onClick={async () => { setBusy(true); setError(''); setMessage(''); try { await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version }); setMessage('YouTube thumbnail saved in this packaging version.'); onChanged?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Download YouTube Thumbnail</button><p className="muted small-text">Saves YouTube’s available copy, which may differ in quality from the original.</p></div>
+    <div><button disabled={busy || out || !version || !data.video.thumbnail} onClick={async () => { setBusy(true); setError(''); setMessage(''); try { await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version }); setMessage('YouTube thumbnail saved in this packaging version.'); onChanged?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Download YouTube Thumbnail</button> <span className="muted small-text">{units(1)}</span><p className="muted small-text">Saves YouTube’s available copy, which may differ in quality from the original.</p></div>
     {data.captions === null ? <p className="error">{data.captionError} Check subtitles in Studio.</p> : <><p>YouTube captions: {data.captions.length ? data.captions.map((c) => `${c.language || 'unknown language'} (${c.kind === 'ASR' || c.kind === 'asr' ? 'automatic' : 'uploaded'}, ${c.status || 'status unknown'})`).join(', ') : 'none'}</p>
       <label>Captions file to send<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}><option value="">Keep current captions</option>{subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}</select></label>
       <p className="muted small-text">{subtitle ? (hasManualCaptions ? 'Push changes replaces the captions you uploaded in this language, so there is still only one track.' : 'Push changes adds these captions.') : ''}{job.subtitleFile ? ` Last sent from HeartQuarters: ${job.subtitleFile.split('/').pop()}.` : ''}</p></>}
     </div></details>
-    <button disabled={busy || !canEdit || !draft.title.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try {
+    <button disabled={busy || out || !canEdit || !draft.title.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try {
       const result = await postJson<{ errors: string[] }>('/api/youtube/video-settings', { piece: piece.path, id: job.id, baseline: data.video, desired: { ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }, before: data.selected, after: selected, subtitle, cover });
       // YouTube doesn't report Altered content back, so the file keeps the answer that was sent.
       const altered = alteredContentValue(draft.synthetic);
       if (doc && altered) { try { await doc.save((text) => setLocalValue(text, 'Altered content', altered)); } catch (e) { result.errors.push(`Altered content wasn't saved to ${doc.file.name}: ${e instanceof Error ? e.message : String(e)}`); } }
       await load(); if (result.errors.length) setError(`Some changes were not confirmed: ${result.errors.join('; ')}`); else setMessage('Changes saved to YouTube.');
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Push Changes to YouTube</button>{' '}
-    <button className="small" disabled={busy} onClick={() => {
-      const changed = JSON.stringify(draft) !== JSON.stringify(data.video) || tagsText !== data.video.tags.join(', ') || [...selected].sort().join('|') !== [...data.selected].sort().join('|') || !!cover || !!subtitle;
-      if (changed && !window.confirm('Reloading from YouTube will discard changes in this form that you have not pushed. Continue?')) return;
-      setError(''); void load().catch((e) => setError(e.message));
-    }}>Reload from YouTube</button>
-    {error && <p className="error">{error}</p>}{message && <p>{message}</p>}
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Push Changes to YouTube</button> <span className="muted small-text">{units(pushCost)}</span>
   </div>;
 }
 
-function MetadataComparison({ doc, video, playlists, selected, piece, jobId, useLocal }: { doc: LoadedDoc; video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; piece: string; jobId: string; useLocal: (field: SyncField, value: string) => boolean }) {
+function MetadataComparison({ cost, out, doc, video, playlists, selected, piece, jobId, useLocal }: { cost: number; out: boolean; doc: LoadedDoc; video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; piece: string; jobId: string; useLocal: (field: SyncField, value: string) => boolean }) {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [error, setError] = useState('');
   if (doc.text === null) return null;
   const snapshot = doc.text; const online = youtubeValues(video);
@@ -245,14 +271,14 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
   };
   return <details className="yt-section metadata-compare"><summary>Compare Local File and YouTube</summary>
     <p className="muted small-text">Local means {doc.file.path}. YouTube shows the last values loaded from your channel. Copying to YouTube stages the change until you save; copying to the file saves that field immediately.</p>
-    <button disabled={busy} onClick={async () => {
+    <button onClick={async () => {
       const fields: SyncField[] = ['Video language', 'Made for kids', 'Altered content'];
       const available = fields.filter((field) => online[field] !== null);
       if (!available.length || !window.confirm(`Save these YouTube settings to ${doc.file.name}: ${available.join(', ')}? Existing values for these fields will be replaced.`)) return;
       setBusy(true); setError(''); setMessage('');
       try { await verifyOnline(available); await doc.save((text) => { if (text !== snapshot) throw new Error('The local file changed. Review it again before copying.'); return available.reduce((result, field) => setLocalValue(result, field, online[field]!), text); }); setMessage('YouTube settings saved to the local file. Values YouTube did not provide were left alone.'); }
       catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>Save YouTube Settings to Local File</button>
+    }} disabled={busy || out}>Save YouTube Settings to Local File</button> <span className="muted small-text">{units(cost)}</span>
     {SYNC_FIELDS.map((field) => {
       let local: string | null = null; let issue = '';
       try { local = localValue(snapshot, field); } catch (e) { issue = e instanceof Error ? e.message : String(e); }
@@ -265,9 +291,9 @@ function MetadataComparison({ doc, video, playlists, selected, piece, jobId, use
         {diff?.limited && <p className="muted small-text">This text is too long to highlight individual words, so both values are highlighted.</p>}
         <div className="compare-columns"><div><strong>Local file</strong><pre>{local === null ? '(not in this file)' : local === '' ? '(empty)' : diff ? <DiffText parts={diff.left} side="local" /> : local}</pre></div><div><strong>YouTube</strong><pre>{remote === null ? '(not provided by YouTube)' : remote === '' ? '(empty)' : diff ? <DiffText parts={diff.right} side="youtube" /> : remote}</pre></div></div>
         <div className="compare-actions"><button disabled={busy || !!issue || local === null} onClick={async () => { if (local === null) return; setBusy(true); setError(''); setMessage(''); try { const current = await getText('projects', doc.file.path); if (current.replace(/^\uFEFF/, '') !== snapshot.replace(/^\uFEFF/, '')) throw new Error('The local file changed outside HeartQuarters. Reload the project and compare again.'); if (useLocal(field, local)) setMessage(`${field} is ready in the YouTube form. Click Push Changes to YouTube to apply it.`); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Use Local on YouTube →</button>
-          <button disabled={busy || !!issue || remote === null} onClick={async () => { if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return; setBusy(true); setError(''); setMessage(''); try {
+          <button disabled={busy || out || !!issue || remote === null} onClick={async () => { if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return; setBusy(true); setError(''); setMessage(''); try {
             await verifyOnline([field]); await doc.save((text) => { if (text !== snapshot) throw new Error('The local file changed. Review it again before copying.'); return setLocalValue(text, field, remote); }); setMessage(`${field} saved to the local file.`);
-          } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>← Save YouTube Value to File</button></div>
+          } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>← Save YouTube Value to File</button> <span className="muted small-text">{units(cost)}</span></div>
       </details>;
     })}
     {message && <p>{message}</p>}{error && <p className="error">{error}</p>}
