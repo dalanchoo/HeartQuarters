@@ -1,27 +1,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { checkFolderName } from './create.js';
 import { versionFolder } from './packaging-version.js';
 
 const MAX_IMAGE = 2_000_000;
+/** Inside a packaging version: the finished thumbnail, with Source/ for the Photoshop file and the art. */
+export const THUMBNAIL_FOLDER = 'Thumbnail';
 
-/** Add a new image without replacing an existing packaging file. */
-export function savePackagingThumbnail(piece: string, version: string, proposedName: unknown, data: Buffer): { path: string } {
+/**
+ * A packaging version holds one thumbnail: Thumbnail/Thumbnail.png (or .jpg), with the Photoshop file and the art it
+ * was made from in Thumbnail/Source. A second thumbnail belongs in a new version, so an existing one is never replaced.
+ */
+export function savePackagingThumbnail(piece: string, version: string, data: Buffer): { path: string } {
   versionFolder(piece, version);
   if (!Buffer.isBuffer(data) || !data.length || data.length > MAX_IMAGE) throw new Error('Choose an image up to 2 MB.');
   const png = data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   const jpeg = data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
   if (!png && !jpeg) throw new Error('Choose a PNG or JPEG image.');
-  const name = checkFolderName(proposedName);
-  if (!((png && /\.png$/i.test(name)) || (jpeg && /\.jpe?g$/i.test(name)))) throw new Error('The filename must match the image format (.png or .jpg).');
-  const folder = safeResolve('projects', path.join(version, 'Covers'));
+  const folder = safeResolve('projects', path.join(version, THUMBNAIL_FOLDER));
   fs.mkdirSync(folder, { recursive: true });
   const folderStat = fs.lstatSync(folder);
-  if (!folderStat.isDirectory() || folderStat.isSymbolicLink()) throw new Error('The Covers folder must be a real folder, not a shortcut.');
-  const file = safeResolve('projects', path.join(version, 'Covers', name));
+  if (!folderStat.isDirectory() || folderStat.isSymbolicLink()) throw new Error('The Thumbnail folder must be a real folder, not a shortcut.');
+  const existing = fs.readdirSync(folder).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
+  if (existing) throw new Error(`This version already has ${existing}. For a different thumbnail, make a new version; nothing was replaced.`);
+  const file = safeResolve('projects', path.join(version, THUMBNAIL_FOLDER, png ? 'Thumbnail.png' : 'Thumbnail.jpg'));
   try { fs.writeFileSync(file, data, { flag: 'wx' }); }
-  catch (e) { if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('A thumbnail with that name already exists. Choose another name; nothing was overwritten.'); throw e; }
+  catch (e) { if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('This version already has a thumbnail; nothing was replaced.'); throw e; }
   return { path: path.relative(safeResolve('projects', ''), file).split(path.sep).join('/') };
 }
 

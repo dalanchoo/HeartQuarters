@@ -3,7 +3,7 @@
 //
 // Folder layout it understands (see Video Projects\--- LONGFORM TEMPLATE):
 //   022 - Worth Telling Them\
-//     Longform\Packaging\V01\YouTube.md, Covers\*.png
+//     Longform\Packaging\V01\YouTube.md, Notes.md, Thumbnail\Thumbnail.png (Thumbnail\Source\ for the art)
 //     Longform\Exports\*.mp4
 //     Shorts\<short>\Packaging\V01\..., Exports\...
 //     Reels\<reel>\...
@@ -116,7 +116,7 @@ function filesIn(dir: string, exts: Set<string>): FileRef[] {
 /**
  * Like filesIn, but also looks in subfolders (skipping "Source" folders, which
  * hold Photoshop files and layers). Names are relative to `base`,
- * e.g. "Covers/Exports/Cover_v02.png".
+ * e.g. "Thumbnail/Thumbnail.png".
  */
 function filesDeep(dir: string, exts: Set<string>, base = dir): FileRef[] {
   let entries: fs.Dirent[];

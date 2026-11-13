@@ -32,7 +32,7 @@ see your projects, edit metadata, watch videos, and run jobs
 | What | Where |
 |---|---|
 | Video projects | `D:\Google Drive\HeartMind\Video Projects\NNN - Title\` |
-| Metadata for each video | `...\Packaging\Vxx\YouTube.md` (and `TikTok.md`, `Instagram.md`, ... for Shorts). Already in use; the app reads these. Versions are numbered V01, V02, ... with no words in the name; `Notes.md` in a version holds what it tried (shown and edited in its own Notes box). |
+| Metadata for each video | `...\Packaging\Vxx\YouTube.md` (and `TikTok.md`, `Instagram.md`, ... for Shorts). Already in use; the app reads these. Versions are numbered V01, V02, ... with no words in the name; `Notes.md` in a version holds what it tried (shown and edited in its own Notes box). One thumbnail per version: `Vxx\Thumbnail\Thumbnail.png` (or .jpg), with `Thumbnail\Source\` for `Thumbnail.psd` and the art it was made from. No Metadata, Covers or Exports folders. |
 | Editing rules (skills) | `D:\Google Drive\HeartMind\HMF_SYS\Skills\HMF_Skills\` (`channel-basics`, `longform-edit`, `shorts-from-longform`, each a `SKILL.md` + `scripts\`); other people's skills in `HMF_SYS\Skills\Downloaded\`. `Video Projects\CLAUDE.md` (and `AGENTS.md`, `GEMINI.md`) only point there. |
 | An episode's own edit settings | `NNN - Title\Longform\Claude\project\episode.json` while editing; kept in `Longform\Intermediate\Edit Scripts\` afterwards |
 | Substack writing | `D:\Google Drive\HeartMind\Writing\<My Journey / My Reflections / My Wisdom>\<piece>\` with `Drafts\*.docx` and `Substack Metadata\Preview.png` |

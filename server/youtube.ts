@@ -105,13 +105,12 @@ function completedUpload(piece: string, id: string): UploadJob {
   return job;
 }
 
-export async function downloadYoutubeThumbnail(piece: string, id: string, version: string, name: unknown) {
+export async function downloadYoutubeThumbnail(piece: string, id: string, version: string) {
   const job = completedUpload(piece, id);
   const video = await readYoutubeVideo(await youtubeAccessToken(), job.videoId!);
   if (!video.settings.thumbnail) throw new Error('YouTube did not provide a thumbnail for this video.');
   const data = await fetchYoutubeThumbnail(video.settings.thumbnail);
-  const extension = data[0] === 0xff && data[1] === 0xd8 ? '.jpg' : '.png';
-  return savePackagingThumbnail(piece, version, `${String(name ?? '').trim()}${extension}`, data);
+  return savePackagingThumbnail(piece, version, data);
 }
 
 export async function existingYoutubeSettings(piece: string, id: string) {

@@ -76,7 +76,7 @@ app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(re
 app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-settings', (req, res) => { existingYoutubeSettings(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/video-settings', (req, res) => { syncYoutubeSettings(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.baseline, req.body?.desired, req.body?.before, req.body?.after, req.body?.subtitle, req.body?.cover).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.post('/api/youtube/download-thumbnail', (req, res) => { downloadYoutubeThumbnail(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.version ?? ''), req.body?.name).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.post('/api/youtube/download-thumbnail', (req, res) => { downloadYoutubeThumbnail(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.version ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));
 app.post('/api/youtube/link', (req, res) => { linkYoutubeVideo(String(req.body?.piece ?? ''), req.body?.url).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/subtitles', handle((req, res) => { res.json(subtitleFiles(String(req.query.piece ?? ''))); }));
@@ -119,7 +119,7 @@ app.get('/api/projects', handle((_req, res) => {
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.post('/api/packaging/rename-version', handle((req, res) => { res.json(renamePackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), req.body?.name)); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
-app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), req.body?.name, decodeThumbnail(req.body?.data))); }));
+app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
 
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
 app.get('/api/project', handle((req, res) => {
