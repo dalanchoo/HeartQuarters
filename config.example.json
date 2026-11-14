@@ -6,7 +6,7 @@
   "skillTargets": [
     { "id": "claude", "name": "Claude Code", "dir": "C:\\Users\\dalan\\.claude\\skills" },
     { "id": "codex", "name": "Codex", "dir": "C:\\Users\\dalan\\.agents\\skills" },
-    { "id": "gemini", "name": "Gemini CLI", "dir": "C:\\Users\\dalan\\.gemini\\skills" }
+    { "id": "gemini", "name": "Gemini (Antigravity)", "dir": "C:\\Users\\dalan\\.gemini\\config", "listFile": "C:\\Users\\dalan\\.gemini\\config\\skills.json" }
   ],
   "writingDir": "D:\\Google Drive\\HeartMind\\Writing",
   "expressionsDir": "D:\\Google Drive\\HeartMind\\Assets\\Expressions",

@@ -127,3 +127,57 @@ describe('setSkillLink', () => {
     expect(fs.readdirSync(path.join(tmp, 'Codex', 'skills'))).toEqual([]);
   });
 });
+
+describe('an AI that reads a list file instead of links (Antigravity)', () => {
+  let listFile: string;
+  const read = () => JSON.parse(fs.readFileSync(listFile, 'utf8'));
+  const mine = () => path.join(tmp, 'Skills', 'HMF_Skills').replace(/\\/g, '/');
+
+  beforeEach(() => {
+    fs.mkdirSync(path.join(tmp, 'Antigravity', 'config'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Skills', 'HMF_Skills', 'thumbnails'));
+    fs.writeFileSync(path.join(tmp, 'Skills', 'HMF_Skills', 'thumbnails', 'SKILL.md'), HEAD('thumbnails', 'x'));
+    listFile = path.join(tmp, 'Antigravity', 'config', 'skills.json');
+    config.skillTargets = [{ id: 'agy', name: 'Gemini (Antigravity)', dir: path.join(tmp, 'Antigravity', 'config'), listFile }];
+  });
+
+  it('turning a skill on adds it to the list, without making a link', () => {
+    expect(skill('HMF_Skills/longform-edit').links.agy).toBe('off');
+    expect(setSkillLink('HMF_Skills/longform-edit', 'agy', true)).toBe('on');
+    expect(read()).toEqual({ entries: [{ path: mine(), include_only: ['longform-edit'] }] });
+    expect(fs.readdirSync(path.join(tmp, 'Antigravity', 'config'))).toEqual(['skills.json']);
+    expect(skill('HMF_Skills/longform-edit').links.agy).toBe('on');
+    expect(skill('HMF_Skills/thumbnails').links.agy).toBe('off');
+    expect(setSkillLink('HMF_Skills/longform-edit', 'agy', true)).toBe('on'); // twice is harmless
+    expect(read().entries[0].include_only).toEqual(['longform-edit']);
+  });
+
+  it('turning the last one off removes its entry and keeps the rest of the file', () => {
+    fs.writeFileSync(listFile, JSON.stringify({ inherits: [{ path: '~/team.json' }], entries: [{ path: '~/elsewhere' }] }));
+    setSkillLink('Downloaded/someones-skill', 'agy', true);
+    expect(setSkillLink('Downloaded/someones-skill', 'agy', false)).toBe('off');
+    expect(read()).toEqual({ inherits: [{ path: '~/team.json' }], entries: [{ path: '~/elsewhere' }] });
+    expect(listSkills().targets[0].others).toEqual(['~/elsewhere']);
+  });
+
+  it('an entry for the whole folder counts every skill in it; turning one off keeps the others', () => {
+    fs.writeFileSync(listFile, JSON.stringify({ entries: [{ path: path.join(tmp, 'Skills', 'HMF_Skills').toUpperCase() }] }));
+    expect(skill('HMF_Skills/thumbnails').links.agy).toBe('on');
+    expect(setSkillLink('HMF_Skills/longform-edit', 'agy', false)).toBe('off');
+    expect(read().entries[0].include_only).toEqual(['thumbnails']);
+    expect(skill('HMF_Skills/thumbnails').links.agy).toBe('on');
+  });
+
+  it('a list it cannot read is shown as other and left alone', () => {
+    fs.writeFileSync(listFile, 'not json');
+    expect(skill('HMF_Skills/longform-edit').links.agy).toBe('other');
+    expect(() => setSkillLink('HMF_Skills/longform-edit', 'agy', true)).toThrow(/Left alone/);
+    expect(fs.readFileSync(listFile, 'utf8')).toBe('not json');
+  });
+
+  it('refuses when the AI is not installed', () => {
+    removeTree(path.join(tmp, 'Antigravity'));
+    expect(() => setSkillLink('HMF_Skills/longform-edit', 'agy', true)).toThrow(/isn't installed/);
+    expect(fs.existsSync(listFile)).toBe(false);
+  });
+});

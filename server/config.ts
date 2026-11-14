@@ -17,12 +17,17 @@ export interface ToolDef {
   script: string;
 }
 
-/** An AI on this PC that reads skills from a folder (one link per skill goes in there). */
+/** An AI on this PC that reads skills from a folder (one link per skill goes in there), or from a list file. */
 export interface SkillTarget {
   id: string;
   name: string;
-  /** The AI's skills folder, e.g. C:\Users\<you>\.claude\skills */
+  /** The AI's skills folder, e.g. C:\Users\<you>\.claude\skills. With listFile: the folder holding that file. */
   dir: string;
+  /**
+   * For an AI that doesn't follow links (Antigravity): the file listing which skill folders it reads,
+   * e.g. C:\Users\<you>\.gemini\config\skills.json. Skills are turned on and off in this file instead.
+   */
+  listFile?: string;
 }
 
 export interface GuideDef {

@@ -7,7 +7,13 @@
 // skill on for an AI puts a link there (a Windows junction) pointing at the real
 // folder; turning it off removes only that link. Nothing else in the AI's folder is
 // ever touched: real folders and links pointing elsewhere are shown, not changed.
+//
+// Antigravity (Gemini) doesn't follow links. It reads a list file instead (skills.json), whose
+// entries name folders to look in, each with an optional include_only list of skill folders. For
+// it, turning a skill on adds the skill's name to the entry for its group folder (HMF_Skills or
+// Downloaded); turning it off takes the name out. Other entries and settings in the file are kept.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { config, isInside, safeResolve, type SkillTarget } from './config.js';
 
@@ -86,6 +92,84 @@ function target(id: string): SkillTarget {
   return t;
 }
 
+// ---- The list file (Antigravity) ----------------------------------------------------
+
+interface ListEntry {
+  path: string;
+  include_only?: string[];
+  exclude?: string[];
+  [other: string]: unknown;
+}
+interface ListFile {
+  entries?: ListEntry[];
+  [other: string]: unknown;
+}
+
+/** The list file's contents ({} when there's none yet), or null when it can't be read. */
+function readList(file: string): ListFile | null {
+  if (!fs.existsSync(file)) return {};
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const list = parsed as ListFile;
+    if (list.entries !== undefined && !Array.isArray(list.entries)) return null;
+    return list;
+  } catch {
+    return null;
+  }
+}
+
+/** Do two paths name the same folder? Handles "~/", forward slashes and upper/lower case. */
+function sameFolder(a: string, b: string): boolean {
+  const norm = (p: string) => path.resolve(p.replace(/^~(?=[\\/])/, os.homedir())).replace(/[\\/]+$/, '').toLowerCase();
+  return norm(a) === norm(b);
+}
+
+const named = (names: string[] | undefined, folder: string) => (names ?? []).some((n) => n.toLowerCase() === folder.toLowerCase());
+
+/** Is the skill in `folder` (inside `groupDir`) turned on in the list? Names are matched exactly, not as patterns. */
+function listState(list: ListFile | null, groupDir: string, folder: string): LinkState {
+  if (!list) return 'other';
+  const entry = list.entries?.find((e) => typeof e?.path === 'string' && sameFolder(e.path, groupDir));
+  if (!entry || named(entry.exclude, folder)) return 'off';
+  return !entry.include_only || named(entry.include_only, folder) ? 'on' : 'off';
+}
+
+/** The skill folders (with a SKILL.md) in one group folder. */
+function skillsIn(groupDir: string): string[] {
+  if (!fs.existsSync(groupDir)) return [];
+  return fs
+    .readdirSync(groupDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && fs.existsSync(path.join(groupDir, e.name, 'SKILL.md')))
+    .map((e) => e.name);
+}
+
+/** Turns one skill on or off in a list file, keeping everything else in the file as it was. */
+function setListed(t: SkillTarget & { listFile: string }, groupDir: string, folder: string, on: boolean): LinkState {
+  const list = readList(t.listFile);
+  if (!list) throw new Error(`${t.listFile} isn't a skills list this page can read. Left alone.`);
+  const entries = list.entries ?? [];
+  let entry = entries.find((e) => typeof e?.path === 'string' && sameFolder(e.path, groupDir));
+  if (on) {
+    if (!installed(t)) throw new Error(`${t.name} isn't installed on this PC (no ${path.dirname(t.dir)} folder).`);
+    if (!entry) {
+      entry = { path: groupDir.replace(/\\/g, '/'), include_only: [] };
+      entries.push(entry);
+    }
+    if (entry.exclude) entry.exclude = entry.exclude.filter((n) => n.toLowerCase() !== folder.toLowerCase());
+    if (entry.include_only && !named(entry.include_only, folder)) entry.include_only.push(folder);
+  } else if (entry) {
+    // No include_only means the whole folder: list the others by name, so only this one goes.
+    const keep = (entry.include_only ?? skillsIn(groupDir)).filter((n) => n.toLowerCase() !== folder.toLowerCase());
+    if (keep.length) entry.include_only = keep;
+    else entries.splice(entries.indexOf(entry), 1);
+  }
+  list.entries = entries;
+  fs.mkdirSync(path.dirname(t.listFile), { recursive: true });
+  fs.writeFileSync(t.listFile, JSON.stringify(list, null, 2) + '\n');
+  return listState(readList(t.listFile), groupDir, folder);
+}
+
 /** An AI counts as installed when its own folder (the one holding "skills") exists. */
 function installed(t: SkillTarget): boolean {
   return fs.existsSync(path.dirname(t.dir));
@@ -113,6 +197,7 @@ function state(t: SkillTarget, folder: string, skillDir: string): LinkState {
 
 export function listSkills(): SkillsOverview {
   const skills: SkillInfo[] = [];
+  const lists = new Map(config.skillTargets.filter((t) => t.listFile).map((t) => [t.id, readList(t.listFile!)]));
   for (const groupFolder of Object.keys(SKILL_GROUPS) as GroupFolder[]) {
     const dir = path.join(config.skillsDir, groupFolder);
     if (!fs.existsSync(dir)) continue;
@@ -123,7 +208,7 @@ export function listSkills(): SkillsOverview {
       if (!fs.existsSync(md)) continue;
       const head = readHeader(fs.readFileSync(md, 'utf8'));
       const links: Record<string, LinkState> = {};
-      for (const t of config.skillTargets) links[t.id] = state(t, e.name, full);
+      for (const t of config.skillTargets) links[t.id] = t.listFile ? listState(lists.get(t.id) ?? null, dir, e.name) : state(t, e.name, full);
       skills.push({
         id: `${groupFolder}/${e.name}`,
         group: SKILL_GROUPS[groupFolder],
@@ -135,7 +220,15 @@ export function listSkills(): SkillsOverview {
     }
   }
   const managed = new Set(skills.map((s) => s.folder.toLowerCase()));
+  const groupDirs = Object.keys(SKILL_GROUPS).map((g) => path.join(config.skillsDir, g));
   const targets: TargetInfo[] = config.skillTargets.map((t) => {
+    if (t.listFile) {
+      // Folders in the list besides ours (skills added some other way).
+      const others = (lists.get(t.id)?.entries ?? [])
+        .filter((e) => typeof e?.path === 'string' && !groupDirs.some((g) => sameFolder(e.path, g)))
+        .map((e) => e.path);
+      return { ...t, installed: installed(t), others };
+    }
     const others = fs.existsSync(t.dir)
       ? fs
           .readdirSync(t.dir, { withFileTypes: true })
@@ -162,6 +255,7 @@ export function targetFolder(targetId: string): string {
 export function setSkillLink(skillId: string, targetId: string, on: boolean): LinkState {
   const t = target(targetId);
   const { full, folder } = skillFolder(skillId);
+  if (t.listFile) return setListed({ ...t, listFile: t.listFile }, path.dirname(full), folder, on);
   const at = path.join(t.dir, folder);
   const now = state(t, folder, full);
 

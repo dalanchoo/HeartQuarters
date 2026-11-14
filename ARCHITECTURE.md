@@ -56,7 +56,9 @@ scripts it needs, in the open "Agent Skills" format that Claude Code, Codex and
 Gemini CLI all read. There is one real copy of each skill, in `HMF_SYS\Skills`;
 each AI on this computer gets a link (a Windows junction) in its own skills
 folder (Claude Code: `C:\Users\dalan\.claude\skills\<name>`), so every AI sees
-the same, current version.
+the same, current version. Gemini's Antigravity doesn't follow those links: it
+reads a list file, `C:\Users\dalan\.gemini\config\skills.json`, naming the skill
+folders to load, and the Skills page turns skills on and off in that file.
 
 - **Never about one episode.** Skills and their scripts contain no episode's
   number, name, paths or settings. Those live in the episode's own files.
