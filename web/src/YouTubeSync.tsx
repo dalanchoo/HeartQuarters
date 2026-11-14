@@ -7,7 +7,7 @@ import { VIDEO_LANGUAGES } from '../../server/youtube-language';
 import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-playlists';
 import { rememberUploadPanel, uploadPanelOpen } from './uploadPanel';
 import { defaultSubtitle } from './subtitleChoice';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
+import { alteredContentValue, comparisonState, descriptionWithHashtags, localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo } from './videoChecks';
@@ -134,7 +134,8 @@ function NewForm({ reloads, piece, doc, covers, canEdit, channel, longform, exis
   const storedLanguage = field('video language');
   const initialAnswer = (name: string) => { const value = field(name).toLowerCase(); return value === 'yes' || value === 'no' ? value : ''; };
   const [video, setVideo] = useState(piece.exports[0].path); const [language, setLanguage] = useState(VIDEO_LANGUAGES.some((l) => l.value === storedLanguage) ? storedLanguage : 'en-US');
-  const [title, setTitle] = useState(field('title')); const [description, setDescription] = useState(field('description')); const [tags, setTags] = useState(field('tags'));
+  const [title, setTitle] = useState(field('title')); const localDescription = () => descriptionWithHashtags(doc.fields ?? []) ?? ''; // with an older file's Hashtags field at the end
+  const [description, setDescription] = useState(localDescription); const [tags, setTags] = useState(field('tags'));
   const [privacy, setPrivacy] = useState('private'); const [kids, setKids] = useState(initialAnswer('made for kids') || 'no'); const [synthetic, setSynthetic] = useState(initialAnswer('altered content'));
   const [subtitles, setSubtitles] = useState<FileChoice[]>([]); const [subtitle, setSubtitle] = useState(''); const [cover, setCover] = useState('');
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null); const [selected, setSelected] = useState<string[]>([]);
@@ -152,7 +153,7 @@ function NewForm({ reloads, piece, doc, covers, canEdit, channel, longform, exis
       if (!window.confirm('Load the current local file? This replaces the title, description, tags and YouTube settings currently in this form.')) return;
       try {
         const localLanguage = field('video language');
-        setTitle(field('title')); setDescription(field('description')); setTags(field('tags'));
+        setTitle(field('title')); setDescription(localDescription()); setTags(field('tags'));
         setLanguage(VIDEO_LANGUAGES.some((l) => l.value === localLanguage) ? localLanguage : 'en-US');
         setKids(initialAnswer('made for kids') || 'no'); setSynthetic(initialAnswer('altered content'));
         setLoadedText(doc.text); setError('');
@@ -224,6 +225,18 @@ function ExistingForm({ reloads, piece, job, doc, covers, version, onChanged, ca
   const playlistsRead = Math.max(1, Math.ceil((quota?.playlists ?? 10) / 50)) + (quota?.playlists ?? 10);
   const fieldsChanged = JSON.stringify({ ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }) !== JSON.stringify(data.video);
   const playlistChanges = data.playlists.filter((p) => selected.includes(p.id) !== data.selected.includes(p.id)).length;
+  // What Push Changes will send: every field in the form that differs from YouTube, plus a chosen thumbnail or captions.
+  const formValues = youtubeValues({ ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) });
+  const onYoutube = youtubeValues(data.video);
+  const staged = SYNC_FIELDS.filter((f) => formValues[f] !== onYoutube[f]);
+  const short = (v: string | null) => (v === null || v === '' ? '(empty)' : v.length > 70 ? `${v.slice(0, 70)}…` : v);
+  const pending = [
+    ...staged.map((f) => (f === 'Description' || f === 'Tags' ? `${f}: changed` : `${f}: "${short(onYoutube[f])}" → "${short(formValues[f])}"`)),
+    ...(draft.privacy !== data.video.privacy ? [`Visibility: ${data.video.privacy} → ${draft.privacy}`] : []),
+    ...(playlistChanges ? [`Playlists: ${playlistChanges} ${playlistChanges === 1 ? 'change' : 'changes'}`] : []),
+    ...(cover ? [`Thumbnail: ${cover.split('/').slice(-3).join('/')}`] : []),
+    ...(subtitle ? [`Captions: ${subtitle.split('/').pop()}`] : []),
+  ];
   const pushCost = playlistsRead + 1 + (fieldsChanged ? 50 : 0) + playlistsRead + 50 * playlistChanges
     + (cover ? 50 + (piece.kind === 'short' ? 1 : 0) : 0) + (subtitle ? 50 + (hasManualCaptions ? 450 : 400) : 0) + readVideoCost(quota);
   return <div>{messages}<h4>Existing YouTube video</h4>
@@ -231,7 +244,8 @@ function ExistingForm({ reloads, piece, job, doc, covers, version, onChanged, ca
     {job.error && <p className="error">{job.error}</p>}
     {job.subtitleStatus === 'error' && <p className="error">Subtitles could not be confirmed: {job.subtitleError}. Check Studio before trying again.</p>}
     {job.playlistResults?.filter((r) => r.status === 'error').map((r) => <p key={r.id} className="error">Playlist {r.id}: {r.error}</p>)}
-    {doc?.text !== null && doc?.text !== undefined && <MetadataComparison cost={readVideoCost(quota)} out={out} doc={doc} video={data.video} playlists={data.playlists} selected={data.selected} piece={piece.path} jobId={job.id} useLocal={useLocal} />}
+    {pending.length > 0 && <p className="push-note">{pending.length} {pending.length === 1 ? 'change is' : 'changes are'} waiting to be pushed. They are listed above the Push Changes to YouTube button.</p>}
+    {doc?.text !== null && doc?.text !== undefined && <MetadataComparison cost={readVideoCost(quota)} out={out} doc={doc} video={data.video} playlists={data.playlists} selected={data.selected} piece={piece.path} jobId={job.id} useLocal={useLocal} staged={staged} />}
     <details className="yt-section" open><summary>Video Details on YouTube</summary><div className="yt-grid">
     <Language value={draft.language ?? ''} setValue={(language) => change({ language: language || null })} />
     <label>Title<input maxLength={100} value={draft.title} onChange={(e) => change({ title: e.target.value })} /></label>
@@ -252,6 +266,9 @@ function ExistingForm({ reloads, piece, job, doc, covers, version, onChanged, ca
       <label>Captions file to send<select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}><option value="">Keep current captions</option>{subtitles.map((s) => <option key={s.path} value={s.path}>{s.name}</option>)}</select></label>
       <p className="muted small-text">{subtitle ? (hasManualCaptions ? 'Push changes replaces the captions you uploaded in this language, so there is still only one track.' : 'Push changes adds these captions.') : ''}{job.subtitleFile ? ` Last sent from HeartQuarters: ${job.subtitleFile.split('/').pop()}.` : ''}</p></>}
     </div></details>
+    <div className={`push-summary${pending.length ? ' has-changes' : ''}`}>
+      {pending.length ? <><strong>Push Changes to YouTube will send:</strong><ul>{pending.map((p) => <li key={p}>{p}</li>)}</ul></> : <span className="muted small-text">Nothing to push: the form matches YouTube.</span>}
+    </div>
     <button disabled={busy || out || !canEdit || !draft.title.trim()} onClick={async () => { setBusy(true); setError(''); setMessage(''); try {
       const result = await postJson<{ errors: string[] }>('/api/youtube/video-settings', { piece: piece.path, id: job.id, baseline: data.video, desired: { ...draft, tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }, before: data.selected, after: selected, subtitle, cover });
       // YouTube doesn't report Altered content back, so the file keeps the answer that was sent.
@@ -262,7 +279,7 @@ function ExistingForm({ reloads, piece, job, doc, covers, version, onChanged, ca
   </div>;
 }
 
-function MetadataComparison({ cost, out, doc, video, playlists, selected, piece, jobId, useLocal }: { cost: number; out: boolean; doc: LoadedDoc; video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; piece: string; jobId: string; useLocal: (field: SyncField, value: string) => boolean }) {
+function MetadataComparison({ cost, out, doc, video, playlists, selected, piece, jobId, useLocal, staged }: { cost: number; out: boolean; doc: LoadedDoc; video: YoutubeVideoSettings; playlists: YoutubePlaylist[]; selected: string[]; piece: string; jobId: string; useLocal: (field: SyncField, value: string) => boolean; staged: SyncField[] }) {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [error, setError] = useState('');
   if (doc.text === null) return null;
   const snapshot = doc.text; const online = youtubeValues(video);
@@ -286,12 +303,14 @@ function MetadataComparison({ cost, out, doc, video, playlists, selected, piece,
       try { local = localValue(snapshot, field); } catch (e) { issue = e instanceof Error ? e.message : String(e); }
       const remote = online[field];
       const diff = local !== null && remote !== null ? metadataDiff(field, local, remote) : null;
-      const state = comparisonState(local, remote, diff?.same, issue);
-      return <details className="compare-field" key={field}><summary><span>{field}</span><span className={`comparison-status ${state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span></summary>
+      // A field copied into the form waits there until Push Changes; it says so instead of just "Different".
+      const waiting = staged.includes(field);
+      const state = waiting ? 'Waiting to Push' : comparisonState(local, remote, diff?.same, issue);
+      return <details className="compare-field" key={field}><summary><span>{field}</span><span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span></summary>
         {issue && <p className="error">{issue}</p>}
         {diff?.reordered && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
         {diff?.limited && <p className="muted small-text">This text is too long to highlight individual words, so both values are highlighted.</p>}
-        <div className="compare-columns"><div><strong>Local file</strong><pre>{local === null ? '(not in this file)' : local === '' ? '(empty)' : diff ? <DiffText parts={diff.left} side="local" /> : local}</pre></div><div><strong>YouTube</strong><pre>{remote === null ? '(not provided by YouTube)' : remote === '' ? '(empty)' : diff ? <DiffText parts={diff.right} side="youtube" /> : remote}</pre></div></div>
+        <div className="compare-columns"><div className={waiting ? 'compare-waiting' : undefined} title={waiting ? 'Push Changes to YouTube, at the bottom of this section, sends this.' : undefined}>{waiting && <span className="waiting-badge">✓ Waiting to Push</span>}<strong>Local file</strong><pre>{local === null ? '(not in this file)' : local === '' ? '(empty)' : diff ? <DiffText parts={diff.left} side="local" /> : local}</pre></div><div><strong>YouTube</strong><pre>{remote === null ? '(not provided by YouTube)' : remote === '' ? '(empty)' : diff ? <DiffText parts={diff.right} side="youtube" /> : remote}</pre></div></div>
         <div className="compare-actions"><button disabled={busy || !!issue || local === null} onClick={async () => { if (local === null) return; setBusy(true); setError(''); setMessage(''); try { const current = await getText('projects', doc.file.path); if (current.replace(/^\uFEFF/, '') !== snapshot.replace(/^\uFEFF/, '')) throw new Error('The local file changed outside HeartQuarters. Reload the project and compare again.'); if (useLocal(field, local)) setMessage(`${field} is ready in the YouTube form. Click Push Changes to YouTube to apply it.`); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>Use Local on YouTube →</button>
           <button disabled={busy || out || !!issue || remote === null} onClick={async () => { if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return; setBusy(true); setError(''); setMessage(''); try {
             await verifyOnline([field]); await doc.save((text) => { if (text !== snapshot) throw new Error('The local file changed. Review it again before copying.'); return setLocalValue(text, field, remote); }); setMessage(`${field} saved to the local file.`);

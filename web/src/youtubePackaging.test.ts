@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues } from './youtubePackaging';
+import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, youtubeValues } from './youtubePackaging';
+
+describe('hashtags kept in their own field (older files)', () => {
+  const OLD = 'Title:\nT\n\nDescription:\nAbout the video.\n\nHashtags:\n#ayahuasca #mensmentalhealth\n\nTags:\na, b\n';
+  it("adds them to the end of the description, the way YouTube has it", () => {
+    expect(localValue(OLD, 'Description')).toBe('About the video.\n\n#ayahuasca #mensmentalhealth');
+    expect(localValue('Description:\nAbout.\n\n#x #y\n\nHashtags:\n#x #y\n', 'Description')).toBe('About.\n\n#x #y'); // not twice
+  });
+  it("puts YouTube's closing hashtags back in the Hashtags field when saving to the file", () => {
+    const saved = setLocalValue(OLD, 'Description', 'A new description.\n\n#ayahuasca #psychedelichealing');
+    expect(saved).toContain('Description:\nA new description.\n\nHashtags:\n#ayahuasca #psychedelichealing\n\nTags:');
+  });
+  it('only takes a last paragraph that is nothing but hashtags', () => {
+    expect(splitHashtags('Text.\n\n#a #b_c #ü1')).toEqual({ description: 'Text.', hashtags: '#a #b_c #ü1' });
+    expect(splitHashtags('Text.\n\nSee #a here')).toEqual({ description: 'Text.\n\nSee #a here', hashtags: null });
+    expect(splitHashtags('#a #b')).toEqual({ description: '#a #b', hashtags: null });
+  });
+});
 
 describe('local YouTube metadata', () => {
   const original = '# YouTube\r\n\r\nTitle:\r\nOld\r\n\r\nDescription:\r\nHello\r\nFull video:\r\nhttps://example.com\r\n\r\nPinned Comment:\r\nKeep this\r\n';

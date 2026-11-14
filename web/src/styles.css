@@ -493,4 +493,11 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 /* YouTube quota: the meter by Check Linked Videos, and the Reload bar at the top of a video's YouTube section. */
 .quota-meter { font-size: 0.8rem; margin: 0.4rem 0; color: var(--muted); }
 .quota-meter.quota-out { color: #b42318; font-weight: 600; }
+.push-summary { margin: 0.8rem 0 0.4rem; }
+.push-summary.has-changes { border: 2px solid #1f6feb; background: #eef4ff; border-radius: 8px; padding: 0.5rem 0.8rem; }
+.push-summary ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.push-note { color: #1f4fbf; font-weight: 600; font-size: 0.85rem; }
+.comparison-waiting { color: #1f4fbf; font-weight: 700; }
+.compare-waiting { border: 3px solid #1f6feb; border-radius: 12px; background: #eef4ff; padding: 0.5rem 0.7rem; position: relative; }
+.waiting-badge { display: inline-block; background: #1f6feb; color: #fff; font-weight: 700; font-size: 0.8rem; border-radius: 999px; padding: 0.15rem 0.6rem; margin-bottom: 0.35rem; margin-right: 0.5rem; }
 .yt-topbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; }
