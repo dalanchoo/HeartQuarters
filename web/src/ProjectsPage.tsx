@@ -18,10 +18,9 @@ import { PieceAI } from './PieceAI';
 import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
 import { DraftsSection } from './DraftsSection';
-import { YouTubeUpload } from './YouTubeUpload';
+import { LocalVsYouTube, YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
-import { addThumbnailPlanningFields } from './packaging';
 import type { VideoOverview } from '../../server/video-overview';
 import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
@@ -451,14 +450,6 @@ function DeletePackagingVersion({ piece, version, onChanged }: { piece: Piece; v
   </>;
 }
 
-function ThumbnailPlanning({ doc }: { doc: import('./PackagingDoc').LoadedDoc }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  if (doc.text === null || !doc.fields || addThumbnailPlanningFields(doc.text) === doc.text) return null;
-  return <div className="thumbnail-planning"><button className="small" disabled={busy} onClick={async () => {
-    setBusy(true); setError(''); try { await doc.save(addThumbnailPlanningFields); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-  }}>Add Thumbnail Planning Fields</button><span className="muted small-text"> Add thumbnail text and idea to {doc.file.name}.</span>{error && <p className="error">{error}</p>}</div>;
-}
-
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
 function OpenInCapCut({ draft }: { draft: string }) {
   const [message, setMessage] = useState<{ text: string; failed?: boolean } | null>(null);
@@ -586,7 +577,10 @@ function PieceCard({
   const [docsLoads, setDocsLoads] = useState(0);
   const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const [open, setOpen] = useState(startOpen);
-  const { focus, items } = useContext(StatusContext);
+  const { focus } = useContext(StatusContext);
+  // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
+  const link = useYoutubeLink(piece, longformProject, (plain || open) && piece.kind !== 'reel');
+  const youtubeDoc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
@@ -608,13 +602,17 @@ function PieceCard({
         />
       )}
       {piece.kind !== 'reel' && <PieceStatus path={piece.path} details />}
+      {piece.kind !== 'reel' && <YouTubeLinkBar piece={piece} link={link} />}
 
-      {/* Two columns: thumbnails, exports and versions on the left; text on the right. */}
+      {/* Two columns: the video on the left; its versions, notes and folder buttons on the right. */}
       <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
         <div className="piece-media">
           <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
-          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} onSaved={() => onChanged?.()} />}
+        </div>
 
+        <div className="piece-docs">
+          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} onSaved={() => onChanged?.()} />}
+          {!version && <p className="muted">No packaging yet.</p>}
           {version && (
             <div className="versions">
               {piece.versions.map((v) => (
@@ -641,21 +639,21 @@ function PieceCard({
             {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
           </div>
         </div>
+      </div>
 
-        <div className="piece-docs">
-          {!version && <p className="muted">No packaging yet.</p>}
+      {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
+      {youtubeDoc && piece.kind !== 'reel' ? (
+        <LocalVsYouTube key={youtubeDoc.file.path} piece={piece} doc={youtubeDoc} covers={version?.covers ?? []} version={version?.path} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
+      ) : (
+        <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
           {docs.slice(0, 1).map((d) => (
             <PackagingDocShort key={d.file.path} doc={d} />
           ))}
-          {docs.filter((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? '')).map((d) => <ThumbnailPlanning key={d.file.path} doc={d} />)}
-        </div>
-      </div>
-
-      {/* The main file's Description runs full width under both columns. */}
-      <PackagingDocsWide docs={docs} />
+          <PackagingDocsWide docs={docs} />
+        </>
+      )}
       {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} onChanged={onChanged} />}
-      {piece.kind !== 'reel' && <YouTubeUpload linked={items.find((item) => item.path === piece.path)?.link === 'linked'} piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );

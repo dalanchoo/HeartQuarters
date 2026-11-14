@@ -11,6 +11,7 @@ describe('YouTube quota', () => {
     expect(youtubeCost(`${api}/videos?id=x`)).toBe(1);
     expect(youtubeCost(`${api}/videos?part=snippet`, 'PUT')).toBe(50);
     expect(youtubeCost(`${api}/captions?videoId=x`)).toBe(50);
+    expect(youtubeCost(`${api}/captions/abc123?tfmt=srt`)).toBe(200); // downloading a track
     expect(youtubeCost('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet', 'POST')).toBe(400);
     expect(youtubeCost('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet', 'PUT')).toBe(450);
     expect(youtubeCost('https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=x', 'POST')).toBe(50);

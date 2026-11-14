@@ -8,7 +8,7 @@ import { readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.j
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings, readYoutubeVideos } from './youtube-video.js';
-import { fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
+import { fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 import { youtubeFetch } from './youtube-quota.js';
 
@@ -110,18 +110,35 @@ function completedUpload(piece: string, id: string): UploadJob {
 export async function downloadYoutubeThumbnail(piece: string, id: string, version: string) {
   const job = completedUpload(piece, id);
   const video = await readYoutubeVideo(await youtubeAccessToken(), job.videoId!);
-  if (!video.settings.thumbnail) throw new Error('YouTube did not provide a thumbnail for this video.');
-  const data = await fetchYoutubeThumbnail(video.settings.thumbnail);
+  const url = await firstWorkingThumbnail(video.settings.thumbnails ?? []);
+  if (!url) throw new Error('YouTube did not provide a thumbnail for this video.');
+  const data = await fetchYoutubeThumbnail(url);
   return savePackagingThumbnail(piece, version, data);
 }
 
-export async function existingYoutubeSettings(piece: string, id: string) {
+/** A linked video's settings and playlists. Captions cost 50 units more, so they're read only when asked for. */
+export async function existingYoutubeSettings(piece: string, id: string, withCaptions = true) {
   const job = completedUpload(piece, id); const token = await youtubeAccessToken();
   const [video, playlists] = await Promise.all([readYoutubeVideo(token, job.videoId!), videoPlaylists(piece, id)]);
+  video.settings.thumbnail = await firstWorkingThumbnail(video.settings.thumbnails ?? []);
   let captions: Awaited<ReturnType<typeof youtubeCaptionTracks>> | null = null;
   let captionError: string | null = null;
-  try { captions = await youtubeCaptionTracks(token, job.videoId!); } catch (e) { captionError = e instanceof Error ? e.message : String(e); }
+  if (withCaptions) { try { captions = await youtubeCaptionTracks(token, job.videoId!); } catch (e) { captionError = e instanceof Error ? e.message : String(e); } }
   return { video: video.settings, ...playlists, captions, captionError };
+}
+
+/**
+ * The captions YouTube has for a linked video, as text (about 250 units: 50 to find the track, 200 to download it).
+ * The uploaded track is preferred; YouTube's automatic one is used only when there's no other.
+ */
+export async function downloadYoutubeCaptions(piece: string, id: string): Promise<{ track: { language: string; kind: string; name: string } | null; text: string | null }> {
+  const job = completedUpload(piece, id); const token = await youtubeAccessToken();
+  const tracks = await youtubeCaptionTracks(token, job.videoId!);
+  const track = tracks.find((t) => t.kind.toLowerCase() !== 'asr') ?? tracks[0];
+  if (!track) return { track: null, text: null };
+  const res = await youtubeFetch(`https://www.googleapis.com/youtube/v3/captions/${encodeURIComponent(track.id)}?tfmt=srt`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`YouTube didn't send the captions (${res.status}). Captions YouTube made automatically may not be downloadable.`);
+  return { track: { language: track.language, kind: track.kind, name: track.name }, text: await res.text() };
 }
 
 export async function syncYoutubeSettings(piece: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings, before: unknown, after: unknown, subtitle: unknown, cover: unknown) {
@@ -135,7 +152,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   if (cover) {
     const folder = safeResolve('projects', path.join(piece, 'Packaging'));
     coverPath = safeResolve('projects', cover);
-    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > 2_000_000) throw new Error('Choose a PNG or JPEG cover under 2 MB from this project’s packaging.');
+    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > 50_000_000) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
   }
   const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
   const current = await videoPlaylists(piece, id);

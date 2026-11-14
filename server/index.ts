@@ -45,7 +45,7 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput } from './youtube.js';
+import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput, downloadYoutubeCaptions } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
@@ -82,7 +82,9 @@ app.get('/api/youtube/check-videos', (req, res) => { checkYoutubeVideos(req.quer
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.get('/api/youtube/video-settings', (req, res) => { existingYoutubeSettings(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+app.get('/api/youtube/video-settings', (req, res) => { existingYoutubeSettings(String(req.query.piece ?? ''), String(req.query.id ?? ''), req.query.captions !== '0').then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
+// ?piece=&id=: the captions on YouTube as text, only when John asks (about 250 units).
+app.get('/api/youtube/captions', (req, res) => { downloadYoutubeCaptions(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/video-settings', (req, res) => { syncYoutubeSettings(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.baseline, req.body?.desired, req.body?.before, req.body?.after, req.body?.subtitle, req.body?.cover).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.post('/api/youtube/download-thumbnail', (req, res) => { downloadYoutubeThumbnail(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.version ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/uploads', handle((req, res) => { res.json(uploadsFor(String(req.query.piece ?? ''))); }));

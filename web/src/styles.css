@@ -493,6 +493,24 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 /* YouTube quota: the meter by Check Linked Videos, and the Reload bar at the top of a video's YouTube section. */
 .quota-meter { font-size: 0.8rem; margin: 0.4rem 0; color: var(--muted); }
 .quota-meter.quota-out { color: #b42318; font-weight: 600; }
+/* The card's link to YouTube, on its status line. */
+.yt-linkbar { margin: 0.3rem 0 0.6rem; }
+.yt-linkbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.yt-link-input { flex: 1 1 18rem; min-width: 12rem; }
+/* Local vs YouTube: every field of YouTube.md, with one switch for all of them. */
+.local-vs-youtube { margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+.lvy-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.lvy-head h4 { margin: 0; }
+.view-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.view-switch button { border: none; border-radius: 0; box-shadow: none; margin: 0; }
+.view-switch button.active { background: #1f6feb; color: #fff; }
+.lvy-row { padding: 0.5rem 0; border-top: 1px solid var(--line); }
+.lvy-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
+.lvy-value { white-space: pre-wrap; margin: 0.2rem 0; font-family: inherit; background: var(--bg); padding: 0.4rem 0.6rem; border-radius: 6px; }
+.lvy-captions { max-height: 12rem; overflow: auto; font-size: 0.85rem; }
+.lvy-thumb { max-width: 100%; width: 420px; height: auto; border-radius: 6px; display: block; }
+.lvy-push { margin-top: 0.6rem; }
+.lvy-upload { margin-top: 0.8rem; }
 .push-summary { margin: 0.8rem 0 0.4rem; }
 .push-summary.has-changes { border: 2px solid #1f6feb; background: #eef4ff; border-radius: 8px; padding: 0.5rem 0.8rem; }
 .push-summary ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
