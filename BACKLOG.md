@@ -175,15 +175,17 @@ rest into that same V01 later, once there's a transcript.
 **Steps.** Each one is a skill first, then a button, as with every other job:
 1. **Thumbnail rules skill:** the channel's rules for thumbnails and titles, written with John, nothing about one
    episode.
-2. **Brief:** an AI writes `Brief.md` from the transcript, or from the idea or script before recording, with
-   Claude adding vidIQ research when it can. A paste box takes Ask Studio or vidIQ text. To check: whether
-   Codex can connect to vidIQ too.
+2. **Brief, by three AIs in turn:** Claude writes `Brief.md` from the source (the transcript after recording, John's
+   script or bullet points before) plus vidIQ research; then ChatGPT and Gemini each read the source and the brief
+   and add a review under their own name, with their ranking and at least one title and thumbnail idea of their
+   own. A paste box takes Ask Studio or vidIQ text. A checkbox, off by default, also lets an AI watch the video
+   (Gemini can). Format in the `thumbnails-and-titles` skill; tried by hand on 022 (Claude's part only so far).
+   To check: whether Codex can connect to vidIQ too.
 3. **Expression:** the AI names expressions that fit, such as Surprise or Doubt. HeartQuarters shows those photos
    from the library, and John clicks one.
 4. **Drafts:** send to ChatGPT and Gemini together, show both results side by side, and a change box under each.
 5. **Make Version**, the On YouTube notes, and the button changes above.
-6. **Stress test (optional):** Claude, ChatGPT and Gemini criticise the title and thumbnail ideas in the brief.
-7. **Shorts:** the same steps with a 9:16 cover and Shorts-style titles.
+6. **Shorts:** the same steps with a 9:16 cover and Shorts-style titles.
 
 ## Later
 
