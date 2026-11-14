@@ -29,7 +29,23 @@ export function nextVersionName(piece: string): string {
   return `V${String(Math.max(0, ...numbers) + 1).padStart(2, '0')}`;
 }
 
-/** Create an independent copy of one packaging version, as the next version (V01, V02...); never replace a file. */
+const NOT_YET = 'On YouTube: not yet.';
+
+/**
+ * A copied version isn't on YouTube yet, whatever its source's Notes.md said: each "On YouTube: ..." line becomes
+ * "On YouTube: not yet.", and the line is added when there was none. Everything else, and the line endings, stay.
+ */
+export function notYetOnYoutube(notes: string): string {
+  const eol = notes.includes('\r\n') ? '\r\n' : '\n';
+  if (/^On YouTube:.*$/im.test(notes)) return notes.replace(/^On YouTube:[^\r\n]*/gim, NOT_YET);
+  if (!notes.trim()) return `${NOT_YET}${eol}`;
+  return `${notes.replace(/\s+$/, '')}${eol}${eol}${NOT_YET}${eol}`;
+}
+
+/**
+ * Create an independent copy of one packaging version, as the next version (V01, V02...); never replace a file.
+ * The copy's Notes.md says it isn't on YouTube yet (see notYetOnYoutube).
+ */
 export async function copyPackagingVersion(piece: string, source: string): Promise<{ name: string; path: string }> {
   if (!piece || !source) throw new Error('Choose a packaging version to copy.');
   const name = nextVersionName(piece);
@@ -62,5 +78,9 @@ export async function copyPackagingVersion(piece: string, source: string): Promi
   };
   try { await copy(from, to); }
   catch (e) { throw new Error(`The copy stopped. The new folder "${name}" may be incomplete; check it before using it. ${e instanceof Error ? e.message : String(e)}`); }
+  const notesFile = (await fs.promises.readdir(to)).find((f) => f.toLowerCase() === 'notes.md') ?? 'Notes.md';
+  const notesPath = path.join(to, notesFile);
+  const notes = fs.existsSync(notesPath) ? await fs.promises.readFile(notesPath, 'utf8') : '';
+  await fs.promises.writeFile(notesPath, notYetOnYoutube(notes));
   return { name, path: path.relative(safeResolve('projects', ''), to).split(path.sep).join('/') };
 }

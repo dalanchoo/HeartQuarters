@@ -432,9 +432,9 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
   const next = `V${String(Math.max(0, ...piece.versions.map((v) => Number(/^V(\d+)/i.exec(v.name)?.[1] ?? 0))) + 1).padStart(2, '0')}`;
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   return <>
-    <button className="small" disabled={busy} title={`Copies everything in ${source.name} into a new version, ${next}`} onClick={async () => { setBusy(true); setError(''); try {
+    <button className="small" disabled={busy} title={`Copies everything in ${source.name} into a new version, ${next}. Its Notes.md will say it isn't on YouTube yet.`} onClick={async () => { setBusy(true); setError(''); try {
       const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path }); onCreated(result.name);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : '+ New Version'}</button>
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : `Copy ${versionLabel(source.name)} to New Version`}</button>
     {error && <p className="error">{error}</p>}
   </>;
 }

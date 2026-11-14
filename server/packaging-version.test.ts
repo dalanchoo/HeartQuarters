@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { copyPackagingVersion, nextVersionName, trashPackagingVersion } from './packaging-version';
+import { copyPackagingVersion, nextVersionName, notYetOnYoutube, trashPackagingVersion } from './packaging-version';
 let tmp: string; let old: string; let oldTrash: string;
 beforeEach(() => { tmp = makeTree({ 'Videos/piece/Packaging/V01/YouTube.md': 'original', 'Videos/piece/Packaging/V01/Covers/image.png': 'cover', 'Videos/piece/Packaging/V02/YouTube.md': 'existing', 'Videos/other/Packaging/V01/YouTube.md': 'other' }); old = config.videoProjectsDir; oldTrash = config.trashDir; config.videoProjectsDir = path.join(tmp, 'Videos'); config.trashDir = path.join(tmp, 'Trash'); });
 afterEach(() => { config.videoProjectsDir = old; config.trashDir = oldTrash; removeTree(tmp); });
@@ -14,6 +14,18 @@ describe('copying a packaging version', () => {
     expect(result.path).toBe('piece/Packaging/V03');
     expect(fs.readFileSync(path.join(tmp, 'Videos', result.path, 'Covers', 'image.png'), 'utf8')).toBe('cover');
     expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/V01/YouTube.md'), 'utf8')).toBe('original');
+  });
+  it("says the copy isn't on YouTube yet, and leaves the source's notes alone", async () => {
+    fs.writeFileSync(path.join(tmp, 'Videos/piece/Packaging/V01/Notes.md'), 'Made by hand.\r\n\r\nOn YouTube: from 2026-11-05.\r\n');
+    const result = await copyPackagingVersion('piece', 'piece/Packaging/V01');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', result.path, 'Notes.md'), 'utf8')).toBe('Made by hand.\r\n\r\nOn YouTube: not yet.\r\n');
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/V01/Notes.md'), 'utf8')).toContain('from 2026-11-05');
+  });
+  it('adds the On YouTube line when the notes had none, or there were no notes', async () => {
+    expect(notYetOnYoutube('Some notes.\n')).toBe('Some notes.\n\nOn YouTube: not yet.\n');
+    expect(notYetOnYoutube('')).toBe('On YouTube: not yet.\n');
+    const result = await copyPackagingVersion('piece', 'piece/Packaging/V01');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', result.path, 'Notes.md'), 'utf8')).toBe('On YouTube: not yet.\n');
   });
   it("refuses another video's source and leaves the other versions alone", async () => {
     await expect(copyPackagingVersion('piece', 'other/Packaging/V01')).rejects.toThrow(/version in this video/);
