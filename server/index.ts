@@ -18,6 +18,7 @@ import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
+import { briefSource, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
 import {
   hasRetention,
   keepOldPlan,
@@ -417,6 +418,42 @@ app.post('/api/piece-ai/metadata', handle((req, res) => {
 app.post('/api/piece-ai/stop', handle((req, res) => {
   res.json(stopPiece(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
 }));
+
+// ?piece=: what the brief would be made from, and the brief being written, if any.
+app.get('/api/brief', handle((req, res) => {
+  const piece = String(req.query.piece ?? '');
+  res.json({ source: briefSource(piece), job: getBrief(piece) });
+}));
+
+// { piece, notes }: Claude writes the brief, then ChatGPT and Gemini review it, in the background.
+app.post('/api/brief/start', async (req, res) => {
+  try {
+    const { job } = await startBrief(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''));
+    res.json(job);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// { piece, index }: John chose one of the top 3 pairs (saved as Drafts\Choice.json).
+app.post('/api/brief/choose', handle((req, res) => {
+  res.json(chooseBriefPick(String(req.body?.piece ?? ''), req.body?.index));
+}));
+
+// { piece, photo }: the expressions-library photo for the chosen pair.
+app.post('/api/brief/photo', handle((req, res) => {
+  res.json(chooseBriefPhoto(String(req.body?.piece ?? ''), req.body?.photo));
+}));
+
+// { piece, notes }: only the last step, Claude picking the top 3 pairs, on the brief that's already there.
+app.post('/api/brief/picks', async (req, res) => {
+  try {
+    const { job } = await startPicks(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''));
+    res.json(job);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // { video, url }
 app.post('/api/shorts/longform-url', handle((req, res) => {

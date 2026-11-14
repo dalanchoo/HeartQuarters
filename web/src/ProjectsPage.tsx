@@ -653,7 +653,7 @@ function PieceCard({
 
       {/* The main file's Description runs full width under both columns. */}
       <PackagingDocsWide docs={docs} />
-      <DraftsSection drafts={piece.drafts} />
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} onChanged={onChanged} />}
       {piece.kind !== 'reel' && <YouTubeUpload linked={items.find((item) => item.path === piece.path)?.link === 'linked'} piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
       <PackagingOtherPlatforms docs={docs} />
     </>

@@ -7,10 +7,13 @@ export type {
   Piece,
   PackagingVersion,
   Drafts,
+  BriefPick,
+  BriefChoice,
   DraftConversation,
   FileRef,
 } from '../../server/projects';
 export type { Job } from '../../server/tools';
+export type { BriefJob, BriefSource } from '../../server/brief';
 export type { NewKind, CreateResult } from '../../server/create';
 export type { ManageInfo, ManageResult } from '../../server/manage';
 export type { WritingSummary, WritingDetail } from '../../server/writing';

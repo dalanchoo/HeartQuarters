@@ -49,12 +49,80 @@ export interface DraftConversation {
   requests: FileRef | null;
 }
 
+/** One of the brief's top title and thumbnail pairs (Picks.json, written by Write Brief's last step). */
+export interface BriefPick {
+  title: string;
+  thumbnailText: string;
+  /** The word in the thumbnail text shown in the accent colour. */
+  accent: string;
+  /** Expressions-library categories that fit, e.g. "Composure > Calm". */
+  expression: string;
+  background: string;
+  why: string;
+  /** Which AIs suggested or ranked it highly. */
+  backedBy: string[];
+}
+
 /** Packaging\Drafts: the brainstorming before a version is made. Not a version itself. */
 export interface Drafts {
   path: string;
   /** Brief.md: the brief and the AIs' reviews. */
   brief: FileRef | null;
+  /** The top 3 pairs from Picks.json, or null when there are none (or the file can't be read). */
+  picks: BriefPick[] | null;
+  /** The pair John chose and the photo he picked for it (Choice.json), or null before he has chosen. */
+  choice: BriefChoice | null;
   conversations: DraftConversation[];
+}
+
+export const PICKS_FILE = 'Picks.json';
+export const CHOICE_FILE = 'Choice.json';
+
+/** What John chose from the top 3, and the expressions-library photo he picked for it. */
+export interface BriefChoice {
+  pick: BriefPick;
+  /** Which of the picks it was (0, 1 or 2), so the page can mark it. */
+  index: number;
+  /** The photo, relative to the expressions library, e.g. "Positive/Relief/Relief_003.jpg"; null until picked. */
+  photo: string | null;
+}
+
+/** Choice.json, or null if it's missing or not in that form. */
+export function readChoice(file: string): BriefChoice | null {
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')) as { pick?: unknown; index?: unknown; photo?: unknown };
+    const pick = parsePicks({ picks: [data.pick] })?.[0];
+    if (!pick || typeof data.index !== 'number') return null;
+    return { pick, index: data.index, photo: typeof data.photo === 'string' && data.photo ? data.photo : null };
+  } catch {
+    return null;
+  }
+}
+
+/** Picks.json's pairs; null if the file is missing or not in that form. */
+export function readPicks(file: string): BriefPick[] | null {
+  try {
+    return parsePicks(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')));
+  } catch {
+    return null;
+  }
+}
+
+/** { picks: [...] } checked field by field (at most 3); null if it isn't in that form. */
+export function parsePicks(data: unknown): BriefPick[] | null {
+  const list = (data as { picks?: unknown } | null)?.picks;
+  if (!Array.isArray(list) || !list.length) return null;
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const picks = list.slice(0, 3).map((p: Record<string, unknown>) => ({
+    title: text(p?.title),
+    thumbnailText: text(p?.thumbnailText),
+    accent: text(p?.accent),
+    expression: text(p?.expression),
+    background: text(p?.background),
+    why: text(p?.why),
+    backedBy: Array.isArray(p?.backedBy) ? p.backedBy.filter((b): b is string => typeof b === 'string') : [],
+  }));
+  return picks.every((p) => p.title && p.thumbnailText) ? picks : null;
 }
 
 /** The scratchpad folder for thumbnail and title drafts, inside Packaging. */
@@ -210,7 +278,7 @@ function readDrafts(packagingRoot: string): Drafts | null {
       requests: named(filesIn(cDir, DOC_EXTS), 'requests.md'),
     };
   });
-  return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), conversations };
+  return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), picks: readPicks(path.join(dir, PICKS_FILE)), choice: readChoice(path.join(dir, CHOICE_FILE)), conversations };
 }
 
 /**

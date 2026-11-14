@@ -435,7 +435,9 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 
 /* Thumbnail & Title Drafts: the brief, and one box per AI conversation. */
 .drafts { margin: 0.8rem 0; }
-.drafts > summary { cursor: pointer; font-weight: 600; }
+.drafts > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.45rem; }
+.drafts > summary::before { content: '▸'; color: var(--muted); transition: transform 0.1s; }
+.drafts[open] > summary::before { transform: rotate(90deg); }
 .drafts-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.4rem; margin: 0.5rem 0; }
 .drafts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.8rem; }
 .thumb-draft { border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; }
@@ -443,8 +445,42 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .thumb-draft img { width: 100%; height: auto; display: block; border-radius: 4px; }
 .draft-rounds { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.4rem 0; }
 .draft-text { margin-top: 0.4rem; flex-basis: 100%; }
-.drafts-top .draft-text { flex-basis: auto; margin-top: 0; }
-.draft-text pre { white-space: pre-wrap; max-height: 24rem; overflow: auto; font-size: 0.8rem; background: var(--bg); padding: 0.5rem; border-radius: 4px; }
+.write-brief { margin: 0.4rem 0 0.6rem; }
+.top-picks { margin: 0.6rem 0 0.8rem; }
+.top-picks h4 { margin: 0 0 0.4rem; }
+.top-picks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.7rem; }
+.top-pick { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.top-pick p { margin: 0; }
+.top-pick button { align-self: flex-start; margin-top: auto; }
+.top-pick.chosen { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.top-pick-text { font-weight: 800; font-size: 1.25rem; line-height: 1.1; letter-spacing: 0.01em; }
+.top-pick-text .accent-word { color: var(--accent); }
+.top-pick-title { font-weight: 600; }
+.photo-picker { margin-top: 0.8rem; }
+.photo-picker h4 { margin: 0 0 0.3rem; }
+.photo-group { margin: 0.5rem 0; }
+.photo-group p { margin: 0 0 0.3rem; }
+.photo-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-start; }
+/* Whole photos, never cropped: a fixed height, the width follows the photo. */
+.photo-tile { border: 4px solid transparent; border-radius: 8px; padding: 2px; }
+.photo-tile.picked { border-color: #1a7f37; background: #e6f4ea; }
+.photo-choice { padding: 0; min-height: 0; border: none; background: none; box-shadow: none; cursor: pointer; line-height: 0; display: block; }
+.photo-choice:hover { transform: none; background: none; }
+.photo-choice:hover img { outline: 2px solid var(--accent); }
+.photo-choice img { height: 150px; width: auto; max-width: 240px; object-fit: contain; border-radius: 4px; background: var(--bg); }
+.photo-path { font-size: 0.72rem; margin-top: 0.2rem; max-width: 240px; overflow-wrap: anywhere; }
+.photo-tile-foot { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; margin-top: 0.2rem; }
+.picked-label { color: #1a7f37; font-weight: 700; }
+.photo-group .small { margin-left: 0.5rem; }
+.add-category { display: block; margin: 0.6rem 0; }
+.write-brief textarea { width: 100%; box-sizing: border-box; margin-bottom: 0.3rem; }
+.brief-steps { margin: 0.4rem 0; padding-left: 1.2rem; }
+.brief-working { font-weight: 600; }
+.brief-done { color: var(--ok); }
+.brief-failed { color: var(--bad); }
+.brief-skipped, .brief-waiting { color: var(--muted); }
+.draft-md { max-width: none; max-height: 36rem; overflow: auto; background: var(--bg); padding: 0.4rem 1rem; border-radius: 6px; margin-top: 0.4rem; }
+.draft-md h1 { font-size: 1.3rem; } .draft-md h2 { font-size: 1.1rem; margin-top: 1.2rem; } .draft-md h3 { font-size: 1rem; } .draft-md h4 { font-size: 0.95rem; }
 
 /* YouTube quota: the meter by Check Linked Videos, and the Reload bar at the top of a video's YouTube section. */
 .quota-meter { font-size: 0.8rem; margin: 0.4rem 0; color: var(--muted); }
