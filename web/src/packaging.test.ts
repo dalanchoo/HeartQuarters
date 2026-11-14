@@ -16,6 +16,21 @@ describe('thumbnail planning', () => {
   });
 });
 
+describe('older label spellings', () => {
+  it('reads "PINNED COMMENT" without a colon as the Pinned Comment label, not as part of the tags', () => {
+    const fields = parseFields('Title:\nT\n\nTags:\na, b\n\nPINNED COMMENT\nHas this happened to you?\n\nVideo language:\nen-US\n');
+    expect(fields?.map((f) => [f.label, f.value])).toEqual([
+      ['Title', 'T'],
+      ['Tags', 'a, b'],
+      ['Pinned Comment', 'Has this happened to you?'],
+      ['Video language', 'en-US'],
+    ]);
+  });
+  it('does not take an ordinary line in capitals for a label', () => {
+    expect(parseFields('Thumbnail text:\nROPE BROKE ME OPEN\n\nTags:\nx\n')?.map((f) => f.label)).toEqual(['Thumbnail text', 'Tags']);
+  });
+});
+
 describe('setFieldValue', () => {
   const FILE = '# YouTube Info\n\nTitle:\nOld title\n\nDescription:\nHook.\n\nFull video:\nhttps://a\n\nTags:\nx, y\n\nPinned Comment:\nA question?\n';
 

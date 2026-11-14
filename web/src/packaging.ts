@@ -49,7 +49,7 @@ export function addThumbnailPlanningFields(text: string): string {
 export function isBlankPackaging(text: string): boolean {
   return text.split(/\r?\n/).every((line) => {
     const trimmed = line.trim();
-    return trimmed === '' || trimmed === '#tags' || trimmed.startsWith('# ') || LABEL_RE.test(trimmed);
+    return trimmed === '' || trimmed === '#tags' || trimmed.startsWith('# ') || labelOf(trimmed) !== null;
   });
 }
 
@@ -64,16 +64,30 @@ export function parseFields(text: string): Field[] | null {
   return spans.map((s) => ({ label: s.label, value: lines.slice(s.from, s.to).join('\n').trim() }));
 }
 
+/**
+ * A line's label, or null if it isn't one. A label is "Title:" on its own line. Older files also wrote some labels in
+ * capitals without the colon ("PINNED COMMENT"); those count when they're one of the known field names, and are given
+ * the usual spelling ("Pinned Comment").
+ */
+export function labelOf(line: string): string | null {
+  const trimmed = line.trim();
+  const match = LABEL_RE.exec(trimmed);
+  if (match) return match[1];
+  const old = /^([A-Z][A-Z ]{2,30}):?$/.exec(trimmed);
+  if (old && AFTER_DESCRIPTION.has(old[1].toLowerCase())) return old[1].toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return null;
+}
+
 /** Each field's label and which lines hold its value: from just after the label, up to the next label. */
 function fieldSpans(lines: string[]): { label: string; from: number; to: number }[] {
   const spans: { label: string; from: number; to: number }[] = [];
   lines.forEach((line, i) => {
-    const match = LABEL_RE.exec(line.trim());
-    if (!match) return;
+    const label = labelOf(line);
+    if (!label) return;
     const current = spans[spans.length - 1];
-    if (current?.label.toLowerCase() === 'description' && !AFTER_DESCRIPTION.has(match[1].toLowerCase())) return;
+    if (current?.label.toLowerCase() === 'description' && !AFTER_DESCRIPTION.has(label.toLowerCase())) return;
     if (current) current.to = i;
-    spans.push({ label: match[1], from: i + 1, to: lines.length });
+    spans.push({ label, from: i + 1, to: lines.length });
   });
   return spans;
 }
@@ -113,8 +127,8 @@ function descriptionLines(lines: string[]): { from: number; to: number } | null 
   const label = lines.findIndex((l) => /^description:\s*$/i.test(l.trim()));
   if (label < 0) return null;
   const next = lines.findIndex((l, i) => {
-    const match = i > label ? LABEL_RE.exec(l.trim()) : null;
-    return !!match && AFTER_DESCRIPTION.has(match[1].toLowerCase());
+    const found = i > label ? labelOf(l) : null;
+    return !!found && AFTER_DESCRIPTION.has(found.toLowerCase());
   });
   return { from: label + 1, to: next < 0 ? lines.length : next };
 }

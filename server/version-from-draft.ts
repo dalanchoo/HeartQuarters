@@ -19,6 +19,9 @@ import { AI_NAMES } from './ai.js';
 export type Enlarge = (source: string, out: string, width: number, height: number) => Promise<void>;
 
 const LABEL_RE = /^[A-Z][A-Za-z ]{0,30}:\s*$/;
+/** Older files wrote some labels in capitals without the colon ("PINNED COMMENT"); only known field names count. */
+const OLD_LABELS = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'thumbnail idea', 'video language', 'made for kids', 'altered content', 'playlists']);
+const isLabel = (line: string) => LABEL_RE.test(line) || OLD_LABELS.has(line.replace(/:$/, '').toLowerCase()) && /^[A-Z][A-Z ]+:?$/.test(line);
 const ROUND_RE = /^(\d+)\.(png|jpe?g|webp)$/i;
 
 /**
@@ -34,7 +37,7 @@ export function setField(text: string, label: string, value: string): string {
     return [...lines, '', `${label}:`, value].join(eol) + eol;
   }
   let end = at + 1;
-  while (end < lines.length && lines[end].trim() && !LABEL_RE.test(lines[end].trim())) end++;
+  while (end < lines.length && lines[end].trim() && !isLabel(lines[end].trim())) end++;
   lines.splice(at + 1, end - (at + 1), value);
   return lines.join(eol);
 }
