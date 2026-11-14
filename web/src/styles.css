@@ -457,6 +457,14 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .top-pick-text .accent-word { color: var(--accent); }
 .top-pick-title { font-weight: 600; }
 .photo-picker { margin-top: 0.8rem; }
+.make-thumbnail { margin: 0.8rem 0; padding: 0.6rem; border: 1px solid var(--line); border-radius: 8px; }
+.make-thumbnail h4 { margin: 0 0 0.3rem; }
+.draft-change { margin-top: 0.4rem; }
+.draft-change textarea { width: 100%; box-sizing: border-box; margin-bottom: 0.3rem; }
+.ref-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.3rem; }
+.ref-item { position: relative; line-height: 0; }
+.ref-item img { height: 64px; width: auto; border-radius: 4px; border: 1px solid var(--line); }
+.ref-item button { position: absolute; top: 2px; right: 2px; min-height: 0; padding: 0 0.3rem; line-height: 1.2; }
 .photo-picker h4 { margin: 0 0 0.3rem; }
 .photo-group { margin: 0.5rem 0; }
 .photo-group p { margin: 0 0 0.3rem; }

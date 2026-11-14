@@ -19,6 +19,8 @@ import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
+import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
+import { makeVersionFromDraft } from './version-from-draft.js';
 import {
   hasRetention,
   keepOldPlan,
@@ -53,6 +55,7 @@ const app = express();
 app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
+app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
 app.use(express.json());
 
 // YouTube sign-in and uploads. The callback is a Google browser redirect; its
@@ -434,6 +437,30 @@ app.post('/api/brief/start', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+// { piece, image }: Make Version from one draft image: the next version, with the image enlarged to full size.
+app.post('/api/packaging/version-from-draft', async (req, res) => {
+  try {
+    res.json(await makeVersionFromDraft(String(req.body?.piece ?? ''), String(req.body?.image ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ?piece=: the thumbnails being made for this video, and how each went.
+app.get('/api/thumbs', handle((req, res) => {
+  res.json(thumbJobs(String(req.query.piece ?? '')));
+}));
+
+// { piece, ai }: Make Thumbnail with ChatGPT ("codex") or Gemini, from the chosen pair and photo, in the background.
+app.post('/api/thumbs/make', handle((req, res) => {
+  res.json(startThumbnail(String(req.body?.piece ?? ''), req.body?.ai).job);
+}));
+
+// { piece, conversation, text, pasted, drafts }: a change request, with any reference images (pasted, or drafts of this video), to the conversation that made that draft.
+app.post('/api/thumbs/change', handle((req, res) => {
+  res.json(changeThumbnail(String(req.body?.piece ?? ''), String(req.body?.conversation ?? ''), req.body?.text, undefined, { pasted: req.body?.pasted, drafts: req.body?.drafts }).job);
+}));
 
 // { piece, index }: John chose one of the top 3 pairs (saved as Drafts\Choice.json).
 app.post('/api/brief/choose', handle((req, res) => {

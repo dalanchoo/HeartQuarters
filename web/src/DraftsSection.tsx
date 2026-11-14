@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex } from './api';
+import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
 // thumbnail pairs (server/brief.ts). The top 3 show as cards to choose from; the full brief opens below them, then one
-// box per AI conversation with every image it made, newest first, and what was asked.
+// box per AI conversation with every image it made, newest first, and what was asked. Once a pair and its photo are
+// chosen, Make Thumbnail asks ChatGPT or Gemini for one (server/thumbnails.ts), and each draft has a box for changes.
 export function DraftsSection({ piece, drafts, onChanged }: { piece: string; drafts: Drafts | null; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
+  const thumbs = useThumbJobs(piece, open, onChanged);
   const images = drafts?.conversations.reduce((n, c) => n + c.images.length, 0) ?? 0;
   const conversations = drafts?.conversations.length ?? 0;
   return (
@@ -25,6 +27,7 @@ export function DraftsSection({ piece, drafts, onChanged }: { piece: string; dra
       </summary>
       {open && <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} onChanged={onChanged} />}
       {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
+      {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
       {drafts && (
         <>
           <div className="drafts-top">
@@ -34,13 +37,75 @@ export function DraftsSection({ piece, drafts, onChanged }: { piece: string; dra
             {drafts.brief && <TextToggle key={drafts.brief.path + drafts.brief.size} label="Full Brief" path={drafts.brief.path} />}
           </div>
           <div className="drafts-grid">
-            {drafts.conversations.map((c) => (
-              <Conversation key={c.path} conversation={c} />
+            {[...drafts.conversations].reverse().map((c) => (
+              <Conversation key={c.path} piece={piece} conversation={c} allDrafts={drafts.conversations} job={thumbs.jobs.find((j) => j.conversation === c.path)} thumbs={thumbs} onChanged={onChanged} />
             ))}
           </div>
         </>
       )}
     </details>
+  );
+}
+
+interface ThumbJobs {
+  jobs: ThumbJob[];
+  /** Call after starting one: checks again, and keeps checking while any is working. */
+  refresh: () => void;
+}
+
+/** The thumbnails being made for this piece. While any is working, checks every few seconds; when one finishes, the card reloads. */
+function useThumbJobs(piece: string, open: boolean, onChanged?: () => void): ThumbJobs {
+  const [jobs, setJobs] = useState<ThumbJob[]>([]);
+  const before = useRef<Record<string, string>>({});
+  const load = () =>
+    getJson<ThumbJob[]>(`/api/thumbs?piece=${encodeURIComponent(piece)}`).then((list) => {
+      const finished = list.some((j) => before.current[j.conversation] === 'working' && j.state !== 'working');
+      before.current = Object.fromEntries(list.map((j) => [j.conversation, j.state]));
+      setJobs(list);
+      if (finished) onChanged?.();
+    }, () => undefined);
+  useEffect(() => {
+    if (open) void load();
+  }, [open, piece]);
+  const working = jobs.some((j) => j.state === 'working');
+  useEffect(() => {
+    if (!working) return;
+    const timer = setInterval(() => void load(), 4000);
+    return () => clearInterval(timer);
+  }, [working]);
+  return { jobs, refresh: () => void load() };
+}
+
+/** Make Thumbnail: sends the chosen pair and photo to ChatGPT or Gemini. Each go becomes a new draft below. */
+function MakeThumbnail({ piece, choice, thumbs, onChanged }: { piece: string; choice: BriefChoice; thumbs: ThumbJobs; onChanged?: () => void }) {
+  const [error, setError] = useState('');
+  const make = (ai: 'codex' | 'gemini') => {
+    setError('');
+    postJson('/api/thumbs/make', { piece, ai }).then(
+      () => {
+        thumbs.refresh();
+        onChanged?.(); // the new draft's box appears at once, marked as working
+      },
+      (e: Error) => setError(e.message),
+    );
+  };
+  return (
+    <div className="make-thumbnail">
+      <h4>Make Thumbnail</h4>
+      <p className="muted small-text">
+        For {choice.pick.thumbnailText.toUpperCase()} with {choice.photo?.split('/').pop()}. Each go is a new draft below, and takes a minute or two.
+        In tests, ChatGPT kept your likeness better than Gemini.
+      </p>
+      <div className="claude-buttons">
+        <button className="small" onClick={() => make('codex')}>
+          Make with ChatGPT
+        </button>
+        <button className="small" onClick={() => make('gemini')}>
+          Make with Gemini
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
+    </div>
   );
 }
 
@@ -281,10 +346,77 @@ function WriteBrief({ piece, hasBrief, hasPicks, onChanged }: { piece: string; h
   );
 }
 
-function Conversation({ conversation }: { conversation: DraftConversation }) {
+/** A reference image for a change request: pasted or dropped (sent as image data), or one of this video's drafts. */
+type Reference = { kind: 'pasted'; data: string; preview: string } | { kind: 'draft'; path: string; label: string };
+
+/** Reads pasted or dropped image files as references. */
+function readImages(files: File[]): Promise<Reference[]> {
+  return Promise.all(
+    files
+      .filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type))
+      .map(
+        (f) =>
+          new Promise<Reference>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Could not read the image.'));
+            reader.onload = () => {
+              const url = String(reader.result);
+              resolve({ kind: 'pasted', data: url.split(',')[1] ?? '', preview: url });
+            };
+            reader.readAsDataURL(f);
+          }),
+      ),
+  );
+}
+
+function Conversation({ piece, conversation, allDrafts, job, thumbs, onChanged }: { piece: string; conversation: DraftConversation; allDrafts: DraftConversation[]; job?: ThumbJob; thumbs: ThumbJobs; onChanged?: () => void }) {
   const rounds = [...conversation.images].reverse(); // newest first
-  const [shown, setShown] = useState(rounds[0]?.path);
+  const [shown, setShown] = useState<string | undefined>(undefined);
   const current = rounds.find((r) => r.path === shown) ?? rounds[0];
+  const [change, setChange] = useState('');
+  const [refs, setRefs] = useState<Reference[]>([]);
+  const [making, setMaking] = useState(false);
+  const [made, setMade] = useState('');
+  // Make Version: the round on screen becomes the next packaging version, enlarged to full size.
+  const makeVersion = () => {
+    if (!current) return;
+    const round = current.name.replace(/\.[^.]+$/, '');
+    if (!window.confirm(`Make the next version from ${conversation.name}, round ${round}? It gets this thumbnail at full size and the pair's title. Existing versions are left as they are.`)) return;
+    setMaking(true);
+    setError('');
+    postJson<{ name: string }>('/api/packaging/version-from-draft', { piece, image: current.path }).then(
+      (r) => {
+        setMade(r.name);
+        onChanged?.();
+      },
+      (e: Error) => setError(e.message),
+    ).finally(() => setMaking(false));
+  };
+  const [error, setError] = useState('');
+  const working = job?.state === 'working';
+  const addFiles = (files: File[]) => {
+    if (!files.length) return;
+    readImages(files).then((more) => {
+      if (!more.length) setError('Only PNG, JPEG or WebP images can be references.');
+      setRefs((r) => [...r, ...more].slice(0, 4));
+    }, (e: Error) => setError(e.message));
+  };
+  const ask = () => {
+    setError('');
+    const pasted = refs.flatMap((r) => (r.kind === 'pasted' ? [r.data] : []));
+    const fromDrafts = refs.flatMap((r) => (r.kind === 'draft' ? [r.path] : []));
+    postJson('/api/thumbs/change', { piece, conversation: conversation.path, text: change, pasted, drafts: fromDrafts }).then(
+      () => {
+        setChange('');
+        setRefs([]);
+        setShown(undefined); // show the new image when it arrives
+        thumbs.refresh();
+      },
+      (e: Error) => setError(e.message),
+    );
+  };
+  // Every draft image of this video, for "use a draft as a reference".
+  const draftImages = allDrafts.flatMap((c) => c.images.map((i) => ({ path: i.path, label: `${c.name} · ${i.name.replace(/\.[^.]+$/, '')}` })));
   return (
     <div className="thumb-draft">
       <h4>{conversation.name}</h4>
@@ -304,6 +436,74 @@ function Conversation({ conversation }: { conversation: DraftConversation }) {
           ))}
         </div>
       )}
+      {current && !working && (
+        <div className="claude-buttons">
+          <button className="small" disabled={making} onClick={makeVersion}>
+            {making ? 'Making the version…' : `Make Version from ${current.name.replace(/\.[^.]+$/, '')}`}
+          </button>
+        </div>
+      )}
+      {made && <p className="small-text picked-label">Made {made}. It's now the newest version above.</p>}
+      {working && <p className="brief-working small-text">{conversation.name.replace(/ \d+$/, '')} is working on it…</p>}
+      {job?.state === 'failed' && <p className="error small-text">{job.error}</p>}
+      {rounds.length > 0 && !working && (
+        <div
+          className="draft-change"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            addFiles([...e.dataTransfer.files]);
+          }}
+        >
+          <textarea
+            rows={2}
+            value={change}
+            onChange={(e) => setChange(e.target.value)}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+              if (!files.length) return; // ordinary text
+              e.preventDefault();
+              addFiles(files);
+            }}
+            placeholder="What to change, e.g. make the rope look like the reference. Paste or drop an image here as a reference."
+          />
+          {refs.length > 0 && (
+            <div className="ref-list">
+              {refs.map((r, i) => (
+                <div key={i} className="ref-item">
+                  <img src={r.kind === 'pasted' ? r.preview : thumbUrl('projects', r.path, 240)} alt="Reference" />
+                  <button className="small" title="Remove this reference" onClick={() => setRefs(refs.filter((_, j) => j !== i))}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="claude-buttons">
+            <button className="small" disabled={!change.trim()} onClick={ask}>
+              Ask for Changes
+            </button>
+            {draftImages.length > 0 && refs.length < 4 && (
+              <select
+                className="small-text"
+                value=""
+                onChange={(e) => {
+                  const d = draftImages.find((x) => x.path === e.target.value);
+                  if (d) setRefs([...refs, { kind: 'draft', path: d.path, label: d.label }]);
+                }}
+              >
+                <option value="">Add a draft as reference…</option>
+                {draftImages.map((d) => (
+                  <option key={d.path} value={d.path}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      )}
+      {error && <p className="error small-text">{error}</p>}
       {conversation.requests && <TextToggle label="Requests" path={conversation.requests.path} />}
     </div>
   );
