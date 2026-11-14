@@ -123,6 +123,67 @@ Automation levels:
 | 7a | "Prepare Video" button (sync, pop repair, Adobe Enhance when needed) into `Longform\Intermediate\Takes\` | Prep | Placeholder button first. Raw\ stays untouched originals. |
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
+| 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
+
+### Plan for #20: thumbnail and title generator
+
+**Tested on 2026-11-13:** ChatGPT (through Codex) and Gemini (through Antigravity), run by HeartQuarters on John's
+subscriptions with no API keys, both made a thumbnail with John's real face from an expressions-library photo.
+ChatGPT stays closer to the photo; Gemini changes the pose more. Codex saves the image where it's asked to. Gemini
+keeps it in its own folder (`.gemini\antigravity-cli\brain\<conversation>\`), and HeartQuarters copies it from
+there. Only Claude has vidIQ connected today.
+
+**Where it lives:** in each video's Packaging section, not a new tab. Shorts get the same thing in their own
+Packaging section, with 9:16 covers.
+
+**Drafts are not versions.** A version is something worth trying on YouTube. Everything made along the way is a
+draft, kept in `Packaging\Drafts\` (a scratchpad):
+- `Brief.md`: what this thumbnail and title should be (the idea, the text on the image, the expression photo,
+  the title ideas). John can edit it.
+- One folder per AI conversation (for example `ChatGPT 01\`, `Gemini 01\`), holding every image it made in order
+  and the change requests John sent it.
+
+**How a round goes:**
+1. HeartQuarters sends the same request to ChatGPT and Gemini: the channel's thumbnail rules (a skill, the same for
+   every video) plus this video's `Brief.md` and the chosen photo.
+2. Each sends back an image. John asks each one for specific changes ("bigger text", "less clutter"), as many
+   times as he likes. Each answer is a new draft image; nothing is thrown away.
+3. When John likes one, **Make Version** turns it into the next version (below).
+
+**How a version is made (one way for every button):**
+- The next number, `Vxx`. Its `YouTube.md` is a copy of the latest version's, or of the template if there is no
+  version yet, so description, tags and settings carry over.
+- If the draft came with a title, it replaces the Title in the copy. The thumbnail text and idea go in their fields.
+- The image goes in `Thumbnail\Thumbnail.png`; the photo, the brief and the prompts go in `Thumbnail\Source\`.
+- `Notes.md` says which draft and which AI it came from, and **On YouTube: not yet**.
+
+**On YouTube, in Notes.md:** whenever HeartQuarters pushes a version's title or thumbnail to YouTube, it writes
+the date in that version's `Notes.md` ("On YouTube: from 2026-11-20"), and when another version replaces it, the
+end date. Versions from before this can be marked by hand.
+
+**How the existing buttons fit:**
+- **+ New Version** stays: a copy of a version, for changing a title or a thumbnail by hand.
+- **Write YouTube Metadata** fills description and tags into the latest version that isn't on YouTube yet, and
+  leaves a title that's already there alone. If every version is on YouTube already, it makes a new one.
+- **Add Thumbnail Planning Fields** goes away: the template gets the Thumbnail text and Thumbnail idea fields, and
+  Make Version fills them.
+
+**Before recording:** the thumbnail and title often come first. Then the brief is made from the video's idea or
+script instead of the transcript, and V01 holds just the title and thumbnail. Write YouTube Metadata fills in the
+rest into that same V01 later, once there's a transcript.
+
+**Steps.** Each one is a skill first, then a button, as with every other job:
+1. **Thumbnail rules skill:** the channel's rules for thumbnails and titles, written with John, nothing about one
+   episode.
+2. **Brief:** an AI writes `Brief.md` from the transcript, or from the idea or script before recording, with
+   Claude adding vidIQ research when it can. A paste box takes Ask Studio or vidIQ text. To check: whether
+   Codex can connect to vidIQ too.
+3. **Expression:** the AI names expressions that fit, such as Surprise or Doubt. HeartQuarters shows those photos
+   from the library, and John clicks one.
+4. **Drafts:** send to ChatGPT and Gemini together, show both results side by side, and a change box under each.
+5. **Make Version**, the On YouTube notes, and the button changes above.
+6. **Stress test (optional):** Claude, ChatGPT and Gemini criticise the title and thumbnail ideas in the brief.
+7. **Shorts:** the same steps with a 9:16 cover and Shorts-style titles.
 
 ## Later
 
