@@ -58,9 +58,13 @@ export function ShortsPlanCard({ video }: { video: string }) {
     return () => clearInterval(timer);
   }, [busy, video]);
 
-  // A screenshot pasted anywhere on the page is the retention graph. Text pastes carry on as normal.
+  // A screenshot pasted anywhere on the page is the retention graph. Text pastes carry on as normal. Not one that
+  // something else already took (a reference image pasted into a thumbnail's change box), and not while this page is
+  // hidden behind another tab.
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      if (e.defaultPrevented || !root.current || root.current.offsetParent === null) return;
       const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type === 'image/png');
       const file = item?.getAsFile();
       if (!file) return;
@@ -142,7 +146,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
   };
 
   return (
-    <div className="card shorts-plan">
+    <div className="card shorts-plan" ref={root}>
       <div className="tool-head">
         {proposing ? (
           <button onClick={() => stop('shorts')}>Stop</button>
