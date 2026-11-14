@@ -35,7 +35,8 @@ describe('saving thumbnails', () => {
     vi.stubGlobal('fetch', fake);
     try {
       const urls = ['https://evil.example.com/vi/x/uhd.jpg', 'https://i.ytimg.com/vi/x/qhddefault.jpg', 'https://i.ytimg.com/vi/x/maxresdefault.jpg'];
-      expect(await firstWorkingThumbnail(urls)).toBe('https://i.ytimg.com/vi/x/maxresdefault.jpg');
+      // With a changing number, so YouTube's servers send the current image, not a copy kept from before.
+      expect(await firstWorkingThumbnail(urls, 123)).toBe('https://i.ytimg.com/vi/x/maxresdefault.jpg?hq=123');
       expect(fake).toHaveBeenCalledTimes(2); // the other host is never asked
       expect(await firstWorkingThumbnail([])).toBeNull();
     } finally { vi.unstubAllGlobals(); }

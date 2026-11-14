@@ -43,12 +43,16 @@ function youtubeImageUrl(url: string): URL {
 /**
  * The largest thumbnail YouTube really serves. It sometimes lists sizes (such as qhd) that answer "not found" with a
  * small grey placeholder, so each is checked, largest first. Checking images costs no quota.
+ * YouTube's image servers keep an old copy for up to 2 hours after a new thumbnail is set, at the same address, so a
+ * changing number is added to it: the image is then always the current one.
  */
-export async function firstWorkingThumbnail(urls: string[]): Promise<string | null> {
+export async function firstWorkingThumbnail(urls: string[], now = Date.now()): Promise<string | null> {
   for (const url of urls) {
     try {
-      const res = await fetch(youtubeImageUrl(url), { method: 'HEAD', redirect: 'error' });
-      if (res.ok) return url;
+      const fresh = youtubeImageUrl(url);
+      fresh.searchParams.set('hq', String(now));
+      const res = await fetch(fresh, { method: 'HEAD', redirect: 'error' });
+      if (res.ok) return fresh.toString();
     } catch { /* try the next size */ }
   }
   return null;
