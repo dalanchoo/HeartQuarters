@@ -1,4 +1,4 @@
-import { useEffect, useState, type ClipboardEvent } from 'react';
+import { useEffect, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { AiPicker } from './AiPicker';
 import { postJson } from './api';
 
@@ -41,14 +41,50 @@ function tabFromHash(): TabId {
   return TABS.find((t) => t.id === name)?.id ?? 'Videos';
 }
 
+// Each tab remembers where it was (John, 2026-11-14): its last address (e.g. #Videos/005 - ...), so its button goes
+// back there, and its page stays loaded but hidden after the first visit, so open cards, scroll position and
+// choices made on it are still there when he comes back. Kept for this browser tab only.
+const LAST_PLACES = 'hq-last-places';
+
+function loadPlaces(): Partial<Record<TabId, string>> {
+  try {
+    return JSON.parse(sessionStorage.getItem(LAST_PLACES) ?? '{}') as Partial<Record<TabId, string>>;
+  } catch {
+    return {};
+  }
+}
+
 export function App() {
   const [tab, setTab] = useState<TabId>(tabFromHash);
+  const [places, setPlaces] = useState(loadPlaces);
+  const [visited, setVisited] = useState<TabId[]>(() => [tabFromHash()]);
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    const remember = () => {
+      const now = tabFromHash();
+      setTab(now);
+      setVisited((v) => (v.includes(now) ? v : [...v, now]));
+      setPlaces((p) => {
+        const next = { ...p, [now]: location.hash || `#${now}` };
+        try {
+          sessionStorage.setItem(LAST_PLACES, JSON.stringify(next));
+        } catch {
+          /* fine: it's only remembered while the page is open */
+        }
+        return next;
+      });
+    };
+    remember();
+    window.addEventListener('hashchange', remember);
+    return () => window.removeEventListener('hashchange', remember);
   }, []);
+
+  const page = (id: TabId, element: ReactNode) =>
+    visited.includes(id) ? (
+      <div key={id} hidden={tab !== id}>
+        {element}
+      </div>
+    ) : null;
 
   return (
     <div className="app" onPasteCapture={cleanPaste}>
@@ -59,7 +95,7 @@ export function App() {
         </div>
         <nav>
           {TABS.map((t) => (
-            <a key={t.id} href={`#${t.id}`} className={t.id === tab ? 'active' : ''}>
+            <a key={t.id} href={places[t.id] ?? `#${t.id}`} className={t.id === tab ? 'active' : ''}>
               {t.label}
             </a>
           ))}
@@ -67,12 +103,12 @@ export function App() {
         <AiPicker />
       </header>
       <main>
-        {tab === 'Videos' && <ProjectsPage />}
-        {tab === 'Substack' && <SubstackPage />}
-        {tab === 'Expressions' && <ExpressionsPage />}
-        {tab === 'Guides' && <GuidesPage />}
-        {tab === 'Skills' && <SkillsPage />}
-        {tab === 'Tools' && <ToolsPage />}
+        {page('Videos', <ProjectsPage />)}
+        {page('Substack', <SubstackPage />)}
+        {page('Expressions', <ExpressionsPage />)}
+        {page('Guides', <GuidesPage />)}
+        {page('Skills', <SkillsPage />)}
+        {page('Tools', <ToolsPage />)}
       </main>
     </div>
   );

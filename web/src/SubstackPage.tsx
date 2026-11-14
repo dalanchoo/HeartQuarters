@@ -29,7 +29,8 @@ export function SubstackPage() {
 
   useEffect(() => {
     getJson<Section[]>('/api/writing').then(setSections, (e) => setError(e.message));
-    const onHash = () => setSelected(pieceFromHash());
+    // Another tab's address isn't for this page: it stays as it was while hidden.
+    const onHash = () => { if (/^#Substack(\/|$)/.test(location.hash)) setSelected(pieceFromHash()); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);

@@ -35,7 +35,9 @@ export function ExpressionsPage() {
 
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message));
+    // Another tab's address isn't for this page: it stays as it was while hidden.
     const onHash = () => {
+      if (!/^#Expressions(\/|$)/.test(location.hash)) return;
       setSelected(categoryFromHash());
       setOpen(null);
     };

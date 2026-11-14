@@ -85,7 +85,8 @@ export function ProjectsPage() {
   }, [reloads]);
 
   useEffect(() => {
-    const onHash = () => { setSelected(projectFromHash()); setFocus(shortFocus()); };
+    // Another tab's address isn't for this page: it stays as it was while hidden.
+    const onHash = () => { if (!/^#(Videos|Projects)(\/|$)/.test(location.hash)) return; setSelected(projectFromHash()); setFocus(shortFocus()); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
