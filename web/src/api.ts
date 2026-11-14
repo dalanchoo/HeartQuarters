@@ -6,6 +6,8 @@ export type {
   ProjectDetail,
   Piece,
   PackagingVersion,
+  Drafts,
+  DraftConversation,
   FileRef,
 } from '../../server/projects';
 export type { Job } from '../../server/tools';

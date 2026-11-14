@@ -19,6 +19,11 @@ beforeAll(() => {
     '022 - Worth Telling Them/Longform/Packaging/V10/Covers/Thumbnail.png': 'png',
     '022 - Worth Telling Them/Longform/Packaging/V10/Covers/Source/Layer.png': 'psd layer',
     '022 - Worth Telling Them/Longform/Packaging/V02/YouTube.md': 'v2',
+    '022 - Worth Telling Them/Longform/Packaging/Drafts/Brief.md': 'brief',
+    '022 - Worth Telling Them/Longform/Packaging/Drafts/ChatGPT 02/10.png': 'png',
+    '022 - Worth Telling Them/Longform/Packaging/Drafts/ChatGPT 02/02.png': 'png',
+    '022 - Worth Telling Them/Longform/Packaging/Drafts/ChatGPT 02/Requests.md': 'asked',
+    '022 - Worth Telling Them/Longform/Packaging/Drafts/Gemini 01/01.png': 'png',
     '022 - Worth Telling Them/Shorts/022_S01 - First/Exports/s1.mp4': 'video',
     '022 - Worth Telling Them/Shorts/022_S02 - Second/Packaging/V01/TikTok.md': 'tt',
     '023 – En Dash Name/Longform/Exports/023.mp4': 'video',
@@ -114,6 +119,23 @@ describe('readProject', () => {
     expect(v10.covers.map((c) => c.name)).toEqual(['Covers/Thumbnail.png']);
     const legacy = longform.versions.find((v) => v.name === 'Legacy')!;
     expect(legacy.docs.map((d) => d.name)).toEqual(['Metadata/YouTube.md']);
+  });
+
+  it('reads the Drafts folder: the brief and each AI conversation, and never counts it as a version', () => {
+    const longform = readProject('022 - Worth Telling Them').videos[0].pieces[0];
+    expect(longform.versions.map((v) => v.name)).not.toContain('Drafts');
+    const drafts = longform.drafts!;
+    expect(drafts.path).toBe('022 - Worth Telling Them/Longform/Packaging/Drafts');
+    expect(drafts.brief?.name).toBe('Brief.md');
+    expect(drafts.conversations.map((c) => c.name)).toEqual(['ChatGPT 02', 'Gemini 01']);
+    expect(drafts.conversations[0].images.map((i) => i.name)).toEqual(['02.png', '10.png']);
+    expect(drafts.conversations[0].requests?.name).toBe('Requests.md');
+    expect(drafts.conversations[1].requests).toBeNull();
+  });
+
+  it('has no drafts when there is no Drafts folder', () => {
+    const p = readProject('005 - Series');
+    expect(p.videos[1].pieces[0].drafts).toBeNull();
   });
 
   it('splits series projects into their parts (hyphen or en-dash)', () => {

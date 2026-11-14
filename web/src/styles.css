@@ -433,6 +433,19 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .version-notes-text { white-space: pre-wrap; margin: 0.3rem 0; }
 .version-notes textarea { width: 100%; box-sizing: border-box; margin-top: 0.3rem; }
 
+/* Thumbnail & Title Drafts: the brief, and one box per AI conversation. */
+.drafts { margin: 0.8rem 0; }
+.drafts > summary { cursor: pointer; font-weight: 600; }
+.drafts-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.4rem; margin: 0.5rem 0; }
+.drafts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.8rem; }
+.thumb-draft { border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; }
+.thumb-draft h4 { margin: 0 0 0.4rem; }
+.thumb-draft img { width: 100%; height: auto; display: block; border-radius: 4px; }
+.draft-rounds { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.4rem 0; }
+.draft-text { margin-top: 0.4rem; flex-basis: 100%; }
+.drafts-top .draft-text { flex-basis: auto; margin-top: 0; }
+.draft-text pre { white-space: pre-wrap; max-height: 24rem; overflow: auto; font-size: 0.8rem; background: var(--bg); padding: 0.5rem; border-radius: 4px; }
+
 /* YouTube quota: the meter by Check Linked Videos, and the Reload bar at the top of a video's YouTube section. */
 .quota-meter { font-size: 0.8rem; margin: 0.4rem 0; color: var(--muted); }
 .quota-meter.quota-out { color: #b42318; font-weight: 600; }

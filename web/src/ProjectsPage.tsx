@@ -17,6 +17,7 @@ import { PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePacka
 import { PieceAI } from './PieceAI';
 import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
+import { DraftsSection } from './DraftsSection';
 import { YouTubeUpload } from './YouTubeUpload';
 import { VideoPreview } from './VideoPreview';
 import { ThumbnailImport } from './ThumbnailImport';
@@ -652,6 +653,7 @@ function PieceCard({
 
       {/* The main file's Description runs full width under both columns. */}
       <PackagingDocsWide docs={docs} />
+      <DraftsSection drafts={piece.drafts} />
       {piece.kind !== 'reel' && <YouTubeUpload linked={items.find((item) => item.path === piece.path)?.link === 'linked'} piece={piece} docs={docs} covers={version?.covers ?? []} version={version?.path} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} longformProject={longformProject} />}
       <PackagingOtherPlatforms docs={docs} />
     </>

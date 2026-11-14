@@ -39,6 +39,27 @@ export interface PackagingVersion {
   covers: FileRef[];
 }
 
+/** One AI conversation in Packaging\Drafts (e.g. "ChatGPT 02"): its images in order, and what was asked. */
+export interface DraftConversation {
+  name: string;
+  path: string;
+  /** Oldest first: 01.png, 02.png, ... */
+  images: FileRef[];
+  /** Requests.md: the first request and each change request after it. */
+  requests: FileRef | null;
+}
+
+/** Packaging\Drafts: the brainstorming before a version is made. Not a version itself. */
+export interface Drafts {
+  path: string;
+  /** Brief.md: the brief and the AIs' reviews. */
+  brief: FileRef | null;
+  conversations: DraftConversation[];
+}
+
+/** The scratchpad folder for thumbnail and title drafts, inside Packaging. */
+export const DRAFTS_FOLDER = 'Drafts';
+
 export interface Piece {
   kind: 'longform' | 'short' | 'reel';
   name: string;
@@ -47,6 +68,8 @@ export interface Piece {
   packagingVersion: string | null;
   /** Oldest first: Legacy, then V01, V02, ... */
   versions: PackagingVersion[];
+  /** Packaging\Drafts, or null when there's none yet. */
+  drafts: Drafts | null;
   exports: FileRef[];
 }
 
@@ -167,8 +190,27 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
     path: rel(dir),
     packagingVersion: versions.at(-1)?.name ?? null,
     versions,
+    drafts: readDrafts(packagingRoot),
     exports: filesIn(path.join(dir, 'Exports'), VIDEO_EXTS),
   };
+}
+
+/** Packaging\Drafts: Brief.md, and one folder per AI conversation with its images and Requests.md. */
+function readDrafts(packagingRoot: string): Drafts | null {
+  const name = subfolders(packagingRoot).find((f) => f.toLowerCase() === DRAFTS_FOLDER.toLowerCase());
+  if (!name) return null;
+  const dir = path.join(packagingRoot, name);
+  const named = (files: FileRef[], want: string) => files.find((f) => f.name.toLowerCase() === want) ?? null;
+  const conversations = subfolders(dir).map((c): DraftConversation => {
+    const cDir = path.join(dir, c);
+    return {
+      name: c,
+      path: rel(cDir),
+      images: filesIn(cDir, IMAGE_EXTS).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+      requests: named(filesIn(cDir, DOC_EXTS), 'requests.md'),
+    };
+  });
+  return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), conversations };
 }
 
 /**
