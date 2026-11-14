@@ -1,1 +1,0 @@
-export { YouTubeUpload } from './YouTubeSync';

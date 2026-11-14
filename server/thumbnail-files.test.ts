@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { decodeThumbnail, fetchYoutubeThumbnail, savePackagingThumbnail } from './thumbnail-files';
+import { decodeThumbnail, fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } from './thumbnail-files';
 
 let tmp: string; let old: string;
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
@@ -29,6 +29,16 @@ describe('saving thumbnails', () => {
   it('never fetches thumbnail URLs from other hosts', async () => {
     await expect(fetchYoutubeThumbnail('http://127.0.0.1:4321/')).rejects.toThrow(/unsupported/);
     await expect(fetchYoutubeThumbnail('https://i.ytimg.com.example.com/x')).rejects.toThrow(/unsupported/);
+  });
+  it('skips sizes YouTube lists but answers "not found" for, and other hosts', async () => {
+    const fake = vi.fn().mockImplementation(async (url: URL) => new Response(null, { status: url.pathname.includes('qhd') ? 404 : 200 }));
+    vi.stubGlobal('fetch', fake);
+    try {
+      const urls = ['https://evil.example.com/vi/x/uhd.jpg', 'https://i.ytimg.com/vi/x/qhddefault.jpg', 'https://i.ytimg.com/vi/x/maxresdefault.jpg'];
+      expect(await firstWorkingThumbnail(urls)).toBe('https://i.ytimg.com/vi/x/maxresdefault.jpg');
+      expect(fake).toHaveBeenCalledTimes(2); // the other host is never asked
+      expect(await firstWorkingThumbnail([])).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
   });
   it('refuses a Thumbnail junction even if its target is inside the projects folder', () => {
     const target = path.join(tmp, 'Videos/other/Packaging/V01');

@@ -57,10 +57,23 @@ describe('YouTube video settings', () => {
     expect(JSON.parse(mock.mock.calls[1][1].body).status).toMatchObject({ privacyStatus: 'private', license: 'youtube', embeddable: true, publicStatsViewable: true, containsSyntheticMedia: false, selfDeclaredMadeForKids: false });
   });
   it('refuses to overwrite a video changed in Studio', async () => {
-    const mock = vi.fn().mockResolvedValueOnce(Response.json({ items: [{ ...resource, etag: 'new' }] })); vi.stubGlobal('fetch', mock);
-    const baseline = { etag: 'old', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };
+    const mock = vi.fn().mockResolvedValueOnce(Response.json({ items: [{ ...resource, snippet: { ...resource.snippet, title: 'Edited in Studio' } }] })); vi.stubGlobal('fetch', mock);
+    const baseline = { etag: 'tag', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };
     await expect(updateYoutubeVideo('token', 'id', baseline, { ...baseline, title: 'New' })).rejects.toThrow(/changed on YouTube/);
     expect(mock).toHaveBeenCalledTimes(1);
+  });
+  it("doesn't refuse a second push because YouTube changed the etag by itself", async () => {
+    const mock = vi.fn().mockResolvedValueOnce(Response.json({ items: [{ ...resource, etag: 'newer' }] })).mockResolvedValueOnce(Response.json({}));
+    vi.stubGlobal('fetch', mock);
+    const baseline = { etag: 'older', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };
+    await updateYoutubeVideo('token', 'id', baseline, { ...baseline, title: 'New' });
+    expect(mock.mock.calls[1][1].headers['If-Match']).toBe('newer');
+  });
+  it("doesn't ask YouTube at all when no setting changes (only a thumbnail is sent)", async () => {
+    const mock = vi.fn(); vi.stubGlobal('fetch', mock);
+    const baseline = { etag: 'old', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };
+    await updateYoutubeVideo('token', 'id', baseline, { ...baseline });
+    expect(mock).not.toHaveBeenCalled();
   });
   it('does not pretend that an existing answer was cleared', async () => {
     const baseline = { etag: 'tag', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };

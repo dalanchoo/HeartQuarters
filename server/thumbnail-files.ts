@@ -34,10 +34,29 @@ export function decodeThumbnail(value: unknown): Buffer {
   return Buffer.from(value, 'base64');
 }
 
-/** Fetch only a YouTube image URL returned by YouTube, without following redirects. */
-export async function fetchYoutubeThumbnail(url: string): Promise<Buffer> {
+function youtubeImageUrl(url: string): URL {
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:' || parsed.hostname !== 'i.ytimg.com' || parsed.port || parsed.username || parsed.password) throw new Error('YouTube returned an unsupported thumbnail address.');
+  return parsed;
+}
+
+/**
+ * The largest thumbnail YouTube really serves. It sometimes lists sizes (such as qhd) that answer "not found" with a
+ * small grey placeholder, so each is checked, largest first. Checking images costs no quota.
+ */
+export async function firstWorkingThumbnail(urls: string[]): Promise<string | null> {
+  for (const url of urls) {
+    try {
+      const res = await fetch(youtubeImageUrl(url), { method: 'HEAD', redirect: 'error' });
+      if (res.ok) return url;
+    } catch { /* try the next size */ }
+  }
+  return null;
+}
+
+/** Fetch only a YouTube image URL returned by YouTube, without following redirects. */
+export async function fetchYoutubeThumbnail(url: string): Promise<Buffer> {
+  const parsed = youtubeImageUrl(url);
   const res = await fetch(parsed, { redirect: 'error' });
   if (!res.ok || !res.body) throw new Error('Could not download the thumbnail from YouTube.');
   const reader = res.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;

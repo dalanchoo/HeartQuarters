@@ -5,7 +5,10 @@ export interface YoutubeVideoSettings {
   etag: string; title: string; description: string; tags: string[]; language: string | null;
   privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean | null; synthetic: boolean | null;
   thumbnail: string | null; customThumbnail?: boolean | null;
+  /** Every image size YouTube lists, largest first. It sometimes lists sizes it doesn't serve. */
+  thumbnails?: string[];
 }
+const THUMBNAIL_SIZES = ['shortsAspectRatio', 'uhd', 'qhd', 'fhd', 'maxres', 'standard', 'high', 'medium', 'default'];
 interface VideoResource { etag?: string; snippet?: Record<string, unknown>; status?: Record<string, unknown>; contentDetails?: Record<string, unknown> }
 export function youtubeVideoId(value: unknown): string {
   if (typeof value !== 'string') throw new Error('Enter a YouTube video link.');
@@ -61,6 +64,7 @@ function videoSettings(resource: VideoResource): YoutubeVideoSettings | null {
   const snippet = resource.snippet; const status = resource.status;
   if (!resource.etag || !snippet || !status || typeof snippet.title !== 'string' || typeof snippet.categoryId !== 'string' || !['private', 'unlisted', 'public'].includes(String(status.privacyStatus))) return null;
   const thumbs = snippet.thumbnails as Record<string, { url?: string } | undefined> | undefined;
+  const thumbnails = THUMBNAIL_SIZES.map((size) => thumbs?.[size]?.url).filter((url): url is string => typeof url === 'string');
   return {
     etag: resource.etag, title: snippet.title, description: typeof snippet.description === 'string' ? snippet.description : '',
     tags: Array.isArray(snippet.tags) ? snippet.tags.filter((t): t is string => typeof t === 'string') : [],
@@ -68,9 +72,14 @@ function videoSettings(resource: VideoResource): YoutubeVideoSettings | null {
     privacy: status.privacyStatus as YoutubeVideoSettings['privacy'],
     madeForKids: typeof status.selfDeclaredMadeForKids === 'boolean' ? status.selfDeclaredMadeForKids : null,
     synthetic: typeof status.containsSyntheticMedia === 'boolean' ? status.containsSyntheticMedia : null,
-    thumbnail: thumbs?.shortsAspectRatio?.url ?? thumbs?.uhd?.url ?? thumbs?.qhd?.url ?? thumbs?.fhd?.url ?? thumbs?.maxres?.url ?? thumbs?.standard?.url ?? thumbs?.high?.url ?? thumbs?.medium?.url ?? thumbs?.default?.url ?? null,
+    thumbnail: thumbnails[0] ?? null, thumbnails,
     customThumbnail: typeof resource.contentDetails?.hasCustomThumbnail === 'boolean' ? resource.contentDetails.hasCustomThumbnail : null,
   };
+}
+
+/** The values a push can change, to see whether someone changed them on YouTube meanwhile. */
+function comparable(s: YoutubeVideoSettings): string {
+  return JSON.stringify([s.title, s.description, s.tags, s.language, s.privacy, s.madeForKids, s.synthetic]);
 }
 
 export async function updateYoutubeVideo(token: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings): Promise<void> {
@@ -79,11 +88,14 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
   if (!['private', 'unlisted', 'public'].includes(desired.privacy) || ![true, false, null].includes(desired.madeForKids) || ![true, false, null].includes(desired.synthetic)) throw new Error('Check visibility and audience settings.');
   if ((baseline.madeForKids !== null && desired.madeForKids === null) || (baseline.synthetic !== null && desired.synthetic === null) || (baseline.language !== null && desired.language === null)) throw new Error('Choose a value instead of clearing an existing YouTube setting.');
   if (desired.language !== null && desired.language !== baseline.language) videoLanguage(desired.language);
-  const current = await readYoutubeVideo(token, id);
-  if (current.settings.etag !== baseline.etag) throw new Error('This video changed on YouTube. Reload its settings before saving.');
   const snippetChanged = desired.title !== baseline.title || desired.description !== baseline.description || JSON.stringify(desired.tags) !== JSON.stringify(baseline.tags) || desired.language !== baseline.language;
   const statusChanged = desired.privacy !== baseline.privacy || desired.madeForKids !== baseline.madeForKids || desired.synthetic !== baseline.synthetic;
+  // Nothing to change here (only a thumbnail, captions or playlists are being sent): no need to ask YouTube.
   if (!snippetChanged && !statusChanged) return;
+  // Refuse only if a value that matters changed since it was loaded (someone edited it in Studio). YouTube's etag
+  // isn't used for this: it changes by itself for a while after a save, which wrongly refused a second push.
+  const current = await readYoutubeVideo(token, id);
+  if (comparable(current.settings) !== comparable(baseline)) throw new Error('This video changed on YouTube. Reload its settings before saving.');
   const payload: Record<string, unknown> = { id }; const parts: string[] = [];
   if (snippetChanged) {
     const source = current.resource.snippet!; const snippet: Record<string, unknown> = {};
@@ -101,7 +113,7 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
     if (desired.synthetic !== null) status.containsSyntheticMedia = desired.synthetic;
     payload.status = status; parts.push('status');
   }
-  const res = await youtubeFetch(`https://www.googleapis.com/youtube/v3/videos?part=${parts.join(',')}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'If-Match': baseline.etag }, body: JSON.stringify(payload) });
+  const res = await youtubeFetch(`https://www.googleapis.com/youtube/v3/videos?part=${parts.join(',')}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'If-Match': current.settings.etag }, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(`YouTube could not save the video settings (${res.status}). Reload before trying again.`);
   const updated = await res.json() as VideoResource;
   if (snippetChanged && desired.language !== baseline.language && desired.language !== null && updated.snippet?.defaultAudioLanguage !== desired.language) throw new Error('YouTube saved the changes but did not confirm the video language. Check it in Studio.');
