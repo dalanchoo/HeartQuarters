@@ -14,6 +14,7 @@ import { copyPackagingVersion, trashPackagingVersion } from './packaging-version
 import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
+import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
@@ -230,6 +231,8 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.get('/api/expression-references', handle((_req, res) => { res.json(readExpressionReferences()); }));
+app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
 
 // ---- Writing (Substack) ---------------------------------------------------
 

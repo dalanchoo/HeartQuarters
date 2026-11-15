@@ -3,6 +3,7 @@ import {
   fileUrl,
   getJson,
   openInExplorer,
+  postJson,
   thumbUrl,
   type ExpressionCategory,
   type ExpressionIndex,
@@ -35,10 +36,27 @@ export function ExpressionsPage() {
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
   const [referenceError, setReferenceError] = useState('');
-  const setReference = (path: string, checked: boolean) => {
+  const [referenceReady, setReferenceReady] = useState(false);
+  const [referenceBusy, setReferenceBusy] = useState(false);
+  const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
-    try { saveReferences(localStorage, next); setReferences(next); setReferenceError(''); } catch { setReferenceError('Could not remember the reference selection in this browser.'); }
+    setReferenceBusy(true);
+    try { await postJson('/api/expression-references', { paths: next }); setReferences(next); try { saveReferences(localStorage, next); } catch { /* The HeartQuarters file is the primary copy. */ } setReferenceError(''); }
+    catch { setReferenceError('Could not save reference photos. Your previous selection is still saved.'); }
+    finally { setReferenceBusy(false); }
   };
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      let saved = await getJson<{ initialized: boolean; paths: string[] }>('/api/expression-references');
+      const browserPaths = readReferences(localStorage);
+      if (!saved.initialized && browserPaths.length) saved = await postJson('/api/expression-references', { initialize: true, paths: browserPaths });
+      if (active) { setReferences(saved.paths); setReferenceReady(true); }
+    };
+    void load().catch(() => { if (active) setReferenceError('Could not load saved references. Your browser selection is still available; refresh to try again.'); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message));
@@ -100,11 +118,11 @@ export function ExpressionsPage() {
 
       <section className="content">
         <details className="expression-planning"><summary>Reference photos ({references.length})</summary>
-          <p>Choose photos in the grid below as references. These selections are remembered in this browser.</p>
+          <p>Choose photos in the grid below as references. HeartQuarters remembers them on this computer.</p>
           {referenceError && <p className="error">{referenceError}</p>}
           <div className="reference-grid">{references.map((path) => {
             const photo = index.photos.find((p) => p.path === path);
-            return <div key={path}>{photo ? <img src={thumbUrl('expressions', path, 240)} alt={photo.name} /> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" onClick={() => setReference(path, false)}>Remove</button></div>;
+            return <div key={path}>{photo ? <img src={thumbUrl('expressions', path, 240)} alt={photo.name} /> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" disabled={!referenceReady || referenceBusy} onClick={() => void setReference(path, false)}>Remove</button></div>;
           })}</div>
           {!references.length && <p className="muted">No reference photos selected yet.</p>}
         </details>
@@ -164,7 +182,7 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button><label><input type="checkbox" checked={references.includes(p.path)} onChange={(e) => setReference(p.path, e.target.checked)} /> Reference photo</label></div>
+            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference photo</label></div>
           ))}
         </div>
       </section>
