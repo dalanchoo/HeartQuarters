@@ -148,25 +148,30 @@ draft, kept in `Packaging\Drafts\` (a scratchpad):
    every video) plus this video's `Brief.md` and the chosen photo.
 2. Each sends back an image. John asks each one for specific changes ("bigger text", "less clutter"), as many
    times as he likes. Each answer is a new draft image; nothing is thrown away.
-3. When John likes one, **Make Version** turns it into the next version (below).
+3. When John likes one, **Use Thumbnail**, **Use Title** or **Use Both** puts it into the version selected on the
+   card, like editing that version (John, 2026-11-14). Each draft shows the title it was made for beside it.
 
-**How a version is made (one way for every button):**
-- The next number, `Vxx`. Its `YouTube.md` is a copy of the latest version's, or of the template if there is no
-  version yet, so description, tags and settings carry over.
-- If the draft came with a title, it replaces the Title in the copy. The thumbnail text and idea go in their fields.
-- The image goes in `Thumbnail\Thumbnail.png`; the photo, the brief and the prompts go in `Thumbnail\Source\`.
-- `Notes.md` says which draft and which AI it came from, and **On YouTube: not yet**.
+**How a draft is used:**
+- The image, enlarged to full size, becomes `Thumbnail\Thumbnail.png`; a thumbnail that was there moves into
+  `Thumbnail\Source\` ("Replaced ..."), with the draft, the photo, the brief and the requests.
+- Use Title sets the Title in that version's `YouTube.md`; using the thumbnail also sets Thumbnail text and idea.
+- `Notes.md` gets a line saying which draft was used, and what the title was before.
+- New versions only come from **Copy Vxx to New Version**, which copies everything and marks the copy
+  **On YouTube: not yet**.
+
+**Old versions are locked:** any version that isn't the newest is greyed out and can't be changed (fields, Import
+Thumbnail, Use buttons, Delete) until John clicks Unlock. Notes and Push stay available.
 
 **On YouTube, in Notes.md:** whenever HeartQuarters pushes a version's title or thumbnail to YouTube, it writes
 the date in that version's `Notes.md` ("On YouTube: from 2026-11-20"), and when another version replaces it, the
 end date. Versions from before this can be marked by hand.
 
 **How the existing buttons fit:**
-- **+ New Version** stays: a copy of a version, for changing a title or a thumbnail by hand.
+- **Copy Vxx to New Version** (was + New Version) stays: a copy of a version, for changing a title or a thumbnail.
 - **Write YouTube Metadata** fills description and tags into the latest version that isn't on YouTube yet, and
   leaves a title that's already there alone. If every version is on YouTube already, it makes a new one.
 - **Add Thumbnail Planning Fields** goes away: the template gets the Thumbnail text and Thumbnail idea fields, and
-  Make Version fills them.
+  Use Thumbnail fills them.
 
 **Before recording:** the thumbnail and title often come first. Then the brief is made from the video's idea or
 script instead of the transcript, and V01 holds just the title and thumbnail. Write YouTube Metadata fills in the
@@ -184,7 +189,8 @@ rest into that same V01 later, once there's a transcript.
 3. **Expression:** the AI names expressions that fit, such as Surprise or Doubt. HeartQuarters shows those photos
    from the library, and John clicks one.
 4. **Drafts:** send to ChatGPT and Gemini together, show both results side by side, and a change box under each.
-5. **Make Version**, the On YouTube notes, and the button changes above.
+5. **Use Thumbnail / Use Title / Use Both** and the lock on old versions (done 2026-11-14), the On YouTube notes, and
+   the button changes above.
 6. **Shorts:** the same steps with a 9:16 cover and Shorts-style titles.
 
 ## Later

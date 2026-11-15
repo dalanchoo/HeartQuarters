@@ -17,10 +17,11 @@ import { expressionIndex } from './expressions.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
+import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
-import { makeVersionFromDraft } from './version-from-draft.js';
+import { useDraft } from './use-draft.js';
 import {
   hasRetention,
   keepOldPlan,
@@ -292,6 +293,16 @@ app.post('/api/ai', handle((req, res) => {
   res.json(aiOverview());
 }));
 
+// Whether Claude, ChatGPT and Gemini are signed in (asks their programs; free). See ai-signin.ts.
+app.get('/api/ai/sign-ins', (_req, res) => {
+  aiSignIns().then((r) => res.json(r), (e) => res.status(500).json({ error: e instanceof Error ? e.message : String(e) }));
+});
+
+// { id }: opens that AI's sign-in in its own window.
+app.post('/api/ai/sign-in', handle((req, res) => {
+  res.json(openSignIn(req.body?.id));
+}));
+
 // ---- Edit with Claude (see claude.ts) --------------------------------------
 
 app.get('/api/claude', handle((req, res) => {
@@ -440,10 +451,11 @@ app.post('/api/brief/start', async (req, res) => {
   }
 });
 
-// { piece, image }: Make Version from one draft image: the next version, with the image enlarged to full size.
-app.post('/api/packaging/version-from-draft', async (req, res) => {
+// { piece, image, version, thumbnail, title }: Use Thumbnail / Use Title / Use Both: a draft image into that version.
+app.post('/api/packaging/use-draft', async (req, res) => {
   try {
-    res.json(await makeVersionFromDraft(String(req.body?.piece ?? ''), String(req.body?.image ?? '')));
+    const b = req.body ?? {};
+    res.json(await useDraft(String(b.piece ?? ''), String(b.image ?? ''), String(b.version ?? ''), { thumbnail: b.thumbnail === true, title: b.title === true }));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }

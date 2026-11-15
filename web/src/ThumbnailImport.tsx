@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { postJson } from './api';
 
-export function ThumbnailImport({ piece, version, onSaved }: { piece: string; version: string; onSaved: () => void }) {
+export function ThumbnailImport({ piece, version, locked, onSaved }: { piece: string; version: string; locked?: boolean; onSaved: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   return <details className="thumbnail-import"><summary>Import Thumbnail</summary>
     <p className="muted small-text">Add a PNG or JPEG up to 2 MB. It’s saved as Thumbnail.png or Thumbnail.jpg in this version’s Thumbnail folder. A version holds one thumbnail; for another one, make a new version.</p>
-    <label>Image <input type="file" accept="image/png,image/jpeg" onChange={(e) => { const selected = e.target.files?.[0] ?? null; setFile(selected); setMessage(''); }} /></label>
-    {file && <><button disabled={busy} onClick={async () => {
+    <label>Image <input type="file" disabled={locked} accept="image/png,image/jpeg" onChange={(e) => { const selected = e.target.files?.[0] ?? null; setFile(selected); setMessage(''); }} /></label>
+    {file && <><button disabled={busy || locked} onClick={async () => {
         setBusy(true); setMessage(''); try {
           if (file.size > 2_000_000) throw new Error('Choose an image up to 2 MB.');
           const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error('Could not read the image.')); reader.onload = () => resolve(String(reader.result).split(',')[1] ?? ''); reader.readAsDataURL(file); });

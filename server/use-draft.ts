@@ -1,22 +1,22 @@
-// Make Version: turns the draft round John likes (e.g. Drafts\ChatGPT 01\05.png) into the next packaging version
-// (V02, V03...), the way the thumbnails-and-titles skill describes:
-//   YouTube.md   a copy of the newest version's (or the template's, if there's none), with the pair's title and
-//                thumbnail text filled in, so description, tags and settings carry over
-//   Thumbnail\Thumbnail.png          the draft enlarged to YouTube's full size (3840 x 2160, or 2160 x 3840 for a Short)
-//   Thumbnail\Source\                the draft as made, the photo, the brief, the requests and their reference images
-//   Notes.md     where it came from, and "On YouTube: not yet."
-// Only a new version folder is made: nothing that exists is changed.
+// Use Thumbnail / Use Title: puts a draft round John likes (e.g. Drafts\ChatGPT 01\05.png) into the packaging version he
+// has selected, like editing that version by hand. The screens lock old versions, so this only reaches one he unlocked.
+//   Thumbnail\Thumbnail.png   the draft enlarged to YouTube's full size (3840 x 2160, or 2160 x 3840 for a Short)
+//   Thumbnail\Source\         the draft as made, the photo, the brief, the requests and their reference images
+//   Thumbnail\Backups\        a thumbnail that was there before ("Replaced ..."): nothing is deleted
+//   YouTube.md                the pair's title, and/or its thumbnail text and idea
+//   Notes.md                  a line saying what was used, and what the title was before
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config, safeResolve } from './config.js';
-import { nextVersionName } from './packaging-version.js';
+import { safeResolve } from './config.js';
+import { versionFolder } from './packaging-version.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, NOTES_FILE, readChoice, type BriefPick } from './projects.js';
 import { isShort, readConversation } from './thumbnails.js';
 import { AI_NAMES } from './ai.js';
 
 /** Makes `out` from `source` at exactly width x height (filling the frame, trimming any sliver). Tests pass a fake. */
 export type Enlarge = (source: string, out: string, width: number, height: number) => Promise<void>;
+export type Measure = (file: string) => Promise<{ width: number; height: number } | null>;
 
 const LABEL_RE = /^[A-Z][A-Za-z ]{0,30}:\s*$/;
 /** Older files wrote some labels in capitals without the colon ("PINNED COMMENT"); only known field names count. */
@@ -42,19 +42,12 @@ export function setField(text: string, label: string, value: string): string {
   return lines.join(eol);
 }
 
-/** The newest version's YouTube.md, or the template's when the piece has no version with one yet. */
-function startingYoutubeMd(pieceDir: string, piece: string): string {
-  const packaging = path.join(pieceDir, 'Packaging');
-  const versions = fs
-    .readdirSync(packaging)
-    .filter((d) => /^V\d+$/i.test(d))
-    .sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
-  for (const v of versions) {
-    const file = fs.readdirSync(path.join(packaging, v)).find((f) => f.toLowerCase() === 'youtube.md');
-    if (file) return fs.readFileSync(path.join(packaging, v, file), 'utf8');
-  }
-  const template = path.join(config.videoProjectsDir, isShort(piece) ? '--- SHORTS TEMPLATE' : '--- LONGFORM TEMPLATE', 'Packaging', 'V01', 'YouTube.md');
-  return fs.existsSync(template) ? fs.readFileSync(template, 'utf8') : '# YouTube Info\n\nTitle:\n';
+/** One field's current one-line value, or '' when it's missing or empty. */
+export function getField(text: string, label: string): string {
+  const lines = text.split(/\r?\n/);
+  const at = lines.findIndex((l) => l.trim().toLowerCase() === `${label.toLowerCase()}:`);
+  const next = at >= 0 ? lines[at + 1]?.trim() ?? '' : '';
+  return next && !isLabel(next) ? next : '';
 }
 
 function run(cmd: string, args: string[]): Promise<string> {
@@ -75,7 +68,7 @@ export const enlarge: Enlarge = async (source, out, width, height) => {
 };
 
 /** An image's size, read with ffprobe; null if it can't be read. */
-export async function imageSize(file: string): Promise<{ width: number; height: number } | null> {
+export const imageSize: Measure = async (file) => {
   try {
     const out = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file]);
     const [width, height] = out.trim().split(',').map(Number);
@@ -83,93 +76,108 @@ export async function imageSize(file: string): Promise<{ width: number; height: 
   } catch {
     return null;
   }
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+function today(d = new Date()): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function today(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+/** Copies a file only if nothing by that name is there yet. */
+function copyIfNew(from: string, to: string) {
+  if (fs.existsSync(from) && !fs.existsSync(to)) fs.copyFileSync(from, to);
 }
+
+export interface UseParts { thumbnail: boolean; title: boolean }
 
 /**
- * Make Version from one draft image (relative to the Video Projects folder), e.g.
- * "005 - .../Longform/Packaging/Drafts/ChatGPT 01/05.png". Returns the new version's name and path.
+ * Puts a draft image (relative to the Video Projects folder, e.g. ".../Packaging/Drafts/ChatGPT 01/05.png") into a
+ * version of the same video: its thumbnail, its title, or both. Returns what was done, in words.
  */
-export async function makeVersionFromDraft(
-  piece: string,
-  image: string,
-  grow: Enlarge = enlarge,
-  measure: (file: string) => Promise<{ width: number; height: number } | null> = imageSize,
-): Promise<{ name: string; path: string }> {
+export async function useDraft(piece: string, image: string, version: string, parts: UseParts, grow: Enlarge = enlarge, measure: Measure = imageSize): Promise<{ done: string }> {
   if (!piece) throw new Error('No video given.');
+  if (!parts.thumbnail && !parts.title) throw new Error('Choose the thumbnail, the title or both.');
   const pieceDir = safeResolve('projects', piece);
   const drafts = path.join(pieceDir, 'Packaging', DRAFTS_FOLDER);
   const draft = safeResolve('projects', image);
   const conversation = path.dirname(draft);
   const round = ROUND_RE.exec(path.basename(draft))?.[1];
-  if (!round || path.dirname(conversation).toLowerCase() !== drafts.toLowerCase() || !fs.existsSync(draft)) {
-    throw new Error("Choose one of this video's draft images.");
-  }
+  if (!round || path.dirname(conversation).toLowerCase() !== drafts.toLowerCase() || !fs.existsSync(draft)) throw new Error("Choose one of this video's draft images.");
+  const dir = versionFolder(piece, version);
+  const versionName = path.basename(dir);
+
   const info = readConversation(conversation);
-  const choice = readChoice(path.join(drafts, CHOICE_FILE));
-  const pick: BriefPick | undefined = info?.pick ?? choice?.pick;
-  const photo = info?.photo ?? choice?.photo ?? null;
-  const short = isShort(piece);
-  const [width, height] = short ? [2160, 3840] : [3840, 2160];
-
-  const name = nextVersionName(piece);
-  const version = path.join(pieceDir, 'Packaging', name);
-  fs.mkdirSync(version); // fails if it somehow exists: nothing is replaced
-  try {
-    return await fillVersion();
-  } catch (e) {
-    fs.rmSync(version, { recursive: true, force: true }); // only the folder made just now, half-filled
-    throw e;
-  }
-
-  async function fillVersion(): Promise<{ name: string; path: string }> {
-  const thumbDir = path.join(version, 'Thumbnail');
-  const source = path.join(thumbDir, 'Source');
-  fs.mkdirSync(source, { recursive: true });
-
-  // The thumbnail at full size, and where it came from.
+  const pick: BriefPick | undefined = info?.pick ?? readChoice(path.join(drafts, CHOICE_FILE))?.pick;
+  const photo = info?.photo ?? null;
+  if (parts.title && !pick) throw new Error("This draft's title isn't known, so only its thumbnail can be used.");
   const conv = path.basename(conversation);
-  const made = await measure(draft);
-  await grow(draft, path.join(thumbDir, 'Thumbnail.png'), width, height);
-  fs.copyFileSync(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
-  if (photo) {
-    const full = safeResolve('expressions', photo);
-    if (fs.existsSync(full)) fs.copyFileSync(full, path.join(source, `Photo - ${path.basename(full)}`));
-  }
-  for (const f of ['Brief.md']) if (fs.existsSync(path.join(drafts, f))) fs.copyFileSync(path.join(drafts, f), path.join(source, f));
-  if (fs.existsSync(path.join(conversation, 'Requests.md'))) fs.copyFileSync(path.join(conversation, 'Requests.md'), path.join(source, 'Requests.md'));
-  const refs = path.join(conversation, 'References');
-  if (fs.existsSync(refs)) fs.cpSync(refs, path.join(source, 'References'), { recursive: true, errorOnExist: true, force: false });
+  const notes: string[] = [];
 
-  // YouTube.md: everything carries over; the pair's title and thumbnail text go in.
-  let youtube = startingYoutubeMd(pieceDir, piece);
+  if (parts.thumbnail) {
+    const thumbDir = path.join(dir, 'Thumbnail');
+    const source = path.join(thumbDir, 'Source');
+    fs.mkdirSync(source, { recursive: true });
+    if (fs.lstatSync(thumbDir).isSymbolicLink() || fs.lstatSync(source).isSymbolicLink()) throw new Error('The Thumbnail folder must be a real folder, not a shortcut.');
+    const [width, height] = isShort(piece) ? [2160, 3840] : [3840, 2160];
+    // Made beside the old one first, so a failure leaves the version as it was.
+    const fresh = path.join(thumbDir, 'Thumbnail.new.png');
+    const made = await measure(draft);
+    try {
+      await grow(draft, fresh, width, height);
+    } catch (e) {
+      fs.rmSync(fresh, { force: true });
+      throw e;
+    }
+    const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
+    if (old) {
+      const d = new Date();
+      const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
+      const backups = path.join(thumbDir, 'Backups');
+      fs.mkdirSync(backups, { recursive: true });
+      fs.renameSync(path.join(thumbDir, old), path.join(backups, kept));
+      notes.push(`The thumbnail before is kept as Thumbnail\\Backups\\${kept}.`);
+    }
+    fs.renameSync(fresh, path.join(thumbDir, 'Thumbnail.png'));
+    copyIfNew(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
+    if (photo) {
+      const full = safeResolve('expressions', photo);
+      copyIfNew(full, path.join(source, `Photo - ${path.basename(full)}`));
+    }
+    copyIfNew(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));
+    copyIfNew(path.join(conversation, 'Requests.md'), path.join(source, `Requests - ${conv}.md`));
+    const refs = path.join(conversation, 'References');
+    if (fs.existsSync(refs)) fs.cpSync(refs, path.join(source, `References - ${conv}`), { recursive: true, errorOnExist: false, force: false });
+    const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
+    notes.unshift(
+      `Thumbnail: draft ${conv}, round ${round}, by ${ai}${photo ? `, using the photo ${photo}` : ''}. ` +
+        (made ? `Made at ${made.width} x ${made.height}, enlarged to ${width} x ${height}.` : `Enlarged to ${width} x ${height}.`),
+    );
+  }
+
   if (pick) {
-    youtube = setField(youtube, 'Title', pick.title);
-    youtube = setField(youtube, 'Thumbnail text', pick.thumbnailText.toUpperCase());
-    youtube = setField(youtube, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
+    const ytName = fs.readdirSync(dir).find((f) => f.toLowerCase() === 'youtube.md') ?? 'YouTube.md';
+    const ytFile = path.join(dir, ytName);
+    let youtube = fs.existsSync(ytFile) ? fs.readFileSync(ytFile, 'utf8') : '# YouTube Info\n\nTitle:\n';
+    if (parts.title) {
+      const before = getField(youtube, 'Title');
+      youtube = setField(youtube, 'Title', pick.title);
+      notes.push(before && before !== pick.title ? `Title: "${pick.title}" (it was "${before}").` : `Title: "${pick.title}".`);
+    }
+    if (parts.thumbnail) {
+      youtube = setField(youtube, 'Thumbnail text', pick.thumbnailText.toUpperCase());
+      youtube = setField(youtube, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
+    }
+    fs.writeFileSync(ytFile, youtube.endsWith('\n') ? youtube : youtube + '\n');
   }
-  fs.writeFileSync(path.join(version, 'YouTube.md'), youtube.endsWith('\n') ? youtube : youtube + '\n');
 
-  const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
-  fs.writeFileSync(
-    path.join(version, NOTES_FILE),
-    [
-      `Made with Make Version from draft ${conv}, round ${round}, on ${today()}.`,
-      '',
-      `Thumbnail by ${ai}${pick ? ` for the pair "${pick.thumbnailText.toUpperCase()}" / "${pick.title}"` : ''}${photo ? `, using the photo ${photo}` : ''}.`,
-      made ? `The image was made at ${made.width} x ${made.height} and enlarged to ${width} x ${height}.` : `The image was enlarged to ${width} x ${height}.`,
-      '',
-      pick ? 'Title: from the chosen pair.' : 'Title: unchanged from the previous version.',
-      '',
-      'On YouTube: not yet.',
-      '',
-    ].join('\n'),
-  );
-  return { name, path: path.relative(config.videoProjectsDir, version).split(path.sep).join('/') };
-  }
+  // Notes.md: what was used, added at the end.
+  const notesName = fs.readdirSync(dir).find((f) => f.toLowerCase() === NOTES_FILE.toLowerCase()) ?? NOTES_FILE;
+  const notesFile = path.join(dir, notesName);
+  const before = fs.existsSync(notesFile) ? fs.readFileSync(notesFile, 'utf8') : '';
+  const eol = before.includes('\r\n') ? '\r\n' : '\n';
+  const entry = [`${today()}: used from the drafts.`, ...notes].join(eol);
+  fs.writeFileSync(notesFile, before.trim() ? `${before.replace(/\s+$/, '')}${eol}${eol}${entry}${eol}` : `${entry}${eol}`);
+
+  const what = parts.thumbnail && parts.title ? 'thumbnail and title' : parts.thumbnail ? 'thumbnail' : 'title';
+  return { done: `${versionName} now uses this ${what}.` };
 }

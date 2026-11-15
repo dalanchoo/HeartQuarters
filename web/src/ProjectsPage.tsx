@@ -13,7 +13,7 @@ import {
 import { ManageButtons } from './ManageFolder';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
-import { PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
+import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { PieceAI } from './PieceAI';
 import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
@@ -439,10 +439,10 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
   </>;
 }
 
-function DeletePackagingVersion({ piece, version, onChanged }: { piece: Piece; version: { name: string; path: string }; onChanged: () => void }) {
+function DeletePackagingVersion({ piece, version, locked, onChanged }: { piece: Piece; version: { name: string; path: string }; locked?: boolean; onChanged: () => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   return <>
-    <button className="small danger-outline" disabled={busy} onClick={async () => {
+    <button className="small danger-outline" disabled={busy || locked} onClick={async () => {
       if (!window.confirm(`Delete packaging version ${version.name}? It moves to HeartQuarters Trash with all its files. The video and the other versions stay.`)) return;
       setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }}>Delete Version</button>
@@ -574,8 +574,13 @@ function PieceCard({
   const [versionName, setVersionName] = useState(piece.packagingVersion);
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
+  // Every version is locked until John clicks its padlock, so nothing in it changes by accident. Unlocking lasts until
+  // the page is reloaded; a version he has just copied starts unlocked, since he made it to change it.
+  const [unlocked, setUnlocked] = useState<string[]>([]);
+  const locked = !!version && !unlocked.includes(version.path);
   const [docsLoads, setDocsLoads] = useState(0);
-  const docs = usePackagingDocs(version?.docs ?? [], docsLoads);
+  const loadedDocs = usePackagingDocs(version?.docs ?? [], docsLoads);
+  const docs = locked ? lockDocs(loadedDocs) : loadedDocs;
   const [open, setOpen] = useState(startOpen);
   const { focus } = useContext(StatusContext);
   // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
@@ -611,7 +616,7 @@ function PieceCard({
         </div>
 
         <div className="piece-docs">
-          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} onSaved={() => onChanged?.()} />}
+          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} locked={locked} onSaved={() => onChanged?.()} />}
           {!version && <p className="muted">No packaging yet.</p>}
           {version && (
             <div className="versions">
@@ -626,8 +631,15 @@ function PieceCard({
                   {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
                 </button>
               ))}
-              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); onChanged?.(); }} />
-              <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+              <button
+                className={`small lock-toggle${locked ? ' lock-toggle--locked' : ''}`}
+                onClick={() => setUnlocked(locked ? [...unlocked, version.path] : unlocked.filter((p) => p !== version.path))}
+                title={locked ? `${versionLabel(version.name)} is locked: nothing in it can be changed. Click to unlock it.` : `${versionLabel(version.name)} is unlocked: changes go into it. Click to lock it again.`}
+              >
+                {locked ? `🔒 ${versionLabel(version.name)} Locked` : `🔓 ${versionLabel(version.name)} Unlocked`}
+              </button>
+              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked([...unlocked, version.path.replace(/[^/]+$/, name)]); onChanged?.(); }} />
+              <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
               <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
             </div>
           )}
@@ -653,7 +665,7 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} onChanged={onChanged} />}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );

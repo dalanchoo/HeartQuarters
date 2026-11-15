@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { fileUrl, getJson, getText, postJson, type FileRef, type Piece } from './api';
+import { fileStamp, fileUrl, getJson, getText, postJson, type FileRef, type Piece } from './api';
 import { CopyButton, type LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
@@ -483,19 +483,22 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   };
 
   // ← Save YouTube Value to File, checked against YouTube once more first.
+  // What happened after a row's button, shown under that row (the section's own messages are far below).
+  const [rowNote, setRowNote] = useState<{ row: string; text: string; failed?: boolean } | null>(null);
   const saveToFile = async (field: SyncField) => {
     if (!job || !online) return;
     const remote = online[field];
     if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return;
     setBusy(true);
     setError('');
+    setRowNote(null);
     try {
       const current = await cachedYoutube<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`, true);
       if (youtubeValues(current.video)[field] !== remote) throw new Error('The YouTube value changed since it was loaded. Reload from YouTube and compare again.');
       await doc.save((t) => setLocalValue(t, field, remote));
-      setMessage(`${field} saved to the local file.`);
+      setRowNote({ row: field, text: `YouTube's ${field} is saved in ${doc.file.name}.` });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setRowNote({ row: field, text: `Not saved: ${e instanceof Error ? e.message : String(e)}`, failed: true });
     } finally {
       setBusy(false);
     }
@@ -504,13 +507,15 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
     if (!job || !version) return;
     setBusy(true);
     setError('');
+    setRowNote(null);
     postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version })
       .then(() => {
-        setMessage("YouTube's thumbnail saved in this version.");
+        setRowNote({ row: 'Thumbnail', text: "YouTube's thumbnail is saved in this version." });
         onChanged?.();
-      }, (e: Error) => setError(e.message))
+      }, (e: Error) => setRowNote({ row: 'Thumbnail', text: `Not saved: ${e.message}`, failed: true }))
       .finally(() => setBusy(false));
   };
+  const noteFor = (row: string) => (rowNote?.row === row ? <p className={rowNote.failed ? 'error small-text' : 'small-text picked-label'}>{rowNote.text}</p> : null);
 
   const canCompare = linked && !!data;
   const shownView: View = linked ? view : 'local';
@@ -592,12 +597,13 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
                   </button>
                 )}
                 {sync && canCompare && remote !== null && (
-                  <button className="small" disabled={busy || out} onClick={() => void saveToFile(label)}>
+                  <button className="small" disabled={busy || out || doc.locked} onClick={() => void saveToFile(label)}>
                     ← Save YouTube Value to File
                   </button>
                 )}
               </div>
-              {shownView === 'diff' && diff && local !== null && field && !waiting ? (
+              {/* Locked: both sides highlighted. Unlocked: the local side is a box to type in, beside YouTube's highlighted. */}
+              {shownView === 'diff' && diff && local !== null && field && !waiting && doc.locked ? (
                 <div className="compare-columns">
                   <div>
                     <strong>Local file</strong>
@@ -615,6 +621,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
               )}
               {diff?.reordered && shownView === 'diff' && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
               {note && shownView === 'local' && <p className="muted small-text">{note}</p>}
+              {noteFor(label)}
             </div>
           );
         })}
@@ -630,16 +637,17 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
             </button>
           )}
           {canCompare && data?.video.thumbnail && version && (
-            <button className="small" disabled={busy || out} onClick={saveThumbnail} title="Saves YouTube's copy into this version, if it has no thumbnail yet">
+            <button className="small" disabled={busy || out || doc.locked} onClick={saveThumbnail} title="Saves YouTube's copy into this version, if it has no thumbnail yet">
               ← Save YouTube Value to File
             </button>
           )}
         </div>
         {columns(
-          localThumb ? <img className="lvy-thumb" src={fileUrl('projects', localThumb.path)} alt="Local thumbnail" /> : <p className="muted small-text">No thumbnail in this version.</p>,
+          localThumb ? <img className="lvy-thumb" src={fileUrl('projects', localThumb.path, fileStamp(localThumb))} alt="Local thumbnail" /> : <p className="muted small-text">No thumbnail in this version.</p>,
           data ? data.video.thumbnail ? <img className="lvy-thumb" src={data.video.thumbnail} alt="YouTube thumbnail" /> : <p className="muted small-text">Not available.</p> : <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>,
           staged.includes('Thumbnail'),
         )}
+        {noteFor('Thumbnail')}
       </div>
 
       {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. */}
@@ -776,7 +784,7 @@ function FieldEditor({ doc, index, field }: { doc: LoadedDoc; index: number; fie
   };
   return (
     <>
-      <textarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
+      <textarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
       {status && <span className="muted small-text">{status === 'saving' ? 'Saving…' : 'Saved ✓'}</span>}
       {error && <p className="error small-text">Not saved: {error}</p>}
     </>
@@ -789,7 +797,7 @@ function MissingField({ doc, label }: { doc: LoadedDoc; label: string }) {
   return (
     <p className="muted small-text">
       Not in this file yet.{' '}
-      <button className="small" onClick={() => doc.save((t) => setLocalValue(t, label as SyncField, '')).catch((e: Error) => setError(e.message))}>
+      <button className="small" disabled={doc.locked} onClick={() => doc.save((t) => setLocalValue(t, label as SyncField, '')).catch((e: Error) => setError(e.message))}>
         Add
       </button>
       {error && <span className="error"> {error}</span>}
@@ -814,11 +822,11 @@ function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
   return (
     <div className="ai-lines small-text">
       <label>
-        <input type="checkbox" checked={has.music} disabled={saving} onChange={(e) => change({ ...has, music: e.target.checked })} />
+        <input type="checkbox" checked={has.music} disabled={saving || doc.locked} onChange={(e) => change({ ...has, music: e.target.checked })} />
         The music is AI-generated
       </label>
       <label>
-        <input type="checkbox" checked={has.visuals} disabled={saving} onChange={(e) => change({ ...has, visuals: e.target.checked })} />
+        <input type="checkbox" checked={has.visuals} disabled={saving || doc.locked} onChange={(e) => change({ ...has, visuals: e.target.checked })} />
         Some B-roll is AI-generated
       </label>
       {error && <p className="error">{error}</p>}

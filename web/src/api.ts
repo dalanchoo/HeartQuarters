@@ -22,6 +22,7 @@ export type { SkillsOverview, SkillInfo, TargetInfo, LinkState } from '../../ser
 export type { ClaudeRun, ClaudeMessage } from '../../server/claude';
 export type { ShortsPlan, PlannedShort, ShortsOverview, TimedWord } from '../../server/shorts';
 export type { AiId, AiOverview } from '../../server/ai';
+export type { SignIn } from '../../server/ai-signin';
 export type {
   ExpressionIndex,
   ExpressionCategory,
@@ -62,12 +63,17 @@ export async function getText(root: RootId, path: string): Promise<string> {
   return res.text();
 }
 
-export function fileUrl(root: RootId, path: string): string {
-  return `/api/file?root=${root}&path=${encodeURIComponent(path)}`;
+/** A file's size and change time, added to its address so the browser loads a changed file instead of its old copy. */
+export function fileStamp(f: { size?: number; modified?: number }): string {
+  return f.modified ? `${f.size ?? 0}-${f.modified}` : '';
 }
 
-export function thumbUrl(root: RootId, path: string, width = 360): string {
-  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}`;
+export function fileUrl(root: RootId, path: string, stamp = ''): string {
+  return `/api/file?root=${root}&path=${encodeURIComponent(path)}${stamp ? `&v=${stamp}` : ''}`;
+}
+
+export function thumbUrl(root: RootId, path: string, width = 360, stamp = ''): string {
+  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}${stamp ? `&v=${stamp}` : ''}`;
 }
 
 export function openInExplorer(root: RootId, path: string) {

@@ -25,6 +25,8 @@ export interface FileRef {
   /** Relative to the Video Projects folder, with forward slashes. */
   path: string;
   size: number;
+  /** When the file last changed (milliseconds), so the screens show a new image instead of a cached one. */
+  modified?: number;
 }
 
 export interface PackagingVersion {
@@ -47,6 +49,8 @@ export interface DraftConversation {
   images: FileRef[];
   /** Requests.md: the first request and each change request after it. */
   requests: FileRef | null;
+  /** The title and thumbnail text these images were made for (from Conversation.json), if known. */
+  pick: BriefPick | null;
 }
 
 /** One of the brief's top title and thumbnail pairs (Picks.json, written by Write Brief's last step). */
@@ -197,7 +201,8 @@ function filesIn(dir: string, exts: Set<string>): FileRef[] {
       .filter((d) => d.isFile() && exts.has(path.extname(d.name).toLowerCase()))
       .map((d) => {
         const full = path.join(dir, d.name);
-        return { name: d.name, path: rel(full), size: fs.statSync(full).size };
+        const st = fs.statSync(full);
+        return { name: d.name, path: rel(full), size: st.size, modified: Math.round(st.mtimeMs) };
       });
   } catch {
     return [];
@@ -220,10 +225,12 @@ function filesDeep(dir: string, exts: Set<string>, base = dir): FileRef[] {
   for (const e of entries) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (e.name.toLowerCase() !== 'source') out.push(...filesDeep(full, exts, base));
+      // Source\ holds what a thumbnail was made from, Backups\ the ones it replaced: neither is a cover.
+      if (!['source', 'backups'].includes(e.name.toLowerCase())) out.push(...filesDeep(full, exts, base));
     } else if (e.isFile() && exts.has(path.extname(e.name).toLowerCase())) {
       const name = path.relative(base, full).split(path.sep).join('/');
-      out.push({ name, path: rel(full), size: fs.statSync(full).size });
+      const st = fs.statSync(full);
+      out.push({ name, path: rel(full), size: st.size, modified: Math.round(st.mtimeMs) });
     }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -263,6 +270,16 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
   };
 }
 
+/** The pair a draft conversation was made for, from its Conversation.json; null if there's none. */
+function readConversationPick(folder: string): BriefPick | null {
+  try {
+    const info = JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')) as { pick?: unknown };
+    return parsePicks({ picks: [info.pick] })?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Packaging\Drafts: Brief.md, and one folder per AI conversation with its images and Requests.md. */
 function readDrafts(packagingRoot: string): Drafts | null {
   const name = subfolders(packagingRoot).find((f) => f.toLowerCase() === DRAFTS_FOLDER.toLowerCase());
@@ -276,6 +293,7 @@ function readDrafts(packagingRoot: string): Drafts | null {
       path: rel(cDir),
       images: filesIn(cDir, IMAGE_EXTS).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
       requests: named(filesIn(cDir, DOC_EXTS), 'requests.md'),
+      pick: readConversationPick(cDir),
     };
   });
   return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), picks: readPicks(path.join(dir, PICKS_FILE)), choice: readChoice(path.join(dir, CHOICE_FILE)), conversations };

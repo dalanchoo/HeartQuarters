@@ -9,11 +9,17 @@ import { categoriesIn, photosIn } from './expressionPick';
 // thumbnail pairs (server/brief.ts). The top 3 show as cards to choose from; the full brief opens below them, then one
 // box per AI conversation with every image it made, newest first, and what was asked. Once a pair and its photo are
 // chosen, Make Thumbnail asks ChatGPT or Gemini for one (server/thumbnails.ts), and each draft has a box for changes.
-export function DraftsSection({ piece, drafts, onChanged }: { piece: string; drafts: Drafts | null; onChanged?: () => void }) {
+/** The packaging version selected on the card: where Use Thumbnail and Use Title put a draft. Locked when it's an old one. */
+export interface UseTarget { name: string; path: string; locked: boolean }
+
+export function DraftsSection({ piece, drafts, target, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
   const thumbs = useThumbJobs(piece, open, onChanged);
   const images = drafts?.conversations.reduce((n, c) => n + c.images.length, 0) ?? 0;
   const conversations = drafts?.conversations.length ?? 0;
+  // The brief, the top 3 and the photos take a lot of room; once there are drafts, they start folded away.
+  const [briefOpen, setBriefOpen] = useState(conversations === 0);
+  const briefSummary = [drafts?.brief ? 'brief written' : 'no brief yet', drafts?.choice ? `pair ${drafts.choice.index + 1} chosen` : null, drafts?.choice?.photo ? `photo ${drafts.choice.photo.split('/').pop()}` : null].filter(Boolean).join(', ');
   return (
     <details className="drafts" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
@@ -25,9 +31,16 @@ export function DraftsSection({ piece, drafts, onChanged }: { piece: string; dra
             : 'none yet'}
         </span>
       </summary>
-      {open && <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} onChanged={onChanged} />}
-      {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
-      {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
+      {open && (
+        <details className="brief-area" open={briefOpen} onToggle={(e) => setBriefOpen(e.currentTarget.open)}>
+          <summary>
+            Brief, Top 3, Photo and Make Thumbnail <span className="muted small-text">· {briefSummary}</span>
+          </summary>
+          <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} onChanged={onChanged} />
+          {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
+          {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
+        </details>
+      )}
       {drafts && (
         <>
           <div className="drafts-top">
@@ -38,7 +51,7 @@ export function DraftsSection({ piece, drafts, onChanged }: { piece: string; dra
           </div>
           <div className="drafts-grid">
             {[...drafts.conversations].reverse().map((c) => (
-              <Conversation key={c.path} piece={piece} conversation={c} allDrafts={drafts.conversations} job={thumbs.jobs.find((j) => j.conversation === c.path)} thumbs={thumbs} onChanged={onChanged} />
+              <Conversation key={c.path} piece={piece} target={target} conversation={c} allDrafts={drafts.conversations} job={thumbs.jobs.find((j) => j.conversation === c.path)} thumbs={thumbs} onChanged={onChanged} />
             ))}
           </div>
         </>
@@ -369,28 +382,27 @@ function readImages(files: File[]): Promise<Reference[]> {
   );
 }
 
-function Conversation({ piece, conversation, allDrafts, job, thumbs, onChanged }: { piece: string; conversation: DraftConversation; allDrafts: DraftConversation[]; job?: ThumbJob; thumbs: ThumbJobs; onChanged?: () => void }) {
+function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onChanged }: { piece: string; target?: UseTarget; conversation: DraftConversation; allDrafts: DraftConversation[]; job?: ThumbJob; thumbs: ThumbJobs; onChanged?: () => void }) {
   const rounds = [...conversation.images].reverse(); // newest first
   const [shown, setShown] = useState<string | undefined>(undefined);
   const current = rounds.find((r) => r.path === shown) ?? rounds[0];
   const [change, setChange] = useState('');
   const [refs, setRefs] = useState<Reference[]>([]);
-  const [making, setMaking] = useState(false);
-  const [made, setMade] = useState('');
-  // Make Version: the round on screen becomes the next packaging version, enlarged to full size.
-  const makeVersion = () => {
-    if (!current) return;
-    const round = current.name.replace(/\.[^.]+$/, '');
-    if (!window.confirm(`Make the next version from ${conversation.name}, round ${round}? It gets this thumbnail at full size and the pair's title. Existing versions are left as they are.`)) return;
-    setMaking(true);
+  const [using, setUsing] = useState(false);
+  const [used, setUsed] = useState('');
+  // Use Thumbnail / Use Title / Use Both: the round on screen goes into the version selected on the card.
+  const use = (thumbnail: boolean, title: boolean) => {
+    if (!current || !target || target.locked) return;
+    setUsing(true);
+    setUsed('');
     setError('');
-    postJson<{ name: string }>('/api/packaging/version-from-draft', { piece, image: current.path }).then(
+    postJson<{ done: string }>('/api/packaging/use-draft', { piece, image: current.path, version: target.path, thumbnail, title }).then(
       (r) => {
-        setMade(r.name);
+        setUsed(r.done);
         onChanged?.();
       },
       (e: Error) => setError(e.message),
-    ).finally(() => setMaking(false));
+    ).finally(() => setUsing(false));
   };
   const [error, setError] = useState('');
   const working = job?.state === 'working';
@@ -436,14 +448,33 @@ function Conversation({ piece, conversation, allDrafts, job, thumbs, onChanged }
           ))}
         </div>
       )}
-      {current && !working && (
-        <div className="claude-buttons">
-          <button className="small" disabled={making} onClick={makeVersion}>
-            {making ? 'Making the version…' : `Make Version from ${current.name.replace(/\.[^.]+$/, '')}`}
-          </button>
+      {conversation.pick && (
+        <div className="draft-pair">
+          <div className="draft-pair-title">{conversation.pick.title}</div>
+          <div className="muted small-text">Thumbnail text: {conversation.pick.thumbnailText.toUpperCase()}</div>
         </div>
       )}
-      {made && <p className="small-text picked-label">Made {made}. It's now the newest version above.</p>}
+      {current && !working && target && (
+        <div className="draft-use">
+          <button className="small" disabled={using || target.locked} onClick={() => use(true, false)}>
+            Use Thumbnail
+          </button>
+          {conversation.pick && (
+            <>
+              <button className="small" disabled={using || target.locked} onClick={() => use(false, true)}>
+                Use Title
+              </button>
+              <button className="small" disabled={using || target.locked} onClick={() => use(true, true)}>
+                Use Both
+              </button>
+            </>
+          )}
+          <span className="muted small-text">
+            {using ? `Putting it in ${target.name}…` : target.locked ? `${target.name} is locked. Click its 🔒 above to unlock it.` : `Goes into ${target.name}, the version selected above.`}
+          </span>
+        </div>
+      )}
+      {used && <p className="small-text picked-label">{used}</p>}
       {working && <p className="brief-working small-text">{conversation.name.replace(/ \d+$/, '')} is working on it…</p>}
       {job?.state === 'failed' && <p className="error small-text">{job.error}</p>}
       {rounds.length > 0 && !working && (

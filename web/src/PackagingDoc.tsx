@@ -24,6 +24,13 @@ export interface LoadedDoc {
   fields: Field[] | null; // null if the file isn't in "Label:" format
   /** Changes the file: `change` gets its latest text and returns the new text. Changes are saved one at a time. */
   save: (change: (text: string) => string) => Promise<void>;
+  /** An old packaging version John hasn't unlocked: shown, but nothing in it can be changed. */
+  locked?: boolean;
+}
+
+/** The same files, locked: their boxes are read-only and any save is refused. */
+export function lockDocs(docs: LoadedDoc[]): LoadedDoc[] {
+  return docs.map((d) => ({ ...d, locked: true, save: () => Promise.reject(new Error('This version is locked. Unlock it to change it.')) }));
 }
 
 /** Loads a set of packaging files (e.g. one version's YouTube.md, TikTok.md...). A new `loads` number reads them again. */
@@ -120,6 +127,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         spellCheck
         rows={draft.split('\n').length}
         value={draft}
+        readOnly={doc.locked}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
       />
@@ -147,11 +155,11 @@ function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
   return (
     <div className="ai-lines small-text">
       <label>
-        <input type="checkbox" checked={has.music} disabled={saving} onChange={(e) => change({ ...has, music: e.target.checked })} />
+        <input type="checkbox" checked={has.music} disabled={saving || doc.locked} onChange={(e) => change({ ...has, music: e.target.checked })} />
         The music is AI-generated
       </label>
       <label>
-        <input type="checkbox" checked={has.visuals} disabled={saving} onChange={(e) => change({ ...has, visuals: e.target.checked })} />
+        <input type="checkbox" checked={has.visuals} disabled={saving || doc.locked} onChange={(e) => change({ ...has, visuals: e.target.checked })} />
         Some B-roll is AI-generated
       </label>
       {error && <p className="error">{error}</p>}
@@ -178,6 +186,7 @@ function MissingYoutubeSettings({ doc }: { doc: LoadedDoc }) {
             <span className="muted small-text">Not in this file yet</span>
             <button
               className="small"
+              disabled={doc.locked}
               onClick={() => {
                 setError(null);
                 doc.save((text) => setLocalValue(text, label, '')).catch((e: Error) => setError(e.message));
