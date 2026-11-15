@@ -16,6 +16,7 @@ import mammoth from 'mammoth';
 import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
+import { isShort } from './thumbnails.js';
 
 export interface BriefSource {
   kind: 'transcript' | 'script';
@@ -125,9 +126,18 @@ const NOTES_NOTE = "John's notes for this brief (what he wants, what he doesn't 
 const READ_SKILLS = () =>
   `First read the skills "${skillFile('channel-basics')}" and "${skillFile('thumbnails-and-titles')}" (they say Claude where they mean any AI).`;
 
+/** For a Short: its cover is vertical, and it's compared with other Shorts, not longform thumbnails. */
+export function shortNote(piece: string): string[] {
+  if (!isShort(piece)) return [];
+  return [
+    `This video is a YouTube Short (vertical, 9:16). Plan its cover, not a wide thumbnail: follow the skill's rules for a Shorts cover (2160 x 3840, nothing important in the bottom fifth or by the right edge, where the app's buttons are). Its title is the Short's title. For "Recent thumbnails", look at the newest few Shorts' covers (each Shorts folder's Packaging, newest version) rather than longform thumbnails.`,
+  ];
+}
+
 export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string): string {
   return [
     `Write a thumbnail and title brief for the Heart Mind Fusion video "${pieceName}", following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
+    ...shortNote(pieceName),
     `The source is the video's ${source.kind}, copied into source.txt in the current folder (from ${source.path}). Read all of it.`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     `Research with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits: for example keyword research for the main search words and one YouTube search for competing videos. If vidIQ isn't available, write the brief anyway and say so.`,
@@ -137,9 +147,10 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
   ].join('\n\n');
 }
 
-export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false): string {
+export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false, piece = ''): string {
   return [
     `Review a thumbnail and title brief for the Heart Mind Fusion channel, following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
+    ...shortNote(piece),
     `Read all of the video's ${source.kind}, in source.txt in the current folder, then the brief, in brief.md in the current folder (with any earlier reviews at its end).`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
@@ -160,6 +171,23 @@ export function fromHeading(answer: string, heading: RegExp, name: string): stri
 
 // ---- Running the AIs --------------------------------------------------------------------------------------
 
+/**
+ * The reason an AI gives in its answer when it stops with an error and says nothing else, such as Claude's
+ * "Failed to authenticate: OAuth session expired" (it puts that in its JSON answer). A sign-in problem says how to fix it.
+ */
+export function errorInAnswer(out: string): string {
+  let reason = '';
+  try {
+    const answer = JSON.parse(out) as { is_error?: boolean; result?: unknown };
+    // Only Claude answers in this JSON form, so the sign-in advice is Claude's.
+    if (answer.is_error && typeof answer.result === 'string') reason = answer.result;
+    if (/authenticat|oauth/i.test(reason)) reason += ' Sign in again: run claude in a terminal and type /login.';
+  } catch {
+    reason = out.trim().split('\n').slice(-3).join(' ').slice(0, 500);
+  }
+  return reason;
+}
+
 function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { cwd, env: env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -172,7 +200,7 @@ function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv):
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code === 0) resolve(out);
-      else reject(new Error(err.trim().split('\n').slice(-3).join(' ') || `It stopped (exit code ${code}).`));
+      else reject(new Error(err.trim().split('\n').slice(-3).join(' ') || errorInAnswer(out) || `It stopped (exit code ${code}).`));
     });
   });
 }
@@ -189,7 +217,7 @@ export const askAi: AskAi = async (ai, prompt, cwd) => {
       { ...process.env, ENABLE_CLAUDEAI_MCP_SERVERS: 'true' },
     );
     const result = JSON.parse(out) as { is_error?: boolean; result?: string };
-    if (result.is_error) throw new Error(result.result || 'Claude stopped with an error.');
+    if (result.is_error) throw new Error(errorInAnswer(out) || 'Claude stopped with an error.');
     return result.result ?? '';
   }
   if (ai === 'codex') {
@@ -352,7 +380,7 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
     for (const r of reviewers) {
       r.state = 'working';
       try {
-        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim()), work), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
+        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece), work), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
         fs.appendFileSync(brief, `\n${review}\n`);
         fs.appendFileSync(path.join(work, 'brief.md'), `\n${review}\n`);
         r.state = 'done';

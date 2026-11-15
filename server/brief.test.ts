@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, chooseBriefPhoto, chooseBriefPick, expressionCategories, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, srtToText, startBrief, startPicks, type AskAi, type BriefStep } from './brief';
+import { briefSource, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -230,5 +230,25 @@ ${JSON.stringify(PICKS)}`)).toHaveLength(3);
       { ai: 'codex', name: 'ChatGPT', role: 'reviews', state: 'done' },
     ] as BriefStep[];
     expect(noteWhoTookPart('# B\n\nMade from: script. Research: none.\n', steps)).toBe('# B\n\nMade from: script. Research: none. By: Claude (brief), ChatGPT (reviews).\n');
+  });
+});
+
+describe('a Short', () => {
+  it('tells every AI to plan a vertical cover and compare it with other Shorts', () => {
+    const source = { kind: 'transcript' as const, path: 'x.txt' };
+    expect(shortNote('022 - V/Longform')).toEqual([]);
+    expect(writerPrompt('022 - V/Longform', source, false, '2026-11-14')).not.toMatch(/YouTube Short/);
+    expect(writerPrompt('022 - V/Shorts/022_S04 - X', source, false, '2026-11-14')).toMatch(/YouTube Short \(vertical, 9:16\).*2160 x 3840/);
+    expect(reviewerPrompt('ChatGPT', source, false, '999 - Shorts/S01')).toMatch(/YouTube Short/);
+  });
+});
+
+describe("an AI's error", () => {
+  it("shows Claude's own reason, with how to sign in again when that's the problem", () => {
+    const expired = JSON.stringify({ is_error: true, result: 'Failed to authenticate: OAuth session expired and could not be refreshed' });
+    expect(errorInAnswer(expired)).toMatch(/^Failed to authenticate.*Sign in again: run claude in a terminal and type \/login\.$/);
+    expect(errorInAnswer(JSON.stringify({ is_error: true, result: 'Overloaded' }))).toBe('Overloaded');
+    expect(errorInAnswer(JSON.stringify({ is_error: false, result: 'fine' }))).toBe('');
+    expect(errorInAnswer('')).toBe('');
   });
 });
