@@ -12,7 +12,7 @@ import {
 import { CopyButton } from './PackagingDoc';
 import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionGenerator } from './ExpressionGenerator';
-import { clampZoom, fitScale, originalSizePercent } from './expressionZoom';
+import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -390,7 +390,7 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
           </div>
-          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(Number(e.target.value) / (fit * 100))} /><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
+          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><div className="lb-zoom-track"><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(snapOriginalSize(Number(e.target.value)) / (fit * 100))} /><button type="button" className="lb-zoom-original" style={{ top: `calc(${10000 / (200 - originalSizePercent(fit, 1))}% + ${8 - 1600 / (200 - originalSizePercent(fit, 1))}px)` }} onClick={() => changeZoom(1 / fit)} aria-label="Set zoom to 100%">100%</button></div><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
         </div>
       </div>
     </div>

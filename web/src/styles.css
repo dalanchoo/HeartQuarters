@@ -407,7 +407,10 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .lb-viewport.zoomed { cursor: grab; }
 .lb-viewport.zoomed:active { cursor: grabbing; }
 .lb-zoom { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; flex: 0 0 auto; }
+.lb-zoom-track { position: relative; width: 82px; height: 100px; }
 .lb-zoom input { writing-mode: vertical-lr; direction: rtl; height: 100px; }
+.lb-zoom-original { position: absolute; left: 24px; transform: translateY(-50%); padding: 0.15rem 0.3rem; min-height: 0; font-size: 0.75rem; }
+.lb-zoom-original:active:not(:disabled) { transform: translateY(-45%); }
 .lb-zoom span { min-width: 3.5rem; text-align: center; }
 .lb-nav { position: absolute; top: 36vh; transform: translateY(-50%); font-size: 2rem; line-height: 1;
           padding: 0.3rem 0.8rem; background: rgba(255, 255, 255, 0.85); }

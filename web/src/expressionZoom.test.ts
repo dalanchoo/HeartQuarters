@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampZoom, fitScale, originalSizePercent } from './expressionZoom';
+import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 
 describe('expression photo zoom', () => {
   it('fits wide and tall photos without enlarging small ones', () => {
@@ -17,5 +17,11 @@ describe('expression photo zoom', () => {
     expect(originalSizePercent(fit, 1)).toBe(12.5);
     expect(originalSizePercent(fit, 8)).toBe(100);
     expect(originalSizePercent(fit, 16)).toBe(200);
+  });
+  it('snaps close values to 100% but still allows zooming past it', () => {
+    expect(snapOriginalSize(96)).toBe(100);
+    expect(snapOriginalSize(103)).toBe(100);
+    expect(snapOriginalSize(95)).toBe(95);
+    expect(snapOriginalSize(105)).toBe(105);
   });
 });

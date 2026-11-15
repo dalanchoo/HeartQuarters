@@ -12,3 +12,8 @@ export function clampZoom(value: number, maximum: number): number {
 export function originalSizePercent(fit: number, zoom: number): number {
   return fit * zoom * 100;
 }
+
+/** Make original size easy to select without preventing movement past it. */
+export function snapOriginalSize(percent: number): number {
+  return Math.abs(percent - 100) <= 4 ? 100 : percent;
+}
