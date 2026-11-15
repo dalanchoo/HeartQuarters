@@ -374,6 +374,10 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .reference-grid { display: flex; flex-wrap: wrap; gap: 0.7rem; }
 .reference-grid > div { display: flex; width: 120px; flex-direction: column; gap: 0.25rem; overflow-wrap: anywhere; }
 .reference-grid img { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; }
+.reference-grid > label { display: flex; width: 120px; flex-direction: column; gap: 0.25rem; }
+.expression-generator-options { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 0.7rem 0; }
+.expression-generator-options select { font: inherit; }
+.expression-candidate { display: block; max-width: min(100%, 550px); max-height: 650px; object-fit: contain; margin: 0.7rem 0; }
 .expression-photo-choice { min-width: 0; padding: 0.4rem; border: 1px solid #c9c3bc; border-radius: 10px; background: var(--panel); box-shadow: 0 1px 3px #0001; }
 .expression-photo-choice .photo { width: 100%; }
 .expression-photo-choice label { display: block; font-size: 0.8rem; margin-top: 0.25rem; }

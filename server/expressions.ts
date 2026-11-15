@@ -50,6 +50,7 @@ export interface ExpressionIndex {
 }
 
 let cached: { at: number; index: ExpressionIndex } | null = null;
+export function clearExpressionIndex(): void { cached = null; }
 
 function parseTagsFile(file: string): Tag[] {
   try {

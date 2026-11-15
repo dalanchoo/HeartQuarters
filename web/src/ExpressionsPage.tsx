@@ -11,6 +11,7 @@ import {
 } from './api';
 import { CopyButton } from './PackagingDoc';
 import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
+import { ExpressionGenerator } from './ExpressionGenerator';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -161,6 +162,7 @@ export function ExpressionsPage() {
             </div>
           </div>
         </div>
+        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />}
 
         {subs.length > 0 && (
           <div className="chips">
