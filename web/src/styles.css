@@ -374,7 +374,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .reference-grid { display: flex; flex-wrap: wrap; gap: 0.7rem; }
 .reference-grid > div { display: flex; width: 120px; flex-direction: column; gap: 0.25rem; overflow-wrap: anywhere; }
 .reference-grid img { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; }
-.expression-photo-choice { min-width: 0; }
+.expression-photo-choice { min-width: 0; padding: 0.4rem; border: 1px solid #c9c3bc; border-radius: 10px; background: var(--panel); box-shadow: 0 1px 3px #0001; }
 .expression-photo-choice .photo { width: 100%; }
 .expression-photo-choice label { display: block; font-size: 0.8rem; margin-top: 0.25rem; }
 .photo { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel);
