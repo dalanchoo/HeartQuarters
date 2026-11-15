@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
+import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { versionFolder } from './packaging-version.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, NOTES_FILE, readChoice, type BriefPick } from './projects.js';
 import { isShort, readConversation } from './thumbnails.js';
@@ -140,7 +141,7 @@ export async function useDraft(piece: string, image: string, version: string, pa
     fs.renameSync(fresh, path.join(thumbDir, 'Thumbnail.png'));
     copyIfNew(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
     if (photo) {
-      const full = safeResolve('expressions', photo);
+      const full = resolveExpressionPhoto(photo);
       copyIfNew(full, path.join(source, `Photo - ${path.basename(full)}`));
     }
     copyIfNew(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));

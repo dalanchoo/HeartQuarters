@@ -14,6 +14,7 @@ import { copyPackagingVersion, trashPackagingVersion } from './packaging-version
 import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
+import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
 import { approveExpression, candidateFile, expressionJob, expressionJobs, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
@@ -232,6 +233,8 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.post('/api/expressions/preview-change', handle((req, res) => { res.json(previewExpressionChange(String(req.body?.photo ?? ''), req.body?.destination === null ? null : String(req.body?.destination ?? ''))); }));
+app.post('/api/expressions/apply-change', handle((req, res) => { res.json(applyExpressionChange(String(req.body?.photo ?? ''), req.body?.destination === null ? null : String(req.body?.destination ?? ''), String(req.body?.token ?? ''))); }));
 app.get('/api/expression-references', handle((_req, res) => { res.json(readExpressionReferences()); }));
 app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
 app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options).job); }));

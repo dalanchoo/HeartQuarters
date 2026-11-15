@@ -46,6 +46,16 @@ beforeEach(() => {
 });
 
 describe('Make Thumbnail', () => {
+  it('uses a project-owned source photo after the library photo is removed', async () => {
+    const local = `${LONGFORM}/Packaging/Drafts/Source/kept.jpg`;
+    fs.mkdirSync(path.join(drafts(), 'Source'));
+    fs.writeFileSync(path.join(tmp, 'Projects', local), 'kept');
+    choose(`project:${local}`);
+    const { job, finished } = startThumbnail(LONGFORM, 'codex', fakeMake);
+    await finished;
+    expect(job.state).toBe('done');
+    expect(calls[0].photo).toBe(path.join(tmp, 'Projects', local));
+  });
   it('needs a chosen pair and a photo first', () => {
     expect(() => startThumbnail(LONGFORM, 'codex', fakeMake)).toThrow(/Choose one of the top 3/);
     choose(null);

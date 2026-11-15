@@ -74,6 +74,14 @@ describe('getField', () => {
 describe('using a draft in the selected version', () => {
   const draft = `${LONGFORM}/Packaging/Drafts/ChatGPT 01/05.png`;
   const v2 = () => path.join(pkg(LONGFORM), 'V02');
+  it('uses the preserved project photo when its library original was removed', async () => {
+    const local = `${LONGFORM}/Packaging/Drafts/Source/kept.jpg`;
+    fs.mkdirSync(path.join(pkg(LONGFORM), 'Drafts', 'Source'));
+    fs.writeFileSync(path.join(tmp, 'Projects', local), 'preserved');
+    fs.writeFileSync(path.join(pkg(LONGFORM), 'Drafts', 'ChatGPT 01', 'Conversation.json'), JSON.stringify({ ai: 'codex', session: 's', photo: `project:${local}`, pick: PICK }));
+    await useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: false }, fakeGrow, fakeMeasure);
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Source', 'Photo - kept.jpg'), 'utf8')).toBe('preserved');
+  });
   it('Use Both: full-size thumbnail, the pair in YouTube.md, the old thumbnail kept, and a note', async () => {
     const result = await useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: true }, fakeGrow, fakeMeasure);
     expect(result.done).toBe('V02 now uses this thumbnail and title.');

@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
+import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
 
 export type ImageAi = Extract<AiId, 'codex' | 'gemini'>;
@@ -260,7 +261,7 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
   const choice = readChoice(path.join(drafts, CHOICE_FILE));
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   if (!choice.photo) throw new Error('Pick a photo for the pair first.');
-  const photo = safeResolve('expressions', choice.photo);
+  const photo = resolveExpressionPhoto(choice.photo);
   if (!fs.existsSync(photo)) throw new Error(`The photo ${choice.photo} isn't in the expressions library any more.`);
   const name = nextConversationName(drafts, ai);
   const folder = path.join(drafts, name);

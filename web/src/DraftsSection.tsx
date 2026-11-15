@@ -182,15 +182,17 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   };
   const tile = (p: { path: string; name: string }) => {
     const picked = choice.photo === p.path;
+    const root = p.path.startsWith('project:') ? 'projects' : 'expressions';
+    const photoPath = root === 'projects' ? p.path.slice(8) : p.path;
     return (
       <div key={p.path} className={`photo-tile${picked ? ' picked' : ''}`}>
         <button className="photo-choice" disabled={saving !== null} title={`Use ${p.name}`} onClick={() => pick(p.path)}>
-          <img src={thumbUrl('expressions', p.path, 320)} alt={p.name} loading="lazy" />
+          <img src={thumbUrl(root, photoPath, 320)} alt={p.name} loading="lazy" />
         </button>
         <div className="photo-path">{p.path.replace(/\.[^.]+$/, '')}</div>
         <div className="photo-tile-foot">
           {picked ? <span className="picked-label">✓ Picked</span> : saving === p.path ? <span className="muted">Saving…</span> : null}
-          <a href={fileUrl('expressions', p.path)} target="_blank" rel="noreferrer">
+          <a href={fileUrl(root, photoPath)} target="_blank" rel="noreferrer">
             Full Size
           </a>
         </div>

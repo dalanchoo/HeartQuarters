@@ -39,6 +39,7 @@ export function ExpressionsPage() {
   const [referenceError, setReferenceError] = useState('');
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceBusy, setReferenceBusy] = useState(false);
+  const [changeMessage, setChangeMessage] = useState('');
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
     setReferenceBusy(true);
@@ -141,6 +142,7 @@ export function ExpressionsPage() {
             </span>
           ))}
         </div>
+        {changeMessage && <p role="status">{changeMessage}</p>}
 
         <div className="expr-head">
           {current.reference && (
@@ -196,6 +198,8 @@ export function ExpressionsPage() {
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
+          categories={index.categories}
+          onChanged={(message) => { setOpen(null); setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }}
         />
       )}
     </div>
@@ -259,13 +263,37 @@ function Lightbox({
   onClose,
   onPrev,
   onNext,
+  categories,
+  onChanged,
 }: {
   photo: ExpressionPhoto;
   rootDir: string;
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
+  categories: ExpressionCategory[];
+  onChanged: (message: string) => void;
 }) {
+  type Plan = { token: string; changes: { from: string; to: string | null }[]; sidecars: string[]; links: string[]; references: string[] };
+  const [destination, setDestination] = useState('');
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [operation, setOperation] = useState<'delete' | 'move' | null>(null);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setMessage(''); }, [photo.path]);
+  const preview = async (kind: 'delete' | 'move') => {
+    setBusy(true); setMessage(''); setPlan(null); setOperation(kind);
+    try { setPlan(await postJson<Plan>('/api/expressions/preview-change', { photo: photo.path, destination: kind === 'delete' ? null : destination })); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not check this change.'); }
+    finally { setBusy(false); }
+  };
+  const apply = async () => {
+    if (!plan || !operation) return;
+    setBusy(true); setMessage('');
+    try { await postJson('/api/expressions/apply-change', { photo: photo.path, destination: operation === 'delete' ? null : destination, token: plan.token }); onChanged(operation === 'delete' ? 'Photo moved to HeartQuarters Trash.' : 'Photo moved to the selected category.'); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not change the photo.'); setPlan(null); }
+    finally { setBusy(false); }
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -319,6 +347,13 @@ function Lightbox({
               View Full Size ↗
             </a>
             <button className="small" onClick={onClose}>Close (Esc)</button>
+          </div>
+          <div className="expression-manage">
+            <label>Move to Category <select value={destination} disabled={busy} onChange={(e) => { setDestination(e.target.value); setPlan(null); }}><option value="">Choose a category…</option>{categories.filter(c => c.path && c.path !== photo.category).map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' › ')}</option>)}</select></label>{' '}
+            <button disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button>{' '}
+            <button disabled={busy} onClick={() => void preview('delete')}>Review Delete</button>
+            {message && <p className="error">{message}</p>}
+            {plan && <div><p><strong>Review Changes</strong></p><ul>{plan.changes.map(c => <li key={c.from}>{c.from} → {c.to ?? 'HeartQuarters Trash'}</li>)}</ul><p>{plan.sidecars.length} photo and sidecar files will move. {plan.links.length} thumbnail references and {plan.references.length} saved reference photos will be updated.</p><details><summary>Files and Thumbnail References</summary><ul>{plan.sidecars.map(f => <li key={f}>{f}</li>)}{plan.links.map(f => <li key={f}>Thumbnail: {f}</li>)}</ul></details>{operation === 'delete' && plan.links.length > 0 && <p>Thumbnail projects using the deleted photo will keep a copy in their Drafts Source folder.</p>}<button disabled={busy} onClick={() => void apply()}>{operation === 'delete' ? 'Delete Photo' : 'Move Photo'}</button>{' '}<button disabled={busy} onClick={() => setPlan(null)}>Cancel</button></div>}
           </div>
         </div>
       </div>
