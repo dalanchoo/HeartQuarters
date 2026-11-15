@@ -142,6 +142,7 @@ export function buildPrompt(videoDir: string, short: ShortToBuild): string {
     `The clip runs from ${short.start} to ${short.end} seconds on the longform's timeline.`,
     'Build the picture and the captions: keep that stretch on every track, moved to start at 0, then 9:16, John framed',
     "so his head stays on screen, B-roll and graphics refitted to the portrait frame, and captions, all as the skill says.",
+    `Run add_captions.py with --subtitles "${path.join(videoDir, 'Shorts', short.name)}", so the short's .srt and .txt for YouTube are made with its captions.`,
     ...(short.notes ? [`The plan's notes on this clip, which you must follow: ${short.notes}`] : []),
     'Leave the cover and packaging until John asks. Start by checking how this project is actually built.',
     `Before you report, run "${path.join(config.skillsDir, 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py')}" on the project and fix every PROBLEM it prints.`,
@@ -310,7 +311,7 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
     if (failed || !run.job?.startsWith('short-')) return end();
     run.activity = 'HeartQuarters is checking the project…';
     save(run);
-    checkShortProject(run.draft, (said) => {
+    checkShortProject(run.video, run.draft, (said) => {
       if (said) run.messages.push({ from: 'app', text: said, at: new Date().toISOString() });
       end();
     });
@@ -341,15 +342,35 @@ function newRun(fields: Pick<ClaudeRun, 'video' | 'job' | 'draft' | 'prompt'>, s
 }
 
 /**
- * Runs the skill's checker on a short's CapCut project after each turn, so the result comes from HeartQuarters and not
- * only from the AI's report of it. Says nothing if there's no checker or project to check.
+ * A short's subtitle files for YouTube (Subtitles\NNN_S01-captions.srt), made with its captions. Says what's missing, or
+ * null when the .srt is there or the short's folder can't be found.
  */
-function checkShortProject(draft: string, done: (said: string | null) => void) {
+export function missingShortSubtitles(video: string, draft: string): string | null {
+  let folder: string;
+  try {
+    folder = safeResolve('projects', path.join(video, 'Shorts', draft));
+  } catch {
+    return null;
+  }
+  if (!fs.existsSync(folder)) return null;
+  const subs = path.join(folder, 'Subtitles');
+  const has = fs.existsSync(subs) && fs.readdirSync(subs).some((f) => /-captions\.srt$/i.test(f));
+  return has ? null : `There's no .srt in the short's Subtitles folder. Run add_captions.py again with --subtitles "${folder}".`;
+}
+
+/**
+ * Runs the skill's checker on a short's CapCut project after each turn, so the result comes from HeartQuarters and not
+ * only from the AI's report of it, and checks the short's subtitle files are there. Says nothing if there's no checker
+ * or project to check.
+ */
+function checkShortProject(video: string, draft: string, done: (said: string | null) => void) {
   const script = path.join(config.skillsDir, 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py');
   const project = path.join(config.capcutDraftsDir, draft);
   if (!fs.existsSync(script) || !fs.existsSync(project)) return done(null);
+  const subtitles = missingShortSubtitles(video, draft);
   execFile(config.python, [script, project], { encoding: 'utf8', timeout: 60000 }, (error, stdout) => {
     const problems = stdout.split(/\r?\n/).filter((line) => line.startsWith('PROBLEM: ')).map((line) => line.slice('PROBLEM: '.length));
+    if (subtitles) problems.push(subtitles);
     if (problems.length > 0) {
       return done(`HeartQuarters checked this CapCut project and found ${problems.length} problem(s). Don't trust it until they're fixed:\n- ${problems.join('\n- ')}`);
     }

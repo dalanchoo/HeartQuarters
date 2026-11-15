@@ -212,7 +212,8 @@ describe('checking a short after each turn', () => {
     const script = path.join(tmp, 'Skills', 'HMF_Skills', 'shorts-from-longform', 'scripts', 'check_short.py');
     fs.mkdirSync(path.dirname(script), { recursive: true });
     fs.writeFileSync(script, checker);
-    fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME, 'Subtitles'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME, 'Subtitles', 'x-captions.srt'), '1');
     fs.mkdirSync(path.join(tmp, 'Drafts', NAME), { recursive: true });
   };
 
@@ -240,6 +241,15 @@ describe('checking a short after each turn', () => {
     setUp("process.exit(3);");
     writeShortMetadata(NUMBERED, NAME);
     expect((await settle()).messages.at(-1)!.text).toMatch(/couldn't check/);
+  });
+
+  it("counts a missing .srt for YouTube as a problem", async () => {
+    setUp("console.log('No problems found.');");
+    fs.rmSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME, 'Subtitles'), { recursive: true });
+    writeShortMetadata(NUMBERED, NAME);
+    const said = (await settle()).messages.at(-1)!;
+    expect(said.text).toMatch(/found 1 problem\(s\)/);
+    expect(said.text).toMatch(/no \.srt in the short's Subtitles folder.*--subtitles/);
   });
 
   it('adds nothing when there is no checker', async () => {

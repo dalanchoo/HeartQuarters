@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appDir, config } from './config';
-import { claudeArgs, firstPrompt, forgetIdleRuns, forgetRun, getRun, handoverPrompt, readEvent, sendNote, startEdit, stopRun, type ClaudeRun } from './claude';
+import { buildPrompt, claudeArgs, firstPrompt, forgetIdleRuns, forgetRun, getRun, handoverPrompt, missingShortSubtitles, readEvent, sendNote, startEdit, stopRun, type ClaudeRun } from './claude';
 import { aiOverview, chooseAi, chosenAi, codexArgs, geminiArgs, geminiReader, readCodexEvent } from './ai';
 import { makeTree, removeTree } from './testing';
 
@@ -350,5 +350,30 @@ describe('a conversation', () => {
     fs.rmSync(path.join(tmp, 'Drafts', VIDEO), { recursive: true });
     expect(() => startEdit(VIDEO)).toThrow(/no CapCut project/);
     expect(() => sendNote('Nope', 'x')).toThrow(/no Longform folder/);
+  });
+});
+
+describe("a short's subtitle files", () => {
+  let tmp: string;
+  let old: string;
+  beforeEach(() => {
+    tmp = makeTree({ 'Videos/022 - V/Shorts/022_S04 - A/Subtitles/022_S04-captions.srt': '1', 'Videos/022 - V/Shorts/022_S05 - B/Subtitles/notes.txt': 'mine' });
+    old = config.videoProjectsDir;
+    config.videoProjectsDir = path.join(tmp, 'Videos');
+  });
+  afterEach(() => {
+    config.videoProjectsDir = old;
+    removeTree(tmp);
+  });
+  it('are asked for when the short is built', () => {
+    const prompt = buildPrompt(path.join(tmp, 'Videos', '022 - V'), { id: 's5', title: 'B', name: '022_S05 - B', start: 1, end: 2, source: '022 - V' });
+    expect(prompt).toContain('--subtitles');
+    expect(prompt).toContain(path.join('Shorts', '022_S05 - B'));
+  });
+  it('are reported when the .srt is missing', () => {
+    expect(missingShortSubtitles('022 - V', '022_S04 - A')).toBeNull();
+    expect(missingShortSubtitles('022 - V', '022_S05 - B')).toMatch(/no \.srt.*--subtitles/);
+    expect(missingShortSubtitles('022 - V', 'No such short')).toBeNull();
+    expect(missingShortSubtitles('..', '..')).toBeNull();
   });
 });
