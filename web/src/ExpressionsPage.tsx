@@ -36,6 +36,7 @@ export function ExpressionsPage() {
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
+  const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
   const [referenceError, setReferenceError] = useState('');
   const [referenceReady, setReferenceReady] = useState(false);
@@ -121,13 +122,13 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
-        <ExpressionCandidates categories={index.categories} revision={candidateRevision} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />
+        <ExpressionCandidates categories={index.categories} revision={candidateRevision} onViewCandidate={(id, category) => setPreview({ photo: { path: id, name: 'Generated Candidate', category: category || 'Unassigned', tags: [] }, imageUrl: `/api/expression-generation/image?id=${encodeURIComponent(id)}` })} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />
         <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
           <p>Choose photos in the grid below as references. HeartQuarters remembers them on this computer.</p>
           {referenceError && <p className="error">{referenceError}</p>}
           <div className="reference-grid">{references.map((path) => {
             const photo = index.photos.find((p) => p.path === path);
-            return <div key={path}>{photo ? <img src={thumbUrl('expressions', path, 240)} alt={photo.name} /> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" disabled={!referenceReady || referenceBusy} onClick={() => void setReference(path, false)}>Remove</button></div>;
+            return <div key={path}>{photo ? <button type="button" className="expression-view-image" onClick={() => setPreview({ photo })} aria-label={`View ${photo.name}`}><img src={thumbUrl('expressions', path, 240)} alt={photo.name} /></button> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" disabled={!referenceReady || referenceBusy} onClick={() => void setReference(path, false)}>Remove</button></div>;
           })}</div>
           {!references.length && <p className="muted">No reference photos selected yet.</p>}
         </details>
@@ -149,7 +150,7 @@ export function ExpressionsPage() {
 
         <div className="expr-head">
           {current.reference && (
-            <img className="expr-ref" src={thumbUrl('expressions', current.reference, 240)} alt="" />
+            <button type="button" className="expression-view-image" onClick={() => setPreview({ photo: { path: current.reference!, name: `${current.name} Reference`, category: current.path, tags: [] } })} aria-label={`View ${current.name} reference`}><img className="expr-ref" src={thumbUrl('expressions', current.reference, 240)} alt={`${current.name} reference`} /></button>
           )}
           <div>
             <h1>{current.name}</h1>
@@ -167,7 +168,7 @@ export function ExpressionsPage() {
             </div>
           </div>
         </div>
-        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onStarted={() => setCandidateRevision(n => n + 1)} />}
+        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
 
         {subs.length > 0 && (
           <div className="chips">
@@ -204,6 +205,7 @@ export function ExpressionsPage() {
           onNext={() => setOpen((open + 1) % shown.length)}
         />
       )}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -302,8 +304,8 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, onClose, onPrev, onNext }: {
-  photo: ExpressionPhoto; onClose: () => void; onPrev: () => void; onNext: () => void;
+function Lightbox({ photo, imageUrl, onClose, onPrev, onNext }: {
+  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void;
 }) {
   const [zoom, setZoom] = useState(1);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -347,8 +349,8 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.target instanceof HTMLInputElement) return;
-      if (e.key === 'ArrowLeft') onPrev();
-      if (e.key === 'ArrowRight') onNext();
+      if (e.key === 'ArrowLeft') onPrev?.();
+      if (e.key === 'ArrowRight') onNext?.();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -359,7 +361,7 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
   return (
     <div className="lightbox" onClick={onClose}>
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
-        <button className="lb-nav lb-prev" onClick={onPrev} title="Previous (←)">‹</button>
+        {onPrev && <button className="lb-nav lb-prev" onClick={onPrev} title="Previous (←)">‹</button>}
         {/* Preview first, swapped for the full-size photo once it has loaded. */}
         <div ref={viewport} className={`lb-viewport${zoom > 1 ? ' zoomed' : ''}`}
           onPointerDown={(e) => { if (zoom <= 1 || e.button !== 0) return; drag.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
@@ -368,13 +370,13 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
           onPointerCancel={() => { drag.current = null; }}
           onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); }}>
           <div className="lb-image-canvas" style={{ width: Math.max(viewSize.width, imageSize.width * fit * zoom), height: Math.max(viewSize.height, imageSize.height * fit * zoom) }}>
-            <img className="lb-img" src={fileUrl('expressions', photo.path)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
+            <img className="lb-img" src={imageUrl ?? fileUrl('expressions', photo.path)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: imageUrl ? undefined : `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
               onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
               role="button" tabIndex={0} aria-label={zoom > 1 ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); } }} />
           </div>
         </div>
-        <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>
+        {onNext && <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>}
         <div className="lb-info">
           <div className="lb-details">
           <div className="lb-title">
