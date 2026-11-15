@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getJson, postJson, type AiId, type AiOverview } from './api';
+import { getJson, postJson, type AiId, type AiOverview, type SignIn } from './api';
 
 const CHANGED = 'hq-ai-chosen';
 
@@ -30,6 +30,7 @@ export function AiPicker() {
   const [error, setError] = useState<string | null>(null);
   if (!overview) return null;
   return (
+    <>
     <label className="ai-picker small-text" title={error ?? 'Which AI does the jobs that buttons in this app start'}>
       AI
       <select
@@ -48,5 +49,74 @@ export function AiPicker() {
       </select>
       {error && <span className="error">{error}</span>}
     </label>
+    <SignIns />
+    </>
+  );
+}
+
+/**
+ * Whether each AI is signed in, checked when the app opens, when ↻ is clicked, and when John comes back to the app
+ * after opening a sign-in. Sign In opens that AI's program in its own window, where he finishes in the browser.
+ */
+function SignIns() {
+  const [signIns, setSignIns] = useState<SignIn[] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState('');
+  const [waiting, setWaiting] = useState(false);
+  const check = () => {
+    setChecking(true);
+    getJson<SignIn[]>('/api/ai/sign-ins')
+      .then(setSignIns, (e: Error) => setMessage(e.message))
+      .finally(() => setChecking(false));
+  };
+  useEffect(check, []);
+  // After a sign-in was opened: check again when John comes back to this window.
+  useEffect(() => {
+    if (!waiting) return;
+    const back = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    window.addEventListener('focus', back);
+    return () => window.removeEventListener('focus', back);
+  }, [waiting]);
+  useEffect(() => {
+    if (waiting && signIns?.every((s) => s.state === 'in')) {
+      setWaiting(false);
+      setMessage('');
+    }
+  }, [signIns, waiting]);
+  const signIn = (s: SignIn) => {
+    setMessage('');
+    postJson<{ name: string }>('/api/ai/sign-in', { id: s.id }).then(
+      () => {
+        setWaiting(true);
+        setMessage(
+          s.id === 'gemini'
+            ? 'Gemini opened in its own window. Sign in there if it asks, then close that window and come back here.'
+            : `${s.name}'s sign-in opened in its own window and your browser. Finish signing in, then come back here.`,
+        );
+      },
+      (e: Error) => setMessage(e.message),
+    );
+  };
+  if (!signIns) return checking ? <span className="muted">Checking sign-ins…</span> : null;
+  return (
+    <span className="ai-signins">
+      {signIns.map((s) => (
+        <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={s.detail}>
+          <span className="ai-signin-dot" aria-hidden="true" />
+          {s.name}
+          {s.state !== 'in' && (
+            <button type="button" className="small" onClick={() => signIn(s)} title={s.state === 'out' ? 'Not signed in' : `Couldn't tell: ${s.detail}`}>
+              Sign In
+            </button>
+          )}
+        </span>
+      ))}
+      <button type="button" className="small ai-signin-check" disabled={checking} onClick={check} title="Check the sign-ins again">
+        {checking ? '…' : '↻'}
+      </button>
+      {message && <span className="ai-signin-message">{message}</span>}
+    </span>
   );
 }
