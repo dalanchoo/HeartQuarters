@@ -104,7 +104,7 @@ export function firstRequest(choice: BriefChoice, short: boolean, out: string): 
       `- Background and supporting image: ${p.background}`,
       `- Why it should work: ${p.why}`,
       short
-        ? '- Layout: portrait. Keep all text out of the bottom fifth and away from the right edge, where the app\'s buttons are.'
+        ? '- Layout: portrait. Keep all text out of the top tenth (the Shorts feed crops it off) and the bottom fifth, and away from the right edge, where the app\'s buttons are.'
         : "- Layout: John on one side, the text on the other. He looks at the camera or toward the text, never away out of the frame. Nothing important in the bottom-right corner, where YouTube shows the video's length.",
       '- It must read at phone size: big face, big words.',
     ].join('\n'),
