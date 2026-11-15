@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -12,6 +12,7 @@ import {
 import { CopyButton } from './PackagingDoc';
 import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionGenerator } from './ExpressionGenerator';
+import { clampZoom, fitScale } from './expressionZoom';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -296,18 +297,47 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
 function Lightbox({ photo, onClose, onPrev, onNext }: {
   photo: ExpressionPhoto; onClose: () => void; onPrev: () => void; onNext: () => void;
 }) {
-  const [zoomed, setZoomed] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
   const viewport = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
-  useEffect(() => { setZoomed(false); }, [photo.path]);
+  const center = useRef<{ x: number; y: number } | null>(null);
+  const fit = fitScale(imageSize.width, imageSize.height, viewSize.width, viewSize.height);
+  const maximum = Math.max(2, Math.ceil(1 / fit * 10) / 10);
+  const changeZoom = (next: number | ((previous: number) => number)) => {
+    const el = viewport.current;
+    if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
+    setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
+  };
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
-    if (zoomed && el) { el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2; el.scrollTop = (el.scrollHeight - el.clientHeight) / 2; }
-  }, [zoomed, photo.path]);
+    if (!el) return;
+    const measure = () => setViewSize({ width: el.clientWidth, height: el.clientHeight });
+    measure(); const observer = new ResizeObserver(measure); observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const target = center.current ?? { x: 0.5, y: 0.5 };
+    el.scrollLeft = target.x * el.scrollWidth - el.clientWidth / 2;
+    el.scrollTop = target.y * el.scrollHeight - el.clientHeight / 2;
+    center.current = null;
+  }, [zoom, imageSize, viewSize]);
+  useEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => { e.preventDefault(); changeZoom(previous => previous * (e.deltaY < 0 ? 1.12 : 1 / 1.12)); };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, [maximum]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      if (e.target instanceof HTMLInputElement) return;
       if (e.key === 'ArrowLeft') onPrev();
       if (e.key === 'ArrowRight') onNext();
     };
@@ -322,15 +352,18 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
         <button className="lb-nav lb-prev" onClick={onPrev} title="Previous (←)">‹</button>
         {/* Preview first, swapped for the full-size photo once it has loaded. */}
-        <div ref={viewport} className={`lb-viewport${zoomed ? ' zoomed' : ''}`}
-          onPointerDown={(e) => { if (!zoomed || e.button !== 0) return; drag.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
+        <div ref={viewport} className={`lb-viewport${zoom > 1 ? ' zoomed' : ''}`}
+          onPointerDown={(e) => { if (zoom <= 1 || e.button !== 0) return; drag.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
           onPointerMove={(e) => { const d = drag.current; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; if (d.moved) { e.currentTarget.scrollLeft = d.left - dx; e.currentTarget.scrollTop = d.top - dy; } }}
           onPointerUp={() => { suppressClick.current = drag.current?.moved ?? false; drag.current = null; }}
           onPointerCancel={() => { drag.current = null; }}
-          onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } setZoomed(!zoomed); }}>
-          <img className="lb-img" src={fileUrl('expressions', photo.path)} style={{ backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
-            role="button" tabIndex={0} aria-label={zoomed ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setZoomed(!zoomed); } }} />
+          onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : maximum); }}>
+          <div className="lb-image-canvas" style={{ width: Math.max(viewSize.width, imageSize.width * fit * zoom), height: Math.max(viewSize.height, imageSize.height * fit * zoom) }}>
+            <img className="lb-img" src={fileUrl('expressions', photo.path)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
+              onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
+              role="button" tabIndex={0} aria-label={zoom > 1 ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : maximum); } }} />
+          </div>
         </div>
         <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>
         <div className="lb-info">
@@ -352,7 +385,8 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
               ))}
             </div>
           )}
-          <p className="muted small-text">{zoomed ? 'Drag to pan. Click the photo to fit it again.' : 'Click the photo to view it at full size.'}</p>
+          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min="100" max={Math.round(maximum * 100)} step="1" value={Math.round(zoom * 100)} onChange={(e) => changeZoom(Number(e.target.value) / 100)} /><span>{Math.round(zoom * 100)}%</span></div>
+          <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
         </div>
       </div>
