@@ -368,6 +368,7 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
         </div>
         <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>
         <div className="lb-info">
+          <div className="lb-details">
           <div className="lb-title">
             <strong>{photo.name}</strong>
             <span className="muted">{photo.category.split('/').join(' › ')}</span>
@@ -386,9 +387,10 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
               ))}
             </div>
           )}
-          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(Number(e.target.value) / (fit * 100))} /><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
+          </div>
+          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(Number(e.target.value) / (fit * 100))} /><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
         </div>
       </div>
     </div>
