@@ -9,6 +9,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
+import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -32,6 +33,12 @@ export function ExpressionsPage() {
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
+  const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
+  const [referenceError, setReferenceError] = useState('');
+  const setReference = (path: string, checked: boolean) => {
+    const next = checked ? [...references, path] : references.filter((p) => p !== path);
+    try { saveReferences(localStorage, next); setReferences(next); setReferenceError(''); } catch { setReferenceError('Could not remember the reference selection in this browser.'); }
+  };
 
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message));
@@ -92,6 +99,19 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
+        <details className="expression-planning"><summary>Reference photos ({references.length})</summary>
+          <p>Choose photos in the grid below as references. These selections are remembered in this browser.</p>
+          {referenceError && <p className="error">{referenceError}</p>}
+          <div className="reference-grid">{references.map((path) => {
+            const photo = index.photos.find((p) => p.path === path);
+            return <div key={path}>{photo ? <img src={thumbUrl('expressions', path, 240)} alt={photo.name} /> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" onClick={() => setReference(path, false)}>Remove</button></div>;
+          })}</div>
+          {!references.length && <p className="muted">No reference photos selected yet.</p>}
+        </details>
+        {current.path === '' && <details className="expression-planning"><summary>Categories to consider</summary>
+          <p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
+          <div className="chips">{suggestedCategories(index.categories).map((c) => <button key={c.path} className="chip" onClick={() => goTo(c.path)}>{c.name} · {c.ownCount} photos</button>)}</div>
+        </details>}
         <div className="crumbs">
           {crumbs.map((c, i) => (
             <span key={c.path}>
@@ -141,10 +161,10 @@ export function ExpressionsPage() {
 
         <div className="photo-grid">
           {shown.map((p, i) => (
-            <button key={p.path} className="photo" onClick={() => setOpen(i)} title={p.name}>
+            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button>
+            </button><label><input type="checkbox" checked={references.includes(p.path)} onChange={(e) => setReference(p.path, e.target.checked)} /> Reference photo</label></div>
           ))}
         </div>
       </section>
