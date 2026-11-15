@@ -19,3 +19,9 @@ Instructions for any AI (or person) changing this code.
    `web/src/api.ts`, which adds the `X-HeartQuarters` header the server requires.
    Files from Drive are served sandboxed; HTML from documents is cleaned with
    DOMPurify before display.
+
+## John's interface preferences
+
+- Use Title Case for interface labels, buttons and section headings, for example
+  “Reference Photo” and “Generate an Expression With ChatGPT.” Ordinary
+  explanatory sentences can use normal sentence case.

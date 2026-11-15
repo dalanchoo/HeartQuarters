@@ -118,7 +118,7 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
-        <details className="expression-planning"><summary>Reference photos ({references.length})</summary>
+        <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
           <p>Choose photos in the grid below as references. HeartQuarters remembers them on this computer.</p>
           {referenceError && <p className="error">{referenceError}</p>}
           <div className="reference-grid">{references.map((path) => {
@@ -127,7 +127,7 @@ export function ExpressionsPage() {
           })}</div>
           {!references.length && <p className="muted">No reference photos selected yet.</p>}
         </details>
-        {current.path === '' && <details className="expression-planning"><summary>Categories to consider</summary>
+        {current.path === '' && <details className="expression-planning"><summary>Categories to Consider</summary>
           <p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
           <div className="chips">{suggestedCategories(index.categories).map((c) => <button key={c.path} className="chip" onClick={() => goTo(c.path)}>{c.name} · {c.ownCount} photos</button>)}</div>
         </details>}
@@ -184,7 +184,7 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference photo</label></div>
+            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference Photo</label></div>
           ))}
         </div>
       </section>
