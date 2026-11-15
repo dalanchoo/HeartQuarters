@@ -42,7 +42,7 @@ export function ExpressionCandidates({ categories, revision, onSaved, onViewCand
   useEffect(() => { const timer = setInterval(() => void load(), 3000); return () => clearInterval(timer); }, []);
   const action = async (id: string, fn: () => Promise<void>) => { setBusy(id); setMessage(''); try { await fn(); await load(); } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); } };
   const parents = new Set(categories.map(c => c.parent));
-  return <section className="expression-planning"><h2>Candidates for Review ({jobs.length})</h2>
+  return <details className="expression-planning" open><summary>Candidates for Review ({jobs.length})</summary>
     <p>Compare candidates from every category. They stay on this computer until you decide.</p>
     {message && <p role="status">{message}</p>}
     {!jobs.length && <p className="muted">No candidates yet.</p>}
@@ -57,5 +57,5 @@ export function ExpressionCandidates({ categories, revision, onSaved, onViewCand
       <div className="expression-candidate-actions">{job.state === 'ready' && <button disabled={busy !== null || !job.category} onClick={() => void action(job.id, async () => { const result = await postJson<{ path: string }>('/api/expression-generation/approve', { id: job.id }); setMessage(`Added ${result.path}`); onSaved(); })}>Approve and Add to Category</button>}
       {job.state !== 'working' && <button disabled={busy !== null} onClick={() => void action(job.id, async () => { await postJson('/api/expression-generation/reject', { id: job.id }); setMessage('Candidate discarded.'); })}>Discard Candidate</button>}</div>
     </article>)}</div>
-  </section>;
+  </details>;
 }
