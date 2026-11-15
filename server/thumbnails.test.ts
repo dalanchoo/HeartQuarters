@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { changeThumbnail, firstRequest, isShort, nextConversationName, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
+import { changeThumbnail, firstRequest, geminiImageArgs, isShort, nextConversationName, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -46,6 +46,19 @@ beforeEach(() => {
 });
 
 describe('Make Thumbnail', () => {
+  it('gives Gemini all reference photos and their distinct folders without enabling terminal commands', () => {
+    const first = path.join(tmp, 'one', 'first.jpg');
+    const second = path.join(tmp, 'two', 'second.jpg');
+    const third = path.join(tmp, 'two', 'third.jpg');
+    const args = geminiImageArgs('Make an image', tmp, { photo: first, refs: [second, third] });
+    expect(args[args.indexOf('-p') + 1]).toContain(first);
+    expect(args[args.indexOf('-p') + 1]).toContain(second);
+    expect(args[args.indexOf('-p') + 1]).toContain(third);
+    expect(args.filter((v) => v === '--add-dir')).toHaveLength(3);
+    expect(args).toContain(path.dirname(first)); expect(args).toContain(path.dirname(second));
+    expect(args).toContain('--sandbox');
+    expect(JSON.parse(args[args.indexOf('--settings') + 1]).permissions.allow).toEqual(['read_file(*)']);
+  });
   it('uses a project-owned source photo after the library photo is removed', async () => {
     const local = `${LONGFORM}/Packaging/Drafts/Source/kept.jpg`;
     fs.mkdirSync(path.join(drafts(), 'Source'));

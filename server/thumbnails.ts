@@ -174,6 +174,16 @@ export function sessionFrom(output: string, key: 'thread_id' | 'conversation_id'
   return '';
 }
 
+/** Tell Gemini about each image and allow it to read each image's folder. */
+export function geminiImageArgs(prompt: string, cwd: string, opts: { session?: string; photo?: string; refs?: string[] }): string[] {
+  const { session, photo, refs = [] } = opts;
+  const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };
+  const images = [...(photo ? [photo] : []), ...refs];
+  const said = images.length ? `${prompt}\n\nReference image files:\n${images.map((file) => `- ${file}`).join('\n')}` : prompt;
+  const dirs = [...new Set([cwd, ...images.map((file) => path.dirname(file))])];
+  return ['-p', said, '--output-format', 'stream-json', ...(session ? ['--conversation', session] : []), '--sandbox', ...dirs.flatMap((dir) => ['--add-dir', dir]), '--settings', JSON.stringify(settings), '--print-timeout', '900s'];
+}
+
 export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, photo, refs }) => {
   const [cmd, ...pre] = aiCommand(ai);
   const saved = path.join(cwd, out);
@@ -188,13 +198,11 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
     if (!image) throw new Error("ChatGPT finished but didn't make an image.");
     return { image, session: id };
   }
-  const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };
-  const said = photo ? `${prompt}\n\nThe photo is at: ${photo}` : prompt;
-  const args = ['-p', said, '--output-format', 'stream-json', ...(session ? ['--conversation', session] : []), '--sandbox', '--add-dir', cwd, ...(photo ? ['--add-dir', path.dirname(photo)] : []), ...(refs?.length ? ['--add-dir', path.dirname(refs[0])] : []), '--settings', JSON.stringify(settings), '--print-timeout', '900s'];
+  const args = geminiImageArgs(prompt, cwd, { session, photo, refs });
   const output = await run(cmd, [...pre, ...args], cwd);
   const id = session || sessionFrom(output, 'conversation_id');
   // Antigravity can't save outside its own folder in a sandbox, so the image is taken from there.
-  const image = fs.existsSync(saved) ? saved : newestImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain', id), started);
+  const image = fs.existsSync(saved) ? saved : id ? newestImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain', id), started) : null;
   if (!image) throw new Error("Gemini finished but didn't make an image.");
   return { image, session: id };
 };
