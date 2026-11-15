@@ -12,7 +12,7 @@ import {
 import { CopyButton } from './PackagingDoc';
 import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionGenerator } from './ExpressionGenerator';
-import { clampZoom, fitScale } from './expressionZoom';
+import { clampZoom, fitScale, originalSizePercent } from './expressionZoom';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -305,7 +305,8 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
   const suppressClick = useRef(false);
   const center = useRef<{ x: number; y: number } | null>(null);
   const fit = fitScale(imageSize.width, imageSize.height, viewSize.width, viewSize.height);
-  const maximum = Math.max(2, Math.ceil(1 / fit * 10) / 10);
+  const maximum = 2 / fit;
+  const percent = originalSizePercent(fit, zoom);
   const changeZoom = (next: number | ((previous: number) => number)) => {
     const el = viewport.current;
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
@@ -357,12 +358,12 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
           onPointerMove={(e) => { const d = drag.current; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; if (d.moved) { e.currentTarget.scrollLeft = d.left - dx; e.currentTarget.scrollTop = d.top - dy; } }}
           onPointerUp={() => { suppressClick.current = drag.current?.moved ?? false; drag.current = null; }}
           onPointerCancel={() => { drag.current = null; }}
-          onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : maximum); }}>
+          onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); }}>
           <div className="lb-image-canvas" style={{ width: Math.max(viewSize.width, imageSize.width * fit * zoom), height: Math.max(viewSize.height, imageSize.height * fit * zoom) }}>
             <img className="lb-img" src={fileUrl('expressions', photo.path)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
               onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
               role="button" tabIndex={0} aria-label={zoom > 1 ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : maximum); } }} />
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); } }} />
           </div>
         </div>
         <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>
@@ -385,7 +386,7 @@ function Lightbox({ photo, onClose, onPrev, onNext }: {
               ))}
             </div>
           )}
-          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min="100" max={Math.round(maximum * 100)} step="1" value={Math.round(zoom * 100)} onChange={(e) => changeZoom(Number(e.target.value) / 100)} /><span>{Math.round(zoom * 100)}%</span></div>
+          <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(Number(e.target.value) / (fit * 100))} /><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
         </div>
