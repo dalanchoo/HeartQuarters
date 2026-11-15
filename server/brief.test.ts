@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
+import { briefSource, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -250,5 +250,47 @@ describe("an AI's error", () => {
     expect(errorInAnswer(JSON.stringify({ is_error: true, result: 'Overloaded' }))).toBe('Overloaded');
     expect(errorInAnswer(JSON.stringify({ is_error: false, result: 'fine' }))).toBe('');
     expect(errorInAnswer('')).toBe('');
+  });
+});
+
+describe('screenshots pasted into the brief boxes', () => {
+  const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]).toString('base64');
+  const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9]).toString('base64');
+  it('are kept with the brief and copied where the AIs work, named by their box', () => {
+    const work = path.join(tmp, 'work');
+    fs.mkdirSync(work);
+    const when = new Date(2026, 10, 15, 9, 5);
+    const saved = saveResearchImages(draftsDir(), work, { vidiq: [PNG, JPG], studio: [PNG], notes: [] }, when);
+    expect(saved.map((s) => path.basename(s.file))).toEqual(['vidIQ 1.png', 'vidIQ 2.jpg', 'Ask Studio 1.png']);
+    expect(fs.readdirSync(path.join(draftsDir(), 'Research', '2026-11-15 09.05')).sort()).toEqual(['Ask Studio 1.png', 'vidIQ 1.png', 'vidIQ 2.jpg']);
+    expect(saveResearchImages(draftsDir(), work, { vidiq: [PNG] }, when)).toHaveLength(1); // a second brief in the same minute
+    expect(fs.existsSync(path.join(draftsDir(), 'Research', '2026-11-15 09.05 (2)', 'vidIQ 1.png'))).toBe(true);
+    const notes = notesWithImages('My notes.', saved);
+    expect(notes).toMatch(/^My notes\.\n\nScreenshots John pasted\. Open and read each one/);
+    expect(notes).toContain(`From vidIQ:\n- ${saved[0].file}\n- ${saved[1].file}`);
+    expect(notes).toContain(`From Ask Studio:\n- ${saved[2].file}`);
+    expect(notesWithImages(' only text ', [])).toBe('only text');
+  });
+  it('refuses anything that is not an image, and too many, before writing anything', () => {
+    const work = path.join(tmp, 'work2');
+    fs.mkdirSync(work);
+    expect(() => saveResearchImages(draftsDir(), work, { vidiq: [PNG, 'bm90IGFuIGltYWdl'] }, new Date())).toThrow(/PNG, JPEG or WebP/);
+    expect(() => saveResearchImages(draftsDir(), work, { notes: Array(13).fill(PNG) }, new Date())).toThrow(/at most 12/);
+    expect(fs.existsSync(path.join(draftsDir(), 'Research'))).toBe(false);
+    expect(saveResearchImages(draftsDir(), work, undefined, new Date())).toEqual([]);
+  });
+  it('reach every AI: listed in notes.txt, and passed along for ChatGPT', async () => {
+    const seen: { ai: string; images: string[]; notes: string }[] = [];
+    const recording: AskAi = async (ai, prompt, cwd, images = []) => {
+      seen.push({ ai, images, notes: fs.existsSync(path.join(cwd, 'notes.txt')) ? fs.readFileSync(path.join(cwd, 'notes.txt'), 'utf8') : '' });
+      return fakeAi(ai, prompt, cwd);
+    };
+    const { finished } = await startBrief(LONGFORM, '', recording, { vidiq: [PNG] });
+    await finished;
+    expect(seen.map((s) => s.ai)).toEqual(['claude', 'codex', 'gemini', 'claude']);
+    for (const s of seen) {
+      expect(s.images.map((i) => path.basename(i))).toEqual(['vidIQ 1.png']);
+      expect(s.notes).toContain('From vidIQ:');
+    }
   });
 });

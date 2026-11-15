@@ -548,3 +548,13 @@ textarea[readonly]:focus { outline: none; }
 .brief-area[open] > summary { margin-bottom: 0.5rem; }
 /* Local vs YouTube: YouTube's side looks exactly like the local box beside it (same text size, no inner scrolling), so equal texts look equal. */
 .lvy-value, .compare-columns pre.lvy-value { font: inherit; font-size: 0.875rem; line-height: 1.4; padding: 0.35rem 0.6rem; margin: 0; border: 1px solid transparent; max-height: none; overflow: visible; }
+/* Write Brief: the question for vidIQ and Ask Studio, and one box each for John's notes and their answers. */
+.research-question { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.7rem; margin: 0.4rem 0; }
+.research-question > summary { cursor: pointer; font-weight: 600; }
+.card .research-question > summary { display: flex; align-items: center; gap: 0.45rem; }
+.research-question > summary::before { content: "▸"; color: var(--muted); transition: transform 0.1s; }
+.research-question[open] > summary::before { transform: rotate(90deg); }
+.brief-box { display: block; margin: 0.4rem 0; }
+.brief-box > span { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.15rem; }
+.brief-box textarea { width: 100%; box-sizing: border-box; }
+.small-link { font-size: 0.85rem; }

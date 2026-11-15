@@ -16,7 +16,7 @@ import mammoth from 'mammoth';
 import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
-import { isShort } from './thumbnails.js';
+import { decodeReference, isShort } from './thumbnails.js';
 
 export interface BriefSource {
   kind: 'transcript' | 'script';
@@ -44,7 +44,8 @@ export interface BriefJob {
 }
 
 /** Asks one AI one question in `cwd` and gives back its answer. Real AIs in askAi; tests pass a fake. */
-export type AskAi = (ai: AiId, prompt: string, cwd: string) => Promise<string>;
+/** Asks one AI. `images` are screenshots John pasted; ChatGPT gets them attached (the others open them as files). */
+export type AskAi = (ai: AiId, prompt: string, cwd: string, images?: string[]) => Promise<string>;
 
 const BRIEF_FILE = 'Brief.md';
 /** Each vidIQ call costs John credits, so Claude is told to keep to a few. */
@@ -130,7 +131,7 @@ const READ_SKILLS = () =>
 export function shortNote(piece: string): string[] {
   if (!isShort(piece)) return [];
   return [
-    `This video is a YouTube Short (vertical, 9:16). Plan its cover, not a wide thumbnail: follow the skill's rules for a Shorts cover (2160 x 3840, nothing important in the bottom fifth or by the right edge, where the app's buttons are). Its title is the Short's title. For "Recent thumbnails", look at the newest few Shorts' covers (each Shorts folder's Packaging, newest version) rather than longform thumbnails.`,
+    `This video is a YouTube Short (vertical, 9:16). Plan its cover, not a wide thumbnail: follow the skill's rules for a Shorts cover (2160 x 3840, nothing important in the top tenth, which the Shorts feed crops off, the bottom fifth or by the right edge, where the app's buttons are). Its title is the Short's title. For "Recent thumbnails", look at the newest few Shorts' covers (each Shorts folder's Packaging, newest version) rather than longform thumbnails.`,
   ];
 }
 
@@ -206,7 +207,7 @@ function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv):
 }
 
 /** The real AIs, read-only: none of them may change a file. */
-export const askAi: AskAi = async (ai, prompt, cwd) => {
+export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...pre] = aiCommand(ai);
   if (ai === 'claude') {
     // Claude.ai's connectors (vidIQ) are only loaded in a background run when asked for.
@@ -222,7 +223,7 @@ export const askAi: AskAi = async (ai, prompt, cwd) => {
   }
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', '-s', 'read-only', '-o', answer, prompt], cwd);
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
     return fs.readFileSync(answer, 'utf8');
   }
   const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };
@@ -300,10 +301,10 @@ export function picksFromAnswer(answer: string): BriefPick[] {
 }
 
 /** The last step: Claude picks the top 3 pairs, saved as Picks.json (an earlier one is kept, renamed). */
-async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boolean, drafts: string, when: Date): Promise<void> {
+async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boolean, drafts: string, when: Date, shots: string[] = []): Promise<void> {
   step.state = 'working';
   try {
-    const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes), work));
+    const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes), work, shots));
     keepOld(drafts, PICKS_FILE, when);
     fs.writeFileSync(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
     step.state = 'done';
@@ -311,6 +312,58 @@ async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boo
     step.state = 'failed';
     step.error = e instanceof Error ? e.message : String(e);
   }
+}
+
+// ---- Screenshots John pasted into the brief's boxes ------------------------------------------------------------
+
+/** Which box an image was pasted into, as it's named for the AIs and in its file name. */
+export const RESEARCH_BOXES = { notes: "John's notes", vidiq: 'vidIQ', studio: 'Ask Studio' } as const;
+export type ResearchBox = keyof typeof RESEARCH_BOXES;
+/** Pasted images, base64, by the box they were pasted into. */
+export type ResearchImages = Partial<Record<ResearchBox, unknown>>;
+const MAX_RESEARCH_IMAGES = 12;
+export interface SavedShot { box: ResearchBox; file: string }
+
+/**
+ * Saves the pasted screenshots in Packaging\Drafts\Research\<date time>\ ("vidIQ 1.png", "Ask Studio 1.png"...), as
+ * a record of what the brief was based on, and copies them into the AIs' work folder. Returns the work copies.
+ */
+export function saveResearchImages(drafts: string, work: string, images: ResearchImages | undefined, when: Date): SavedShot[] {
+  const lists = (Object.keys(RESEARCH_BOXES) as ResearchBox[]).map((box) => ({ box, list: Array.isArray(images?.[box]) ? (images![box] as unknown[]) : [] }));
+  const count = lists.reduce((n, l) => n + l.list.length, 0);
+  if (!count) return [];
+  if (count > MAX_RESEARCH_IMAGES) throw new Error(`Paste at most ${MAX_RESEARCH_IMAGES} images in all.`);
+  const decoded = lists.map((l) => ({ box: l.box, images: l.list.map(decodeReference) })); // all checked before anything is written
+  let record = path.join(drafts, 'Research', stamp(when));
+  for (let n = 2; fs.existsSync(record); n++) record = path.join(drafts, 'Research', `${stamp(when)} (${n})`);
+  fs.mkdirSync(record, { recursive: true });
+  fs.mkdirSync(path.join(work, 'research'), { recursive: true });
+  return decoded.flatMap(({ box, images: list }) =>
+    list.map((img, i) => {
+      const name = `${RESEARCH_BOXES[box]} ${i + 1}${img.ext}`;
+      fs.writeFileSync(path.join(record, name), img.data, { flag: 'wx' });
+      const file = path.join(work, 'research', name);
+      fs.writeFileSync(file, img.data);
+      return { box, file };
+    }),
+  );
+}
+
+/** notes.txt for the AIs: John's text, then the screenshots, listed under the box they were pasted into. */
+export function notesWithImages(notes: string, shots: SavedShot[]): string {
+  if (!shots.length) return notes.trim();
+  const groups = (Object.keys(RESEARCH_BOXES) as ResearchBox[])
+    .map((box) => ({ box, files: shots.filter((s) => s.box === box).map((s) => s.file) }))
+    .filter((g) => g.files.length);
+  return [
+    notes.trim(),
+    [
+      'Screenshots John pasted. Open and read each one: they may show suggested titles and tags with their scores, or other research.',
+      ...groups.map((g) => `${g.box === 'notes' ? 'With his notes' : `From ${RESEARCH_BOXES[g.box]}`}:\n${g.files.map((f) => `- ${f}`).join('\n')}`),
+    ].join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 /** A fresh folder in the app's data where the AIs work, with copies of what they read. */
@@ -333,7 +386,7 @@ export function noteWhoTookPart(brief: string, steps: BriefStep[]): string {
  * Starts the brief for one piece (e.g. "022 - Worth Telling Them/Longform"). Returns the job at once; `finished`
  * settles when all three AIs are done. `notes` is what John typed or pasted for the AIs, if anything.
  */
-export async function startBrief(piece: string, notes: string, ask: AskAi = askAi): Promise<{ job: BriefJob; finished: Promise<void> }> {
+export async function startBrief(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages): Promise<{ job: BriefJob; finished: Promise<void> }> {
   if (jobs.get(piece)?.status === 'running') throw new Error('A brief is already being written for this video.');
   const dir = pieceFolder(piece);
   const found = findSource(dir);
@@ -342,6 +395,9 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
 
   const work = workFolder(piece);
   fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
+  const saved = saveResearchImages(path.join(dir, 'Packaging', DRAFTS_FOLDER), work, images, new Date());
+  const shots = saved.map((s) => s.file);
+  const notes = notesWithImages(rawNotes, saved);
   if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
 
   const step = (ai: AiId, role: BriefStep['role']): BriefStep => ({ ai, name: AI_NAMES[ai], role, state: 'waiting' });
@@ -363,7 +419,7 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
     const when = new Date();
     try {
       writer.state = 'working';
-      const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10)), work), /^# Brief:/m, 'Claude');
+      const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10)), work, shots), /^# Brief:/m, 'Claude');
       fs.mkdirSync(drafts, { recursive: true });
       job.kept = keepOld(drafts, BRIEF_FILE, when);
       fs.writeFileSync(brief, text + '\n');
@@ -380,7 +436,7 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
     for (const r of reviewers) {
       r.state = 'working';
       try {
-        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece), work), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
+        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece), work, shots), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
         fs.appendFileSync(brief, `\n${review}\n`);
         fs.appendFileSync(path.join(work, 'brief.md'), `\n${review}\n`);
         r.state = 'done';
@@ -390,7 +446,7 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
       }
     }
     fs.writeFileSync(brief, noteWhoTookPart(fs.readFileSync(brief, 'utf8'), job.steps));
-    await runPicks(picker, ask, work, !!notes.trim(), drafts, when);
+    await runPicks(picker, ask, work, !!notes.trim(), drafts, when, shots);
     job.status = 'done';
   })().catch((e) => {
     job.status = 'failed';
@@ -400,7 +456,7 @@ export async function startBrief(piece: string, notes: string, ask: AskAi = askA
 }
 
 /** Pick Top 3 for a brief written before there were picks (or again): only the last step, on the Brief.md there. */
-export async function startPicks(piece: string, notes: string, ask: AskAi = askAi): Promise<{ job: BriefJob; finished: Promise<void> }> {
+export async function startPicks(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages): Promise<{ job: BriefJob; finished: Promise<void> }> {
   if (jobs.get(piece)?.status === 'running') throw new Error('A brief is already being written for this video.');
   const dir = pieceFolder(piece);
   const drafts = path.join(dir, 'Packaging', DRAFTS_FOLDER);
@@ -409,6 +465,9 @@ export async function startPicks(piece: string, notes: string, ask: AskAi = askA
   const found = findSource(dir);
   const work = workFolder(piece);
   fs.copyFileSync(brief, path.join(work, 'brief.md'));
+  const saved = saveResearchImages(drafts, work, images, new Date());
+  const shots = saved.map((s) => s.file);
+  const notes = notesWithImages(rawNotes, saved);
   if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
   const job: BriefJob = {
     piece,
@@ -418,7 +477,7 @@ export async function startPicks(piece: string, notes: string, ask: AskAi = askA
     startedAt: new Date().toISOString(),
   };
   jobs.set(piece, job);
-  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date()).then(() => {
+  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots).then(() => {
     job.status = job.steps[0].state === 'done' ? 'done' : 'failed';
   });
   return { job, finished };

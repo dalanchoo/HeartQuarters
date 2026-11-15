@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { combineNotes, researchQuestion } from './researchPrompt';
+
+describe('the research question for vidIQ and Ask Studio', () => {
+  it("names the Short, says where it is, and what it's about", () => {
+    const q = researchQuestion({ title: "They Remember Our Childhood. I Don't.", about: 'With SDAM, my friends remember.', short: true, url: 'https://youtube.com/shorts/x' });
+    expect(q).toMatch(/^I'm choosing the title and cover for my YouTube Short "They Remember Our Childhood\. I Don't\.", which is on my channel at https:\/\/youtube\.com\/shorts\/x\./);
+    expect(q).toContain("What it's about: With SDAM, my friends remember.");
+    expect(q).toContain('suggest 5 title and cover pairs');
+    expect(q).toContain('true to what actually happens');
+  });
+  it('works for a longform video not on YouTube yet, with no title', () => {
+    const q = researchQuestion({ title: '', about: '', short: false });
+    expect(q).toMatch(/^I'm choosing the title and thumbnail for my next YouTube video, which isn't on YouTube yet\./);
+    expect(q).not.toContain("What it's about");
+    expect(q).toContain('under about 60 characters');
+  });
+});
+
+describe('combining the notes boxes', () => {
+  it('puts each filled box under its own heading and leaves out empty ones', () => {
+    expect(combineNotes(' mine ', '', 'studio says')).toBe("John's notes:\nmine\n\nResearch from YouTube's Ask Studio:\nstudio says");
+    expect(combineNotes('', '', '')).toBe('');
+  });
+});

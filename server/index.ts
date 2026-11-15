@@ -57,6 +57,7 @@ app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
 app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
+app.use(['/api/brief/start', '/api/brief/picks'], express.json({ limit: '120mb' })); // screenshots pasted into the brief's boxes
 app.use(express.json());
 
 // YouTube sign-in and uploads. The callback is a Google browser redirect; its
@@ -444,7 +445,7 @@ app.get('/api/brief', handle((req, res) => {
 // { piece, notes }: Claude writes the brief, then ChatGPT and Gemini review it, in the background.
 app.post('/api/brief/start', async (req, res) => {
   try {
-    const { job } = await startBrief(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''));
+    const { job } = await startBrief(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images);
     res.json(job);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
@@ -489,7 +490,7 @@ app.post('/api/brief/photo', handle((req, res) => {
 // { piece, notes }: only the last step, Claude picking the top 3 pairs, on the brief that's already there.
 app.post('/api/brief/picks', async (req, res) => {
   try {
-    const { job } = await startPicks(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''));
+    const { job } = await startPicks(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images);
     res.json(job);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });

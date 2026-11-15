@@ -3,6 +3,8 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
+import { CopyButton } from './PackagingDoc';
+import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
@@ -12,7 +14,7 @@ import { categoriesIn, photosIn } from './expressionPick';
 /** The packaging version selected on the card: where Use Thumbnail and Use Title put a draft. Locked when it's an old one. */
 export interface UseTarget { name: string; path: string; locked: boolean }
 
-export function DraftsSection({ piece, drafts, target, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; onChanged?: () => void }) {
+export function DraftsSection({ piece, drafts, target, research, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; research?: Research; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
   const thumbs = useThumbJobs(piece, open, onChanged);
   const images = drafts?.conversations.reduce((n, c) => n + c.images.length, 0) ?? 0;
@@ -36,7 +38,7 @@ export function DraftsSection({ piece, drafts, target, onChanged }: { piece: str
           <summary>
             Brief, Top 3, Photo and Make Thumbnail <span className="muted small-text">· {briefSummary}</span>
           </summary>
-          <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} onChanged={onChanged} />
+          <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} research={research} onChanged={onChanged} />
           {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
           {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
         </details>
@@ -277,11 +279,92 @@ const STATE_WORDS: Record<BriefJob['steps'][number]['state'], string> = {
   skipped: 'skipped',
 };
 
-/** Write Brief: the source it will use, a box for John's notes or pasted research, the button, and each AI's progress. */
-function WriteBrief({ piece, hasBrief, hasPicks, onChanged }: { piece: string; hasBrief: boolean; hasPicks: boolean; onChanged?: () => void }) {
+/** Write Brief: the source it will use, the question for vidIQ and Ask Studio, boxes for John's notes and their answers, the button, and each AI's progress. */
+/** What the research question for vidIQ and Ask Studio is filled in with, and the video's ID once it's on YouTube. */
+export interface Research extends ResearchFacts { videoId?: string }
+
+/** The three boxes, kept in this browser per video so pasted research isn't lost on a reload. */
+function useBriefBoxes(piece: string) {
+  const key = `hq-brief-notes:${piece}`;
+  const [boxes, setBoxes] = useState<{ notes: string; vidiq: string; studio: string }>(() => {
+    try {
+      return { notes: '', vidiq: '', studio: '', ...JSON.parse(localStorage.getItem(key) ?? '{}') };
+    } catch {
+      return { notes: '', vidiq: '', studio: '' };
+    }
+  });
+  const set = (part: 'notes' | 'vidiq' | 'studio', value: string) =>
+    setBoxes((b) => {
+      const next = { ...b, [part]: value };
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {
+        /* kept only until the page is reloaded */
+      }
+      return next;
+    });
+  return [boxes, set] as const;
+}
+
+type BoxName = 'notes' | 'vidiq' | 'studio';
+type Pasted = { data: string; preview: string };
+
+/** One of the brief's boxes: text, plus screenshots pasted or dropped into it, shown small with a ✕ each. */
+function BriefBox({ label, value, onText, images, onImages, placeholder }: { label: string; value: string; onText: (v: string) => void; images: Pasted[]; onImages: (i: Pasted[]) => void; placeholder: string }) {
+  const [error, setError] = useState('');
+  const add = (files: File[]) => {
+    if (!files.length) return;
+    setError('');
+    readImages(files).then((more) => {
+      const ok = more.flatMap((m) => (m.kind === 'pasted' ? [{ data: m.data, preview: m.preview }] : []));
+      if (!ok.length) setError('Only PNG, JPEG or WebP images can be pasted here.');
+      onImages([...images, ...ok]);
+    }, (e: Error) => setError(e.message));
+  };
+  return (
+    <div className="brief-box" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); add([...e.dataTransfer.files]); }}>
+      <span>{label}</span>
+      <textarea
+        rows={2}
+        value={value}
+        onChange={(e) => onText(e.target.value)}
+        onPaste={(e) => {
+          const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+          if (!files.length) return; // ordinary text
+          e.preventDefault();
+          add(files);
+        }}
+        placeholder={`${placeholder}. You can paste or drop screenshots here too.`}
+      />
+      {images.length > 0 && (
+        <div className="ref-list">
+          {images.map((img, i) => (
+            <div key={i} className="ref-item">
+              <a href={img.preview} target="_blank" rel="noreferrer" title="Open full size">
+                <img src={img.preview} alt={`${label}, image ${i + 1}`} />
+              </a>
+              <button className="small" title="Remove this image" onClick={() => onImages(images.filter((_, j) => j !== i))}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <p className="error small-text">{error}</p>}
+    </div>
+  );
+}
+
+function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece: string; hasBrief: boolean; hasPicks: boolean; research?: Research; onChanged?: () => void }) {
+  // Screenshots pasted into the boxes. Unlike the text, they aren't kept over a reload (too big for the browser's storage).
+  const [shots, setShots] = useState<Record<BoxName, Pasted[]>>({ notes: [], vidiq: [], studio: [] });
+  const images = { notes: shots.notes.map((s) => s.data), vidiq: shots.vidiq.map((s) => s.data), studio: shots.studio.map((s) => s.data) };
   const [source, setSource] = useState<BriefSource | null | undefined>(undefined);
   const [job, setJob] = useState<BriefJob | null>(null);
-  const [notes, setNotes] = useState('');
+  const [boxes, setBox] = useBriefBoxes(piece);
+  // The AIs get the three boxes as one text, each part under its own heading.
+  const notes = combineNotes(boxes.notes, boxes.vidiq, boxes.studio);
+  const question = research ? researchQuestion(research) : '';
   const [error, setError] = useState('');
   const wasRunning = useRef(false);
 
@@ -311,12 +394,12 @@ function WriteBrief({ piece, hasBrief, hasPicks, onChanged }: { piece: string; h
   const start = () => {
     if (hasBrief && !window.confirm('Write a new brief? The current Brief.md is kept, renamed with its date and time.')) return;
     setError('');
-    postJson<BriefJob>('/api/brief/start', { piece, notes }).then(setJob, (e: Error) => setError(e.message));
+    postJson<BriefJob>('/api/brief/start', { piece, notes, images }).then(setJob, (e: Error) => setError(e.message));
   };
   // For a brief written before there were picks, or to pick again: only Claude's last step, about a minute.
   const pick = () => {
     setError('');
-    postJson<BriefJob>('/api/brief/picks', { piece, notes }).then(setJob, (e: Error) => setError(e.message));
+    postJson<BriefJob>('/api/brief/picks', { piece, notes, images }).then(setJob, (e: Error) => setError(e.message));
   };
 
   if (source === undefined) return error ? <p className="error">{error}</p> : null;
@@ -329,7 +412,24 @@ function WriteBrief({ piece, hasBrief, hasPicks, onChanged }: { piece: string; h
       </p>
       {source && !running && (
         <>
-          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional: notes for the AIs (for example what you don't like about the current thumbnail, or which version is on YouTube), or research from Ask Studio or vidIQ" />
+          {question && (
+            <details className="research-question">
+              <summary>Question for vidIQ and Ask Studio</summary>
+              <p className="muted small-text">Paste it into vidIQ and into Ask Studio, then paste each answer into its box below.</p>
+              <pre className="lvy-value">{question}</pre>
+              <div className="draft-use">
+                <CopyButton text={question} label="Copy Question" />
+                {research?.videoId && (
+                  <a className="small-link" href={`https://studio.youtube.com/video/${research.videoId}/edit`} target="_blank" rel="noreferrer">
+                    Open This Video in Studio ↗
+                  </a>
+                )}
+              </div>
+            </details>
+          )}
+          <BriefBox label="Notes for the AIs" value={boxes.notes} onText={(v) => setBox('notes', v)} images={shots.notes} onImages={(i) => setShots({ ...shots, notes: i })} placeholder="Optional: for example what you don't like about the current thumbnail, or which version is on YouTube" />
+          <BriefBox label="vidIQ's answer" value={boxes.vidiq} onText={(v) => setBox('vidiq', v)} images={shots.vidiq} onImages={(i) => setShots({ ...shots, vidiq: i })} placeholder="Paste what vidIQ suggested, such as its title and tag scores" />
+          <BriefBox label="Ask Studio's answer" value={boxes.studio} onText={(v) => setBox('studio', v)} images={shots.studio} onImages={(i) => setShots({ ...shots, studio: i })} placeholder="Paste what Ask Studio suggested" />
           <div className="claude-buttons">
             <button className="small" onClick={start}>
               {hasBrief ? 'Write New Brief' : 'Write Brief'}

@@ -14,6 +14,7 @@ import { ManageButtons } from './ManageFolder';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
+import { localValue } from './youtubePackaging';
 import { PieceAI } from './PieceAI';
 import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
@@ -589,6 +590,22 @@ function PieceCard({
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
+  // For the question John pastes into vidIQ and Ask Studio: the title and what it's about, from YouTube.md.
+  const videoId = link.job?.status === 'done' ? link.job.videoId : undefined;
+  const research = (() => {
+    const text = youtubeDoc?.text ?? '';
+    const read = (label: 'Title' | 'Description') => {
+      try {
+        return localValue(text, label) ?? '';
+      } catch {
+        return '';
+      }
+    };
+    const about = read('Description').split(/\n\s*\n/)[0] ?? '';
+    const short = piece.kind === 'short';
+    return { title: read('Title'), about, short, videoId, url: videoId ? (short ? `https://youtube.com/shorts/${videoId}` : `https://youtube.com/watch?v=${videoId}`) : undefined };
+  })();
+
   const reloadDocs = () => {
     setDocsLoads((n) => n + 1);
     onChanged?.();
@@ -665,7 +682,7 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} onChanged={reloadDocs} />}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );
