@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -186,7 +186,9 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference Photo</label></div>
+            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference Photo</label>
+              <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
+            </div>
           ))}
         </div>
       </section>
@@ -194,12 +196,9 @@ export function ExpressionsPage() {
       {open !== null && shown[open] && (
         <Lightbox
           photo={shown[open]}
-          rootDir={index.rootDir}
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
-          categories={index.categories}
-          onChanged={(message) => { setOpen(null); setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }}
         />
       )}
     </div>
@@ -257,22 +256,8 @@ function CategoryTree({
   );
 }
 
-function Lightbox({
-  photo,
-  rootDir,
-  onClose,
-  onPrev,
-  onNext,
-  categories,
-  onChanged,
-}: {
-  photo: ExpressionPhoto;
-  rootDir: string;
-  onClose: () => void;
-  onPrev: () => void;
-  onNext: () => void;
-  categories: ExpressionCategory[];
-  onChanged: (message: string) => void;
+function PhotoActions({ photo, rootDir, categories, onChanged }: {
+  photo: ExpressionPhoto; rootDir: string; categories: ExpressionCategory[]; onChanged: (message: string) => void;
 }) {
   type Plan = { token: string; changes: { from: string; to: string | null }[]; sidecars: string[]; links: string[]; references: string[] };
   const [destination, setDestination] = useState('');
@@ -294,6 +279,32 @@ function Lightbox({
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not change the photo.'); setPlan(null); }
     finally { setBusy(false); }
   };
+  const fullPath = `${rootDir}\\${photo.path.split('/').join('\\')}`;
+  return <div className="expression-actions">
+    <div className="expression-action-buttons">
+      <CopyButton text={fullPath} label="Copy File Path" />
+      <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Open Folder</button>
+      <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
+      <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
+    </div>
+    {operation === 'move' && <div className="expression-move"><label>Move to Category <select value={destination} disabled={busy} onChange={(e) => { setDestination(e.target.value); setPlan(null); }}><option value="">Choose a category…</option>{categories.filter(c => c.path && c.path !== photo.category).map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' › ')}</option>)}</select></label><button className="small" disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button></div>}
+    {message && <p className="error">{message}</p>}
+    {plan && <div className="expression-review"><p><strong>Review Changes</strong></p><ul>{plan.changes.map(c => <li key={c.from}>{c.from} → {c.to ?? 'HeartQuarters Trash'}</li>)}</ul><p>{plan.sidecars.length} photo and sidecar files will move. {plan.links.length} thumbnail references and {plan.references.length} saved reference photos will be updated.</p><details><summary>Files and Thumbnail References</summary><ul>{plan.sidecars.map(f => <li key={f}>{f}</li>)}{plan.links.map(f => <li key={f}>Thumbnail: {f}</li>)}</ul></details>{operation === 'delete' && plan.links.length > 0 && <p>Thumbnail projects using the deleted photo will keep a copy in their Drafts Source folder.</p>}<button disabled={busy} onClick={() => void apply()}>{operation === 'delete' ? 'Delete Photo' : 'Move Photo'}</button>{' '}<button disabled={busy} onClick={() => { setPlan(null); setOperation(null); }}>Cancel</button></div>}
+  </div>;
+}
+
+function Lightbox({ photo, onClose, onPrev, onNext }: {
+  photo: ExpressionPhoto; onClose: () => void; onPrev: () => void; onNext: () => void;
+}) {
+  const [zoomed, setZoomed] = useState(false);
+  const viewport = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  useEffect(() => { setZoomed(false); }, [photo.path]);
+  useEffect(() => {
+    const el = viewport.current;
+    if (zoomed && el) { el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2; el.scrollTop = (el.scrollHeight - el.clientHeight) / 2; }
+  }, [zoomed, photo.path]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -304,7 +315,6 @@ function Lightbox({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, onPrev, onNext]);
 
-  const fullPath = `${rootDir}\\${photo.path.split('/').join('\\')}`;
   const tags = [...photo.tags].sort((a, b) => Number(b.confirmed) - Number(a.confirmed));
 
   return (
@@ -312,12 +322,16 @@ function Lightbox({
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
         <button className="lb-nav lb-prev" onClick={onPrev} title="Previous (←)">‹</button>
         {/* Preview first, swapped for the full-size photo once it has loaded. */}
-        <img
-          className="lb-img"
-          src={fileUrl('expressions', photo.path)}
-          style={{ backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }}
-          alt={photo.name}
-        />
+        <div ref={viewport} className={`lb-viewport${zoomed ? ' zoomed' : ''}`}
+          onPointerDown={(e) => { if (!zoomed || e.button !== 0) return; drag.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={(e) => { const d = drag.current; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; if (d.moved) { e.currentTarget.scrollLeft = d.left - dx; e.currentTarget.scrollTop = d.top - dy; } }}
+          onPointerUp={() => { suppressClick.current = drag.current?.moved ?? false; drag.current = null; }}
+          onPointerCancel={() => { drag.current = null; }}
+          onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } setZoomed(!zoomed); }}>
+          <img className="lb-img" src={fileUrl('expressions', photo.path)} style={{ backgroundImage: `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
+            role="button" tabIndex={0} aria-label={zoomed ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setZoomed(!zoomed); } }} />
+        </div>
         <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>
         <div className="lb-info">
           <div className="lb-title">
@@ -338,23 +352,8 @@ function Lightbox({
               ))}
             </div>
           )}
-          <div className="versions">
-            <CopyButton text={fullPath} label="Copy File Path" />
-            <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>
-              Open Folder
-            </button>
-            <a className="small button-link" href={fileUrl('expressions', photo.path)} target="_blank" rel="noreferrer">
-              View Full Size ↗
-            </a>
-            <button className="small" onClick={onClose}>Close (Esc)</button>
-          </div>
-          <div className="expression-manage">
-            <label>Move to Category <select value={destination} disabled={busy} onChange={(e) => { setDestination(e.target.value); setPlan(null); }}><option value="">Choose a category…</option>{categories.filter(c => c.path && c.path !== photo.category).map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' › ')}</option>)}</select></label>{' '}
-            <button disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button>{' '}
-            <button disabled={busy} onClick={() => void preview('delete')}>Review Delete</button>
-            {message && <p className="error">{message}</p>}
-            {plan && <div><p><strong>Review Changes</strong></p><ul>{plan.changes.map(c => <li key={c.from}>{c.from} → {c.to ?? 'HeartQuarters Trash'}</li>)}</ul><p>{plan.sidecars.length} photo and sidecar files will move. {plan.links.length} thumbnail references and {plan.references.length} saved reference photos will be updated.</p><details><summary>Files and Thumbnail References</summary><ul>{plan.sidecars.map(f => <li key={f}>{f}</li>)}{plan.links.map(f => <li key={f}>Thumbnail: {f}</li>)}</ul></details>{operation === 'delete' && plan.links.length > 0 && <p>Thumbnail projects using the deleted photo will keep a copy in their Drafts Source folder.</p>}<button disabled={busy} onClick={() => void apply()}>{operation === 'delete' ? 'Delete Photo' : 'Move Photo'}</button>{' '}<button disabled={busy} onClick={() => setPlan(null)}>Cancel</button></div>}
-          </div>
+          <p className="muted small-text">{zoomed ? 'Drag to pan. Click the photo to fit it again.' : 'Click the photo to view it at full size.'}</p>
+          <button className="small" onClick={onClose}>Close (Esc)</button>
         </div>
       </div>
     </div>
