@@ -558,3 +558,9 @@ textarea[readonly]:focus { outline: none; }
 .brief-box > span { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.15rem; }
 .brief-box textarea { width: 100%; box-sizing: border-box; }
 .small-link { font-size: 0.85rem; }
+/* Publishing in Local vs YouTube: one playlist per line, and Visibility set out like Playlists beside it. */
+.playlist-options label { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; margin: 0; padding: 0.35rem 0; }
+.playlist-options input { width: auto; margin: 0; }
+.lvy-push .yt-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.lvy-push .yt-grid > label { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; margin: 0.75rem 0; }
+@media (max-width: 850px) { .lvy-push .yt-grid { grid-template-columns: minmax(0, 1fr); } }
