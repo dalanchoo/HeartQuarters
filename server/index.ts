@@ -16,7 +16,7 @@ import { draftHtml, listWriting, readWriting } from './writing.js';
 import { expressionIndex } from './expressions.js';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
-import { approveExpression, candidateFile, expressionJob, expressionJobs, rejectExpression, startExpressionGeneration } from './expression-generation.js';
+import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
@@ -238,9 +238,11 @@ app.post('/api/expressions/apply-change', handle((req, res) => { res.json(applyE
 app.get('/api/expression-references', handle((_req, res) => { res.json(readExpressionReferences()); }));
 app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
 app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options, req.body?.ai).job); }));
+app.get('/api/expression-generation/prompt', handle((req, res) => { res.json({ prompt: previewExpressionPrompt(String(req.query.category ?? ''), { framing: String(req.query.framing ?? ''), angle: String(req.query.angle ?? ''), gaze: String(req.query.gaze ?? '') }) }); }));
 app.get('/api/expression-generation/job', handle((req, res) => { res.json(expressionJob(String(req.query.id ?? ''))); }));
-app.get('/api/expression-generation/jobs', handle((req, res) => { res.json(expressionJobs(String(req.query.category ?? ''))); }));
+app.get('/api/expression-generation/jobs', handle((req, res) => { res.json(expressionJobs(req.query.category === undefined ? undefined : String(req.query.category))); }));
 app.get('/api/expression-generation/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(candidateFile(String(req.query.id ?? ''))); }));
+app.post('/api/expression-generation/assign-category', handle((req, res) => { res.json(assignExpressionCategory(String(req.body?.id ?? ''), String(req.body?.category ?? ''))); }));
 app.post('/api/expression-generation/reject', handle((req, res) => { rejectExpression(String(req.body?.id ?? '')); res.json({ ok: true }); }));
 app.post('/api/expression-generation/approve', handle((req, res) => { res.json(approveExpression(String(req.body?.id ?? ''))); }));
 

@@ -4,7 +4,7 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
 import { saveExpressionReferences } from './expression-references';
-import { approveExpression, candidateFile, expressionJob, rejectExpression, startExpressionGeneration } from './expression-generation';
+import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, rejectExpression, reloadExpressionJobs, startExpressionGeneration } from './expression-generation';
 import type { MakeImage } from './thumbnails';
 let tmp: string; let oldRoot: string; let oldRefs: string | undefined; let oldDrafts: string | undefined;
 const png = Buffer.from([137,80,78,71,13,10,26,10,1]);
@@ -16,7 +16,6 @@ describe('expression generation', () => {
   it('keeps the candidate separate until approval and records unconfirmed tags', async () => {
     const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake); await finished;
     expect(expressionJob(job.id).state).toBe('ready'); expect(fs.existsSync(candidateFile(job.id))).toBe(true);
-    expect(() => startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake)).toThrow(/existing candidate/);
     expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Warmth'))).toEqual(['Warmth.txt']);
     const result = approveExpression(job.id); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('Warmth, N/A, UNCONFIRMED');
@@ -38,6 +37,8 @@ describe('expression generation', () => {
     expect(received?.[0]).toBe('gemini');
     expect(received?.[4].photo).toBe(path.join(tmp, 'Expressions/Neutral/ref.jpg'));
     expect(received?.[4].refs).toEqual([other]);
+    expect(job.prompt).toContain(other);
+    expect(job.prompt).toContain(received?.[1]);
     rejectExpression(job.id);
     expect(() => startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'claude', fake)).toThrow(/ChatGPT or Gemini/);
   });
@@ -51,5 +52,48 @@ describe('expression generation', () => {
     const result = approveExpression(job.id);
     expect(result.path).toMatch(/\.jpg$/);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(jpeg);
+  });
+  it('keeps several candidates across a restart, with their exact prompts and categories', async () => {
+    fs.mkdirSync(path.join(tmp, 'Expressions/Positive/Joy'));
+    const first = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake);
+    const second = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'gemini', fake);
+    const third = startExpressionGeneration('Positive/Joy', ['Neutral/ref.jpg'], options, 'gemini', fake);
+    await Promise.all([first.finished, second.finished, third.finished]);
+    reloadExpressionJobs();
+    const saved = expressionJobs();
+    expect(saved).toHaveLength(3);
+    expect(expressionJob(first.job.id)).toMatchObject({ category: 'Positive/Warmth', ai: 'codex', state: 'ready', prompt: first.job.prompt, references: ['Neutral/ref.jpg'] });
+    expect(expressionJobs('Positive/Warmth')).toHaveLength(2);
+    expect(candidateFile(third.job.id)).toMatch(/candidate\.png$/);
+    rejectExpression(first.job.id); rejectExpression(second.job.id); rejectExpression(third.job.id);
+  });
+  it('recovers older image-only candidates without guessing their category', () => {
+    const id = '12345678-1234-4123-8123-123456789abc';
+    const dir = path.join(tmp, 'drafts', id); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'candidate.png'), png);
+    reloadExpressionJobs();
+    expect(expressionJob(id)).toMatchObject({ category: '', ai: 'unknown', state: 'ready', recovered: true });
+    expect(() => approveExpression(id)).toThrow(/Choose a category/);
+    assignExpressionCategory(id, 'Positive/Warmth');
+    reloadExpressionJobs();
+    expect(expressionJob(id).category).toBe('Positive/Warmth');
+    expect(approveExpression(id).path).toMatch(/^Positive\/Warmth\//);
+  });
+  it('marks an interrupted generation as failed after restart', () => {
+    const id = '12345678-1234-4123-8123-123456789abc';
+    const dir = path.join(tmp, 'drafts', id); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify({ id, category: 'Positive/Warmth', ai: 'gemini', state: 'working', options, prompt: 'prompt', references: [], createdAt: new Date().toISOString() }));
+    reloadExpressionJobs();
+    expect(expressionJob(id)).toMatchObject({ state: 'failed', error: expect.stringContaining('interrupted') });
+    rejectExpression(id);
+  });
+  it('leaves invalid candidate metadata untouched instead of using an unsafe image path', () => {
+    const id = '12345678-1234-4123-8123-123456789abc';
+    const dir = path.join(tmp, 'drafts', id); fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'job.json');
+    fs.writeFileSync(file, JSON.stringify({ id, category: 'Positive/Warmth', ai: 'gemini', state: 'ready', options, format: '../../outside', prompt: 'prompt', references: [], createdAt: new Date().toISOString() }));
+    reloadExpressionJobs();
+    expect(expressionJobs()).toEqual([]);
+    expect(fs.existsSync(file)).toBe(true);
+    expect(() => candidateFile(id)).toThrow(/not found/);
   });
 });

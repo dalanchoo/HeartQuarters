@@ -11,7 +11,7 @@ import {
 } from './api';
 import { CopyButton } from './PackagingDoc';
 import { matchingDestinations, readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
-import { ExpressionGenerator } from './ExpressionGenerator';
+import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
@@ -41,6 +41,7 @@ export function ExpressionsPage() {
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
+  const [candidateRevision, setCandidateRevision] = useState(0);
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
     setReferenceBusy(true);
@@ -120,6 +121,7 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
+        <ExpressionCandidates categories={index.categories} revision={candidateRevision} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />
         <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
           <p>Choose photos in the grid below as references. HeartQuarters remembers them on this computer.</p>
           {referenceError && <p className="error">{referenceError}</p>}
@@ -165,7 +167,7 @@ export function ExpressionsPage() {
             </div>
           </div>
         </div>
-        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />}
+        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onStarted={() => setCandidateRevision(n => n + 1)} />}
 
         {subs.length > 0 && (
           <div className="chips">
