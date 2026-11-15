@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -10,7 +10,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
+import { matchingDestinations, readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 
@@ -262,11 +262,17 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
 }) {
   type Plan = { token: string; changes: { from: string; to: string | null }[]; sidecars: string[]; links: string[]; references: string[] };
   const [destination, setDestination] = useState('');
+  const [destinationSearch, setDestinationSearch] = useState('');
+  const [destinationsOpen, setDestinationsOpen] = useState(false);
+  const [activeDestination, setActiveDestination] = useState(0);
+  const destinationListId = useId();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [operation, setOperation] = useState<'delete' | 'move' | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setMessage(''); }, [photo.path]);
+  useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setDestinationSearch(''); setDestinationsOpen(false); setMessage(''); }, [photo.path]);
+  const destinations = matchingDestinations(categories, photo.category, destinationSearch.replaceAll(' › ', '/'));
+  const chooseDestination = (category: ExpressionCategory) => { setDestination(category.path); setDestinationSearch(category.path.split('/').join(' › ')); setDestinationsOpen(false); setPlan(null); };
   const preview = async (kind: 'delete' | 'move') => {
     setBusy(true); setMessage(''); setPlan(null); setOperation(kind);
     try { setPlan(await postJson<Plan>('/api/expressions/preview-change', { photo: photo.path, destination: kind === 'delete' ? null : destination })); }
@@ -288,7 +294,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>
-    {operation === 'move' && <div className="expression-move"><label>Move to Category <select value={destination} disabled={busy} onChange={(e) => { setDestination(e.target.value); setPlan(null); }}><option value="">Choose a category…</option>{categories.filter(c => c.path && c.path !== photo.category).map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' › ')}</option>)}</select></label><button className="small" disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button></div>}
+    {operation === 'move' && <div className="expression-move"><label htmlFor={`${destinationListId}-input`}>Move to Category</label><div className="expression-destination"><input id={`${destinationListId}-input`} role="combobox" aria-autocomplete="list" aria-expanded={destinationsOpen} aria-controls={destinationListId} aria-activedescendant={destinationsOpen && destinations[activeDestination] ? `${destinationListId}-${activeDestination}` : undefined} value={destinationSearch} disabled={busy} placeholder="Search categories…" onFocus={() => { setDestinationsOpen(true); setActiveDestination(0); }} onBlur={() => setDestinationsOpen(false)} onChange={(e) => { setDestinationSearch(e.target.value); setDestination(''); setPlan(null); setDestinationsOpen(true); setActiveDestination(0); }} onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setDestinationsOpen(true); setActiveDestination(i => Math.min(i + 1, destinations.length - 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveDestination(i => Math.max(i - 1, 0)); } else if (e.key === 'Enter' && destinationsOpen && destinations[activeDestination]) { e.preventDefault(); chooseDestination(destinations[activeDestination]); } else if (e.key === 'Escape') setDestinationsOpen(false); }} />{destinationsOpen && <div id={destinationListId} className="expression-destination-options" role="listbox">{destinations.length ? destinations.map((c, i) => <div id={`${destinationListId}-${i}`} key={c.path} role="option" aria-selected={i === activeDestination} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setActiveDestination(i)} onClick={() => chooseDestination(c)}>{c.path.split('/').join(' › ')}</div>) : <div className="muted">No matching categories</div>}</div>}</div><button className="small" disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button></div>}
     {message && <p className="error">{message}</p>}
     {plan && <div className="expression-review"><p><strong>Review Changes</strong></p><ul>{plan.changes.map(c => <li key={c.from}>{c.from} → {c.to ?? 'HeartQuarters Trash'}</li>)}</ul><p>{plan.sidecars.length} photo and sidecar files will move. {plan.links.length} thumbnail references and {plan.references.length} saved reference photos will be updated.</p><details><summary>Files and Thumbnail References</summary><ul>{plan.sidecars.map(f => <li key={f}>{f}</li>)}{plan.links.map(f => <li key={f}>Thumbnail: {f}</li>)}</ul></details>{operation === 'delete' && plan.links.length > 0 && <p>Thumbnail projects using the deleted photo will keep a copy in their Drafts Source folder.</p>}<button disabled={busy} onClick={() => void apply()}>{operation === 'delete' ? 'Delete Photo' : 'Move Photo'}</button>{' '}<button disabled={busy} onClick={() => { setPlan(null); setOperation(null); }}>Cancel</button></div>}
   </div>;

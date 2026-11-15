@@ -6,6 +6,12 @@ export function readReferences(storage: Pick<Storage, 'getItem'>): string[] {
 }
 export function saveReferences(storage: Pick<Storage, 'setItem'>, paths: string[]): void { storage.setItem(KEY, JSON.stringify([...new Set(paths)])); }
 
+/** Search the full category path so both category and parent names can be found. */
+export function matchingDestinations(categories: ExpressionCategory[], current: string, query: string): ExpressionCategory[] {
+  const term = query.trim().toLocaleLowerCase();
+  return categories.filter(c => !!c.path && c.path !== current && c.path.toLocaleLowerCase().includes(term));
+}
+
 /** A starting suggestion, not an assessment of whether existing photos are good. */
 export function suggestedCategories(categories: ExpressionCategory[]): ExpressionCategory[] {
   const useful = /^(curiosity|confusion|skepticism|concern|surprise|thinking|joy|sadness|confidence|disbelief|frustration|warmth)$/i;

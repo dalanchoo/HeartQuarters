@@ -383,7 +383,11 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-photo-choice label { display: block; font-size: 0.8rem; margin-top: 0.25rem; }
 .expression-action-buttons { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
 .expression-move { margin-top: 0.4rem; }
-.expression-move select { display: block; width: 100%; margin: 0.25rem 0; }
+.expression-destination { position: relative; margin: 0.25rem 0; }
+.expression-destination input { width: 100%; }
+.expression-destination-options { position: absolute; z-index: 5; top: 100%; left: 0; min-width: 100%; width: max-content; max-width: min(80vw, 350px); max-height: 220px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 12px #0003; }
+.expression-destination-options > div { padding: 0.4rem 0.6rem; cursor: pointer; }
+.expression-destination-options > div[aria-selected="true"] { background: var(--accent-soft); }
 .expression-review { overflow-wrap: anywhere; font-size: 0.8rem; }
 .expression-review ul { padding-left: 1.2rem; }
 .photo { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel);
