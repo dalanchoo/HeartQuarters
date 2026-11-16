@@ -134,7 +134,7 @@ export function ExpressionsPage() {
         </details>
         {current.path === '' && <details className="expression-planning"><summary>Categories to Consider</summary>
           <p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
-          <div className="chips">{suggestedCategories(index.categories).map((c) => <button key={c.path} className="chip" onClick={() => goTo(c.path)}>{c.name} · {c.ownCount} photos</button>)}</div>
+          <div className="chips">{suggestedCategories(index.categories).map((c) => <button key={c.path} className="chip" onClick={() => goTo(c.path)}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
         </details>}
         <div className="crumbs">
           {crumbs.map((c, i) => (
