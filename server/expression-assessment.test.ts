@@ -23,6 +23,14 @@ describe('blind expression assessment', () => {
     expect(() => parseAssessment('[{"tag":"Smile","confidence":500}]', cats)).toThrow();
     expect(() => parseAssessment('[]', cats)).toThrow();
   });
+  it('keeps scores of at least 75% and preserves confirmed tags below the cutoff', () => {
+    const cats = buildExpressionIndex().categories;
+    const values = parseAssessment('[{"tag":"Smile","confidence":74},{"tag":"CloseUp","confidence":75},{"tag":"Warmth","confidence":20}]', cats);
+    const merged = mergeAssessment('Warmth, 42%, CONFIRMED\nSmile, 99%, UNCONFIRMED\nOldGuess, 20%, UNCONFIRMED\n', values, cats);
+    expect(merged).toContain('Warmth, 42%, CONFIRMED');
+    expect(merged).toContain('CloseUp, 75%, UNCONFIRMED');
+    expect(merged).not.toContain('Smile'); expect(merged).not.toContain('OldGuess');
+  });
   it('uses a neutral temporary image and updates only after a valid answer', async () => {
     const job = startAssessment('Positive/Warmth/Warmth_001.jpg', async (_ai, prompt, cwd, images) => {
       expect(path.basename(images![0])).toBe('image.png'); expect(cwd).not.toContain('Warmth'); expect(fs.readdirSync(cwd)).toEqual(['image.png']); expect(prompt).not.toContain('Warmth_001');

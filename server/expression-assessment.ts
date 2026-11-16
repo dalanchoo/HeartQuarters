@@ -47,10 +47,10 @@ export function parseAssessment(answer: string, categories: ExpressionCategory[]
 export function mergeAssessment(text: string, values: Assessment[], categories: ExpressionCategory[]): string {
   const v = assessmentVocabulary(categories);
   const known = new Set([...v.framing, ...v.pose, ...v.morphology, ...v.expressions.map(e => e.name)].map(s => s.toLowerCase()));
-  const lines = text.split(/\r?\n/); const retained = lines.filter(line => { const tag = parseTags(line)[0]; return !tag || tag.confirmed || !known.has(tag.tag.toLowerCase()); });
+  const lines = text.split(/\r?\n/); const retained = lines.filter(line => { const tag = parseTags(line)[0]; return !tag || tag.confirmed || (!known.has(tag.tag.toLowerCase()) && (tag.confidence === null || tag.confidence >= 75)); });
   while (retained.at(-1) === '') retained.pop();
   const confirmed = new Set(parseTags(retained.join('\n')).filter(t => t.confirmed).map(t => t.tag.toLowerCase()));
-  for (const value of values) if (!confirmed.has(value.tag.toLowerCase())) retained.push(`${value.tag}, ${value.confidence}%, UNCONFIRMED`);
+  for (const value of values) if (value.confidence >= 75 && !confirmed.has(value.tag.toLowerCase())) retained.push(`${value.tag}, ${value.confidence}%, UNCONFIRMED`);
   return retained.join(text.includes('\r\n') ? '\r\n' : '\n') + (text.includes('\r\n') ? '\r\n' : '\n');
 }
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
