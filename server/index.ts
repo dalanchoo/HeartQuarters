@@ -224,7 +224,7 @@ app.get('/api/thumb', (req, res) => {
     const full = safeResolve(parseRoot(req.query.root), String(req.query.path ?? ''));
     const width = Math.min(800, Math.max(120, Number(req.query.w) || 360));
     thumbnail(full, width).then(
-      (thumb) => res.set('Cache-Control', 'max-age=86400').sendFile(thumb),
+      (thumb) => res.set('Cache-Control', req.query.root === 'expressions' ? 'no-cache' : 'max-age=86400').sendFile(thumb),
       (e) => res.status(500).json({ error: e instanceof Error ? e.message : String(e) }),
     );
   } catch (e) {

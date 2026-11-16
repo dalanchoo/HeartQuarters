@@ -1,5 +1,7 @@
 // Reading the Expressions library: categories, photos, tag files.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config';
 import { buildExpressionIndex, parseTags } from './expressions';
 import { makeTree, removeTree } from './testing';
@@ -62,6 +64,13 @@ describe('buildExpressionIndex', () => {
     ]);
   });
 
+  it('changes the image revision when a different photo takes the same filename', () => {
+    const file = path.join(tmp, 'Positive/Joy/Joy_002.webp');
+    const before = buildExpressionIndex().photos.find(p => p.path === 'Positive/Joy/Joy_002.webp')!.revision;
+    fs.writeFileSync(file, 'a different image with a different length');
+    const after = buildExpressionIndex().photos.find(p => p.path === 'Positive/Joy/Joy_002.webp')!.revision;
+    expect(before).toBeTruthy(); expect(after).toBeTruthy(); expect(after).not.toBe(before);
+  });
   it('uses only the matching tag file, not other AI guesses', () => {
     const joy1 = buildExpressionIndex().photos.find((p) => p.name === 'Joy_001')!;
     expect(joy1.tags).toEqual([{ tag: 'Joy', confidence: 90, confirmed: true }]);

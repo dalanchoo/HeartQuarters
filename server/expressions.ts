@@ -42,6 +42,8 @@ export interface ExpressionPhoto {
   path: string;
   name: string;
   category: string;
+  /** Changes when a different file occupies this path, for browser image caches. */
+  revision?: string;
   tags: Tag[];
 }
 
@@ -121,8 +123,11 @@ export function buildExpressionIndex(): ExpressionIndex {
       if (base === `_${name}`) {
         category.reference = rel;
       } else if (!file.startsWith('_') && relPath) {
+        let stat: fs.Stats;
+        try { stat = fs.statSync(path.join(dir, file)); } catch { continue; }
         photos.push({
           path: rel,
+          revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`,
           name: base,
           category: relPath,
           tags: files.has(`${base}.txt`) ? parseTagsFile(path.join(dir, `${base}.txt`)) : [],

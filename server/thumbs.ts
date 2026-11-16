@@ -51,7 +51,7 @@ export function thumbnail(source: string, width: number): Promise<string> {
   const st = fs.statSync(source);
   const key = crypto
     .createHash('sha1')
-    .update(`${source}|${st.size}|${st.mtimeMs}|${width}`)
+    .update(`${source}|${st.size}|${st.mtimeMs}|${st.ctimeMs}|${width}`)
     .digest('hex');
   const out = path.join(cacheDir, `${key}.jpg`);
   if (fs.existsSync(out)) return Promise.resolve(out);

@@ -69,11 +69,11 @@ export function fileStamp(f: { size?: number; modified?: number }): string {
 }
 
 export function fileUrl(root: RootId, path: string, stamp = ''): string {
-  return `/api/file?root=${root}&path=${encodeURIComponent(path)}${stamp ? `&v=${stamp}` : ''}`;
+  return `/api/file?root=${root}&path=${encodeURIComponent(path)}${stamp || root === 'expressions' ? `&v=${encodeURIComponent(stamp || 'expressions-2')}` : ''}`;
 }
 
 export function thumbUrl(root: RootId, path: string, width = 360, stamp = ''): string {
-  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}${stamp ? `&v=${stamp}` : ''}`;
+  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}${stamp || root === 'expressions' ? `&v=${encodeURIComponent(stamp || 'expressions-2')}` : ''}`;
 }
 
 export function openInExplorer(root: RootId, path: string) {

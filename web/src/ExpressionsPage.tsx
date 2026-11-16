@@ -237,7 +237,7 @@ export function ExpressionsPage() {
         <div className="photo-grid">
           {shown.map((p) => (
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(p.path)} title={p.name}>
-              <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
+              <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
             </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button>
               <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
@@ -451,7 +451,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
           onPointerCancel={() => { drag.current = null; }}
           onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); }}>
           <div className="lb-image-canvas" style={{ width: Math.max(viewSize.width, imageSize.width * fit * zoom), height: Math.max(viewSize.height, imageSize.height * fit * zoom) }}>
-            <img className="lb-img" src={imageUrl ?? fileUrl('expressions', photo.path)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: imageUrl ? undefined : `url("${thumbUrl('expressions', photo.path, 800)}")` }} alt={photo.name}
+            <img className="lb-img" src={imageUrl ?? fileUrl('expressions', photo.path, photo.revision)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: imageUrl ? undefined : `url("${thumbUrl('expressions', photo.path, 800, photo.revision)}")` }} alt={photo.name}
               onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
               role="button" tabIndex={0} aria-label={zoom > 1 ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); } }} />
