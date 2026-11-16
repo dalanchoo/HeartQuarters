@@ -14,6 +14,9 @@ import { matchingDestinations, readReferences, saveReferences, suggestedCategori
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
+import { groupExpressionAttributes } from './expressionAttributes';
+
+type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -45,8 +48,9 @@ export function ExpressionsPage() {
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
-  const confirmTag = async (photo: ExpressionPhoto, tag: ExpressionPhoto['tags'][number]) => {
-    await postJson('/api/expressions/confirm-tag', { photo: photo.path, tag: tag.tag, confidence: tag.confidence });
+  const changeTag = async (photo: ExpressionPhoto, action: TagAction) => {
+    if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name });
+    else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
     const updated = await getJson<ExpressionIndex>('/api/expressions');
     setIndex(updated);
     const refreshed = updated.photos.find(p => p.path === photo.path);
@@ -210,13 +214,14 @@ export function ExpressionsPage() {
       {open !== null && shown[open] && (
         <Lightbox
           photo={shown[open]}
-          onConfirm={confirmTag}
+          onTagAction={changeTag}
+          categories={index.categories}
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onConfirm={preview.imageUrl ? undefined : confirmTag} onClose={() => setPreview(null)} />}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} categories={index.categories} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -322,10 +327,12 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onConfirm }: {
-  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onConfirm?: (photo: ExpressionPhoto, tag: ExpressionPhoto['tags'][number]) => Promise<void>;
+function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categories }: {
+  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; categories: ExpressionCategory[];
 }) {
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [pendingTag, setPendingTag] = useState<Extract<TagAction, { kind: 'confirm' | 'remove' }> | null>(null);
+  const [savingTag, setSavingTag] = useState(false);
+  const [newExpression, setNewExpression] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -342,7 +349,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onConfirm }: {
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
-  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); center.current = null; }, [photo.path]);
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -367,16 +374,29 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onConfirm }: {
   }, [maximum]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === 'Escape') { if (pendingTag) setPendingTag(null); else onClose(); return; }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'ArrowLeft') onPrev?.();
       if (e.key === 'ArrowRight') onNext?.();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, onPrev, onNext]);
+  }, [onClose, onPrev, onNext, pendingTag]);
 
-  const tags = [...photo.tags].sort((a, b) => Number(b.confirmed) - Number(a.confirmed));
+  const groups = groupExpressionAttributes(photo.tags);
+  const parents = new Set(categories.map(c => c.parent));
+  const options = categories.filter(c => c.path && !parents.has(c.path) && !photo.tags.some(t => t.tag.toLowerCase() === c.name.toLowerCase()));
+  const saveTag = async (action: TagAction) => {
+    if (!onTagAction) return;
+    setSavingTag(true); setConfirmError('');
+    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); }
+    catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
+    finally { setSavingTag(false); }
+  };
+  const showTags = (tags: ExpressionPhoto['tags']) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : ''}`}>
+    <span title={t.confirmed ? 'Confirmed' : 'AI suggestion'}>{t.tag}{!t.confirmed && t.confidence !== null && ` ${t.confidence}%`}</span>
+    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'confirm', tag: t })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
+  </span>)}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
 
   return (
     <div className="lightbox" onClick={onClose}>
@@ -403,23 +423,15 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onConfirm }: {
             <strong>{photo.name}</strong>
             <span className="muted">{photo.category.split('/').join(' › ')}</span>
           </div>
-          {tags.length > 0 && (
-            <div className="chips">
-              {tags.map((t) => (
-                t.confirmed ? <span
-                  key={t.tag}
-                  className="tag confirmed"
-                  title="Confirmed"
-                >
-                  {t.tag}
-                </span> : <button key={t.tag} type="button" className="tag tag-confirm" disabled={!onConfirm || confirming !== null} title={`Confirm ${t.tag}`} onClick={() => { if (!onConfirm) return; setConfirming(t.tag); setConfirmError(''); void onConfirm(photo, t).catch(e => setConfirmError(e instanceof Error ? e.message : String(e))).finally(() => setConfirming(null)); }}>
-                  {t.tag}{t.confidence !== null && ` ${t.confidence}%`} <span aria-hidden="true">✓</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {groups.details.length > 0 && showTags(groups.details)}
+          <div className="attribute-groups">
+            <section><h4>Framing &amp; Pose</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
+            <section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
+            <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
+              {onTagAction && <div className="attribute-add"><label>Add Expression <select value={newExpression} disabled={savingTag} onChange={e => setNewExpression(e.target.value)}><option value="">Choose an expression…</option>{options.map(c => <option key={c.path} value={c.name}>{c.path.split('/').join(' > ')}</option>)}</select></label><button disabled={savingTag || !newExpression} onClick={() => void saveTag({ kind: 'add', name: newExpression })}>Add Expression</button></div>}
+            </section>
+          </div>
           {confirmError && <p className="error">{confirmError}</p>}
-          {tags.some(t => !t.confirmed) && onConfirm && <p className="muted small-text">Click a suggested attribute to confirm it.</p>}
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
           </div>
