@@ -13,6 +13,7 @@ import { CopyButton } from './PackagingDoc';
 import { matchingDestinations, readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
+import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -35,6 +36,7 @@ export function ExpressionsPage() {
   const [selected, setSelected] = useState(categoryFromHash);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
+  const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
@@ -96,8 +98,8 @@ export function ExpressionsPage() {
       current.path === '' ||
       p.category === current.path ||
       (includeSub && p.category.startsWith(current.path + '/'));
-    return index.photos.filter((p) => inScope(p) && matches(p, words));
-  }, [index, current, includeSub, query]);
+    return index.photos.filter((p) => inScope(p) && matches(p, words) && matchesExpressionOrigin(p, origin));
+  }, [index, current, includeSub, query, origin]);
 
   if (error) return <p className="error content">{error}</p>;
   if (!index || !current) return <p className="muted content">Loading…</p>;
@@ -180,6 +182,7 @@ export function ExpressionsPage() {
           </div>
         )}
 
+        <label className="expression-origin-filter">Photo Type <select value={origin} onChange={(e) => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
         <p className="muted">
           {shown.length} photo{shown.length === 1 ? '' : 's'}
           {words.length > 0 && ` matching “${query.trim()}”`}
@@ -274,6 +277,12 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   const [operation, setOperation] = useState<'delete' | 'move' | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const markAi = async () => {
+    setBusy(true); setMessage('');
+    try { await postJson('/api/expressions/mark-ai', { photo: photo.path }); onChanged('Photo marked as AI-generated.'); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark the photo.'); }
+    finally { setBusy(false); }
+  };
   useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setDestinationSearch(''); setDestinationsOpen(false); setMessage(''); }, [photo.path]);
   const destinations = matchingDestinations(categories, photo.category, destinationSearch.replaceAll(' › ', '/'));
   const chooseDestination = (category: ExpressionCategory) => { setDestination(category.path); setDestinationSearch(category.path.split('/').join(' › ')); setDestinationsOpen(false); setPlan(null); };
@@ -295,6 +304,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
     <div className="expression-action-buttons">
       <CopyButton text={fullPath} label="Copy File Path" />
       <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Open Folder</button>
+      {!isAiExpression(photo) && <button className="small" disabled={busy} onClick={() => void markAi()}>Mark as AI</button>}
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>

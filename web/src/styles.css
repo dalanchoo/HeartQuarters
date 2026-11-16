@@ -393,6 +393,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-photo-choice { min-width: 0; padding: 0.4rem; border: 1px solid #c9c3bc; border-radius: 10px; background: var(--panel); box-shadow: 0 1px 3px #0001; }
 .expression-photo-choice .photo { width: 100%; }
 .expression-photo-choice label { display: block; font-size: 0.8rem; margin-top: 0.25rem; }
+.expression-origin-filter { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
 .expression-action-buttons { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
 .expression-move { margin-top: 0.4rem; }
 .expression-destination { position: relative; margin: 0.25rem 0; }
