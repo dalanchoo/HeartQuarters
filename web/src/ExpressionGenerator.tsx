@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { getJson, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
 import { CategoryPicker } from './CategoryPicker';
 import { filterSelectablePhotos } from './expressionPlanning';
-import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
+import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 
 type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; references: string[]; recovered?: boolean };
 
 export function ExpressionGenerator({ category, references, photos, categories, onStarted, onViewPhoto, onToggleStar, starBusy }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
   const [chosen, setChosen] = useState<string[]>([]);
-  const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [photoCategory, setPhotoCategory] = useState('*'); const [query, setQuery] = useState(''); const [photoFraming, setPhotoFraming] = useState(''); const [photoPose, setPhotoPose] = useState(''); const [photoMorphology, setPhotoMorphology] = useState('');
+  const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [filters, setFilters] = useState(emptyPhotoFilters);
   useEffect(() => { setChosen(current => current.filter(path => photos.some(photo => photo.path === path))); }, [photos]);
   const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState(''); const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
@@ -28,13 +28,11 @@ export function ExpressionGenerator({ category, references, photos, categories, 
     try { await postJson('/api/expression-generation/start', { category: category.path, references: chosen, options: { framing, angle, gaze }, ai, prompt }); setMessage('Generation started. The candidate will appear in Candidates for Review.'); onStarted(); }
     catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
-  const visible = filterSelectablePhotos(photos, references, { scope, category: photoCategory, query, attributes: [photoFraming, photoPose, photoMorphology] });
+  const visible = filterSelectablePhotos(photos, references, { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
     <p>Choose up to five photos for likeness. Stars are remembered; your choices here are for this candidate.</p>
     <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Starred Photos</option><option value="all">All Photos</option></select></label>
-      <CategoryPicker label="Photo Category" value={photoCategory} options={[{ value: '*', label: 'All Categories' }, ...categories.filter(c => c.path).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))]} onChange={setPhotoCategory} />
-      {([['Framing', FRAMING_TAGS, photoFraming, setPhotoFraming], ['Pose', POSE_TAGS, photoPose, setPhotoPose], ['Morphology', MORPHOLOGY_TAGS, photoMorphology, setPhotoMorphology]] as const).map(([label, tags, value, change]) => <CategoryPicker key={label} label={label} value={value} onChange={change} options={[{ value: '', label: `All ${label}` }, ...tags.map(tag => ({ value: tag, label: tag.replace(/([a-z])([A-Z])/g, '$1 $2') }))]} searchPlaceholder={`Search ${label.toLowerCase()}…`} emptyMessage="No matching attributes." />)}
-      <label>Find Attributes or Name <input type="search" placeholder="e.g. Eyes Closed or Look Off Camera" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
+      <ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div>
     <p className="muted">{chosen.length} of 5 selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`}</p>
     <div className="generation-photo-grid">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
       <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => setChosen(current => selected ? current.filter(p => p !== photo.path) : [...current, photo.path])}><img src={thumbUrl('expressions', photo.path, 240)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>

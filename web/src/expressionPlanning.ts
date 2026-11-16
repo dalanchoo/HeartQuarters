@@ -1,4 +1,6 @@
 import type { ExpressionCategory, ExpressionPhoto } from './api';
+import { groupExpressionAttributes } from './expressionAttributes';
+import type { PhotoFilters } from './ExpressionPhotoFilters';
 
 const KEY = 'hq-expression-reference-photos';
 export type CategoryOption = { value: string; label: string; disabled?: boolean };
@@ -36,8 +38,17 @@ export function suggestedCategories(categories: ExpressionCategory[]): Expressio
     .sort((a, b) => a.ownCount - b.ownCount || a.name.localeCompare(b.name)).slice(0, 12);
 }
 
-export function filterSelectablePhotos(photos: ExpressionPhoto[], stars: string[], filter: { scope: 'starred' | 'all'; category: string; query: string; attributes?: string[] }): ExpressionPhoto[] {
+export function filterSelectablePhotos(photos: ExpressionPhoto[], stars: string[], filter: { scope: 'starred' | 'all'; category: string; query: string; attributes?: string[]; textFilters?: Pick<PhotoFilters, 'categoryText' | 'framingText' | 'poseText' | 'morphologyText'>; includeSub?: boolean }): ExpressionPhoto[] {
   const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '').replace(/lookingoffcamera/g, 'lookoffcamera').replace(/lookingatcamera/g, 'lookatcamera');
   const term = normalize(filter.query); const starred = new Set(stars);
-  return photos.filter(photo => (filter.scope === 'all' || starred.has(photo.path)) && (filter.attributes ?? []).every(attribute => !attribute || photo.tags.some(tag => tag.tag.toLowerCase() === attribute.toLowerCase())) && (filter.category === '*' || photo.category === filter.category || photo.category.startsWith(filter.category + '/')) && normalize([photo.name, photo.category, ...photo.tags.map(t => t.tag)].join(' ')).includes(term));
+  return photos.filter(photo => (filter.scope === 'all' || starred.has(photo.path)) && (filter.attributes ?? []).every(attribute => !attribute || photo.tags.some(tag => tag.tag.toLowerCase() === attribute.toLowerCase())) && (filter.category === '*' || photo.category === filter.category || (filter.includeSub !== false && photo.category.startsWith(filter.category + '/'))) && matchesPhotoFilterTexts(photo, filter.textFilters) && normalize([photo.name, photo.category, ...photo.tags.map(t => t.tag)].join(' ')).includes(term));
+}
+
+/** Each text filter searches only its corresponding category or attribute group. */
+export function matchesPhotoFilterTexts(photo: ExpressionPhoto, filters?: Pick<PhotoFilters, 'categoryText' | 'framingText' | 'poseText' | 'morphologyText'>): boolean {
+  if (!filters) return true;
+  const normalized = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '');
+  const contains = (values: string[], query: string) => !query.trim() || values.some(value => normalized(value).includes(normalized(query)));
+  const groups = groupExpressionAttributes(photo.tags);
+  return contains([photo.category], filters.categoryText) && contains(groups.framing.map(t => t.tag), filters.framingText) && contains(groups.pose.map(t => t.tag), filters.poseText) && contains(groups.morphology.map(t => t.tag), filters.morphologyText);
 }

@@ -24,6 +24,18 @@ describe('expression planning', () => {
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', attributes: ['lookoffcamera', ''] }).map(p => p.path)).toEqual(['b']);
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['LookOffCamera', 'EyesClosed'] })).toEqual([]);
   });
+  it('applies each text filter to its own group and combines them', () => {
+    const photos = [
+      { path: 'a', name: 'Frontal', category: 'Positive/Warmth', tags: [{ tag: 'Frontal', confidence: 80, confirmed: false }, { tag: 'LookOffCamera', confidence: 80, confirmed: false }, { tag: 'EyesClosed', confidence: 80, confirmed: false }, { tag: 'Joy', confidence: 80, confirmed: false }] },
+      { path: 'b', name: 'Other', category: 'Positive/Joy', tags: [{ tag: 'EyesClosed', confidence: 80, confirmed: false }] },
+    ];
+    const textFilters = { categoryText: 'warm', framingText: 'fron', poseText: 'off camera', morphologyText: 'eyes closed' };
+    const filter = { scope: 'all' as const, category: '*', query: '', textFilters };
+    expect(filterSelectablePhotos(photos, [], filter).map(p => p.path)).toEqual(['a']);
+    expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, framingText: 'Joy' } })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, morphologyText: 'Frontal' } })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { ...filter, category: 'Positive', includeSub: false })).toEqual([]);
+  });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];
     expect(filterCategoryOptions(options, 'DeT').map(o => o.value)).toEqual(['a', 'c']);

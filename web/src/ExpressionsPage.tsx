@@ -10,8 +10,9 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
+import { filterSelectablePhotos, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
+import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
@@ -45,6 +46,7 @@ export function ExpressionsPage() {
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
   const [starredOnly, setStarredOnly] = useState(false);
+  const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
@@ -117,12 +119,8 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    const inScope = (p: ExpressionPhoto) =>
-      current.path === '' ||
-      p.category === current.path ||
-      (includeSub && p.category.startsWith(current.path + '/'));
-    return index.photos.filter((p) => inScope(p) && matches(p, words) && matchesExpressionOrigin(p, origin) && (!starredOnly || references.includes(p.path)));
-  }, [index, current, includeSub, query, origin, starredOnly, references]);
+    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin));
+  }, [index, current, includeSub, query, origin, starredOnly, references, libraryFilters]);
 
   if (error) return <p className="error content">{error}</p>;
   if (!index || !current) return <p className="muted content">Loading…</p>;
@@ -200,18 +198,11 @@ export function ExpressionsPage() {
             </div>
           </div>
         </div>
-        {subs.length > 0 && (
-          <div className="chips">
-            {subs.map((c) => (
-              <button key={c.path} className="chip" onClick={() => goTo(c.path)}>
-                {c.name} <span className="muted">{c.totalCount}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <label className="expression-origin-filter">Photo Type <select value={origin} onChange={(e) => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
-        <label className="expression-origin-filter"><input type="checkbox" checked={starredOnly} onChange={e => { setStarredOnly(e.target.checked); setOpen(null); }} /> Starred Only</label>
+        <div className="generation-photo-filters expression-library-filters">
+          <label>Photos <select value={starredOnly ? 'starred' : 'all'} onChange={e => { setStarredOnly(e.target.value === 'starred'); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option></select></label>
+          <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
+          <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
+        </div>
         {referenceError && <p className="error">{referenceError}</p>}
         <p className="muted">
           {shown.length} photo{shown.length === 1 ? '' : 's'}
