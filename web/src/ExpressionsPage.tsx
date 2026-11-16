@@ -157,9 +157,10 @@ export function ExpressionsPage() {
         </div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
-          <h2>Choose an Expression</h2>
-          <div className="expression-category-picker"><CategoryPicker label="Category" value={generationCategory} options={availableCategories.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setGenerationCategory} /></div>
-          {generationSelection?.definition && <p>{generationSelection.definition}</p>}
+          <h2>Choose an Expression to Generate</h2>
+          <div className="expression-category-picker"><CategoryPicker label="Category" value={generationCategory} options={availableCategories.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setGenerationCategory} />
+            {generationSelection?.definition && <p>{generationSelection.definition}</p>}
+          </div>
         </div>
         {referenceError && <p className="error">{referenceError}</p>}
         {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator category={generationSelection} references={references} photos={index.photos} categories={index.categories} starBusy={!referenceReady || referenceBusy} onToggleStar={(path, starred) => void setReference(path, starred)} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
