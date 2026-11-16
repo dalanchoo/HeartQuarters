@@ -36,7 +36,7 @@ export function CategoryPicker({ label, value, options, onChange, disabled = fal
   }, [open]);
   useEffect(() => { if (open) document.getElementById(`${id}-option-${active}`)?.scrollIntoView({ block: 'nearest' }); }, [active, id, open]);
   return <div className="category-picker"><span className="category-picker-label" id={`${id}-label`}>{label}</span>
-    <button ref={trigger} type="button" className="category-picker-trigger" disabled={disabled} aria-labelledby={`${id}-label ${id}-value`} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} onClick={() => { if (!open) { setQuery(''); setActive(nextCategoryIndex(options, -1, 1)); } setOpen(!open); }}>
+    <button ref={trigger} type="button" className="category-picker-trigger" title={selected?.label ?? placeholder} disabled={disabled} aria-labelledby={`${id}-label ${id}-value`} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} onClick={() => { if (!open) { setQuery(''); setActive(nextCategoryIndex(options, -1, 1)); } setOpen(!open); }}>
       <span id={`${id}-value`}>{selected?.label ?? placeholder}</span><span aria-hidden="true">▾</span>
     </button>
     {open && createPortal(<div ref={popup} className="category-picker-popup" style={position} onClick={e => e.stopPropagation()}>
