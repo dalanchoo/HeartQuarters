@@ -451,8 +451,8 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
         <div className="lb-info">
           <div className="lb-details">
           <div className="lb-title">
-            <strong>{photo.name}</strong>
-            <span className="muted">{photo.category.split('/').join(' › ')}</span>
+            <div className="lb-title-name"><strong>{photo.name}</strong>
+            <span className="muted">{photo.category.split('/').join(' › ')}</span></div>
             {onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag || !overview} onClick={() => void assess()}>Reassess With {chosenName(overview)}</button>}
           </div>
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
