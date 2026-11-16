@@ -22,3 +22,37 @@ export function confirmExpressionTag(photoPath: string, name: string, confidence
   writeFileSafely(sidecar, lines.join(''));
   clearExpressionIndex();
 }
+
+/** Remove exactly the tag the user reviewed; reject if it has changed. */
+export function removeExpressionTag(photoPath: string, name: string, confidence: unknown, confirmed: unknown): void {
+  const photo = buildExpressionIndex().photos.find(p => p.path === photoPath);
+  if (!photo || !name || typeof confirmed !== 'boolean' || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or tag is not available.');
+  const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
+  if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file, not a shortcut.');
+  const lines = fs.readFileSync(sidecar, 'utf8').split(/(?<=\n)/);
+  const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] })).filter(item => item.tag?.tag === name);
+  if (matching.length !== 1 || matching[0].tag.confidence !== confidence || matching[0].tag.confirmed !== confirmed) throw new Error('The tag changed since it was shown. Refresh and try again.');
+  lines.splice(matching[0].i, 1);
+  writeFileSafely(sidecar, lines.join(''));
+  clearExpressionIndex();
+}
+
+/** Add a confirmed expression from the existing category vocabulary. */
+export function addExpressionTag(photoPath: string, name: string): void {
+  const index = buildExpressionIndex();
+  const photo = index.photos.find(p => p.path === photoPath);
+  const parents = new Set(index.categories.map(c => c.parent));
+  const category = index.categories.find(c => c.path && !parents.has(c.path) && c.name.toLowerCase() === name.trim().toLowerCase());
+  if (!photo || !category) throw new Error('Choose an existing expression category.');
+  const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
+  let text = ''; let exists = false;
+  try {
+    if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file, not a shortcut.');
+    text = fs.readFileSync(sidecar, 'utf8'); exists = true;
+  } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+  if (parseTags(text).some(tag => tag.tag.toLowerCase() === category.name.toLowerCase())) throw new Error('This expression is already on the photo.');
+  const newline = text.includes('\r\n') ? '\r\n' : '\n';
+  const updated = text + (text && !text.endsWith('\n') ? newline : '') + `${category.name}, N/A, CONFIRMED${newline}`;
+  if (exists) writeFileSafely(sidecar, updated); else fs.writeFileSync(sidecar, updated, { flag: 'wx' });
+  clearExpressionIndex();
+}

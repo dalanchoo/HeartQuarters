@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { confirmExpressionTag } from './confirm-expression-tag';
+import { addExpressionTag, confirmExpressionTag, removeExpressionTag } from './confirm-expression-tag';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string; let original: string;
@@ -19,5 +19,25 @@ describe('confirming expression tags', () => {
     expect(() => confirmExpressionTag('../outside.jpg', 'Smile', 88)).toThrow();
     fs.appendFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'Smile, 88%, UNCONFIRMED\r\n');
     expect(() => confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 88)).toThrow(/changed/);
+  });
+  it('removes only the chosen tag and refuses stale changes', () => {
+    expect(() => removeExpressionTag('Joy/Joy_001.jpg', 'Smile', 88, true)).toThrow(/changed/);
+    removeExpressionTag('Joy/Joy_001.jpg', 'Smile', 88, false);
+    expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toBe('EyesWide: 72, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n');
+    removeExpressionTag('Joy/Joy_001.jpg', 'Joy', null, true);
+    expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toBe('EyesWide: 72, UNCONFIRMED\r\n');
+  });
+  it('adds an existing expression as confirmed and rejects duplicates or invented values', () => {
+    fs.mkdirSync(path.join(tmp, 'Calm'));
+    addExpressionTag('Joy/Joy_001.jpg', 'calm');
+    expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toContain('Calm, N/A, CONFIRMED\r\n');
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'Calm')).toThrow(/already/);
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'unknown')).toThrow(/existing expression/);
+    expect(() => addExpressionTag('../outside.jpg', 'Calm')).toThrow();
+  });
+  it('creates a sidecar when adding an expression to a photo without one', () => {
+    fs.writeFileSync(path.join(tmp, 'Joy/Joy_002.jpg'), 'photo');
+    addExpressionTag('Joy/Joy_002.jpg', 'Joy');
+    expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_002.txt'), 'utf8')).toBe('Joy, N/A, CONFIRMED\n');
   });
 });
