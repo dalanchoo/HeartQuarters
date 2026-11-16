@@ -35,6 +35,7 @@ describe('saving thumbnails', () => {
     const current = savePackagingThumbnail('piece', 'piece/Packaging/V02', old);
     const currentPath = path.join(tmp, 'Videos', current.path); const st = fs.statSync(currentPath);
     expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02', { size: st.size + 1, modified: Math.round(st.mtimeMs) })).toThrow(/changed/);
+    expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02', { size: st.size, modified: Math.round(st.mtimeMs) }, { size: 0, modified: 0 })).toThrow(/source thumbnail changed/);
     const copied = copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02', { size: st.size, modified: Math.round(st.mtimeMs) });
     expect(fs.readFileSync(path.join(tmp, 'Videos', copied.path))).toEqual(png);
     const backups = path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Backups');

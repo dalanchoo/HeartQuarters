@@ -135,7 +135,7 @@ app.get('/api/projects', handle((_req, res) => {
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
-app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected)); }));
+app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected, req.body?.sourceExpected)); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
 
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".

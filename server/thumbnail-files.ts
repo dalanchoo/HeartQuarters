@@ -31,7 +31,7 @@ export function savePackagingThumbnail(piece: string, version: string, data: Buf
 }
 
 /** Copy a finished image between versions of the same piece, never replacing an existing thumbnail. */
-export function copyVersionThumbnail(piece: string, source: string, target: string, expected?: { size: number; modified: number }): { path: string } {
+export function copyVersionThumbnail(piece: string, source: string, target: string, expected?: { size: number; modified: number }, sourceExpected?: { size: number; modified: number }): { path: string } {
   const fromVersion = versionFolder(piece, source); const toVersion = versionFolder(piece, target);
   if (fromVersion.toLowerCase() === toVersion.toLowerCase()) throw new Error('Choose a different source version.');
   const fromFolder = safeResolve('projects', path.join(source, THUMBNAIL_FOLDER));
@@ -39,7 +39,9 @@ export function copyVersionThumbnail(piece: string, source: string, target: stri
   const names = fs.readdirSync(fromFolder).filter(name => /^Thumbnail\.(png|jpe?g)$/i.test(name));
   if (names.length !== 1) throw new Error('The source version must have exactly one thumbnail.');
   const image = safeResolve('projects', path.join(source, THUMBNAIL_FOLDER, names[0]));
-  if (!fs.lstatSync(image).isFile() || fs.lstatSync(image).isSymbolicLink()) throw new Error('The source thumbnail must be a real file.');
+  const sourceStat = fs.lstatSync(image);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) throw new Error('The source thumbnail must be a real file.');
+  if (sourceExpected && (sourceStat.size !== sourceExpected.size || Math.round(sourceStat.mtimeMs) !== sourceExpected.modified)) throw new Error('The source thumbnail changed. Reload before copying.');
   const toFolder = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER));
   fs.mkdirSync(toFolder, { recursive: true });
   if (!fs.lstatSync(toFolder).isDirectory() || fs.lstatSync(toFolder).isSymbolicLink()) throw new Error('The destination thumbnail folder must be a real folder.');
