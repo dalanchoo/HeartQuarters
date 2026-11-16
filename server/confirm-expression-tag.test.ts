@@ -32,12 +32,22 @@ describe('confirming expression tags', () => {
     addExpressionTag('Joy/Joy_001.jpg', 'calm');
     expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toContain('Calm, N/A, CONFIRMED\r\n');
     expect(() => addExpressionTag('Joy/Joy_001.jpg', 'Calm')).toThrow(/already/);
-    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'unknown')).toThrow(/existing expression/);
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'unknown')).toThrow(/existing attribute/);
     expect(() => addExpressionTag('../outside.jpg', 'Calm')).toThrow();
   });
   it('creates a sidecar when adding an expression to a photo without one', () => {
     fs.writeFileSync(path.join(tmp, 'Joy/Joy_002.jpg'), 'photo');
     addExpressionTag('Joy/Joy_002.jpg', 'Joy');
     expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_002.txt'), 'utf8')).toBe('Joy, N/A, CONFIRMED\n');
+  });
+  it('adds framing and morphology from the matching vocabulary as confirmed', () => {
+    addExpressionTag('Joy/Joy_001.jpg', 'closeup', 'framing');
+    addExpressionTag('Joy/Joy_001.jpg', 'FurrowedBrow', 'morphology');
+    const text = fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8');
+    expect(text).toContain('CloseUp, N/A, CONFIRMED\r\n');
+    expect(text).toContain('FurrowedBrow, N/A, CONFIRMED\r\n');
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'Frontal', 'morphology')).toThrow(/selected group/);
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'Smile', 'morphology')).toThrow(/already/);
+    expect(() => addExpressionTag('Joy/Joy_001.jpg', 'CloseUp', 'unknown')).toThrow(/selected group/);
   });
 });

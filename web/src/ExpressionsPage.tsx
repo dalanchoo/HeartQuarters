@@ -15,8 +15,9 @@ import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
+import { FRAMING_TAGS, MORPHOLOGY_TAGS } from '../../server/expression-attribute-vocabulary';
 
-type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string };
+type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -49,7 +50,7 @@ export function ExpressionsPage() {
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
   const changeTag = async (photo: ExpressionPhoto, action: TagAction) => {
-    if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name });
+    if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name, group: action.group });
     else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
     const updated = await getJson<ExpressionIndex>('/api/expressions');
     setIndex(updated);
@@ -333,6 +334,8 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { kind: 'confirm' | 'remove' }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
   const [newExpression, setNewExpression] = useState('');
+  const [newFraming, setNewFraming] = useState('');
+  const [newMorphology, setNewMorphology] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -349,7 +352,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
-  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); center.current = null; }, [photo.path]);
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewMorphology(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -389,7 +392,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
   const saveTag = async (action: TagAction) => {
     if (!onTagAction) return;
     setSavingTag(true); setConfirmError('');
-    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); }
+    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewMorphology(''); }
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
@@ -425,10 +428,14 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
           </div>
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
-            <section><h4>Framing &amp; Pose</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
-            <section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
+            <section><h4>Framing &amp; Pose</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}
+              {onTagAction && <div className="attribute-add"><label>Add Framing or Pose <select value={newFraming} disabled={savingTag} onChange={e => setNewFraming(e.target.value)}><option value="">Choose an attribute…</option>{FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add Framing or Pose</button></div>}
+            </section>
+            <section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}
+              {onTagAction && <div className="attribute-add"><label>Add Morphology <select value={newMorphology} disabled={savingTag} onChange={e => setNewMorphology(e.target.value)}><option value="">Choose an attribute…</option>{MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add Morphology</button></div>}
+            </section>
             <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
-              {onTagAction && <div className="attribute-add"><label>Add Expression <select value={newExpression} disabled={savingTag} onChange={e => setNewExpression(e.target.value)}><option value="">Choose an expression…</option>{options.map(c => <option key={c.path} value={c.name}>{c.path.split('/').join(' > ')}</option>)}</select></label><button disabled={savingTag || !newExpression} onClick={() => void saveTag({ kind: 'add', name: newExpression })}>Add Expression</button></div>}
+              {onTagAction && <div className="attribute-add"><label>Add Expression <select value={newExpression} disabled={savingTag} onChange={e => setNewExpression(e.target.value)}><option value="">Choose an expression…</option>{options.map(c => <option key={c.path} value={c.name}>{c.path.split('/').join(' > ')}</option>)}</select></label><button disabled={savingTag || !newExpression} onClick={() => void saveTag({ kind: 'add', name: newExpression, group: 'expression' })}>Add Expression</button></div>}
             </section>
           </div>
           {confirmError && <p className="error">{confirmError}</p>}

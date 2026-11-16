@@ -3,6 +3,7 @@ import path from 'node:path';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, parseTags } from './expressions.js';
 import { writeFileSafely } from './files.js';
+import { FRAMING_TAGS, MORPHOLOGY_TAGS } from './expression-attribute-vocabulary.js';
 
 /** Confirm an existing suggestion without changing its score or any other tags. */
 export function confirmExpressionTag(photoPath: string, name: string, confidence: unknown): void {
@@ -37,22 +38,24 @@ export function removeExpressionTag(photoPath: string, name: string, confidence:
   clearExpressionIndex();
 }
 
-/** Add a confirmed expression from the existing category vocabulary. */
-export function addExpressionTag(photoPath: string, name: string): void {
+/** Add a confirmed attribute from the appropriate existing vocabulary. */
+export function addExpressionTag(photoPath: string, name: string, group: unknown = 'expression'): void {
   const index = buildExpressionIndex();
   const photo = index.photos.find(p => p.path === photoPath);
   const parents = new Set(index.categories.map(c => c.parent));
   const category = index.categories.find(c => c.path && !parents.has(c.path) && c.name.toLowerCase() === name.trim().toLowerCase());
-  if (!photo || !category) throw new Error('Choose an existing expression category.');
+  const vocabulary = group === 'framing' ? FRAMING_TAGS : group === 'morphology' ? MORPHOLOGY_TAGS : null;
+  const canonical = group === 'expression' ? category?.name : vocabulary?.find(tag => tag.toLowerCase() === name.trim().toLowerCase());
+  if (!photo || !canonical) throw new Error('Choose an existing attribute in the selected group.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   let text = ''; let exists = false;
   try {
     if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file, not a shortcut.');
     text = fs.readFileSync(sidecar, 'utf8'); exists = true;
   } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
-  if (parseTags(text).some(tag => tag.tag.toLowerCase() === category.name.toLowerCase())) throw new Error('This expression is already on the photo.');
+  if (parseTags(text).some(tag => tag.tag.toLowerCase() === canonical.toLowerCase())) throw new Error('This attribute is already on the photo.');
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const updated = text + (text && !text.endsWith('\n') ? newline : '') + `${category.name}, N/A, CONFIRMED${newline}`;
+  const updated = text + (text && !text.endsWith('\n') ? newline : '') + `${canonical}, N/A, CONFIRMED${newline}`;
   if (exists) writeFileSafely(sidecar, updated); else fs.writeFileSync(sidecar, updated, { flag: 'wx' });
   clearExpressionIndex();
 }
