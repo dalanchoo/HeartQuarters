@@ -710,3 +710,6 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .tree-leaf { padding-left: 1.2rem; }
 
 .copy-thumbnail { display: flex; flex-wrap: wrap; align-items: end; gap: 0.6rem; margin: 0.6rem 0; }
+
+.version-choice { display: inline-flex; align-items: center; gap: 0.2rem; }
+.version-padlock { min-width: 2rem; padding: 0.1rem 0.35rem; }

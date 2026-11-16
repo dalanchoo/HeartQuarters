@@ -435,7 +435,7 @@ function NewPackagingVersion({ piece, source, onCreated }: { piece: Piece; sourc
   return <>
     <button className="small" disabled={busy} title={`Copies everything in ${source.name} into a new version, ${next}. Its Notes.md will say it isn't on YouTube yet.`} onClick={async () => { setBusy(true); setError(''); try {
       const result = await postJson<{ name: string }>('/api/packaging/copy-version', { piece: piece.path, source: source.path }); onCreated(result.name);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : `Copy ${versionLabel(source.name)} to New Version`}</button>
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } }}>{busy ? 'Copying…' : `Clone ${versionLabel(source.name)}`}</button>
     {error && <p className="error">{error}</p>}
   </>;
 }
@@ -577,8 +577,8 @@ function PieceCard({
   const latest = piece.versions.at(-1)?.name;
   // Every version is locked until John clicks its padlock, so nothing in it changes by accident. Unlocking lasts until
   // the page is reloaded; a version he has just copied starts unlocked, since he made it to change it.
-  const [unlocked, setUnlocked] = useState<string[]>([]);
-  const locked = !!version && !unlocked.includes(version.path);
+  const [unlocked, setUnlocked] = useState<string | null>(null);
+  const locked = !!version && unlocked !== version.path;
   const [docsLoads, setDocsLoads] = useState(0);
   const loadedDocs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const docs = locked ? lockDocs(loadedDocs) : loadedDocs;
@@ -639,24 +639,16 @@ function PieceCard({
           {version && (
             <div className="versions">
               {piece.versions.map((v) => (
-                <button
-                  key={v.name}
-                  className={`version small ${v.name === version.name ? 'active' : ''}`}
-                  onClick={() => setVersionName(v.name)}
-                  title={v.name === latest ? 'Latest version' : undefined}
-                >
-                  {versionLabel(v.name)}
-                  {v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
-                </button>
+                <div key={v.path} className="version-choice">
+                  <button type="button" className="small version-padlock" aria-label={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} aria-pressed={unlocked === v.path} title={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} onClick={() => { setVersionName(v.name); setUnlocked(unlocked === v.path ? null : v.path); }}>
+                    {unlocked === v.path ? '🔓' : '🔒'}
+                  </button>
+                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => setVersionName(v.name)} title={v.name === latest ? 'Latest version' : undefined}>
+                    {versionLabel(v.name)}{v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
+                  </button>
+                </div>
               ))}
-              <button
-                className={`small lock-toggle${locked ? ' lock-toggle--locked' : ''}`}
-                onClick={() => setUnlocked(locked ? [...unlocked, version.path] : unlocked.filter((p) => p !== version.path))}
-                title={locked ? `${versionLabel(version.name)} is locked: nothing in it can be changed. Click to unlock it.` : `${versionLabel(version.name)} is unlocked: changes go into it. Click to lock it again.`}
-              >
-                {locked ? `🔒 ${versionLabel(version.name)} Locked` : `🔓 ${versionLabel(version.name)} Unlocked`}
-              </button>
-              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked([...unlocked, version.path.replace(/[^/]+$/, name)]); onChanged?.(); }} />
+              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
               <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
               <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
             </div>
