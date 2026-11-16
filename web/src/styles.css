@@ -233,6 +233,7 @@ main { flex: 1; min-height: 0; }
 .video-preview-tools button:hover:not(:disabled) { color: white; background: #3b4350; }
 .video-preview-select { display: flex; flex-direction: column; gap: 0.25rem; }
 .video-preview-select select { width: 100%; min-width: 0; font: inherit; }
+.thumbnail-import { margin-bottom: 0.5rem; }
 .thumbnail-import > summary { cursor: pointer; font-weight: 600; }
 .thumbnail-import label { display: block; margin: 0.4rem 0; }
 .thumbnail-import input { max-width: 100%; font: inherit; }
