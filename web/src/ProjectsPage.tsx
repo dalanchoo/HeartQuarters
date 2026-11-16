@@ -619,6 +619,7 @@ function PieceCard({
           video={video}
           piece={piece.kind === 'longform' ? 'Longform' : piece.name}
           draft={draft ?? piece.name}
+          version={version?.path}
           canEdit={piece.kind === 'longform'}
           onFinished={reloadDocs}
         />
@@ -633,7 +634,7 @@ function PieceCard({
         </div>
 
         <div className="piece-docs">
-          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} locked={locked} onSaved={() => onChanged?.()} />}
+          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
           {!version && <p className="muted">No packaging yet.</p>}
           {version && (
             <div className="versions">

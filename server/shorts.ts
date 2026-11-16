@@ -7,6 +7,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
 import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
+import { prepareMetadataVersion } from './metadata-version.js';
 import { uploadsFor } from './youtube.js';
 import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, findDraft, numberOf } from './create.js';
 import { writeFileSafely } from './files.js';
@@ -372,11 +373,13 @@ export function notePiece(video: string, piece: string, text: unknown): ClaudeRu
  * "Write YouTube metadata", the same button on every card. Any AI can do this one, since it only writes a text file
  * in the video's folder.
  */
-export function writePieceMetadata(video: string, piece: string): ClaudeRun {
+export function writePieceMetadata(video: string, piece: string, version = ''): ClaudeRun {
   const { job, draft } = pieceJob(video, piece);
   // A clean conversation every time: metadata doesn't need what came before, and a long history costs tokens.
   forgetRun(video, job);
-  const message = job === 'edit' ? longformMetadataPrompt() : metadataPrompt(piece, readLongformUrl(video));
+  const piecePath = path.posix.join(video.replace(/\\/g, '/'), job === 'edit' ? 'Longform' : `Shorts/${piece}`);
+  const target = version ? prepareMetadataVersion(piecePath, version) : '';
+  const message = job === 'edit' ? longformMetadataPrompt(target) : metadataPrompt(piece, readLongformUrl(video), target);
   return askInConversation(video, job, draft, message);
 }
 

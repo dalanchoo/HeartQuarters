@@ -29,6 +29,26 @@ export function savePackagingThumbnail(piece: string, version: string, data: Buf
   return { path: path.relative(safeResolve('projects', ''), file).split(path.sep).join('/') };
 }
 
+/** Copy a finished image between versions of the same piece, never replacing an existing thumbnail. */
+export function copyVersionThumbnail(piece: string, source: string, target: string): { path: string } {
+  const fromVersion = versionFolder(piece, source); const toVersion = versionFolder(piece, target);
+  if (fromVersion.toLowerCase() === toVersion.toLowerCase()) throw new Error('Choose a different source version.');
+  const fromFolder = safeResolve('projects', path.join(source, THUMBNAIL_FOLDER));
+  if (!fs.lstatSync(fromFolder).isDirectory() || fs.lstatSync(fromFolder).isSymbolicLink()) throw new Error('The source thumbnail folder must be a real folder.');
+  const names = fs.readdirSync(fromFolder).filter(name => /^Thumbnail\.(png|jpe?g)$/i.test(name));
+  if (names.length !== 1) throw new Error('The source version must have exactly one thumbnail.');
+  const image = safeResolve('projects', path.join(source, THUMBNAIL_FOLDER, names[0]));
+  if (!fs.lstatSync(image).isFile() || fs.lstatSync(image).isSymbolicLink()) throw new Error('The source thumbnail must be a real file.');
+  const toFolder = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER));
+  fs.mkdirSync(toFolder, { recursive: true });
+  if (!fs.lstatSync(toFolder).isDirectory() || fs.lstatSync(toFolder).isSymbolicLink()) throw new Error('The destination thumbnail folder must be a real folder.');
+  if (fs.readdirSync(toFolder).some(name => /^Thumbnail\.(png|jpe?g)$/i.test(name))) throw new Error('This version already has a thumbnail; nothing was replaced.');
+  const filename = `Thumbnail${path.extname(names[0]).toLowerCase()}`;
+  const dest = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER, filename));
+  fs.copyFileSync(image, dest, fs.constants.COPYFILE_EXCL);
+  return { path: path.relative(safeResolve('projects', ''), dest).split(path.sep).join('/') };
+}
+
 export function decodeThumbnail(value: unknown): Buffer {
   if (typeof value !== 'string' || !value || value.length > Math.ceil(MAX_IMAGE / 3) * 4 + 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new Error('Invalid image data. Choose a PNG or JPEG up to 2 MB.');
   return Buffer.from(value, 'base64');

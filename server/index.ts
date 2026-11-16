@@ -11,7 +11,7 @@ import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind,
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText, saveVersionNotes } from './metadata.js';
 import { copyPackagingVersion, trashPackagingVersion } from './packaging-version.js';
-import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
+import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex } from './expressions.js';
@@ -137,6 +137,7 @@ app.get('/api/projects', handle((_req, res) => {
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
+app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''))); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
 
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
@@ -456,7 +457,7 @@ app.post('/api/conversations/forget', handle((_req, res) => {
 
 // { video, piece }
 app.post('/api/piece-ai/metadata', handle((req, res) => {
-  res.json(writePieceMetadata(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
+  res.json(writePieceMetadata(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), String(req.body?.version ?? '')));
 }));
 
 app.post('/api/piece-ai/stop', handle((req, res) => {

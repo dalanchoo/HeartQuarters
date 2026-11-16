@@ -447,10 +447,10 @@ export function sendNote(video: string, text: string, job: ClaudeJob = 'edit', a
 }
 
 /** The message that asks for a short's YouTube metadata. An export isn't needed: the words and the project are enough. */
-export function metadataPrompt(shortName: string, longformUrl: string | null): string {
+export function metadataPrompt(shortName: string, longformUrl: string | null, version = ''): string {
   return [
     `Write the YouTube metadata for the short "${shortName}", following the shorts-from-longform skill's "Packaging" section. YouTube only.`,
-    `Fill in Shorts\\${shortName}\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
+    version ? `Write YouTube metadata only to "Shorts/${shortName}/Packaging/${version.replace(/\\/g, '/').split('/').at(-1)}/YouTube.md". HeartQuarters already chose and prepared this version; do not create another version.` : `Fill in Shorts\\${shortName}\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
     "Use the short's words from its Subtitles folder or the word-by-word transcript: John may not have exported it yet, and you don't need the export.",
     longformUrl
       ? `The longform's YouTube URL is ${longformUrl}.`
@@ -461,10 +461,10 @@ export function metadataPrompt(shortName: string, longformUrl: string | null): s
 }
 
 /** The message that asks for the longform's YouTube metadata. */
-export function longformMetadataPrompt(): string {
+export function longformMetadataPrompt(version = ''): string {
   return [
     `Write the YouTube metadata for this video's longform, following the longform-edit skill's packaging rules. YouTube only.`,
-    `Fill in Longform\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
+    version ? `Write YouTube metadata only to "Longform/Packaging/${version.replace(/\\/g, '/').split('/').at(-1)}/YouTube.md". HeartQuarters already chose and prepared this version; do not create another version.` : `Fill in Longform\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
     "Use the final video's words: the transcript in Longform\\Subtitles, or the export if there isn't one.",
     "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
   ].join(' ');

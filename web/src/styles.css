@@ -708,3 +708,5 @@ details[open]:not(.action-menu):not(.new-version):not(.playlist-select details) 
 details.page-section:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before { font-size: 1rem; }
 .compare-field > summary { grid-template-columns: 1rem minmax(8rem, 10rem) 1fr; }
 .tree-leaf { padding-left: 1.2rem; }
+
+.copy-thumbnail { display: flex; flex-wrap: wrap; align-items: end; gap: 0.6rem; margin: 0.6rem 0; }

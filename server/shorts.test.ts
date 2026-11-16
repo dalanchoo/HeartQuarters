@@ -191,6 +191,19 @@ describe("a card's AI box, the same for the longform and each short", () => {
     expect(run.prompt).toMatch(/longform-edit.*Longform\\Packaging\\V01\\YouTube\.md/s);
   });
 
+  it('prepares the new metadata version with the selected thumbnail and directs the AI to that version', async () => {
+    const piece = `${NUMBERED}/Longform`; const version = `${piece}/Packaging/V04`;
+    const folder = path.join(tmp, 'Videos', version); fs.mkdirSync(path.join(folder, 'Thumbnail'), { recursive: true });
+    fs.writeFileSync(path.join(folder, 'YouTube.md'), 'Title:\nPrevious Title\n');
+    fs.writeFileSync(path.join(folder, 'Thumbnail/Thumbnail.png'), 'thumbnail');
+    writePieceMetadata(NUMBERED, 'Longform', version);
+    const run = await settle('edit');
+    expect(run.prompt).toContain('Longform/Packaging/V05/YouTube.md');
+    expect(run.prompt).toContain('do not create another version');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', piece, 'Packaging/V05/Thumbnail/Thumbnail.png'), 'utf8')).toBe('thumbnail');
+    expect(fs.readFileSync(path.join(folder, 'YouTube.md'), 'utf8')).toContain('Previous Title');
+  });
+
   it("takes the longform's URL from its linked YouTube video first, then the older saved file", () => {
     saveLongformUrl(NUMBERED, 'https://youtu.be/from-file');
     expect(readLongformUrl(NUMBERED)).toBe('https://youtu.be/from-file');

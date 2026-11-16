@@ -3,7 +3,7 @@ import path from 'node:path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { decodeThumbnail, fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } from './thumbnail-files';
+import { copyVersionThumbnail, decodeThumbnail, fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } from './thumbnail-files';
 
 let tmp: string; let old: string;
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
@@ -19,6 +19,14 @@ describe('saving thumbnails', () => {
     expect(fs.readFileSync(path.join(tmp, 'Videos', saved.path))).toEqual(png);
     fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/V02'));
     expect(savePackagingThumbnail('piece', 'piece/Packaging/V02', jpeg).path).toBe('piece/Packaging/V02/Thumbnail/Thumbnail.jpg');
+  });
+  it('copies a thumbnail between versions without replacing existing images', () => {
+    fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/V02'));
+    const source = savePackagingThumbnail('piece', 'piece/Packaging/V01', png);
+    const copy = copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', copy.path))).toEqual(fs.readFileSync(path.join(tmp, 'Videos', source.path)));
+    expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02')).toThrow(/already has a thumbnail/);
+    expect(() => copyVersionThumbnail('piece', 'other/Packaging/V01', 'piece/Packaging/V02')).toThrow();
   });
   it('rejects other projects and invalid images', () => {
     expect(() => savePackagingThumbnail('piece', 'other/Packaging/V01', png)).toThrow();
