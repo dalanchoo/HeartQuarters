@@ -16,6 +16,7 @@ import {
   type TimedWord,
 } from './api';
 import { ClaudeChat } from './ClaudeChat';
+import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
 
 type Transcript = { file: string; words: TimedWord[] } | null;
@@ -85,6 +86,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
 
   const { plan, run, builds, exportFile, retention, drafts } = state;
   const source = draft || drafts[0] || '';
+  const groups = groupPlannedShorts(plan?.shorts ?? [], builds, making);
 
   const propose = () => {
     if (plan && !confirm('Propose a new list? Your current list is kept as a separate file in the Shorts folder.')) return;
@@ -209,7 +211,8 @@ export function ShortsPlanCard({ video }: { video: string }) {
           {!transcript && <p className="muted small-text">This video has no word-by-word transcript, so clips can't show their words.</p>}
           {!exportFile && <p className="muted small-text">Export the longform into Longform\Exports to preview clips here.</p>}
 
-          {plan.shorts.map((s) => card(s, false))}
+          {groups.ready.map((s) => card(s, false))}
+          {groups.ready.length === 0 && <p className="muted small-text">No Shorts Awaiting Creation.</p>}
           <button
             className="small"
             onClick={() => {
@@ -221,6 +224,11 @@ export function ShortsPlanCard({ video }: { video: string }) {
           >
             Add a Short
           </button>
+
+          {groups.made.length > 0 && <details className="made-shorts"><summary>Made Shorts ({groups.made.length})</summary>
+            <p className="muted small-text">These Shorts have already been created. Open a row to review its plan or conversation.</p>
+            {groups.made.map(s => card(s, false))}
+          </details>}
 
           {plan.rejected.length > 0 && (
             <details className="near-misses" open>
@@ -287,6 +295,8 @@ function ShortCard({
     ? 'copying the CapCut project…'
     : build?.status === 'running'
       ? 'AI is working…'
+      : build?.status === 'failed'
+        ? 'AI stopped · needs attention'
       : made
         ? 'made'
         : null;
