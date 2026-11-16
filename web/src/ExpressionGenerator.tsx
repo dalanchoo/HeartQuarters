@@ -6,6 +6,7 @@ type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; s
 export function ExpressionGenerator({ category, references, photos, onStarted, onViewPhoto }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void }) {
   const available = references.filter((p) => photos.some((photo) => photo.path === p));
   const [chosen, setChosen] = useState(() => available.slice(0, 3));
+  useEffect(() => { setChosen(current => current.filter(path => references.includes(path) && photos.some(photo => photo.path === path))); }, [references, photos]);
   const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState('');
   const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
@@ -22,7 +23,7 @@ export function ExpressionGenerator({ category, references, photos, onStarted, o
     catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  return <details className="expression-planning"><summary>Generate an Expression</summary>
+  return <details className="expression-planning" open><summary>Generate an Expression</summary>
     <p>Choose up to five reference photos for likeness. Candidates stay on this computer until you approve or discard them.</p>
     <div className="reference-grid">{available.map((p) => { const photo = photos.find((item) => item.path === p)!; return <div key={p}><button type="button" className="expression-view-image" onClick={() => onViewPhoto(photo)} aria-label={`View ${photo.name}`}><img src={thumbUrl('expressions', p, 240)} alt={photo.name} /></button><label><input type="checkbox" checked={chosen.includes(p)} disabled={!chosen.includes(p) && chosen.length >= 5} onChange={(e) => setChosen(e.target.checked ? [...chosen, p] : chosen.filter((v) => v !== p))} /> Use Reference</label></div>; })}</div>
     {!available.length && <p>Select reference photos above before generating.</p>}

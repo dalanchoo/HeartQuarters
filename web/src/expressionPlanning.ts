@@ -12,6 +12,19 @@ export function matchingDestinations(categories: ExpressionCategory[], current: 
   return categories.filter(c => !!c.path && c.path !== current && c.path.toLocaleLowerCase().includes(term));
 }
 
+export function generationCategories(categories: ExpressionCategory[]): ExpressionCategory[] {
+  const parents = new Set(categories.map(c => c.parent));
+  return categories.filter(c => !!c.path && !parents.has(c.path));
+}
+
+export function generationCategoryOnSwitch(categories: ExpressionCategory[], libraryPath: string, previous: string): string {
+  return generationCategories(categories).some(c => c.path === libraryPath) ? libraryPath : previous;
+}
+
+export function readyCandidateCount(jobs: { state: string }[]): number {
+  return jobs.filter(job => job.state === 'ready').length;
+}
+
 /** A starting suggestion, not an assessment of whether existing photos are good. */
 export function suggestedCategories(categories: ExpressionCategory[]): ExpressionCategory[] {
   const useful = /^(curiosity|confusion|skepticism|concern|surprise|thinking|joy|sadness|confidence|disbelief|frustration|warmth)$/i;

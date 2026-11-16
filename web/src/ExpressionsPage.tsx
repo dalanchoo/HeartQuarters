@@ -10,7 +10,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { matchingDestinations, readReferences, saveReferences, suggestedCategories } from './expressionPlanning';
+import { generationCategories, generationCategoryOnSwitch, matchingDestinations, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
@@ -38,6 +38,10 @@ export function ExpressionsPage() {
   const [index, setIndex] = useState<ExpressionIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
+  const [activeTab, setActiveTab] = useState<'library' | 'generation'>('library');
+  const [generationCategory, setGenerationCategory] = useState('');
+  const [generationSearch, setGenerationSearch] = useState('');
+  const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
@@ -49,6 +53,12 @@ export function ExpressionsPage() {
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const load = () => { void getJson<{ state: string }[]>('/api/expression-generation/jobs').then(jobs => { if (active) setReadyCount(readyCandidateCount(jobs)); }, () => { if (active) setReadyCount(null); }); };
+    load(); const timer = setInterval(load, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [candidateRevision]);
   const changeTag = async (photo: ExpressionPhoto, action: TagAction) => {
     if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name, group: action.group });
     else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
@@ -121,10 +131,17 @@ export function ExpressionsPage() {
     crumbs.unshift(c);
   }
   const subs = children.get(current.path) ?? [];
+  const availableCategories = generationCategories(index.categories);
+  const generationSelection = availableCategories.find(c => c.path === generationCategory);
+  const filteredCategories = availableCategories.filter(c => c.path.toLowerCase().includes(generationSearch.trim().toLowerCase()));
+  const switchTab = (tab: 'library' | 'generation') => {
+    if (tab === 'generation' && activeTab !== 'generation') setGenerationCategory(previous => generationCategoryOnSwitch(index.categories, current.path, previous));
+    setActiveTab(tab); setOpen(null); setPreview(null);
+  };
 
   return (
     <div className="split">
-      <aside className="sidebar">
+      <aside className="sidebar" hidden={activeTab !== 'library'}>
         <input
           className="search"
           type="search"
@@ -136,20 +153,34 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
-        <ExpressionCandidates categories={index.categories} revision={candidateRevision} onViewCandidate={(id, category) => setPreview({ photo: { path: id, name: 'Generated Candidate', category: category || 'Unassigned', tags: [] }, imageUrl: `/api/expression-generation/image?id=${encodeURIComponent(id)}` })} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }} />
+        <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const next = e.key === 'Home' ? 'library' : e.key === 'End' ? 'generation' : activeTab === 'library' ? 'generation' : 'library'; switchTab(next); document.getElementById(next === 'library' ? 'expression-library-tab' : 'expression-generation-tab')?.focus(); }}>
+          <button role="tab" aria-selected={activeTab === 'library'} aria-controls="expression-library" id="expression-library-tab" onClick={() => switchTab('library')}>Library</button>
+          <button role="tab" aria-selected={activeTab === 'generation'} aria-controls="expression-generation" id="expression-generation-tab" onClick={() => switchTab('generation')}>Generate &amp; Review{readyCount !== null && readyCount > 0 ? ` · ${readyCount}` : ''}</button>
+        </div>
+        <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
+        <div className="expression-planning">
+          <h2>Choose an Expression</h2>
+          <div className="expression-category-picker"><label>Find Category <input type="search" value={generationSearch} onChange={e => setGenerationSearch(e.target.value)} placeholder="Search category names…" /></label>
+            <label>Category <select value={generationCategory} onChange={e => setGenerationCategory(e.target.value)}><option value="">Choose a category…</option>{generationSelection && !filteredCategories.some(c => c.path === generationSelection.path) && <option value={generationSelection.path}>{generationSelection.path.split('/').join(' > ')} (selected)</option>}{filteredCategories.map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' > ')}</option>)}</select></label></div>
+          {generationSelection?.definition && <p>{generationSelection.definition}</p>}
+          <details><summary>Categories to Consider</summary><p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
+            <div className="chips">{suggestedCategories(index.categories).map(c => <button key={c.path} className="chip" onClick={() => { setGenerationSearch(''); setGenerationCategory(c.path); }}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
+          </details>
+        </div>
         <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
-          <p>Choose photos in the grid below as references. HeartQuarters remembers them on this computer.</p>
+          <p>Choose reference photos in the Library. HeartQuarters remembers them on this computer.</p>
           {referenceError && <p className="error">{referenceError}</p>}
           <div className="reference-grid">{references.map((path) => {
             const photo = index.photos.find((p) => p.path === path);
             return <div key={path}>{photo ? <button type="button" className="expression-view-image" onClick={() => setPreview({ photo })} aria-label={`View ${photo.name}`}><img src={thumbUrl('expressions', path, 240)} alt={photo.name} /></button> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" disabled={!referenceReady || referenceBusy} onClick={() => void setReference(path, false)}>Remove</button></div>;
           })}</div>
           {!references.length && <p className="muted">No reference photos selected yet.</p>}
+          <button className="small" onClick={() => switchTab('library')}>Open Library</button>
         </details>
-        {current.path === '' && <details className="expression-planning"><summary>Categories to Consider</summary>
-          <p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
-          <div className="chips">{suggestedCategories(index.categories).map((c) => <button key={c.path} className="chip" onClick={() => goTo(c.path)}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
-        </details>}
+        {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : !referenceReady ? <p className="muted">Loading reference photos…</p> : <ExpressionGenerator key={generationSelection.path} category={generationSelection} references={references} photos={index.photos} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
+        <ExpressionCandidates categories={index.categories} revision={candidateRevision} onViewCandidate={(id, category) => setPreview({ photo: { path: id, name: 'Generated Candidate', category: category || 'Unassigned', tags: [] }, imageUrl: `/api/expression-generation/image?id=${encodeURIComponent(id)}` })} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); setCandidateRevision(n => n + 1); }} />
+        </div>
+        <div id="expression-library" role="tabpanel" aria-labelledby="expression-library-tab" hidden={activeTab !== 'library'}>
         <div className="crumbs">
           {crumbs.map((c, i) => (
             <span key={c.path}>
@@ -182,8 +213,6 @@ export function ExpressionsPage() {
             </div>
           </div>
         </div>
-        {current.path && subs.length === 0 && referenceReady && <ExpressionGenerator key={current.path} category={current} references={references} photos={index.photos} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
-
         {subs.length > 0 && (
           <div className="chips">
             {subs.map((c) => (
@@ -209,6 +238,7 @@ export function ExpressionsPage() {
               <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
             </div>
           ))}
+        </div>
         </div>
       </section>
 
