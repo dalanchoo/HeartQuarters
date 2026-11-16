@@ -3,7 +3,7 @@ import path from 'node:path';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, parseTags } from './expressions.js';
 import { writeFileSafely } from './files.js';
-import { FRAMING_TAGS, MORPHOLOGY_TAGS } from './expression-attribute-vocabulary.js';
+import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
 /** Confirm an existing suggestion without changing its score or any other tags. */
 export function confirmExpressionTag(photoPath: string, name: string, confidence: unknown): void {
@@ -44,7 +44,7 @@ export function addExpressionTag(photoPath: string, name: string, group: unknown
   const photo = index.photos.find(p => p.path === photoPath);
   const parents = new Set(index.categories.map(c => c.parent));
   const category = index.categories.find(c => c.path && !parents.has(c.path) && c.name.toLowerCase() === name.trim().toLowerCase());
-  const vocabulary = group === 'framing' ? FRAMING_TAGS : group === 'morphology' ? MORPHOLOGY_TAGS : null;
+  const vocabulary = group === 'framing' ? FRAMING_TAGS : group === 'pose' ? POSE_TAGS : group === 'morphology' ? MORPHOLOGY_TAGS : null;
   const canonical = group === 'expression' ? category?.name : vocabulary?.find(tag => tag.toLowerCase() === name.trim().toLowerCase());
   if (!photo || !canonical) throw new Error('Choose an existing attribute in the selected group.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');

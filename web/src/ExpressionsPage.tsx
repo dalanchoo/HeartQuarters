@@ -15,9 +15,9 @@ import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
-import { FRAMING_TAGS, MORPHOLOGY_TAGS } from '../../server/expression-attribute-vocabulary';
+import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 
-type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'morphology' };
+type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -335,6 +335,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
   const [savingTag, setSavingTag] = useState(false);
   const [newExpression, setNewExpression] = useState('');
   const [newFraming, setNewFraming] = useState('');
+  const [newPose, setNewPose] = useState('');
   const [newMorphology, setNewMorphology] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
@@ -352,7 +353,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
-  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewMorphology(''); center.current = null; }, [photo.path]);
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewPose(''); setNewMorphology(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -392,7 +393,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
   const saveTag = async (action: TagAction) => {
     if (!onTagAction) return;
     setSavingTag(true); setConfirmError('');
-    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewMorphology(''); }
+    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewPose(''); setNewMorphology(''); }
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
@@ -428,12 +429,9 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
           </div>
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
-            <section><h4>Framing &amp; Pose</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}
-              {onTagAction && <div className="attribute-add"><label>Add Framing or Pose <select value={newFraming} disabled={savingTag} onChange={e => setNewFraming(e.target.value)}><option value="">Choose an attribute…</option>{FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add Framing or Pose</button></div>}
-            </section>
-            <section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}
-              {onTagAction && <div className="attribute-add"><label>Add Morphology <select value={newMorphology} disabled={savingTag} onChange={e => setNewMorphology(e.target.value)}><option value="">Choose an attribute…</option>{MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add Morphology</button></div>}
-            </section>
+            <section><h4>Framing</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
+            <section><h4>Pose &amp; Gaze</h4>{groups.pose.length ? showTags(groups.pose) : <p className="muted small-text">None recorded.</p>}</section>
+            <section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
             <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
               {onTagAction && <div className="attribute-add"><label>Add Expression <select value={newExpression} disabled={savingTag} onChange={e => setNewExpression(e.target.value)}><option value="">Choose an expression…</option>{options.map(c => <option key={c.path} value={c.name}>{c.path.split('/').join(' > ')}</option>)}</select></label><button disabled={savingTag || !newExpression} onClick={() => void saveTag({ kind: 'add', name: newExpression, group: 'expression' })}>Add Expression</button></div>}
             </section>
@@ -441,6 +439,11 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
           {confirmError && <p className="error">{confirmError}</p>}
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           </div>
+          {onTagAction && <div className="lb-attribute-controls">
+            <div className="lb-attribute-control"><label>Add Framing <select value={newFraming} disabled={savingTag} onChange={e => setNewFraming(e.target.value)}><option value="">Choose…</option>{FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button aria-label="Add framing" disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add</button></div>
+            <div className="lb-attribute-control"><label>Add Pose <select value={newPose} disabled={savingTag} onChange={e => setNewPose(e.target.value)}><option value="">Choose…</option>{POSE_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button aria-label="Add pose" disabled={savingTag || !newPose} onClick={() => void saveTag({ kind: 'add', name: newPose, group: 'pose' })}>Add</button></div>
+            <div className="lb-attribute-control"><label>Add Morphology <select value={newMorphology} disabled={savingTag} onChange={e => setNewMorphology(e.target.value)}><option value="">Choose…</option>{MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button aria-label="Add morphology" disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add</button></div>
+          </div>}
           <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><div className="lb-zoom-track"><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(snapOriginalSize(Number(e.target.value)) / (fit * 100))} /><button type="button" className="lb-zoom-original" style={{ top: `calc(${10000 / (200 - originalSizePercent(fit, 1))}% + ${8 - 1600 / (200 - originalSizePercent(fit, 1))}px)` }} onClick={() => changeZoom(1 / fit)} aria-label="Set zoom to 100%">100%</button></div><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
           <button type="button" className="lb-close" onClick={onClose} aria-label="Close photo viewer" title="Close (Esc)">×</button>
         </div>
