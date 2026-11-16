@@ -5,6 +5,7 @@ import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type Bri
 import { categoriesIn, photosIn } from './expressionPick';
 import { CopyButton } from './PackagingDoc';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
+import { CategoryPicker } from './CategoryPicker';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
@@ -236,24 +237,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           );
         })}
       {library && (
-        <label className="small-text add-category">
-          Show photos from another category:{' '}
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) setAdded([...added.filter((a) => a !== e.target.value), e.target.value]);
-            }}
-          >
-            <option value="">Choose a category…</option>
-            {library.categories
-              .filter((c) => c.path && !categories.includes(c.path))
-              .map((c) => (
-                <option key={c.path} value={c.path} disabled={c.totalCount === 0}>
-                  {c.path} ({c.totalCount ? `${c.totalCount} ${c.totalCount === 1 ? 'photo' : 'photos'}` : 'no photos yet'})
-                </option>
-              ))}
-          </select>
-        </label>
+        <div className="small-text add-category"><CategoryPicker label="Show Photos From Another Category" value="" onChange={value => setAdded([...added.filter(a => a !== value), value])} options={library.categories.filter(c => c.path && !categories.includes(c.path)).map(c => ({ value: c.path, label: `${c.path.split('/').join(' > ')} (${c.totalCount ? `${c.totalCount} ${c.totalCount === 1 ? 'photo' : 'photos'}` : 'no photos yet'})`, disabled: c.totalCount === 0 }))} /></div>
       )}
       {error && <p className="error">{error}</p>}
     </div>

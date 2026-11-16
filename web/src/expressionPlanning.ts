@@ -1,16 +1,19 @@
 import type { ExpressionCategory } from './api';
 
 const KEY = 'hq-expression-reference-photos';
+export type CategoryOption = { value: string; label: string; disabled?: boolean };
+export function filterCategoryOptions(options: CategoryOption[], query: string): CategoryOption[] {
+  const term = query.trim().toLocaleLowerCase();
+  return options.filter(option => option.label.toLocaleLowerCase().includes(term));
+}
+export function nextCategoryIndex(options: CategoryOption[], current: number, direction: 1 | -1): number {
+  for (let index = current + direction; index >= 0 && index < options.length; index += direction) if (!options[index].disabled) return index;
+  return current >= 0 && current < options.length && !options[current].disabled ? current : -1;
+}
 export function readReferences(storage: Pick<Storage, 'getItem'>): string[] {
   try { const value: unknown = JSON.parse(storage.getItem(KEY) ?? '[]'); return Array.isArray(value) ? [...new Set(value.filter((p): p is string => typeof p === 'string'))] : []; } catch { return []; }
 }
 export function saveReferences(storage: Pick<Storage, 'setItem'>, paths: string[]): void { storage.setItem(KEY, JSON.stringify([...new Set(paths)])); }
-
-/** Search the full category path so both category and parent names can be found. */
-export function matchingDestinations(categories: ExpressionCategory[], current: string, query: string): ExpressionCategory[] {
-  const term = query.trim().toLocaleLowerCase();
-  return categories.filter(c => !!c.path && c.path !== current && c.path.toLocaleLowerCase().includes(term));
-}
 
 export function generationCategories(categories: ExpressionCategory[]): ExpressionCategory[] {
   const parents = new Set(categories.map(c => c.parent));

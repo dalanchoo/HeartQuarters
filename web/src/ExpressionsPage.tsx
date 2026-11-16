@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -10,7 +10,8 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { generationCategories, generationCategoryOnSwitch, matchingDestinations, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { CategoryPicker } from './CategoryPicker';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
@@ -40,7 +41,6 @@ export function ExpressionsPage() {
   const [selected, setSelected] = useState(categoryFromHash);
   const [activeTab, setActiveTab] = useState<'library' | 'generation'>('library');
   const [generationCategory, setGenerationCategory] = useState('');
-  const [generationSearch, setGenerationSearch] = useState('');
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
@@ -133,7 +133,6 @@ export function ExpressionsPage() {
   const subs = children.get(current.path) ?? [];
   const availableCategories = generationCategories(index.categories);
   const generationSelection = availableCategories.find(c => c.path === generationCategory);
-  const filteredCategories = availableCategories.filter(c => c.path.toLowerCase().includes(generationSearch.trim().toLowerCase()));
   const switchTab = (tab: 'library' | 'generation') => {
     if (tab === 'generation' && activeTab !== 'generation') setGenerationCategory(previous => generationCategoryOnSwitch(index.categories, current.path, previous));
     setActiveTab(tab); setOpen(null); setPreview(null);
@@ -160,11 +159,10 @@ export function ExpressionsPage() {
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
           <h2>Choose an Expression</h2>
-          <div className="expression-category-picker"><label>Find Category <input type="search" value={generationSearch} onChange={e => setGenerationSearch(e.target.value)} placeholder="Search category names…" /></label>
-            <label>Category <select value={generationCategory} onChange={e => setGenerationCategory(e.target.value)}><option value="">Choose a category…</option>{generationSelection && !filteredCategories.some(c => c.path === generationSelection.path) && <option value={generationSelection.path}>{generationSelection.path.split('/').join(' > ')} (selected)</option>}{filteredCategories.map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' > ')}</option>)}</select></label></div>
+          <div className="expression-category-picker"><CategoryPicker label="Category" value={generationCategory} options={availableCategories.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setGenerationCategory} /></div>
           {generationSelection?.definition && <p>{generationSelection.definition}</p>}
           <details><summary>Categories to Consider</summary><p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
-            <div className="chips">{suggestedCategories(index.categories).map(c => <button key={c.path} className="chip" onClick={() => { setGenerationSearch(''); setGenerationCategory(c.path); }}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
+            <div className="chips">{suggestedCategories(index.categories).map(c => <button key={c.path} className="chip" onClick={() => setGenerationCategory(c.path)}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
           </details>
         </div>
         <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
@@ -313,10 +311,6 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
 }) {
   type Plan = { token: string; changes: { from: string; to: string | null }[]; sidecars: string[]; links: string[]; references: string[] };
   const [destination, setDestination] = useState('');
-  const [destinationSearch, setDestinationSearch] = useState('');
-  const [destinationsOpen, setDestinationsOpen] = useState(false);
-  const [activeDestination, setActiveDestination] = useState(0);
-  const destinationListId = useId();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [operation, setOperation] = useState<'delete' | 'move' | null>(null);
   const [message, setMessage] = useState('');
@@ -327,9 +321,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark the photo.'); }
     finally { setBusy(false); }
   };
-  useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setDestinationSearch(''); setDestinationsOpen(false); setMessage(''); }, [photo.path]);
-  const destinations = matchingDestinations(categories, photo.category, destinationSearch.replaceAll(' › ', '/'));
-  const chooseDestination = (category: ExpressionCategory) => { setDestination(category.path); setDestinationSearch(category.path.split('/').join(' › ')); setDestinationsOpen(false); setPlan(null); };
+  useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setMessage(''); }, [photo.path]);
   const preview = async (kind: 'delete' | 'move') => {
     setBusy(true); setMessage(''); setPlan(null); setOperation(kind);
     try { setPlan(await postJson<Plan>('/api/expressions/preview-change', { photo: photo.path, destination: kind === 'delete' ? null : destination })); }
@@ -352,7 +344,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>
-    {operation === 'move' && <div className="expression-move"><label htmlFor={`${destinationListId}-input`}>Move to Category</label><div className="expression-destination"><input id={`${destinationListId}-input`} role="combobox" aria-autocomplete="list" aria-expanded={destinationsOpen} aria-controls={destinationListId} aria-activedescendant={destinationsOpen && destinations[activeDestination] ? `${destinationListId}-${activeDestination}` : undefined} value={destinationSearch} disabled={busy} placeholder="Search categories…" onFocus={() => { setDestinationsOpen(true); setActiveDestination(0); }} onBlur={() => setDestinationsOpen(false)} onChange={(e) => { setDestinationSearch(e.target.value); setDestination(''); setPlan(null); setDestinationsOpen(true); setActiveDestination(0); }} onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setDestinationsOpen(true); setActiveDestination(i => Math.min(i + 1, destinations.length - 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveDestination(i => Math.max(i - 1, 0)); } else if (e.key === 'Enter' && destinationsOpen && destinations[activeDestination]) { e.preventDefault(); chooseDestination(destinations[activeDestination]); } else if (e.key === 'Escape') setDestinationsOpen(false); }} />{destinationsOpen && <div id={destinationListId} className="expression-destination-options" role="listbox">{destinations.length ? destinations.map((c, i) => <div id={`${destinationListId}-${i}`} key={c.path} role="option" aria-selected={i === activeDestination} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setActiveDestination(i)} onClick={() => chooseDestination(c)}>{c.path.split('/').join(' › ')}</div>) : <div className="muted">No matching categories</div>}</div>}</div><button className="small" disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button></div>}
+    {operation === 'move' && <div className="expression-move"><CategoryPicker label="Move to Category" value={destination} disabled={busy} options={categories.filter(c => c.path && c.path !== photo.category).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={value => { setDestination(value); setPlan(null); }} /><button className="small" disabled={!destination || busy} onClick={() => void preview('move')}>Review Move</button></div>}
     {message && <p className="error">{message}</p>}
     {plan && <div className="expression-review"><p><strong>Review Changes</strong></p><ul>{plan.changes.map(c => <li key={c.from}>{c.from} → {c.to ?? 'HeartQuarters Trash'}</li>)}</ul><p>{plan.sidecars.length} photo and sidecar files will move. {plan.links.length} thumbnail references and {plan.references.length} saved reference photos will be updated.</p><details><summary>Files and Thumbnail References</summary><ul>{plan.sidecars.map(f => <li key={f}>{f}</li>)}{plan.links.map(f => <li key={f}>Thumbnail: {f}</li>)}</ul></details>{operation === 'delete' && plan.links.length > 0 && <p>Thumbnail projects using the deleted photo will keep a copy in their Drafts Source folder.</p>}<button disabled={busy} onClick={() => void apply()}>{operation === 'delete' ? 'Delete Photo' : 'Move Photo'}</button>{' '}<button disabled={busy} onClick={() => { setPlan(null); setOperation(null); }}>Cancel</button></div>}
   </div>;
@@ -466,7 +458,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
             <div className="attribute-row"><section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><label>Add Morphology <select value={newMorphology} disabled={savingTag} onChange={e => setNewMorphology(e.target.value)}><option value="">Choose…</option>{MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => <option key={name} value={name}>{name}</option>)}</select></label><button aria-label="Add morphology" disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add</button></div>}</div>
             <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
-              {onTagAction && <div className="attribute-add"><label>Add Expression <select value={newExpression} disabled={savingTag} onChange={e => setNewExpression(e.target.value)}><option value="">Choose an expression…</option>{options.map(c => <option key={c.path} value={c.name}>{c.path.split('/').join(' > ')}</option>)}</select></label><button disabled={savingTag || !newExpression} onClick={() => void saveTag({ kind: 'add', name: newExpression, group: 'expression' })}>Add Expression</button></div>}
+              {onTagAction && <div className="attribute-add"><CategoryPicker label="Add Expression" value={newExpression} disabled={savingTag} options={options.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setNewExpression} /><button disabled={savingTag || !newExpression} onClick={() => { const category = options.find(c => c.path === newExpression); if (category) void saveTag({ kind: 'add', name: category.name, group: 'expression' }); }}>Add Expression</button></div>}
             </section>
           </div>
           {confirmError && <p className="error">{confirmError}</p>}

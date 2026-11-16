@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
+import { CategoryPicker } from './CategoryPicker';
 
 type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; references: string[]; recovered?: boolean };
 
@@ -53,7 +54,7 @@ export function ExpressionCandidates({ categories, revision, onSaved, onViewCand
       {job.state === 'working' && <p role="status">Generating… This can take several minutes.</p>}
       {job.state === 'failed' && <p className="error">{job.error}</p>}
       {job.state === 'ready' && <button type="button" className="expression-view-image expression-candidate-button" onClick={() => onViewCandidate(job.id, job.category)} aria-label={`View candidate for ${job.category || 'an unassigned category'}`}><img className="expression-candidate" src={`/api/expression-generation/image?id=${encodeURIComponent(job.id)}`} alt={`Candidate for ${job.category || 'an unassigned category'}`} loading="lazy" /></button>}
-      {job.recovered && <label>Category <select value={job.category} disabled={busy !== null} onChange={(e) => { if (e.target.value) void action(job.id, async () => { await postJson('/api/expression-generation/assign-category', { id: job.id, category: e.target.value }); }); }}><option value="">Choose a category…</option>{categories.filter(c => c.path && !parents.has(c.path)).map(c => <option key={c.path} value={c.path}>{c.path.split('/').join(' › ')}</option>)}</select></label>}
+      {job.recovered && <CategoryPicker label="Category" value={job.category} disabled={busy !== null} options={categories.filter(c => c.path && !parents.has(c.path)).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={category => { void action(job.id, async () => { await postJson('/api/expression-generation/assign-category', { id: job.id, category }); }); }} />}
       <details className="expression-prompt"><summary>View Prompt</summary><p>{job.prompt || 'The prompt was not saved for this older candidate.'}</p></details>
       <div className="expression-candidate-actions">{job.state === 'ready' && <button disabled={busy !== null || !job.category} onClick={() => void action(job.id, async () => { const result = await postJson<{ path: string }>('/api/expression-generation/approve', { id: job.id }); setMessage(`Added ${result.path}`); onSaved(); })}>Approve and Add to Category</button>}
       {job.state !== 'working' && <button disabled={busy !== null} onClick={() => void action(job.id, async () => { await postJson('/api/expression-generation/reject', { id: job.id }); setMessage('Candidate discarded.'); })}>Discard Candidate</button>}</div>
