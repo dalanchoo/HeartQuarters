@@ -680,3 +680,6 @@ textarea[readonly]:focus { outline: none; }
 .generation-photo-filters .expression-filter-field .category-picker { min-width: 0; }
 .expression-filter-field input { width: 100%; }
 .expression-library-filters { margin: .8rem 0; }
+
+.expression-review-filter { display: inline-flex; align-items: center; gap: .35rem; margin-top: .75rem; }
+.expression-review-reason { margin: .3rem 0; font-size: .85rem; overflow-wrap: anywhere; }
