@@ -17,8 +17,9 @@ describe('expression generation', () => {
     const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake); await finished;
     expect(expressionJob(job.id).state).toBe('ready'); expect(fs.existsSync(candidateFile(job.id))).toBe(true);
     expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Warmth'))).toEqual(['Warmth.txt']);
-    const result = approveExpression(job.id); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
+    const result = approveExpression(job.id); expect(result.path).toBe('Positive/Warmth/Warmth_001.png'); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('Warmth, N/A, UNCONFIRMED');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('AIGenerated, N/A, CONFIRMED');
   });
   it('rejects unsafe references and discards a rejected candidate', async () => {
     expect(() => startExpressionGeneration('Positive/Warmth', ['../bad.jpg'], options, 'codex', fake)).toThrow();
@@ -52,6 +53,26 @@ describe('expression generation', () => {
     const result = approveExpression(job.id);
     expect(result.path).toMatch(/\.jpg$/);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(jpeg);
+  });
+  it('uses the first free number without overwriting photos or sidecar files', async () => {
+    const folder = path.join(tmp, 'Expressions/Positive/Warmth');
+    fs.writeFileSync(path.join(folder, 'Warmth_001.jpg'), 'existing photo');
+    fs.writeFileSync(path.join(folder, 'warmth_002_GPT.txt'), 'existing sidecar');
+    const first = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake);
+    const second = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'gemini', fake);
+    await Promise.all([first.finished, second.finished]);
+    expect(approveExpression(first.job.id).path).toBe('Positive/Warmth/Warmth_003.png');
+    expect(approveExpression(second.job.id).path).toBe('Positive/Warmth/Warmth_004.png');
+    expect(fs.readFileSync(path.join(folder, 'Warmth_001.jpg'), 'utf8')).toBe('existing photo');
+    expect(fs.readFileSync(path.join(folder, 'warmth_002_GPT.txt'), 'utf8')).toBe('existing sidecar');
+  });
+  it('keeps the candidate when all three-digit numbers are in use', async () => {
+    const folder = path.join(tmp, 'Expressions/Positive/Warmth');
+    for (let n = 1; n <= 999; n++) fs.writeFileSync(path.join(folder, `Warmth_${String(n).padStart(3, '0')}.txt`), 'existing');
+    const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake); await finished;
+    expect(() => approveExpression(job.id)).toThrow(/no free three-digit numbers/i);
+    expect(fs.existsSync(candidateFile(job.id))).toBe(true);
+    rejectExpression(job.id);
   });
   it('keeps several candidates across a restart, with their exact prompts and categories', async () => {
     fs.mkdirSync(path.join(tmp, 'Expressions/Positive/Joy'));

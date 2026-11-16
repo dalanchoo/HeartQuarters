@@ -92,10 +92,18 @@ export function approveExpression(id: string): { path: string } {
   if (!job.category) throw new Error('Choose a category for this recovered photo first.');
   const category = buildExpressionIndex().categories.find((c) => c.path === job.category);
   if (!category) throw new Error('The category no longer exists.');
-  const folder = safeResolve('expressions', category.path); const name = `${category.name}_AI_${id.slice(0, 8)}`;
+  const folder = safeResolve('expressions', category.path);
+  const existing = fs.readdirSync(folder).map(file => file.toLowerCase());
+  let number = 1;
+  while (number <= 999 && existing.some(file => {
+    const prefix = `${category.name}_${String(number).padStart(3, '0')}`.toLowerCase();
+    return file === prefix || file.startsWith(`${prefix}.`) || file.startsWith(`${prefix}_`);
+  })) number++;
+  if (number > 999) throw new Error('There are no free three-digit numbers in this category. The candidate has been kept.');
+  const name = `${category.name}_${String(number).padStart(3, '0')}`;
   const dest = safeResolve('expressions', `${category.path}/${name}.${job.format}`); const sidecar = safeResolve('expressions', `${category.path}/${name}.txt`);
   const data = fs.readFileSync(image); const groups = [[job.options.gaze], [job.options.framing, job.options.angle], [category.name]].map((group) => group.filter(Boolean)).filter((group) => group.length);
-  fs.writeFileSync(sidecar, groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')).join('\n==========\n') + '\n', { flag: 'wx' });
+  fs.writeFileSync(sidecar, groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')).join('\n==========\n') + '\n==========\nAIGenerated, N/A, CONFIRMED\n', { flag: 'wx' });
   try { fs.writeFileSync(dest, data, { flag: 'wx' }); } catch (e) { fs.unlinkSync(sidecar); throw e; }
   rejectExpression(id); clearExpressionIndex(); return { path: `${category.path}/${name}.${job.format}` };
 }
