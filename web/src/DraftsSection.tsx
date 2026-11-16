@@ -5,6 +5,7 @@ import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type Bri
 import { categoriesIn, photosIn } from './expressionPick';
 import { CopyButton } from './PackagingDoc';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
+import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
@@ -168,6 +169,13 @@ function TopPicks({ piece, picks, choice, onChanged }: { piece: string; picks: B
  */
 function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: BriefChoice; onChanged?: () => void }) {
   const [library, setLibrary] = useState<ExpressionIndex | null>(null);
+  const [stars, setStars] = useState<string[]>(() => readReferences(localStorage));
+  useEffect(() => {
+    let active = true;
+    const load = () => { void getJson<{ initialized: boolean; paths: string[] }>('/api/expression-references').then(result => { if (active) setStars(result.initialized ? result.paths : readReferences(localStorage)); }, () => {}); };
+    load(); window.addEventListener('hq-starred-photos-changed', load);
+    return () => { active = false; window.removeEventListener('hq-starred-photos-changed', load); };
+  }, []);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   useEffect(() => {
@@ -213,6 +221,10 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           <div className="photo-grid">{tile({ path: choice.photo, name: choice.photo.split('/').pop() ?? choice.photo })}</div>
         </div>
       )}
+      {library && <details className="photo-group"><summary>Starred Photos ({library.photos.filter(p => stars.includes(p.path)).length})</summary>
+        <div className="photo-grid">{library.photos.filter(p => stars.includes(p.path)).map(tile)}</div>
+        {!stars.length && <p className="muted">Star photos in Expressions to find them here.</p>}
+      </details>}
       {!library && !error && <p className="muted small-text">Loading the expressions library…</p>}
       {library && categories.length === 0 && <p className="muted small-text">This pair names no library category. Add one below.</p>}
       {library &&

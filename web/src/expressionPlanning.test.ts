@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterCategoryOptions, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { filterCategoryOptions, filterSelectablePhotos, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
 import type { ExpressionCategory } from './api';
 describe('expression planning', () => {
   it('remembers distinct reference paths and handles damaged data', () => {
@@ -10,6 +10,18 @@ describe('expression planning', () => {
   it('suggests sparse useful leaf categories first', () => {
     const category = (path: string, name: string, parent: string, ownCount: number): ExpressionCategory => ({ path, name, parent, ownCount, totalCount: ownCount, reference: null, definition: null });
     expect(suggestedCategories([category('x/Thinking', 'Thinking', 'x', 2), category('x/Curiosity', 'Curiosity', 'x', 0), category('x/Joy', 'Joy', 'x', 6)]).map((c) => c.name)).toEqual(['Curiosity', 'Thinking']);
+  });
+  it('filters selectable photos by stars, category and readable attribute names', () => {
+    const photos = [
+      { path: 'a', name: 'One', category: 'Positive/Warmth', tags: [{ tag: 'EyesClosed', confidence: 88, confirmed: false }] },
+      { path: 'b', name: 'Two', category: 'Positive/Joy', tags: [{ tag: 'LookOffCamera', confidence: 90, confirmed: true }] },
+      { path: 'c', name: 'Three', category: 'Other', tags: [] },
+    ];
+    expect(filterSelectablePhotos(photos, ['a'], { scope: 'starred', category: '*', query: '' }).map(p => p.path)).toEqual(['a']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: 'eyes closed' }).map(p => p.path)).toEqual(['a']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: 'looking off camera' }).map(p => p.path)).toEqual(['b']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Pos', query: '' })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', attribute: 'LookOffCamera' }).map(p => p.path)).toEqual(['b']);
   });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];

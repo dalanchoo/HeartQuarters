@@ -10,7 +10,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
@@ -44,6 +44,7 @@ export function ExpressionsPage() {
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
+  const [starredOnly, setStarredOnly] = useState(false);
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
@@ -70,8 +71,8 @@ export function ExpressionsPage() {
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
     setReferenceBusy(true);
-    try { await postJson('/api/expression-references', { paths: next }); setReferences(next); try { saveReferences(localStorage, next); } catch { /* The HeartQuarters file is the primary copy. */ } setReferenceError(''); }
-    catch { setReferenceError('Could not save reference photos. Your previous selection is still saved.'); }
+    try { await postJson('/api/expression-references', { paths: next }); setReferences(next); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, next); } catch { /* The HeartQuarters file is the primary copy. */ } setReferenceError(''); }
+    catch { setReferenceError('Could not save starred photos. Your previous selection is still saved.'); }
     finally { setReferenceBusy(false); }
   };
 
@@ -83,7 +84,7 @@ export function ExpressionsPage() {
       if (!saved.initialized && browserPaths.length) saved = await postJson('/api/expression-references', { initialize: true, paths: browserPaths });
       if (active) { setReferences(saved.paths); setReferenceReady(true); }
     };
-    void load().catch(() => { if (active) setReferenceError('Could not load saved references. Your browser selection is still available; refresh to try again.'); });
+    void load().catch(() => { if (active) setReferenceError('Could not load starred photos. Your browser selection is still available; refresh to try again.'); });
     return () => { active = false; };
   }, []);
 
@@ -120,8 +121,8 @@ export function ExpressionsPage() {
       current.path === '' ||
       p.category === current.path ||
       (includeSub && p.category.startsWith(current.path + '/'));
-    return index.photos.filter((p) => inScope(p) && matches(p, words) && matchesExpressionOrigin(p, origin));
-  }, [index, current, includeSub, query, origin]);
+    return index.photos.filter((p) => inScope(p) && matches(p, words) && matchesExpressionOrigin(p, origin) && (!starredOnly || references.includes(p.path)));
+  }, [index, current, includeSub, query, origin, starredOnly, references]);
 
   if (error) return <p className="error content">{error}</p>;
   if (!index || !current) return <p className="muted content">Loading…</p>;
@@ -161,21 +162,9 @@ export function ExpressionsPage() {
           <h2>Choose an Expression</h2>
           <div className="expression-category-picker"><CategoryPicker label="Category" value={generationCategory} options={availableCategories.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setGenerationCategory} /></div>
           {generationSelection?.definition && <p>{generationSelection.definition}</p>}
-          <details><summary>Categories to Consider</summary><p className="muted">Starting suggestions: commonly useful expressions with fewer than five photos. Counts do not judge photo quality.</p>
-            <div className="chips">{suggestedCategories(index.categories).map(c => <button key={c.path} className="chip" onClick={() => setGenerationCategory(c.path)}>{c.path.split('/').join(' > ')} · {c.ownCount} photos</button>)}</div>
-          </details>
         </div>
-        <details className="expression-planning"><summary>Reference Photos ({references.length})</summary>
-          <p>Choose reference photos in the Library. HeartQuarters remembers them on this computer.</p>
-          {referenceError && <p className="error">{referenceError}</p>}
-          <div className="reference-grid">{references.map((path) => {
-            const photo = index.photos.find((p) => p.path === path);
-            return <div key={path}>{photo ? <button type="button" className="expression-view-image" onClick={() => setPreview({ photo })} aria-label={`View ${photo.name}`}><img src={thumbUrl('expressions', path, 240)} alt={photo.name} /></button> : <p>Photo no longer found: {path}</p>}<span>{photo?.name}</span><button className="small" disabled={!referenceReady || referenceBusy} onClick={() => void setReference(path, false)}>Remove</button></div>;
-          })}</div>
-          {!references.length && <p className="muted">No reference photos selected yet.</p>}
-          <button className="small" onClick={() => switchTab('library')}>Open Library</button>
-        </details>
-        {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : !referenceReady ? <p className="muted">Loading reference photos…</p> : <ExpressionGenerator key={generationSelection.path} category={generationSelection} references={references} photos={index.photos} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
+        {referenceError && <p className="error">{referenceError}</p>}
+        {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator category={generationSelection} references={references} photos={index.photos} categories={index.categories} starBusy={!referenceReady || referenceBusy} onToggleStar={(path, starred) => void setReference(path, starred)} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
         <ExpressionCandidates categories={index.categories} revision={candidateRevision} onViewCandidate={(id, category) => setPreview({ photo: { path: id, name: 'Generated Candidate', category: category || 'Unassigned', tags: [] }, imageUrl: `/api/expression-generation/image?id=${encodeURIComponent(id)}` })} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); setCandidateRevision(n => n + 1); }} />
         </div>
         <div id="expression-library" role="tabpanel" aria-labelledby="expression-library-tab" hidden={activeTab !== 'library'}>
@@ -222,6 +211,8 @@ export function ExpressionsPage() {
         )}
 
         <label className="expression-origin-filter">Photo Type <select value={origin} onChange={(e) => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
+        <label className="expression-origin-filter"><input type="checkbox" checked={starredOnly} onChange={e => { setStarredOnly(e.target.checked); setOpen(null); }} /> Starred Only</label>
+        {referenceError && <p className="error">{referenceError}</p>}
         <p className="muted">
           {shown.length} photo{shown.length === 1 ? '' : 's'}
           {words.length > 0 && ` matching “${query.trim()}”`}
@@ -232,8 +223,8 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button><label><input type="checkbox" disabled={!referenceReady || referenceBusy} checked={references.includes(p.path)} onChange={(e) => void setReference(p.path, e.target.checked)} /> Reference Photo</label>
-              <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
+            </button><button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button>
+              <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
             </div>
           ))}
         </div>

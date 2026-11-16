@@ -243,7 +243,7 @@ app.post('/api/expressions/preview-change', handle((req, res) => { res.json(prev
 app.post('/api/expressions/apply-change', handle((req, res) => { res.json(applyExpressionChange(String(req.body?.photo ?? ''), req.body?.destination === null ? null : String(req.body?.destination ?? ''), String(req.body?.token ?? ''))); }));
 app.get('/api/expression-references', handle((_req, res) => { res.json(readExpressionReferences()); }));
 app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
-app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options, req.body?.ai).job); }));
+app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options, req.body?.ai, undefined, req.body?.prompt).job); }));
 app.get('/api/expression-generation/prompt', handle((req, res) => { res.json({ prompt: previewExpressionPrompt(String(req.query.category ?? ''), { framing: String(req.query.framing ?? ''), angle: String(req.query.angle ?? ''), gaze: String(req.query.gaze ?? '') }) }); }));
 app.get('/api/expression-generation/job', handle((req, res) => { res.json(expressionJob(String(req.query.id ?? ''))); }));
 app.get('/api/expression-generation/jobs', handle((req, res) => { res.json(expressionJobs(req.query.category === undefined ? undefined : String(req.query.category))); }));

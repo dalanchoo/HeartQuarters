@@ -43,6 +43,18 @@ describe('expression generation', () => {
     rejectExpression(job.id);
     expect(() => startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'claude', fake)).toThrow(/ChatGPT or Gemini/);
   });
+  it('accepts unstarred library photos and uses the edited prompt exactly', async () => {
+    const other = path.join(tmp, 'Expressions/Neutral/unstarred.jpg'); fs.writeFileSync(other, 'photo');
+    let actualPrompt = '';
+    const generate: MakeImage = async (...args) => { actualPrompt = args[1]; return fake(...args); };
+    const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/unstarred.jpg'], options, 'codex', generate, 'A carefully edited prompt.');
+    await finished;
+    expect(job.state).toBe('ready'); expect(actualPrompt).toBe('A carefully edited prompt.');
+    expect(expressionJob(job.id).prompt).toBe('A carefully edited prompt.');
+    rejectExpression(job.id);
+    expect(() => startExpressionGeneration('Positive/Warmth', ['Neutral/unstarred.jpg'], options, 'codex', generate, '   ')).toThrow(/prompt/i);
+    expect(() => startExpressionGeneration('Positive/Warmth', ['Neutral/unstarred.jpg', 'Neutral/unstarred.jpg'], options, 'codex', generate)).toThrow(/different photos/);
+  });
   it('keeps the correct file type if Gemini returns a JPEG', async () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     const generate: MakeImage = async (_ai, _prompt, cwd, out) => { const image = path.join(cwd, out); fs.writeFileSync(image, jpeg); return { image, session: 'test' }; };

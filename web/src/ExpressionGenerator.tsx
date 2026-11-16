@@ -1,39 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getJson, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
 import { CategoryPicker } from './CategoryPicker';
+import { filterSelectablePhotos } from './expressionPlanning';
 
 type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; references: string[]; recovered?: boolean };
 
-export function ExpressionGenerator({ category, references, photos, onStarted, onViewPhoto }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void }) {
-  const available = references.filter((p) => photos.some((photo) => photo.path === p));
-  const [chosen, setChosen] = useState(() => available.slice(0, 3));
-  useEffect(() => { setChosen(current => current.filter(path => references.includes(path) && photos.some(photo => photo.path === path))); }, [references, photos]);
-  const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState('');
-  const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
+export function ExpressionGenerator({ category, references, photos, categories, onStarted, onViewPhoto, onToggleStar, starBusy }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [photoCategory, setPhotoCategory] = useState('*'); const [query, setQuery] = useState(''); const [attribute, setAttribute] = useState('');
+  useEffect(() => { setChosen(current => current.filter(path => photos.some(photo => photo.path === path))); }, [photos]);
+  const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState(''); const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
+  const [loadingPrompt, setLoadingPrompt] = useState(true); const [suggested, setSuggested] = useState(''); const [outdated, setOutdated] = useState(false); const edited = useRef(false); const lastSuggestion = useRef('');
   useEffect(() => {
-    let active = true;
-    setPrompt('');
-    const params = new URLSearchParams({ category: category.path, framing, angle, gaze });
-    void getJson<{ prompt: string }>(`/api/expression-generation/prompt?${params}`).then((result) => { if (active) setPrompt(result.prompt); }, (e) => { if (active) setMessage(e.message); });
+    let active = true; setLoadingPrompt(true); const params = new URLSearchParams({ category: category.path, framing, angle, gaze });
+    void getJson<{ prompt: string }>(`/api/expression-generation/prompt?${params}`).then(result => {
+      if (!active) return;
+      if (edited.current && lastSuggestion.current && lastSuggestion.current !== result.prompt) setOutdated(true);
+      if (!edited.current) setPrompt(result.prompt);
+      lastSuggestion.current = result.prompt; setSuggested(result.prompt); setLoadingPrompt(false);
+    }, e => { if (active) { setMessage(e.message); } });
     return () => { active = false; };
   }, [category.path, framing, angle, gaze]);
   const start = async () => {
     setBusy(true); setMessage('');
-    try { await postJson('/api/expression-generation/start', { category: category.path, references: chosen, options: { framing, angle, gaze }, ai }); setMessage('Generation started. The candidate will appear in Candidates for Review.'); onStarted(); }
-    catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    try { await postJson('/api/expression-generation/start', { category: category.path, references: chosen, options: { framing, angle, gaze }, ai, prompt }); setMessage('Generation started. The candidate will appear in Candidates for Review.'); onStarted(); }
+    catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
+  const visible = filterSelectablePhotos(photos, references, { scope, category: photoCategory, query, attribute });
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
-    <p>Choose up to five reference photos for likeness. Candidates stay on this computer until you approve or discard them.</p>
-    <div className="reference-grid">{available.map((p) => { const photo = photos.find((item) => item.path === p)!; return <div key={p}><button type="button" className="expression-view-image" onClick={() => onViewPhoto(photo)} aria-label={`View ${photo.name}`}><img src={thumbUrl('expressions', p, 240)} alt={photo.name} /></button><label><input type="checkbox" checked={chosen.includes(p)} disabled={!chosen.includes(p) && chosen.length >= 5} onChange={(e) => setChosen(e.target.checked ? [...chosen, p] : chosen.filter((v) => v !== p))} /> Use Reference</label></div>; })}</div>
-    {!available.length && <p>Select reference photos above before generating.</p>}
-    <div className="expression-generator-options"><label>Image Generator <select value={ai} onChange={(e) => setAi(e.target.value as 'codex' | 'gemini')}><option value="codex">ChatGPT</option><option value="gemini">Gemini</option></select></label><label>Framing <select value={framing} onChange={(e) => setFraming(e.target.value)}><option value="">Natural</option><option value="HeadShoulders">Head and Shoulders</option><option value="UpperBody">Upper Body</option><option value="CloseUp">Close-Up</option></select></label>
-    <label>Face Direction <select value={angle} onChange={(e) => setAngle(e.target.value)}><option value="">Natural</option><option value="Frontal">Frontal</option><option value="ThreeQuarter">Three-Quarter</option><option value="LeftFacing">Face Left</option><option value="RightFacing">Face Right</option></select></label>
-    <label>Gaze <select value={gaze} onChange={(e) => setGaze(e.target.value)}><option value="">Natural</option><option value="LookAtCamera">At Camera</option><option value="LookOffCamera">Away From Camera</option><option value="LookLeft">Left</option><option value="LookRight">Right</option><option value="LookUp">Up</option><option value="LookDown">Down</option></select></label></div>
-    <details className="expression-prompt"><summary>View Prompt</summary><p>{prompt || 'Loading prompt…'}</p>{ai === 'gemini' && <p>Gemini also receives the paths to the selected reference photos.</p>}</details>
-    <button disabled={busy || !chosen.length || !prompt} onClick={() => void start()}>Generate Candidate</button>
-    {message && <p role="status">{message}</p>}
+    <p>Choose up to five photos for likeness. Stars are remembered; your choices here are for this candidate.</p>
+    <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Starred Photos</option><option value="all">All Photos</option></select></label>
+      <CategoryPicker label="Photo Category" value={photoCategory} options={[{ value: '*', label: 'All Categories' }, ...categories.filter(c => c.path).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))]} onChange={setPhotoCategory} />
+      <label>Attribute <select value={attribute} onChange={e => setAttribute(e.target.value)}><option value="">All Attributes</option>{[...new Set(photos.flatMap(p => p.tags.map(t => t.tag)))].sort((a, b) => a.localeCompare(b)).map(tag => <option key={tag} value={tag}>{tag.replace(/([a-z])([A-Z])/g, '$1 $2')}</option>)}</select></label>
+      <label>Find Attributes or Name <input type="search" placeholder="e.g. Eyes Closed or Look Off Camera" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
+    <p className="muted">{chosen.length} of 5 selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`}</p>
+    <div className="generation-photo-grid">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
+      <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => setChosen(current => selected ? current.filter(p => p !== photo.path) : [...current, photo.path])}><img src={thumbUrl('expressions', photo.path, 240)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
+      <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => onToggleStar(photo.path, !starred)}>{starred ? '★ Starred' : '☆ Star'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
+    {!visible.length && <p className="muted">No photos match these filters. Choose All Photos to see the whole library.</p>}
+    <div className="expression-generator-options"><label>Image Generator <select value={ai} onChange={e => setAi(e.target.value as 'codex' | 'gemini')}><option value="codex">ChatGPT</option><option value="gemini">Gemini</option></select></label><label>Framing <select value={framing} onChange={e => setFraming(e.target.value)}><option value="">Natural</option><option value="HeadShoulders">Head and Shoulders</option><option value="UpperBody">Upper Body</option><option value="CloseUp">Close-Up</option></select></label>
+    <label>Face Direction <select value={angle} onChange={e => setAngle(e.target.value)}><option value="">Natural</option><option value="Frontal">Frontal</option><option value="ThreeQuarter">Three-Quarter</option><option value="LeftFacing">Face Left</option><option value="RightFacing">Face Right</option></select></label>
+    <label>Gaze <select value={gaze} onChange={e => setGaze(e.target.value)}><option value="">Natural</option><option value="LookAtCamera">At Camera</option><option value="LookOffCamera">Away From Camera</option><option value="LookLeft">Left</option><option value="LookRight">Right</option><option value="LookUp">Up</option><option value="LookDown">Down</option></select></label></div>
+    <label className="generation-prompt">Prompt <textarea rows={10} maxLength={30000} value={prompt} onChange={e => { edited.current = true; setPrompt(e.target.value); }} /></label>
+    {outdated && <p role="status">Your prompt edits were kept when the options changed. Update the prompt if needed, or use the new suggested prompt.</p>}
+    {edited.current && <button type="button" onClick={() => { setPrompt(suggested); edited.current = false; setOutdated(false); }}>Use Suggested Prompt</button>}
+    {ai === 'gemini' && <p className="muted">Gemini also receives the selected reference photos.</p>}
+    <button disabled={busy || loadingPrompt || !chosen.length || !prompt.trim()} onClick={() => void start()}>Generate Candidate</button>{message && <p role="status">{message}</p>}
   </details>;
 }
 

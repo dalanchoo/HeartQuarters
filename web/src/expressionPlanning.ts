@@ -1,4 +1,4 @@
-import type { ExpressionCategory } from './api';
+import type { ExpressionCategory, ExpressionPhoto } from './api';
 
 const KEY = 'hq-expression-reference-photos';
 export type CategoryOption = { value: string; label: string; disabled?: boolean };
@@ -34,4 +34,10 @@ export function suggestedCategories(categories: ExpressionCategory[]): Expressio
   const parents = new Set(categories.map((c) => c.parent));
   return categories.filter((c) => c.path && !parents.has(c.path) && useful.test(c.name) && c.ownCount < 5)
     .sort((a, b) => a.ownCount - b.ownCount || a.name.localeCompare(b.name)).slice(0, 12);
+}
+
+export function filterSelectablePhotos(photos: ExpressionPhoto[], stars: string[], filter: { scope: 'starred' | 'all'; category: string; query: string; attribute?: string }): ExpressionPhoto[] {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '').replace(/lookingoffcamera/g, 'lookoffcamera').replace(/lookingatcamera/g, 'lookatcamera');
+  const term = normalize(filter.query); const starred = new Set(stars);
+  return photos.filter(photo => (filter.scope === 'all' || starred.has(photo.path)) && (!filter.attribute || photo.tags.some(tag => tag.tag === filter.attribute)) && (filter.category === '*' || photo.category === filter.category || photo.category.startsWith(filter.category + '/')) && normalize([photo.name, photo.category, ...photo.tags.map(t => t.tag)].join(' ')).includes(term));
 }

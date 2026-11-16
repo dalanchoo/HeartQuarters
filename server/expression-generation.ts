@@ -3,7 +3,6 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appDir, safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
-import { readExpressionReferences } from './expression-references.js';
 import { geminiImageArgs, makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 
@@ -52,13 +51,14 @@ export function previewExpressionPrompt(category: string, options: Options): str
   return expressionPrompt(selected.name, selected.definition, options);
 }
 
-export function startExpressionGeneration(category: string, refs: unknown, options: Options, ai: unknown = 'codex', make: MakeImage = makeImage): { job: Job; finished: Promise<void> } {
+export function startExpressionGeneration(category: string, refs: unknown, options: Options, ai: unknown = 'codex', make: MakeImage = makeImage, requestedPrompt?: unknown): { job: Job; finished: Promise<void> } {
   if (ai !== 'codex' && ai !== 'gemini') throw new Error('Choose ChatGPT or Gemini to generate the expression.');
   ensureLoaded();
-  const prompt = previewExpressionPrompt(category, options);
+  const suggestedPrompt = previewExpressionPrompt(category, options);
+  if (requestedPrompt !== undefined && (typeof requestedPrompt !== 'string' || !requestedPrompt.trim() || requestedPrompt.length > 30000)) throw new Error('Enter a prompt of up to 30,000 characters.');
+  const prompt = typeof requestedPrompt === 'string' ? requestedPrompt : suggestedPrompt;
   const index = buildExpressionIndex();
-  const saved = readExpressionReferences().paths;
-  if (!Array.isArray(refs) || refs.length < 1 || refs.length > 5 || refs.some((p) => typeof p !== 'string' || !saved.includes(p) || !index.photos.some((photo) => photo.path === p))) throw new Error('Choose one to five saved reference photos.');
+  if (!Array.isArray(refs) || refs.length < 1 || refs.length > 5 || new Set(refs).size !== refs.length || refs.some((p) => typeof p !== 'string' || !index.photos.some((photo) => photo.path === p))) throw new Error('Choose one to five different photos from the expression library.');
   const files = (refs as string[]).map((p) => safeResolve('expressions', p));
   const id = randomUUID(); const dir = valid(id); fs.mkdirSync(dir, { recursive: true });
   const sentPrompt = ai === 'gemini' ? geminiImageArgs(prompt, dir, { photo: files[0], refs: files.slice(1) })[1] : prompt;
