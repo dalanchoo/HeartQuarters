@@ -211,24 +211,30 @@ export function ShortsPlanCard({ video }: { video: string }) {
           {!transcript && <p className="muted small-text">This video has no word-by-word transcript, so clips can't show their words.</p>}
           {!exportFile && <p className="muted small-text">Export the longform into Longform\Exports to preview clips here.</p>}
 
-          {groups.ready.map((s) => card(s, false))}
-          {groups.ready.length === 0 && <p className="muted small-text">No Shorts Awaiting Creation.</p>}
-          <button
-            className="small"
-            onClick={() => {
-              const last = plan.shorts[plan.shorts.length - 1];
-              const start = last ? last.end : 0;
-              const id = nextShortId([...plan.shorts, ...plan.rejected].map((s) => s.id));
-              save([...plan.shorts, { id, title: 'New Short', start, end: start + 45, proposed: null }], plan.rejected);
-            }}
-          >
-            Add a Short
-          </button>
+          <details className="unmade-shorts" open>
+            <summary>Unmade Shorts ({groups.ready.length})</summary>
+            {groups.ready.map((s) => card(s, false))}
+            {groups.ready.length === 0 && <p className="muted small-text">No Shorts Awaiting Creation.</p>}
+            <button
+              className="small"
+              onClick={() => {
+                const last = plan.shorts[plan.shorts.length - 1];
+                const start = last ? last.end : 0;
+                const id = nextShortId([...plan.shorts, ...plan.rejected].map((s) => s.id));
+                save([...plan.shorts, { id, title: 'New Short', start, end: start + 45, proposed: null }], plan.rejected);
+              }}
+            >
+              Add a Short
+            </button>
+          </details>
 
-          {groups.made.length > 0 && <details className="made-shorts"><summary>Made Shorts ({groups.made.length})</summary>
-            <p className="muted small-text">These Shorts have already been created. Open a row to review its plan or conversation.</p>
-            {groups.made.map(s => card(s, false))}
-          </details>}
+          {groups.made.length > 0 && (
+            <details className="made-shorts">
+              <summary>Made Shorts ({groups.made.length})</summary>
+              <p className="muted small-text">These Shorts have already been created. Open a row to review its plan or conversation.</p>
+              {groups.made.map((s) => card(s, false))}
+            </details>
+          )}
 
           {plan.rejected.length > 0 && (
             <details className="near-misses" open>

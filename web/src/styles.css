@@ -113,8 +113,9 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .trim-handle:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .trim-scale { display: flex; justify-content: space-between; gap: 0.6rem; margin-top: 0.2rem; }
 .short-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
-.near-misses { margin-top: 0.8rem; }
-.near-misses > summary { cursor: pointer; font-weight: 600; margin-bottom: 0.3rem; }
+.unmade-shorts, .made-shorts, .near-misses { margin-top: 0.8rem; }
+.unmade-shorts > summary, .made-shorts > summary, .near-misses > summary { cursor: pointer; font-weight: 600; margin-bottom: 0.3rem; }
+.unmade-shorts > :not(summary), .made-shorts > :not(summary), .near-misses > :not(summary) { margin-left: 1.2rem; }
 @media (max-width: 800px) { .short-preview { grid-template-columns: minmax(0, 1fr); } }
 
 /* Skills page: one row per skill, one column per AI */
@@ -707,6 +708,3 @@ details[open]:not(.action-menu):not(.new-version):not(.playlist-select details) 
 details.page-section:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before { font-size: 1rem; }
 .compare-field > summary { grid-template-columns: 1rem minmax(8rem, 10rem) 1fr; }
 .tree-leaf { padding-left: 1.2rem; }
-
-.made-shorts { margin-top: 0.8rem; padding: 0.5rem 0.7rem; background: #f2f5f8; border: 1px solid #d4dce7; border-radius: 8px; }
-.made-shorts > summary { cursor: pointer; font-weight: 600; color: #344d6e; }
