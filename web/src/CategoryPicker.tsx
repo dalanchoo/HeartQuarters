@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { filterCategoryOptions, nextCategoryIndex, type CategoryOption } from './expressionPlanning';
 
 /** A single category control with its search at the top of the open menu. */
-export function CategoryPicker({ label, value, options, onChange, disabled = false }: {
-  label: string; value: string; options: CategoryOption[]; onChange: (value: string) => void; disabled?: boolean;
+export function CategoryPicker({ label, value, options, onChange, disabled = false, placeholder = 'Choose a category…', searchPlaceholder = 'Search categories…', emptyMessage = 'No matching categories.' }: {
+  label: string; value: string; options: CategoryOption[]; onChange: (value: string) => void; disabled?: boolean; placeholder?: string; searchPlaceholder?: string; emptyMessage?: string;
 }) {
   const [open, setOpen] = useState(false); const [query, setQuery] = useState(''); const [active, setActive] = useState(-1);
   const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number }>({ left: 0, width: 250, maxHeight: 320 });
@@ -37,16 +37,16 @@ export function CategoryPicker({ label, value, options, onChange, disabled = fal
   useEffect(() => { if (open) document.getElementById(`${id}-option-${active}`)?.scrollIntoView({ block: 'nearest' }); }, [active, id, open]);
   return <div className="category-picker"><span className="category-picker-label" id={`${id}-label`}>{label}</span>
     <button ref={trigger} type="button" className="category-picker-trigger" disabled={disabled} aria-labelledby={`${id}-label ${id}-value`} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} onClick={() => { if (!open) { setQuery(''); setActive(nextCategoryIndex(options, -1, 1)); } setOpen(!open); }}>
-      <span id={`${id}-value`}>{selected?.label ?? 'Choose a category…'}</span><span aria-hidden="true">▾</span>
+      <span id={`${id}-value`}>{selected?.label ?? placeholder}</span><span aria-hidden="true">▾</span>
     </button>
-    {open && createPortal(<div ref={popup} className="category-picker-popup" style={position}>
-      <input ref={search} type="search" role="combobox" aria-label={`Search ${label}`} aria-autocomplete="list" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={filtered[active] ? `${id}-option-${active}` : undefined} placeholder="Search categories…" value={query} onChange={e => { setQuery(e.target.value); setActive(nextCategoryIndex(filterCategoryOptions(options, e.target.value), -1, 1)); }} onKeyDown={e => {
+    {open && createPortal(<div ref={popup} className="category-picker-popup" style={position} onClick={e => e.stopPropagation()}>
+      <input ref={search} type="search" role="combobox" aria-label={`Search ${label}`} aria-autocomplete="list" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={filtered[active] ? `${id}-option-${active}` : undefined} placeholder={searchPlaceholder} value={query} onChange={e => { setQuery(e.target.value); setActive(nextCategoryIndex(filterCategoryOptions(options, e.target.value), -1, 1)); }} onKeyDown={e => {
         if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => nextCategoryIndex(filtered, i, 1)); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(i => nextCategoryIndex(filtered, i, -1)); }
         else if (e.key === 'Enter' && filtered[active]) { e.preventDefault(); choose(filtered[active]); }
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); trigger.current?.focus(); }
       }} />
-      <div id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="category-picker-options">{filtered.length ? filtered.map((option, i) => <div id={`${id}-option-${i}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} className={i === active ? 'active' : ''} key={option.value} onMouseEnter={() => { if (!option.disabled) setActive(i); }} onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>{option.label}</div>) : <p className="muted">No matching categories.</p>}</div>
+      <div id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="category-picker-options">{filtered.length ? filtered.map((option, i) => <div id={`${id}-option-${i}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} className={i === active ? 'active' : ''} key={option.value} onMouseEnter={() => { if (!option.disabled) setActive(i); }} onMouseDown={e => e.preventDefault()} onClick={() => choose(option)}>{option.label}</div>) : <p className="muted">{emptyMessage}</p>}</div>
     </div>, document.body)}
   </div>;
 }

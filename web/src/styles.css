@@ -658,3 +658,5 @@ textarea[readonly]:focus { outline: none; }
 .generation-photo-actions { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
 .generation-prompt { display: flex; flex-direction: column; gap: .3rem; margin: .7rem 0; }
 .generation-prompt textarea { width: 100%; font: inherit; }
+
+.lb-attribute-control .category-picker { flex: 1; min-width: 0; }

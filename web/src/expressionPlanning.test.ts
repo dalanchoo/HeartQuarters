@@ -21,7 +21,8 @@ describe('expression planning', () => {
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: 'eyes closed' }).map(p => p.path)).toEqual(['a']);
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: 'looking off camera' }).map(p => p.path)).toEqual(['b']);
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Pos', query: '' })).toEqual([]);
-    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', attribute: 'LookOffCamera' }).map(p => p.path)).toEqual(['b']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', attributes: ['lookoffcamera', ''] }).map(p => p.path)).toEqual(['b']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['LookOffCamera', 'EyesClosed'] })).toEqual([]);
   });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];
