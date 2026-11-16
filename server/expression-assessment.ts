@@ -22,12 +22,28 @@ export function assessmentVocabulary(categories: ExpressionCategory[]) {
   const expressions = categories.filter(c => c.path).map(c => ({ name: c.name, definition: c.definition ?? 'No definition provided.' }));
   return { framing: FRAMING_TAGS, pose: POSE_TAGS, morphology: MORPHOLOGY_TAGS, expressions };
 }
-export function assessmentPrompt(categories: ExpressionCategory[]): string {
+export type AssessmentReferences = { framing: string; pose: string; morphology: string; expressions: string };
+
+/** Read shared guidance once per job, without exposing the library path to an AI. */
+export function readAssessmentReferences(): AssessmentReferences {
+  const read = (name: string) => {
+    const file = safeResolve('expressions', name);
+    try {
+      if (!fs.lstatSync(file).isFile()) throw new Error('not a regular file');
+      const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').trim();
+      if (!text) throw new Error('empty');
+      return text;
+    } catch { throw new Error(`Cannot read ${name} in the Expressions folder. Assessment did not start.`); }
+  };
+  return { framing: read('Framing.txt'), pose: read('PoseGaze.txt'), morphology: read('Morphology.txt'), expressions: read('ExpressionCategories.txt') };
+}
+export function assessmentPrompt(categories: ExpressionCategory[], references: AssessmentReferences): string {
   const vocabulary = assessmentVocabulary(categories);
   return [
     'Assess only the visible photo in image.png in this temporary folder. Open that image. This is a blind assessment: do not seek or use the original filename, folder, sidecars, prior assessments, or any other files or context.',
     'Independently assess framing, pose and gaze, facial morphology, and expressions using only the choices below. Expressions may overlap. Do not infer the category from anything outside the image.',
-    `Framing: ${JSON.stringify(vocabulary.framing)}\nPose and gaze: ${JSON.stringify(vocabulary.pose)}\nMorphology: ${JSON.stringify(vocabulary.morphology)}\nExpressions with definitions: ${JSON.stringify(vocabulary.expressions)}`,
+    `Framing reference (Framing.txt):\n${references.framing}\n\nPose and gaze reference (PoseGaze.txt):\n${references.pose}\n\nMorphology reference (Morphology.txt):\n${references.morphology}\n\nExpression vocabulary reference (ExpressionCategories.txt):\n${references.expressions}`,
+    `Accepted framing names: ${JSON.stringify(vocabulary.framing)}\nAccepted pose and gaze names: ${JSON.stringify(vocabulary.pose)}\nAccepted morphology names: ${JSON.stringify(vocabulary.morphology)}\nExpression folder names and their individual definitions: ${JSON.stringify(vocabulary.expressions)}`,
     'Return ONLY a JSON array of objects, e.g. [{"tag":"CloseUp","confidence":80}]. Include each applicable option and an integer confidence from 1 to 100. Omit options you cannot support. Use exact option names, no duplicates or other labels. Do not create or modify files.'
   ].join('\n\n');
 }
@@ -80,6 +96,7 @@ export function startAssessment(photoPath: string, ask: AskAi = askBlind, prepar
   const source = safeResolve('expressions', photoPath); const original = fs.statSync(source); if (!original.isFile()) throw new Error('Photo not found.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   const readSidecar = () => { try { if (!fs.lstatSync(sidecar).isFile()) throw new Error('The sidecar must be a real file.'); return fs.readFileSync(sidecar, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; } };
+  const references = readAssessmentReferences(); const prompt = assessmentPrompt(index.categories, references);
   const before = readSidecar(); const job: Job = { id: randomUUID(), photo: photoPath, state: 'working', models: { claude: 'waiting', codex: 'waiting', gemini: 'waiting' } }; jobs.set(job.id, job); active.set(photoPath, job.id);
   void (async () => {
     const settled = await Promise.allSettled(MODELS.map(async ai => {
@@ -87,7 +104,7 @@ export function startAssessment(photoPath: string, ask: AskAi = askBlind, prepar
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-blind-'));
       try {
         const image = path.join(dir, 'image.png'); await prepare(source, image);
-        const answer = await ask(ai, assessmentPrompt(index.categories), dir, [image]);
+        const answer = await ask(ai, prompt, dir, [image]);
         const values = parseAssessment(answer, index.categories); job.models[ai] = 'done'; return values;
       } catch (error) { job.models[ai] = 'failed'; throw error; }
       finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Don't misreport a saved assessment. */ } }
