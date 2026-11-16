@@ -687,3 +687,5 @@ textarea[readonly]:focus { outline: none; }
 .expression-review-reason { margin: .3rem 0; font-size: .85rem; overflow-wrap: anywhere; }
 
 .attribute-assessments { color: var(--muted); font-size: 0.78rem; }
+
+.attribute-chip.disconfirmed { border: 1px solid #ce8580; background: #fff0ef; color: #952b26; }

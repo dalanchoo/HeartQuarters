@@ -21,6 +21,7 @@ export interface Tag {
   /** Confidence 0-100, or null for "N/A". */
   confidence: number | null;
   confirmed: boolean;
+  disconfirmed?: boolean;
   assessments?: Partial<Record<'claude' | 'codex' | 'gemini', number>>;
 }
 
@@ -74,7 +75,7 @@ export function parseTags(text: string): Tag[] {
         const match = /^(claude|codex|gemini)=(\d{1,3})%$/i.exec(source);
         if (match && Number(match[2]) <= 100) assessments[match[1].toLowerCase() as keyof typeof assessments] = Number(match[2]);
       }
-      return { tag, confidence: Number.isNaN(n) ? null : n, confirmed: (status ?? '').toUpperCase() === 'CONFIRMED', ...(Object.keys(assessments).length ? { assessments } : {}) };
+      return { tag, confidence: Number.isNaN(n) ? null : n, confirmed: (status ?? '').toUpperCase() === 'CONFIRMED', ...((status ?? '').toUpperCase() === 'DISCONFIRMED' ? { disconfirmed: true } : {}), ...(Object.keys(assessments).length ? { assessments } : {}) };
     });
 }
 

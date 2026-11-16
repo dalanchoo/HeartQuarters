@@ -31,6 +31,11 @@ describe('blind expression assessment', () => {
     expect(merged).toContain('CloseUp, 75%, UNCONFIRMED');
     expect(merged).not.toContain('Smile'); expect(merged).not.toContain('OldGuess');
   });
+  it('keeps disconfirmed attributes even if the AI suggests them again', () => {
+    const cats = buildExpressionIndex().categories;
+    const result = mergeModelAssessments('Smile, 60%, DISCONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 95 }], codex: [], gemini: [] }, cats);
+    expect(result).toBe('Smile, 60%, DISCONFIRMED, claude=95%\n');
+  });
   it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
     const cats = buildExpressionIndex().categories;
     const merged = mergeModelAssessments('Warmth, 42%, CONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 90 }, { tag: 'Warmth', confidence: 50 }], codex: [{ tag: 'Smile', confidence: 80 }], gemini: [{ tag: 'Smile', confidence: 74 }, { tag: 'Warmth', confidence: 80 }] }, cats);

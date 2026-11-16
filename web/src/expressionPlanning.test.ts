@@ -43,6 +43,11 @@ describe('expression planning', () => {
     expect(openPhotoSelection([first, second], [second], 'a')).toEqual({ photo: first, index: -1 });
     expect(openPhotoSelection([second], [second], 'a')).toEqual({ photo: undefined, index: -1 });
   });
+  it('does not match disconfirmed tags in attribute filters', () => {
+    const photos = [{ path: 'a', name: 'Photo', category: 'C', tags: [{ tag: 'EyesClosed', confidence: 90, confirmed: false, disconfirmed: true }] }];
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['EyesClosed'] })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', textFilters: { categoryText: '', framingText: '', poseText: '', morphologyText: 'eyes closed' } })).toEqual([]);
+  });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];
     expect(filterCategoryOptions(options, 'DeT').map(o => o.value)).toEqual(['a', 'c']);

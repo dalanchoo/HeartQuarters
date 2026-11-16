@@ -16,7 +16,7 @@ import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex } from './expressions.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
-import { addExpressionTag, confirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
+import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
 import { markExpressionAi } from './mark-expression-ai.js';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
@@ -242,6 +242,7 @@ app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmen
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));
 app.post('/api/expressions/confirm-expression', handle((req, res) => { res.json(confirmExpressionFolder(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence)); }));
 app.post('/api/expressions/confirm-tag', handle((req, res) => { confirmExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence); res.json({ ok: true }); }));
+app.post('/api/expressions/disconfirm-tag', handle((req, res) => { disconfirmExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence, req.body?.confirmed, req.body?.disconfirmed); res.json({ ok: true }); }));
 app.post('/api/expressions/remove-tag', handle((req, res) => { removeExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence, req.body?.confirmed); res.json({ ok: true }); }));
 app.post('/api/expressions/add-tag', handle((req, res) => { addExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.group); res.json({ ok: true }); }));
 app.post('/api/expressions/preview-change', handle((req, res) => { res.json(previewExpressionChange(String(req.body?.photo ?? ''), req.body?.destination === null ? null : String(req.body?.destination ?? ''))); }));

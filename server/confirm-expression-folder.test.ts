@@ -40,6 +40,13 @@ describe('confirming an expression folder', () => {
     expect(confirmExpressionFolder(photo, 'Disapproval', 80).path).toBe(photo);
     expect(fs.readFileSync(file, 'utf8')).toBe('Disapproval, 80%, CONFIRMED\nSkepticism, 90%, UNCONFIRMED\n');
   });
+  it('can confirm a previously disconfirmed expression and move the photo', () => {
+    const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt');
+    fs.writeFileSync(file, 'Skepticism, 90%, DISCONFIRMED\n');
+    const result = confirmExpressionFolder(photo, 'Skepticism', 90);
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Attitude/Skepticism/Skepticism_002.txt'), 'utf8')).toBe('Skepticism, 90%, CONFIRMED\n');
+    expect(result.path).toBe('Attitude/Skepticism/Skepticism_002.jpg');
+  });
   it('does not change files when the suggestion is stale or the folder name is ambiguous', () => {
     const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt'); const before = fs.readFileSync(file, 'utf8');
     expect(() => confirmExpressionFolder(photo, 'Skepticism', 88)).toThrow(/changed/);

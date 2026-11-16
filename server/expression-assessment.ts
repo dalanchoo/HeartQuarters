@@ -48,9 +48,9 @@ export function parseAssessment(answer: string, categories: ExpressionCategory[]
 export function mergeAssessment(text: string, values: Assessment[], categories: ExpressionCategory[]): string {
   const v = assessmentVocabulary(categories);
   const known = new Set([...v.framing, ...v.pose, ...v.morphology, ...v.expressions.map(e => e.name)].map(s => s.toLowerCase()));
-  const lines = text.split(/\r?\n/); const retained = lines.filter(line => { const tag = parseTags(line)[0]; return !tag || tag.confirmed || (!known.has(tag.tag.toLowerCase()) && (tag.confidence === null || tag.confidence >= 75)); });
+  const lines = text.split(/\r?\n/); const retained = lines.filter(line => { const tag = parseTags(line)[0]; return !tag || tag.confirmed || tag.disconfirmed || (!known.has(tag.tag.toLowerCase()) && (tag.confidence === null || tag.confidence >= 75)); });
   while (retained.at(-1) === '') retained.pop();
-  const confirmed = new Set(parseTags(retained.join('\n')).filter(t => t.confirmed).map(t => t.tag.toLowerCase()));
+  const confirmed = new Set(parseTags(retained.join('\n')).filter(t => t.confirmed || t.disconfirmed).map(t => t.tag.toLowerCase()));
   for (const value of values) if (value.confidence >= 75 && !confirmed.has(value.tag.toLowerCase())) retained.push(`${value.tag}, ${value.confidence}%, UNCONFIRMED`);
   return retained.join(text.includes('\r\n') ? '\r\n' : '\n') + (text.includes('\r\n') ? '\r\n' : '\n');
 }
@@ -68,7 +68,7 @@ export function mergeModelAssessments(text: string, results: Record<AiId, Assess
     const parsed = parseTags(line)[0]; if (!parsed) return line;
     const clean = line.replace(/,\s*(?:claude|codex|gemini)=\d{1,3}%/gi, '');
     const entry = scores.get(parsed.tag.toLowerCase()); if (!entry) return clean;
-    const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed) ? [`${ai}=${score}%`] : []; });
+    const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed || parsed.disconfirmed) ? [`${ai}=${score}%`] : []; });
     return clean + (details.length ? `, ${details.join(', ')}` : '');
   }).join(newline);
 }

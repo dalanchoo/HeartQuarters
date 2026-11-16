@@ -9,7 +9,7 @@ export type FolderReviewMode = 'missing' | 'higher';
 export function reviewExpressionFolder(photo: ExpressionPhoto, categoryNames: Set<string>, mode: FolderReviewMode): { folder: string; alternatives: Tag[]; folderTag?: Tag } | null {
   const folder = photo.category.split('/').filter(Boolean).at(-1);
   if (!folder || !categoryNames.has(key(folder))) return null;
-  const expressions = groupExpressionAttributes(photo.tags).expressions.filter(tag => categoryNames.has(key(tag.tag)));
+  const expressions = groupExpressionAttributes(photo.tags.filter(t => !t.disconfirmed)).expressions.filter(tag => categoryNames.has(key(tag.tag)));
   const folderTag = expressions.find(tag => key(tag.tag) === key(folder));
   if ((mode === 'missing' && folderTag) || (mode === 'higher' && (!folderTag || folderTag.confidence === null))) return null;
   const alternatives = expressions.filter(tag => key(tag.tag) !== key(folder) && (mode === 'missing' || (tag.confidence !== null && folderTag?.confidence !== null && folderTag !== undefined && tag.confidence > folderTag.confidence)))

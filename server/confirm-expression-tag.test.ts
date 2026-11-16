@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { addExpressionTag, confirmExpressionTag, removeExpressionTag } from './confirm-expression-tag';
+import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string; let original: string;
@@ -18,6 +18,14 @@ describe('confirming expression tags', () => {
     const file = path.join(tmp, 'Joy/Joy_001.txt'); fs.writeFileSync(file, 'Smile, 90%, UNCONFIRMED, claude=90%, codex=80%\n');
     confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90);
     expect(fs.readFileSync(file, 'utf8')).toBe('Smile, 90%, CONFIRMED, claude=90%, codex=80%\n');
+  });
+  it('records disconfirmation, preserves AI scores and can confirm again', () => {
+    const file = path.join(tmp, 'Joy/Joy_001.txt'); fs.writeFileSync(file, 'Smile, 90%, UNCONFIRMED, claude=90%\n');
+    disconfirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90, false, false);
+    expect(fs.readFileSync(file, 'utf8')).toBe('Smile, 90%, DISCONFIRMED, claude=90%\n');
+    expect(() => disconfirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90, false, false)).toThrow(/changed/);
+    confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90);
+    expect(fs.readFileSync(file, 'utf8')).toBe('Smile, 90%, CONFIRMED, claude=90%\n');
   });
   it('refuses stale confidence, ambiguous tags and paths outside the library', () => {
     expect(() => confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 85)).toThrow(/changed/);

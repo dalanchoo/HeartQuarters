@@ -22,8 +22,8 @@ export function confirmExpressionFolder(photoPath: string, name: string, confide
   for (let i = 0; i < lines.length; i++) {
     const tag = parseTags(lines[i])[0]; if (!tag) continue;
     if (i === matches[0].i) {
-      if (!tag.confirmed && !/UNCONFIRMED(?=\s*(?:,|$))/i.test(lines[i])) throw new Error('This expression cannot be confirmed automatically.');
-      lines[i] = lines[i].replace(/UNCONFIRMED(?=\s*(?:,|$))/i, 'CONFIRMED');
+      if (!tag.confirmed && !/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i.test(lines[i])) throw new Error('This expression cannot be confirmed automatically.');
+      lines[i] = lines[i].replace(/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i, 'CONFIRMED');
     } else if (tag.confirmed && !attributeNames.has(tag.tag.toLowerCase())) {
       if (!/CONFIRMED(?=\s*(?:,|$))/i.test(lines[i])) throw new Error('An existing confirmation cannot be updated safely.');
       lines[i] = lines[i].replace(/CONFIRMED(?=\s*(?:,|$))/i, 'UNCONFIRMED');

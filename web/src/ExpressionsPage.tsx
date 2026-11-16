@@ -20,7 +20,7 @@ import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 
-type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
+type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -33,7 +33,7 @@ function goTo(category: string) {
 
 /** A photo matches when every search word appears in its name, category or tags. */
 function matches(photo: ExpressionPhoto, words: string[]): boolean {
-  const haystack = [photo.name, photo.category, ...photo.tags.map((t) => t.tag)].join(' ').toLowerCase();
+  const haystack = [photo.name, photo.category, ...photo.tags.filter(t => !t.disconfirmed).map((t) => t.tag)].join(' ').toLowerCase();
   return words.every((w) => haystack.includes(w));
 }
 
@@ -77,7 +77,7 @@ export function ExpressionsPage() {
     else if (action.kind === 'confirm' && action.expression) {
       const result = await postJson<{ path: string }>('/api/expressions/confirm-expression', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence });
       newPath = result.path;
-    } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
+    } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : action.kind === 'disconfirm' ? '/api/expressions/disconfirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed, disconfirmed: !!action.tag.disconfirmed });
     const [updated, refs] = await Promise.all([getJson<ExpressionIndex>('/api/expressions'), newPath !== photo.path ? getJson<{ paths: string[] }>('/api/expression-references').catch(() => null) : Promise.resolve(null)]);
     setIndex(updated);
     if (newPath !== photo.path) {
@@ -361,14 +361,14 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
 function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone }: {
   photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
-  const [pendingTag, setPendingTag] = useState<Extract<TagAction, { kind: 'confirm' | 'remove' }> | null>(null);
+  const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
   const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
   useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
   useEffect(() => {
     if (!assessmentId) return;
     let alive = true;
-    const check = async () => { try { const job = await getJson<{ state: 'working' | 'done' | 'failed'; error?: string; models: Record<'claude' | 'codex' | 'gemini', string> }>(`/api/expressions/assessment?id=${encodeURIComponent(assessmentId)}`); if (!alive) return; if (job.state === 'working') { setAssessmentMessage(`Assessing: Claude ${job.models.claude}, ChatGPT ${job.models.codex}, Gemini ${job.models.gemini}.`); return; } setAssessmentId(''); setAssessmentBusy(false); if (job.state === 'done') { setAssessmentMessage('All three assessments are complete. Unconfirmed guesses below 75% were omitted; confirmed attributes were kept.'); onAssessmentDone?.(); } else setAssessmentMessage(job.error ?? 'Assessment failed.'); } catch (e) { if (alive) { setAssessmentId(''); setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } } };
+    const check = async () => { try { const job = await getJson<{ state: 'working' | 'done' | 'failed'; error?: string; models: Record<'claude' | 'codex' | 'gemini', string> }>(`/api/expressions/assessment?id=${encodeURIComponent(assessmentId)}`); if (!alive) return; if (job.state === 'working') { setAssessmentMessage(`Assessing: Claude ${job.models.claude}, ChatGPT ${job.models.codex}, Gemini ${job.models.gemini}.`); return; } setAssessmentId(''); setAssessmentBusy(false); if (job.state === 'done') { setAssessmentMessage('All three assessments are complete. Unconfirmed guesses below 75% were omitted; confirmed and disconfirmed attributes were kept.'); onAssessmentDone?.(); } else setAssessmentMessage(job.error ?? 'Assessment failed.'); } catch (e) { if (alive) { setAssessmentId(''); setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } } };
     void check(); const timer = setInterval(() => void check(), 3000); return () => { alive = false; clearInterval(timer); };
   }, [assessmentId]);
   const assess = async () => { setAssessmentBusy(true); setAssessmentMessage('Preparing a blind assessment…'); try { const job = await postJson<{ id: string }>('/api/expressions/assess', { photo: photo.path }); setAssessmentId(job.id); onAssessmentStarted?.(job.id); setAssessmentMessage('Assessing photo… You can leave this view while it runs.'); } catch (e) { setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } };
@@ -434,9 +434,9 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
-  const showTags = (tags: ExpressionPhoto['tags'], expression = false) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : ''}`}>
-    <span title={t.confirmed ? 'Confirmed' : 'AI suggestion'}>{t.tag}{!t.confirmed && !t.assessments && t.confidence !== null && ` ${t.confidence}%`}</span>{t.assessments && <span className="attribute-assessments">{([['claude', 'Claude'], ['codex', 'ChatGPT'], ['gemini', 'Gemini']] as const).filter(([id]) => t.assessments?.[id] !== undefined).map(([id, name]) => `${name} ${t.assessments?.[id]}%`).join(' · ')}</span>}
-    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t, expression })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
+  const showTags = (tags: ExpressionPhoto['tags'], expression = false) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : t.disconfirmed ? ' disconfirmed' : ''}`}>
+    <span title={t.confirmed ? 'Confirmed' : t.disconfirmed ? 'Disconfirmed' : 'AI suggestion'}>{t.tag}{t.disconfirmed && ' · Disconfirmed'}{!t.confirmed && !t.disconfirmed && !t.assessments && t.confidence !== null && ` ${t.confidence}%`}</span>{t.assessments && <span className="attribute-assessments">{([['claude', 'Claude'], ['codex', 'ChatGPT'], ['gemini', 'Gemini']] as const).filter(([id]) => t.assessments?.[id] !== undefined).map(([id, name]) => `${name} ${t.assessments?.[id]}%`).join(' · ')}</span>}
+    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t, expression })}>Confirm</button>}{!t.disconfirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'disconfirm', tag: t })}>Disconfirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
   </span>)}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
 
   return (
