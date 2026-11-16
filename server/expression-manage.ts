@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
+import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
 import { writeFileSafely } from './files.js';
 
@@ -70,9 +71,10 @@ function makePlan(photo: string, destination: string | null) {
   if (destination !== null) {
     const category = index.categories.find(c => c.path === destination)!;
     const occupied = fs.readdirSync(safeResolve('expressions', destination)).map(s => s.toLowerCase());
+    const prefix = `${category.name}${isAiExpression(selected) ? '_AI' : ''}_`;
     let n = 1;
-    while (occupied.some(s => s.startsWith(`${category.name}_${String(n).padStart(3, '0')}`.toLowerCase() + '.') || s.startsWith(`${category.name}_${String(n).padStart(3, '0')}`.toLowerCase() + '_'))) n++;
-    changes.push({ from: photo, to: `${destination}/${category.name}_${String(n).padStart(3, '0')}${path.extname(photo)}` });
+    while (occupied.some(s => s.startsWith(`${prefix}${String(n).padStart(3, '0')}`.toLowerCase() + '.') || s.startsWith(`${prefix}${String(n).padStart(3, '0')}`.toLowerCase() + '_'))) n++;
+    changes.push({ from: photo, to: `${destination}/${prefix}${String(n).padStart(3, '0')}${path.extname(photo)}` });
   } else changes.push({ from: photo, to: null });
   const match = /^(.*)_(\d+)$/.exec(selected.name);
   if (match) {

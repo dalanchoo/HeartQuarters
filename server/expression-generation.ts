@@ -96,11 +96,11 @@ export function approveExpression(id: string): { path: string } {
   const existing = fs.readdirSync(folder).map(file => file.toLowerCase());
   let number = 1;
   while (number <= 999 && existing.some(file => {
-    const prefix = `${category.name}_${String(number).padStart(3, '0')}`.toLowerCase();
+    const prefix = `${category.name}_AI_${String(number).padStart(3, '0')}`.toLowerCase();
     return file === prefix || file.startsWith(`${prefix}.`) || file.startsWith(`${prefix}_`);
   })) number++;
   if (number > 999) throw new Error('There are no free three-digit numbers in this category. The candidate has been kept.');
-  const name = `${category.name}_${String(number).padStart(3, '0')}`;
+  const name = `${category.name}_AI_${String(number).padStart(3, '0')}`;
   const dest = safeResolve('expressions', `${category.path}/${name}.${job.format}`); const sidecar = safeResolve('expressions', `${category.path}/${name}.txt`);
   const data = fs.readFileSync(image); const groups = [[job.options.gaze], [job.options.framing, job.options.angle], [category.name]].map((group) => group.filter(Boolean)).filter((group) => group.length);
   fs.writeFileSync(sidecar, groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')).join('\n==========\n') + '\n==========\nAIGenerated, N/A, CONFIRMED\n', { flag: 'wx' });

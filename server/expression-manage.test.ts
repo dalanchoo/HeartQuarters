@@ -57,6 +57,13 @@ describe('managing expression photos', () => {
     expect(JSON.parse(fs.readFileSync(path.join(tmp, 'Projects', choice), 'utf8')).photo).toBe('Positive/Joy/Joy_002.jpg');
     expect(readExpressionReferences().paths).toEqual(['Positive/Joy/Joy_002.jpg', 'Communication/Listening/Listening_002.webp']);
   });
+  it('uses the AI naming sequence when moving a photo marked as generated', () => {
+    fs.writeFileSync(path.join(tmp, 'Expressions/Communication/Listening/Listening_002.txt'), 'AIGenerated, N/A, CONFIRMED\n');
+    const plan = previewExpressionChange(a, 'Positive/Joy');
+    expect(plan.changes[0].to).toBe('Positive/Joy/Joy_AI_001.jpg');
+    applyExpressionChange(a, 'Positive/Joy', plan.token);
+    expect(fs.existsSync(path.join(tmp, 'Expressions/Positive/Joy/Joy_AI_001_GPT.txt'))).toBe(true);
+  });
   it('refuses stale previews and unsafe paths without changes', () => {
     const plan = previewExpressionChange(a, null);
     fs.writeFileSync(path.join(tmp, 'Expressions', a), 'changed photo');
