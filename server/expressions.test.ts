@@ -15,6 +15,12 @@ describe('parseTags', () => {
   it('ignores blank or malformed lines', () => {
     expect(parseTags('\n  \nJustAWord\n, 50%, CONFIRMED')).toEqual([]);
   });
+  it('reads older colon-separated tags and confirmations', () => {
+    expect(parseTags('EyesClosed: N/A, CONFIRMED\nFrontal: 92, UNCONFIRMED')).toEqual([
+      { tag: 'EyesClosed', confidence: null, confirmed: true },
+      { tag: 'Frontal', confidence: 92, confirmed: false },
+    ]);
+  });
 });
 
 describe('buildExpressionIndex', () => {

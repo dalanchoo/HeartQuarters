@@ -440,7 +440,9 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .lb-title { display: flex; gap: 0.75rem; align-items: baseline; }
 .tag { font-size: 0.8rem; padding: 0.15rem 0.55rem; border-radius: 99px; background: var(--bg);
        border: 1px dashed var(--line); }
-.tag.confirmed { border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.tag.confirmed { border: 1px solid #83ba92; background: #e3f4e8; color: #1d6834; }
+.tag-confirm { min-height: 0; box-shadow: none; cursor: pointer; }
+.tag-confirm:hover:not(:disabled) { border-color: #1d6834; background: #e3f4e8; }
 
 /* Guides */
 .markdown { max-width: 860px; line-height: 1.6; }

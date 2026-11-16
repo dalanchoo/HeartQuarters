@@ -64,7 +64,7 @@ function parseTagsFile(file: string): Tag[] {
 export function parseTags(text: string): Tag[] {
   return text
     .split(/\r?\n/)
-    .map((line) => line.split(',').map((s) => s.trim()))
+    .map((line) => line.replace(/^([^,:]+):\s*/, '$1, ').split(',').map((s) => s.trim()))
     .filter((parts) => parts.length >= 2 && parts[0])
     .map(([tag, conf, status]) => {
       const n = parseInt(conf, 10);

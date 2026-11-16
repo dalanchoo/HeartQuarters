@@ -45,6 +45,13 @@ export function ExpressionsPage() {
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
+  const confirmTag = async (photo: ExpressionPhoto, tag: ExpressionPhoto['tags'][number]) => {
+    await postJson('/api/expressions/confirm-tag', { photo: photo.path, tag: tag.tag, confidence: tag.confidence });
+    const updated = await getJson<ExpressionIndex>('/api/expressions');
+    setIndex(updated);
+    const refreshed = updated.photos.find(p => p.path === photo.path);
+    if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
+  };
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
     setReferenceBusy(true);
@@ -203,12 +210,13 @@ export function ExpressionsPage() {
       {open !== null && shown[open] && (
         <Lightbox
           photo={shown[open]}
+          onConfirm={confirmTag}
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onClose={() => setPreview(null)} />}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onConfirm={preview.imageUrl ? undefined : confirmTag} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -314,9 +322,11 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, onClose, onPrev, onNext }: {
-  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void;
+function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onConfirm }: {
+  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onConfirm?: (photo: ExpressionPhoto, tag: ExpressionPhoto['tags'][number]) => Promise<void>;
 }) {
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
@@ -332,7 +342,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext }: {
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
-  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); center.current = null; }, [photo.path]);
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -396,17 +406,20 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext }: {
           {tags.length > 0 && (
             <div className="chips">
               {tags.map((t) => (
-                <span
+                t.confirmed ? <span
                   key={t.tag}
-                  className={`tag ${t.confirmed ? 'confirmed' : ''}`}
-                  title={t.confirmed ? 'Confirmed' : 'AI guess, not confirmed'}
+                  className="tag confirmed"
+                  title="Confirmed"
                 >
                   {t.tag}
-                  {t.confidence !== null && <span className="muted"> {t.confidence}%</span>}
-                </span>
+                </span> : <button key={t.tag} type="button" className="tag tag-confirm" disabled={!onConfirm || confirming !== null} title={`Confirm ${t.tag}`} onClick={() => { if (!onConfirm) return; setConfirming(t.tag); setConfirmError(''); void onConfirm(photo, t).catch(e => setConfirmError(e instanceof Error ? e.message : String(e))).finally(() => setConfirming(null)); }}>
+                  {t.tag}{t.confidence !== null && ` ${t.confidence}%`} <span aria-hidden="true">✓</span>
+                </button>
               ))}
             </div>
           )}
+          {confirmError && <p className="error">{confirmError}</p>}
+          {tags.some(t => !t.confirmed) && onConfirm && <p className="muted small-text">Click a suggested attribute to confirm it.</p>}
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
           <button className="small" onClick={onClose}>Close (Esc)</button>
           </div>
