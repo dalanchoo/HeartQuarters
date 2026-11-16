@@ -242,13 +242,12 @@ export function ExpressionsPage() {
           onTagAction={changeTag}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }}
-          categories={index.categories}
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} categories={index.categories} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -348,8 +347,8 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone, categories }: {
-  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void; categories: ExpressionCategory[];
+function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone }: {
+  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { kind: 'confirm' | 'remove' }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
@@ -364,7 +363,6 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
   }, [assessmentId]);
   const assess = async () => { setAssessmentBusy(true); setAssessmentMessage('Preparing a blind assessment…'); try { const job = await postJson<{ id: string }>('/api/expressions/assess', { photo: photo.path }); setAssessmentId(job.id); onAssessmentStarted?.(job.id); setAssessmentMessage('Assessing photo… You can leave this view while it runs.'); } catch (e) { setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } };
 
-  const [newExpression, setNewExpression] = useState('');
   const [newFraming, setNewFraming] = useState('');
   const [newPose, setNewPose] = useState('');
   const [newMorphology, setNewMorphology] = useState('');
@@ -384,7 +382,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
-  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewPose(''); setNewMorphology(''); center.current = null; }, [photo.path]);
+  useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewFraming(''); setNewPose(''); setNewMorphology(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -419,12 +417,10 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
   }, [onClose, onPrev, onNext, pendingTag]);
 
   const groups = groupExpressionAttributes(photo.tags);
-  const parents = new Set(categories.map(c => c.parent));
-  const options = categories.filter(c => c.path && !parents.has(c.path) && !photo.tags.some(t => t.tag.toLowerCase() === c.name.toLowerCase()));
   const saveTag = async (action: TagAction) => {
     if (!onTagAction) return;
     setSavingTag(true); setConfirmError('');
-    try { await onTagAction(photo, action); setPendingTag(null); setNewExpression(''); setNewFraming(''); setNewPose(''); setNewMorphology(''); }
+    try { await onTagAction(photo, action); setPendingTag(null); setNewFraming(''); setNewPose(''); setNewMorphology(''); }
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
@@ -469,7 +465,6 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
             <div className="attribute-row"><section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Morphology" value={newMorphology} disabled={savingTag} onChange={setNewMorphology} placeholder="Choose…" searchPlaceholder="Search morphology…" emptyMessage="No matching attributes." options={MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add morphology" disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add</button></div>}</div>
             <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
-              {onTagAction && <div className="attribute-add"><CategoryPicker label="Add Expression" value={newExpression} disabled={savingTag} options={options.map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={setNewExpression} /><button disabled={savingTag || !newExpression} onClick={() => { const category = options.find(c => c.path === newExpression); if (category) void saveTag({ kind: 'add', name: category.name, group: 'expression' }); }}>Add Expression</button></div>}
             </section>
           </div>
           {confirmError && <p className="error">{confirmError}</p>}
