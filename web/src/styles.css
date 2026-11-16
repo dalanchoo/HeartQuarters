@@ -689,3 +689,16 @@ textarea[readonly]:focus { outline: none; }
 .attribute-assessments { color: var(--muted); font-size: 0.78rem; }
 
 .attribute-chip.disconfirmed { border: 1px solid #ce8580; background: #fff0ef; color: #952b26; }
+
+/* Consistent, visible disclosure indicators for expandable sections and trees. */
+details:not(.action-menu):not(.new-version):not(.playlist-select details) > summary { list-style: none; }
+details:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::-webkit-details-marker { display: none; }
+details:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before {
+  content: '▶'; display: inline-block; flex: 0 0 1em; width: 1em; margin-right: 0.35rem;
+  color: #626971; font-size: 0.85rem; line-height: 1; text-align: center; vertical-align: middle;
+  transition: transform 0.15s;
+}
+details[open]:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before { transform: rotate(90deg); }
+details.page-section:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before { font-size: 1rem; }
+.compare-field > summary { grid-template-columns: 1rem minmax(8rem, 10rem) 1fr; }
+.tree-leaf { padding-left: 1.2rem; }
