@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
-import { assessmentJob, assessmentPrompt, mergeAssessment, parseAssessment, startAssessment } from './expression-assessment';
+import { assessmentJob, assessmentPrompt, mergeAssessment, mergeModelAssessments, parseAssessment, startAssessment } from './expression-assessment';
 import { buildExpressionIndex } from './expressions';
 import { makeTree, removeTree } from './testing';
 
@@ -30,6 +30,20 @@ describe('blind expression assessment', () => {
     expect(merged).toContain('Warmth, 42%, CONFIRMED');
     expect(merged).toContain('CloseUp, 75%, UNCONFIRMED');
     expect(merged).not.toContain('Smile'); expect(merged).not.toContain('OldGuess');
+  });
+  it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
+    const cats = buildExpressionIndex().categories;
+    const merged = mergeModelAssessments('Warmth, 42%, CONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 90 }, { tag: 'Warmth', confidence: 50 }], codex: [{ tag: 'Smile', confidence: 80 }], gemini: [{ tag: 'Smile', confidence: 74 }, { tag: 'Warmth', confidence: 80 }] }, cats);
+    expect(merged).toContain('Warmth, 42%, CONFIRMED, claude=50%, gemini=80%');
+    expect(merged).toContain('Smile, 90%, UNCONFIRMED, claude=90%, codex=80%');
+    expect(merged).not.toContain('gemini=74%');
+  });
+  it('leaves the sidecar unchanged if any AI fails', async () => {
+    const file = path.join(root, 'Positive/Warmth/Warmth_001.txt'); const before = fs.readFileSync(file, 'utf8');
+    const directories = new Set<string>();
+    const job = startAssessment('Positive/Warmth/Warmth_001.jpg', async (ai, _prompt, cwd) => { directories.add(cwd); if (ai === 'gemini') throw new Error('not signed in'); return '[{"tag":"Smile","confidence":91}]'; }, async (_source, dest) => { fs.writeFileSync(dest, 'image'); });
+    await vi.waitFor(() => expect(assessmentJob(job.id).state).not.toBe('working'));
+    expect(directories.size).toBe(3); expect(job.error).toContain('Gemini'); expect(fs.readFileSync(file, 'utf8')).toBe(before);
   });
   it('uses a neutral temporary image and updates only after a valid answer', async () => {
     const job = startAssessment('Positive/Warmth/Warmth_001.jpg', async (_ai, prompt, cwd, images) => {

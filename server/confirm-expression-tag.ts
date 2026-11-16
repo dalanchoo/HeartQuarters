@@ -18,8 +18,8 @@ export function confirmExpressionTag(photoPath: string, name: string, confidence
   if (matching.length !== 1 || matching[0].tag.confidence !== confidence) throw new Error('The tag changed since it was shown. Refresh and try again.');
   if (matching[0].tag.confirmed) return;
   const index = matching[0].i;
-  if (!/UNCONFIRMED(?=\s*$)/i.test(lines[index])) throw new Error('This tag cannot be confirmed automatically.');
-  lines[index] = lines[index].replace(/UNCONFIRMED(?=\s*$)/i, 'CONFIRMED');
+  if (!/UNCONFIRMED(?=\s*(?:,|$))/i.test(lines[index])) throw new Error('This tag cannot be confirmed automatically.');
+  lines[index] = lines[index].replace(/UNCONFIRMED(?=\s*(?:,|$))/i, 'CONFIRMED');
   writeFileSafely(sidecar, lines.join(''));
   clearExpressionIndex();
 }

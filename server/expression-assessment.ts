@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { aiCommand, chosenAi, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, parseTags, type ExpressionCategory } from './expressions.js';
@@ -13,7 +13,8 @@ import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute
 
 const exec = promisify(execFile);
 type Assessment = { tag: string; confidence: number };
-type Job = { id: string; photo: string; ai: AiId; state: 'working' | 'done' | 'failed'; error?: string };
+type Job = { id: string; photo: string; state: 'working' | 'done' | 'failed'; models: Record<AiId, 'waiting' | 'working' | 'done' | 'failed'>; error?: string };
+const MODELS: AiId[] = ['claude', 'codex', 'gemini'];
 const jobs = new Map<string, Job>();
 const active = new Map<string, string>();
 
@@ -53,6 +54,24 @@ export function mergeAssessment(text: string, values: Assessment[], categories: 
   for (const value of values) if (value.confidence >= 75 && !confirmed.has(value.tag.toLowerCase())) retained.push(`${value.tag}, ${value.confidence}%, UNCONFIRMED`);
   return retained.join(text.includes('\r\n') ? '\r\n' : '\n') + (text.includes('\r\n') ? '\r\n' : '\n');
 }
+/** Combine the highest eligible score for filtering while recording every model's own score. */
+export function mergeModelAssessments(text: string, results: Record<AiId, Assessment[]>, categories: ExpressionCategory[]): string {
+  const scores = new Map<string, { tag: string; byAi: Partial<Record<AiId, number>> }>();
+  for (const ai of MODELS) for (const value of results[ai]) {
+    const key = value.tag.toLowerCase(); const entry = scores.get(key) ?? { tag: value.tag, byAi: {} };
+    entry.byAi[ai] = value.confidence; scores.set(key, entry);
+  }
+  const aggregated = [...scores.values()].map(entry => ({ tag: entry.tag, confidence: Math.max(...Object.values(entry.byAi)) }));
+  const base = mergeAssessment(text, aggregated, categories);
+  const newline = text.includes('\r\n') ? '\r\n' : '\n';
+  return base.split(/\r?\n/).map(line => {
+    const parsed = parseTags(line)[0]; if (!parsed) return line;
+    const clean = line.replace(/,\s*(?:claude|codex|gemini)=\d{1,3}%/gi, '');
+    const entry = scores.get(parsed.tag.toLowerCase()); if (!entry) return clean;
+    const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed) ? [`${ai}=${score}%`] : []; });
+    return clean + (details.length ? `, ${details.join(', ')}` : '');
+  }).join(newline);
+}
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
 export function startAssessment(photoPath: string, ask: AskAi = askBlind, prepare: (source: string, dest: string) => Promise<void> = prepareImage): Job {
   const index = buildExpressionIndex();
@@ -61,19 +80,26 @@ export function startAssessment(photoPath: string, ask: AskAi = askBlind, prepar
   const source = safeResolve('expressions', photoPath); const original = fs.statSync(source); if (!original.isFile()) throw new Error('Photo not found.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   const readSidecar = () => { try { if (!fs.lstatSync(sidecar).isFile()) throw new Error('The sidecar must be a real file.'); return fs.readFileSync(sidecar, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; } };
-  const before = readSidecar(); const job: Job = { id: randomUUID(), photo: photoPath, ai: chosenAi(), state: 'working' }; jobs.set(job.id, job); active.set(photoPath, job.id);
+  const before = readSidecar(); const job: Job = { id: randomUUID(), photo: photoPath, state: 'working', models: { claude: 'waiting', codex: 'waiting', gemini: 'waiting' } }; jobs.set(job.id, job); active.set(photoPath, job.id);
   void (async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-blind-'));
-    try {
-      const image = path.join(dir, 'image.png'); await prepare(source, image);
-      const answer = await ask(job.ai, assessmentPrompt(index.categories), dir, [image]);
-      const values = parseAssessment(answer, index.categories);
-      const currentPhoto = fs.statSync(safeResolve('expressions', photoPath));
-      if (currentPhoto.size !== original.size || currentPhoto.mtimeMs !== original.mtimeMs || readSidecar() !== before) throw new Error('The photo or sidecar changed during assessment. No tags were changed; try again.');
-      const updated = mergeAssessment(before ?? '', values, index.categories);
-      if (before === null) fs.writeFileSync(sidecar, updated, { flag: 'wx' }); else writeFileSafely(sidecar, updated);
-      clearExpressionIndex(); job.state = 'done';
-    } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* A cleanup failure must not misreport a saved assessment. */ } }
+    const settled = await Promise.allSettled(MODELS.map(async ai => {
+      job.models[ai] = 'working';
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-blind-'));
+      try {
+        const image = path.join(dir, 'image.png'); await prepare(source, image);
+        const answer = await ask(ai, assessmentPrompt(index.categories), dir, [image]);
+        const values = parseAssessment(answer, index.categories); job.models[ai] = 'done'; return values;
+      } catch (error) { job.models[ai] = 'failed'; throw error; }
+      finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Don't misreport a saved assessment. */ } }
+    }));
+    const errors = settled.flatMap((result, i) => result.status === 'rejected' ? [`${AI_NAMES[MODELS[i]]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`] : []);
+    if (errors.length) throw new Error(`Assessment failed; no tags were changed. ${errors.join(' ')}`);
+    const results = Object.fromEntries(settled.map((result, i) => [MODELS[i], result.status === 'fulfilled' ? result.value : []])) as Record<AiId, Assessment[]>;
+    const currentPhoto = fs.statSync(safeResolve('expressions', photoPath));
+    if (currentPhoto.size !== original.size || currentPhoto.mtimeMs !== original.mtimeMs || readSidecar() !== before) throw new Error('The photo or sidecar changed during assessment. No tags were changed; try again.');
+    const updated = mergeModelAssessments(before ?? '', results, index.categories);
+    if (before === null) fs.writeFileSync(sidecar, updated, { flag: 'wx' }); else writeFileSafely(sidecar, updated);
+    clearExpressionIndex(); job.state = 'done';
   })().catch((e: unknown) => { job.state = 'failed'; job.error = e instanceof Error ? e.message : String(e); }).finally(() => active.delete(photoPath));
   return job;
 }

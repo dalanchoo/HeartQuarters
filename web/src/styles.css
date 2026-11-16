@@ -685,3 +685,5 @@ textarea[readonly]:focus { outline: none; }
 
 .expression-review-filter { display: inline-flex; align-items: center; gap: .35rem; margin-top: .75rem; }
 .expression-review-reason { margin: .3rem 0; font-size: .85rem; overflow-wrap: anywhere; }
+
+.attribute-assessments { color: var(--muted); font-size: 0.78rem; }

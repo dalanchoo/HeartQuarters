@@ -14,6 +14,11 @@ describe('confirming expression tags', () => {
     confirmExpressionTag('Joy/Joy_001.jpg', 'EyesWide', 72);
     expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toBe('Smile, 88%, CONFIRMED\r\nEyesWide: 72, CONFIRMED\r\nJoy, N/A, CONFIRMED\r\n');
   });
+  it('confirms an attribute while keeping all model scores', () => {
+    const file = path.join(tmp, 'Joy/Joy_001.txt'); fs.writeFileSync(file, 'Smile, 90%, UNCONFIRMED, claude=90%, codex=80%\n');
+    confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90);
+    expect(fs.readFileSync(file, 'utf8')).toBe('Smile, 90%, CONFIRMED, claude=90%, codex=80%\n');
+  });
   it('refuses stale confidence, ambiguous tags and paths outside the library', () => {
     expect(() => confirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 85)).toThrow(/changed/);
     expect(() => confirmExpressionTag('../outside.jpg', 'Smile', 88)).toThrow();

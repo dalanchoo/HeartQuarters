@@ -12,6 +12,9 @@ describe('parseTags', () => {
     ]);
   });
 
+  it('reads model scores without changing legacy tags', () => {
+    expect(parseTags('Smile, 90%, UNCONFIRMED, claude=90%, codex=80%, gemini=76%')).toEqual([{ tag: 'Smile', confidence: 90, confirmed: false, assessments: { claude: 90, codex: 80, gemini: 76 } }]);
+  });
   it('ignores blank or malformed lines', () => {
     expect(parseTags('\n  \nJustAWord\n, 50%, CONFIRMED')).toEqual([]);
   });

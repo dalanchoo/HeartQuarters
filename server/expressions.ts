@@ -21,6 +21,7 @@ export interface Tag {
   /** Confidence 0-100, or null for "N/A". */
   confidence: number | null;
   confirmed: boolean;
+  assessments?: Partial<Record<'claude' | 'codex' | 'gemini', number>>;
 }
 
 export interface ExpressionCategory {
@@ -66,13 +67,14 @@ export function parseTags(text: string): Tag[] {
     .split(/\r?\n/)
     .map((line) => line.replace(/^([^,:]+):\s*/, '$1, ').split(',').map((s) => s.trim()))
     .filter((parts) => parts.length >= 2 && parts[0])
-    .map(([tag, conf, status]) => {
+    .map(([tag, conf, status, ...sources]) => {
       const n = parseInt(conf, 10);
-      return {
-        tag,
-        confidence: Number.isNaN(n) ? null : n,
-        confirmed: (status ?? '').toUpperCase() === 'CONFIRMED',
-      };
+      const assessments: NonNullable<Tag['assessments']> = {};
+      for (const source of sources) {
+        const match = /^(claude|codex|gemini)=(\d{1,3})%$/i.exec(source);
+        if (match && Number(match[2]) <= 100) assessments[match[1].toLowerCase() as keyof typeof assessments] = Number(match[2]);
+      }
+      return { tag, confidence: Number.isNaN(n) ? null : n, confirmed: (status ?? '').toUpperCase() === 'CONFIRMED', ...(Object.keys(assessments).length ? { assessments } : {}) };
     });
 }
 
