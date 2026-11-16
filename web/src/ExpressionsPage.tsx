@@ -457,8 +457,9 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
           <div className="lb-title">
             <strong>{photo.name}</strong>
             <span className="muted">{photo.category.split('/').join(' › ')}</span>
+            {onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag || !overview} onClick={() => void assess()}>Reassess With {chosenName(overview)}</button>}
           </div>
-          {onTagAction && <div className="expression-assess"><button type="button" disabled={assessmentBusy || savingTag || !overview} onClick={() => void assess()}>Reassess With {chosenName(overview)}</button>{assessmentMessage && <p role="status">{assessmentMessage}</p>}</div>}
+          {assessmentMessage && <p role="status">{assessmentMessage}</p>}
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
             <div className="attribute-row"><section><h4>Framing</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
