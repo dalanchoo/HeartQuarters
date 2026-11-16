@@ -10,6 +10,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
+import { chosenName, useAi } from './AiPicker';
 import { filterSelectablePhotos, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
@@ -58,6 +59,13 @@ export function ExpressionsPage() {
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
+  const [assessmentJobs, setAssessmentJobs] = useState<string[]>([]);
+  useEffect(() => {
+    if (!assessmentJobs.length) return;
+    let active = true;
+    const check = () => { void Promise.all(assessmentJobs.map(id => getJson<{ id: string; state: string }>(`/api/expressions/assessment?id=${encodeURIComponent(id)}`).catch(() => null))).then(jobs => { if (!active) return; const completed = jobs.filter(job => job && job.state !== 'working'); if (completed.length) { setAssessmentJobs(ids => ids.filter(id => !completed.some(job => job?.id === id))); if (completed.some(job => job?.state === 'done')) void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); } }); };
+    const timer = setInterval(check, 3000); return () => { active = false; clearInterval(timer); };
+  }, [assessmentJobs]);
   useEffect(() => {
     let active = true;
     const load = () => { void getJson<{ state: string }[]>('/api/expression-generation/jobs').then(jobs => { if (active) setReadyCount(readyCandidateCount(jobs)); }, () => { if (active) setReadyCount(null); }); };
@@ -232,13 +240,15 @@ export function ExpressionsPage() {
         <Lightbox
           photo={shown[open]}
           onTagAction={changeTag}
+          onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
+          onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }}
           categories={index.categories}
           onClose={() => setOpen(null)}
           onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
           onNext={() => setOpen((open + 1) % shown.length)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} categories={index.categories} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onClose={() => setPreview(null)} />}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} categories={index.categories} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -338,11 +348,22 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categories }: {
-  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; categories: ExpressionCategory[];
+function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone, categories }: {
+  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void; categories: ExpressionCategory[];
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { kind: 'confirm' | 'remove' }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
+  const { overview } = useAi();
+  const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
+  useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
+  useEffect(() => {
+    if (!assessmentId) return;
+    let alive = true;
+    const check = async () => { try { const job = await getJson<{ state: 'working' | 'done' | 'failed'; error?: string }>(`/api/expressions/assessment?id=${encodeURIComponent(assessmentId)}`); if (!alive || job.state === 'working') return; setAssessmentId(''); setAssessmentBusy(false); if (job.state === 'done') { setAssessmentMessage('Assessment complete. Confirmed attributes were kept.'); onAssessmentDone?.(); } else setAssessmentMessage(job.error ?? 'Assessment failed.'); } catch (e) { if (alive) { setAssessmentId(''); setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } } };
+    void check(); const timer = setInterval(() => void check(), 3000); return () => { alive = false; clearInterval(timer); };
+  }, [assessmentId]);
+  const assess = async () => { setAssessmentBusy(true); setAssessmentMessage('Preparing a blind assessment…'); try { const job = await postJson<{ id: string }>('/api/expressions/assess', { photo: photo.path }); setAssessmentId(job.id); onAssessmentStarted?.(job.id); setAssessmentMessage('Assessing photo… You can leave this view while it runs.'); } catch (e) { setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } };
+
   const [newExpression, setNewExpression] = useState('');
   const [newFraming, setNewFraming] = useState('');
   const [newPose, setNewPose] = useState('');
@@ -409,7 +430,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
   };
   const showTags = (tags: ExpressionPhoto['tags']) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : ''}`}>
     <span title={t.confirmed ? 'Confirmed' : 'AI suggestion'}>{t.tag}{!t.confirmed && t.confidence !== null && ` ${t.confidence}%`}</span>
-    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'confirm', tag: t })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
+    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
   </span>)}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
 
   return (
@@ -437,6 +458,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
             <strong>{photo.name}</strong>
             <span className="muted">{photo.category.split('/').join(' › ')}</span>
           </div>
+          {onTagAction && <div className="expression-assess"><button type="button" disabled={assessmentBusy || savingTag || !overview} onClick={() => void assess()}>Reassess With {chosenName(overview)}</button>{assessmentMessage && <p role="status">{assessmentMessage}</p>}</div>}
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
             <div className="attribute-row"><section><h4>Framing</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>

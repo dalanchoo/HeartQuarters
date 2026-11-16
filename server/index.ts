@@ -13,6 +13,7 @@ import { savePackagingText, saveVersionNotes } from './metadata.js';
 import { copyPackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
+import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex } from './expressions.js';
 import { addExpressionTag, confirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
 import { markExpressionAi } from './mark-expression-ai.js';
@@ -235,6 +236,8 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''))); }));
+app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmentJob(String(req.query.id ?? ''))); }));
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));
 app.post('/api/expressions/confirm-tag', handle((req, res) => { confirmExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence); res.json({ ok: true }); }));
 app.post('/api/expressions/remove-tag', handle((req, res) => { removeExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence, req.body?.confirmed); res.json({ ok: true }); }));
