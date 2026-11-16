@@ -187,6 +187,7 @@ main { flex: 1; min-height: 0; }
 /* A summary laid out with flex loses its arrow, so it gets one drawn here. */
 .card > summary::before { content: '▸'; color: var(--muted); align-self: center; transition: transform 0.1s; }
 .card[open] > summary::before { transform: rotate(90deg); }
+.piece-card[open] > summary { margin-bottom: 0.6rem; }
 .page-section { margin-top: 1rem; }
 .page-section > summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
 .page-section > summary::marker { color: var(--muted); }

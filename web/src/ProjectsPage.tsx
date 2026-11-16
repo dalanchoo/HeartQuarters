@@ -689,7 +689,7 @@ function PieceCard({
 
   if (plain) return <div className="card">{contents}</div>;
   return (
-    <details ref={card} className="card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details ref={card} className="card piece-card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
         <span className="piece-name">{piece.name}</span>
         <span className="muted">{pieceSummary(piece)}</span>
