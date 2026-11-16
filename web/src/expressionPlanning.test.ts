@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterCategoryOptions, filterSelectablePhotos, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { filterCategoryOptions, filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
 import type { ExpressionCategory } from './api';
 describe('expression planning', () => {
   it('remembers distinct reference paths and handles damaged data', () => {
@@ -35,6 +35,13 @@ describe('expression planning', () => {
     expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, framingText: 'Joy' } })).toEqual([]);
     expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, morphologyText: 'Frontal' } })).toEqual([]);
     expect(filterSelectablePhotos(photos, [], { ...filter, category: 'Positive', includeSub: false })).toEqual([]);
+  });
+  it('keeps the selected photo open if updated tags remove it from filtered results', () => {
+    const first = { path: 'a', name: 'First', category: 'C', tags: [] };
+    const second = { path: 'b', name: 'Second', category: 'C', tags: [] };
+    expect(openPhotoSelection([first, second], [first, second], 'a')).toEqual({ photo: first, index: 0 });
+    expect(openPhotoSelection([first, second], [second], 'a')).toEqual({ photo: first, index: -1 });
+    expect(openPhotoSelection([second], [second], 'a')).toEqual({ photo: undefined, index: -1 });
   });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];

@@ -52,3 +52,8 @@ export function matchesPhotoFilterTexts(photo: ExpressionPhoto, filters?: Pick<P
   const groups = groupExpressionAttributes(photo.tags);
   return contains([photo.category], filters.categoryText) && contains(groups.framing.map(t => t.tag), filters.framingText) && contains(groups.pose.map(t => t.tag), filters.poseText) && contains(groups.morphology.map(t => t.tag), filters.morphologyText);
 }
+
+/** Keep the open photo by its path even if its updated tags remove it from the current results. */
+export function openPhotoSelection(all: ExpressionPhoto[], shown: ExpressionPhoto[], path: string | null): { photo: ExpressionPhoto | undefined; index: number } {
+  return { photo: all.find(photo => photo.path === path), index: shown.findIndex(photo => photo.path === path) };
+}

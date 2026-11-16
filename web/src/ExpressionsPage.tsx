@@ -10,7 +10,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { filterSelectablePhotos, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
+import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
@@ -50,7 +50,7 @@ export function ExpressionsPage() {
   const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
   const [reviewFolders, setReviewFolders] = useState<FolderReviewMode | 'all'>('all');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
-  const [open, setOpen] = useState<number | null>(null); // index into `shown`
+  const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
   const [referenceError, setReferenceError] = useState('');
@@ -131,6 +131,8 @@ export function ExpressionsPage() {
     if (!index || !current) return [];
     return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
   }, [index, current, includeSub, query, origin, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
+
+  const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
 
   if (error) return <p className="error content">{error}</p>;
   if (!index || !current) return <p className="muted content">Loading…</p>;
@@ -223,8 +225,8 @@ export function ExpressionsPage() {
         </p>
 
         <div className="photo-grid">
-          {shown.map((p, i) => (
-            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
+          {shown.map((p) => (
+            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
             </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button>
@@ -235,15 +237,15 @@ export function ExpressionsPage() {
         </div>
       </section>
 
-      {open !== null && shown[open] && (
+      {viewedPhoto && (
         <Lightbox
-          photo={shown[open]}
+          photo={viewedPhoto}
           onTagAction={changeTag}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }}
           onClose={() => setOpen(null)}
-          onPrev={() => setOpen((open - 1 + shown.length) % shown.length)}
-          onNext={() => setOpen((open + 1) % shown.length)}
+          onPrev={viewedIndex < 0 ? undefined : () => setOpen(shown[(viewedIndex - 1 + shown.length) % shown.length].path)}
+          onNext={viewedIndex < 0 ? undefined : () => setOpen(shown[(viewedIndex + 1) % shown.length].path)}
         />
       )}
       {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
