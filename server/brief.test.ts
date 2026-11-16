@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 /** A fake AI: Claude writes a brief, ChatGPT and Gemini review it, each saying a little first. */
-const PICKS = { picks: [1, 2, 3].map((n) => ({ title: `Title ${n}`, thumbnailText: `TEXT ${n}`, accent: 'TEXT', expression: 'Composure > Calm', background: 'dark', why: 'because', backedBy: ['Claude', 'Gemini'] })) };
+const PICKS = { picks: [1, 2, 3].map((n) => ({ title: `Title ${n}`, thumbnailText: `TEXT ${n}`, accent: 'TEXT', expression: 'Composure > Calm', background: 'dark', why: 'because', backedBy: ['Claude', 'Gemini'], description: 'A description.\n\n#SDAM', tags: 'SDAM, Memory', pinnedComment: 'What do you think?'  })) };
 const fakeAi: AskAi = async (ai, prompt, cwd) => {
   if (fs.existsSync(path.join(cwd, 'source.txt'))) expect(fs.readFileSync(path.join(cwd, 'source.txt'), 'utf8')).toContain('agonized');
   if (fs.existsSync(path.join(cwd, 'notes.txt'))) expect(prompt).toContain('notes.txt');
@@ -82,11 +82,19 @@ describe('writing the brief', () => {
     expect(job.status).toBe('done');
     expect(job.steps.map((s) => `${s.name} ${s.role} ${s.state}`)).toEqual(['Claude writes done', 'ChatGPT reviews done', 'Gemini reviews done', 'Claude picks done']);
     expect(readPicks(path.join(draftsDir(), 'Picks.json'))?.map((p) => p.title)).toEqual(['Title 1', 'Title 2', 'Title 3']);
+    expect(readPicks(path.join(draftsDir(), 'Picks.json'))?.[0]).toMatchObject({ description: 'A description.\n\n#SDAM', tags: 'SDAM, Memory', pinnedComment: 'What do you think?' });
     const text = briefText();
     expect(text.startsWith('# Brief: 022')).toBe(true); // what the AI said before the brief is dropped
     expect(text.indexOf('## Review: ChatGPT')).toBeLessThan(text.indexOf('## Review: Gemini'));
     expect(text).not.toContain('Sure.');
     expect(text).toContain('By: Claude (brief), ChatGPT and Gemini (reviews).');
+  });
+
+  it('supplies reliable subtitle times for chapter suggestions', async () => {
+    let sawTimes = false;
+    const inspect: AskAi = (ai, prompt, cwd, images) => { if (prompt.includes('"picks"')) { sawTimes = fs.readFileSync(path.join(cwd, 'source-timings.srt'), 'utf8').includes('00:00:02,000'); } return fakeAi(ai, prompt, cwd, images); };
+    const { finished } = await startBrief(LONGFORM, '', inspect); await finished;
+    expect(sawTimes).toBe(true);
   });
 
   it('keeps an earlier brief, renamed with its date and time', async () => {

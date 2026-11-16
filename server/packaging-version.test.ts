@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { copyPackagingVersion, nextVersionName, notYetOnYoutube, trashPackagingVersion } from './packaging-version';
+import { copyPackagingVersion, createFirstPackagingVersion, nextVersionName, notYetOnYoutube, trashPackagingVersion } from './packaging-version';
 let tmp: string; let old: string; let oldTrash: string;
 beforeEach(() => { tmp = makeTree({ 'Videos/piece/Packaging/V01/YouTube.md': 'original', 'Videos/piece/Packaging/V01/Covers/image.png': 'cover', 'Videos/piece/Packaging/V02/YouTube.md': 'existing', 'Videos/other/Packaging/V01/YouTube.md': 'other' }); old = config.videoProjectsDir; oldTrash = config.trashDir; config.videoProjectsDir = path.join(tmp, 'Videos'); config.trashDir = path.join(tmp, 'Trash'); });
 afterEach(() => { config.videoProjectsDir = old; config.trashDir = oldTrash; removeTree(tmp); });
@@ -36,6 +36,15 @@ describe('copying a packaging version', () => {
     fs.symlinkSync(outside, path.join(tmp, 'Videos/piece/Packaging/V01/shortcut'), 'junction');
     await expect(copyPackagingVersion('piece', 'piece/Packaging/V01')).rejects.toThrow(/shortcut or junction/);
     expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V03'))).toBe(false);
+  });
+});
+describe('creating the first packaging version', () => {
+  it('creates V01 once and never replaces an existing version', () => {
+    fs.mkdirSync(path.join(tmp, 'Videos/new-piece'));
+    const result = createFirstPackagingVersion('new-piece');
+    expect(result.path).toBe('new-piece/Packaging/V01');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', result.path, 'YouTube.md'), 'utf8')).toContain('Title:');
+    expect(() => createFirstPackagingVersion('new-piece')).toThrow(/already exists/);
   });
 });
 describe('deleting a packaging version', () => {

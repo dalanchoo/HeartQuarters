@@ -16,7 +16,6 @@ export function PieceAI({
   video,
   piece,
   draft,
-  version,
   canEdit,
   onFinished,
 }: {
@@ -26,8 +25,6 @@ export function PieceAI({
   piece: string;
   /** Its CapCut project. */
   draft: string;
-  /** The packaging version currently selected. */
-  version?: string;
   /** True for a longform, false for a short. */
   canEdit: boolean;
   /** Called when the AI finishes a turn, so the card can show what it wrote. */
@@ -113,10 +110,6 @@ export function PieceAI({
         <button disabled={busy || !state?.canGenerate} title={generateTitle} onClick={generate}>
           {starting ? 'Starting…' : state?.generated ? 'Regenerate' : 'Generate'}
         </button>
-        <button disabled={busy} onClick={() => act('/api/piece-ai/metadata', { version })}>
-          Write YouTube Metadata
-        </button>
-        {!busy && <span className="muted small-text">{name} fills in YouTube.md. You don't need to export first.</span>}
       </div>
       {run && !busy && (
         <button

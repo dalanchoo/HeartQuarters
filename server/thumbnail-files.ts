@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { safeResolve } from './config.js';
 import { versionFolder } from './packaging-version.js';
@@ -30,7 +31,7 @@ export function savePackagingThumbnail(piece: string, version: string, data: Buf
 }
 
 /** Copy a finished image between versions of the same piece, never replacing an existing thumbnail. */
-export function copyVersionThumbnail(piece: string, source: string, target: string): { path: string } {
+export function copyVersionThumbnail(piece: string, source: string, target: string, expected?: { size: number; modified: number }): { path: string } {
   const fromVersion = versionFolder(piece, source); const toVersion = versionFolder(piece, target);
   if (fromVersion.toLowerCase() === toVersion.toLowerCase()) throw new Error('Choose a different source version.');
   const fromFolder = safeResolve('projects', path.join(source, THUMBNAIL_FOLDER));
@@ -42,10 +43,27 @@ export function copyVersionThumbnail(piece: string, source: string, target: stri
   const toFolder = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER));
   fs.mkdirSync(toFolder, { recursive: true });
   if (!fs.lstatSync(toFolder).isDirectory() || fs.lstatSync(toFolder).isSymbolicLink()) throw new Error('The destination thumbnail folder must be a real folder.');
-  if (fs.readdirSync(toFolder).some(name => /^Thumbnail\.(png|jpe?g)$/i.test(name))) throw new Error('This version already has a thumbnail; nothing was replaced.');
+  const oldNames = fs.readdirSync(toFolder).filter(name => /^Thumbnail\.(png|jpe?g)$/i.test(name));
+  if (oldNames.length > 1) throw new Error('This version has multiple thumbnails; nothing was replaced.');
   const filename = `Thumbnail${path.extname(names[0]).toLowerCase()}`;
   const dest = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER, filename));
-  fs.copyFileSync(image, dest, fs.constants.COPYFILE_EXCL);
+  if (!oldNames.length) {
+    if (expected) throw new Error('The destination thumbnail changed. Reload before copying.');
+    fs.copyFileSync(image, dest, fs.constants.COPYFILE_EXCL);
+  } else {
+    if (!expected) throw new Error('This version already has a thumbnail; nothing was replaced.');
+    const old = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER, oldNames[0])); const stat = fs.lstatSync(old);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== expected.size || Math.round(stat.mtimeMs) !== expected.modified) throw new Error('The destination thumbnail changed. Reload before copying.');
+    const backupDir = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER, 'Backups')); fs.mkdirSync(backupDir, { recursive: true });
+    if (!fs.lstatSync(backupDir).isDirectory() || fs.lstatSync(backupDir).isSymbolicLink()) throw new Error('The backup folder must be a real folder.');
+    const backup = path.join(backupDir, `Replaced ${randomUUID()} - ${oldNames[0]}`);
+    const temp = path.join(toFolder, `Copy-${randomUUID()}.tmp`);
+    fs.copyFileSync(image, temp, fs.constants.COPYFILE_EXCL);
+    let moved = false;
+    try { fs.renameSync(old, backup); moved = true; fs.copyFileSync(temp, dest, fs.constants.COPYFILE_EXCL); }
+    catch (error) { if (moved) { try { if (fs.existsSync(old)) throw new Error('destination occupied'); fs.renameSync(backup, old); } catch { throw new Error(`Copy failed and the previous thumbnail could not be restored. It is saved at ${backup}.`); } } throw error; }
+    finally { try { fs.unlinkSync(temp); } catch { /* no temporary file remains on success */ } }
+  }
   return { path: path.relative(safeResolve('projects', ''), dest).split(path.sep).join('/') };
 }
 

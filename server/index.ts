@@ -10,7 +10,7 @@ import { deleteFolder, manageInfo, renameFolder, openInCapCut } from './manage.j
 import { createSeries, createVideoFolder, draftsForVideo, listDrafts, parseKind, suggestPrefix } from './create.js';
 import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText, saveVersionNotes } from './metadata.js';
-import { copyPackagingVersion, trashPackagingVersion } from './packaging-version.js';
+import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
@@ -42,14 +42,12 @@ import {
   saveRetention,
   shortsOverview,
   saveLongformUrl,
-  writeShortMetadata,
   clearPiece,
   generatePiece,
   notePiece,
   pieceState,
   pieceRun,
   stopPiece,
-  writePieceMetadata,
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
@@ -137,7 +135,7 @@ app.get('/api/projects', handle((_req, res) => {
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
-app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''))); }));
+app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected)); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
 
 // ?id= is a relative path, e.g. "005 - Ayahuasca/005B - Night One".
@@ -362,6 +360,7 @@ app.post('/api/packaging/notes', handle((req, res) => {
   saveVersionNotes(String(req.body?.version ?? ''), req.body?.text, req.body?.was);
   res.json({ ok: true });
 }));
+app.post('/api/packaging/first-version', handle((req, res) => { res.json(createFirstPackagingVersion(String(req.body?.piece ?? ''))); }));
 app.post('/api/packaging/copy-version', (req, res) => {
   copyPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? '')).then(
     (result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
@@ -456,9 +455,7 @@ app.post('/api/conversations/forget', handle((_req, res) => {
 }));
 
 // { video, piece }
-app.post('/api/piece-ai/metadata', handle((req, res) => {
-  res.json(writePieceMetadata(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), String(req.body?.version ?? '')));
-}));
+app.post('/api/piece-ai/metadata', (_req, res) => { res.status(410).json({ error: 'Write YouTube Metadata has moved to Generate Packaging. Clone a version to create a new one.' }); });
 
 app.post('/api/piece-ai/stop', handle((req, res) => {
   res.json(stopPiece(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
@@ -537,9 +534,7 @@ app.get('/api/shorts/metadata', handle((req, res) => {
 }));
 
 // { video, short }: the AI writes that short's YouTube metadata, in its conversation.
-app.post('/api/shorts/metadata', handle((req, res) => {
-  res.json(writeShortMetadata(String(req.body?.video ?? ''), String(req.body?.short ?? '')));
-}));
+app.post('/api/shorts/metadata', (_req, res) => { res.status(410).json({ error: 'Write YouTube Metadata has moved to Generate Packaging. Clone a version to create a new one.' }); });
 
 // Moves the old short to the trash, then makes it again: the same wait as above.
 app.post('/api/shorts/regenerate', async (req, res) => {

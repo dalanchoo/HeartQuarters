@@ -28,6 +28,19 @@ describe('saving thumbnails', () => {
     expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02')).toThrow(/already has a thumbnail/);
     expect(() => copyVersionThumbnail('piece', 'other/Packaging/V01', 'piece/Packaging/V02')).toThrow();
   });
+  it('backs up and replaces a thumbnail only when the displayed target still matches', () => {
+    fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/V02'));
+    savePackagingThumbnail('piece', 'piece/Packaging/V01', png);
+    const old = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1]);
+    const current = savePackagingThumbnail('piece', 'piece/Packaging/V02', old);
+    const currentPath = path.join(tmp, 'Videos', current.path); const st = fs.statSync(currentPath);
+    expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02', { size: st.size + 1, modified: Math.round(st.mtimeMs) })).toThrow(/changed/);
+    const copied = copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02', { size: st.size, modified: Math.round(st.mtimeMs) });
+    expect(fs.readFileSync(path.join(tmp, 'Videos', copied.path))).toEqual(png);
+    const backups = path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Backups');
+    expect(fs.readFileSync(path.join(backups, fs.readdirSync(backups)[0]))).toEqual(old);
+    expect(fs.existsSync(currentPath)).toBe(false);
+  });
   it('rejects other projects and invalid images', () => {
     expect(() => savePackagingThumbnail('piece', 'other/Packaging/V01', png)).toThrow();
     expect(() => savePackagingThumbnail('piece', 'piece/Packaging/V01/..', png)).toThrow();

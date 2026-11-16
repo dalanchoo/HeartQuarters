@@ -3,7 +3,10 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
-import { CopyButton } from './PackagingDoc';
+import { CopyButton, type LoadedDoc } from './PackagingDoc';
+import { parseFields } from './packaging';
+import { copyVersionFields } from './versionFields';
+import { splitHashtags } from './youtubePackaging';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
@@ -15,8 +18,12 @@ import { CategoryPicker } from './CategoryPicker';
 // chosen, Make Thumbnail asks ChatGPT or Gemini for one (server/thumbnails.ts), and each draft has a box for changes.
 /** The packaging version selected on the card: where Use Thumbnail and Use Title put a draft. Locked when it's an old one. */
 export interface UseTarget { name: string; path: string; locked: boolean }
+function isCurrentChoice(choice: BriefChoice | null, picks: BriefPick[] | null): boolean {
+  const pick = choice && picks?.[choice.index];
+  return !!pick && JSON.stringify(pick) === JSON.stringify(choice?.pick);
+}
 
-export function DraftsSection({ piece, drafts, target, research, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; research?: Research; onChanged?: () => void }) {
+export function DraftsSection({ piece, drafts, target, doc, research, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; doc?: LoadedDoc; research?: Research; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
   const thumbs = useThumbJobs(piece, open, onChanged);
   const images = drafts?.conversations.reduce((n, c) => n + c.images.length, 0) ?? 0;
@@ -27,7 +34,7 @@ export function DraftsSection({ piece, drafts, target, research, onChanged }: { 
   return (
     <details className="drafts" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
-        Thumbnail & Title Drafts{' '}
+        Generate Packaging{' '}
         <span className="muted small-text">
           ·{' '}
           {drafts
@@ -45,6 +52,7 @@ export function DraftsSection({ piece, drafts, target, research, onChanged }: { 
           {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
         </details>
       )}
+      {open && drafts?.choice && isCurrentChoice(drafts.choice, drafts.picks) && target && doc && <DraftPackagingCompare piece={piece} choice={drafts.choice} conversations={drafts.conversations} target={target} doc={doc} onChanged={onChanged} />}
       {drafts && (
         <>
           <div className="drafts-top">
@@ -62,6 +70,30 @@ export function DraftsSection({ piece, drafts, target, research, onChanged }: { 
       )}
     </details>
   );
+}
+
+function DraftPackagingCompare({ piece, choice, conversations, target, doc, onChanged }: { piece: string; choice: BriefChoice; conversations: DraftConversation[]; target: UseTarget; doc: LoadedDoc; onChanged?: () => void }) {
+  const pick = choice.pick;
+  const descriptionParts = splitHashtags(pick.description ?? '');
+  const values = [{ label: 'Title', value: pick.title }, { label: 'Description', value: descriptionParts.description }, { label: 'Hashtags', value: descriptionParts.hashtags }, { label: 'Tags', value: pick.tags }, { label: 'Pinned Comment', value: pick.pinnedComment }].filter((f): f is { label: string; value: string } => !!f.value);
+  const source = values.map(f => `${f.label}:\n${f.value}`).join('\n\n') + '\n';
+  const available = conversations.filter(c => c.pick?.title === pick.title).flatMap(c => c.images.map(image => ({ path: image.path, label: `${c.name} · ${image.name}` })));
+  const [image, setImage] = useState(''); const [thumbnail, setThumbnail] = useState(true); const [selected, setSelected] = useState<string[]>(() => values.map(f => f.label)); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
+  useEffect(() => { setSelected(values.map(f => f.label)); setImage(''); }, [choice.index, pick.title, pick.description, pick.tags, pick.pinnedComment]);
+  const selectedImage = image || available.at(-1)?.path || '';
+  const fields = doc.text ? parseFields(doc.text) ?? [] : [];
+  return <details className="yt-section"><summary>Review and Apply Generated Packaging</summary>
+    <p className="muted small-text">Compare the selected draft with {target.name}. Chapters are part of the description; hashtags are combined with it when sent to YouTube. No changes are sent to YouTube here.</p>
+    {values.map(field => <div className="version-field-compare" key={field.label}><label><input type="checkbox" checked={selected.includes(field.label)} onChange={e => setSelected(e.target.checked ? [...selected, field.label] : selected.filter(s => s !== field.label))} /> {field.label}</label><div className="compare-columns"><div><strong>Generated Draft</strong><pre className="lvy-value">{field.value}</pre></div><div><strong>{target.name}</strong><pre className="lvy-value">{fields.find(f => f.label.toLowerCase() === field.label.toLowerCase())?.value || '(empty)'}</pre></div></div></div>)}
+    {available.length > 0 && <div className="version-field-compare"><label><input type="checkbox" checked={thumbnail} onChange={e => setThumbnail(e.target.checked)} /> Thumbnail</label> <select value={selectedImage} onChange={e => setImage(e.target.value)}>{available.map(item => <option key={item.path} value={item.path}>{item.label}</option>)}</select><div><img className="lvy-thumb" src={thumbUrl('projects', selectedImage, 320)} alt="Selected generated thumbnail" /></div></div>}
+    {!pick.description && <p className="muted small-text">This older draft has no generated description, tags or pinned comment. Write a new brief to generate the full package.</p>}
+    <button disabled={busy || target.locked || (!selected.length && !(thumbnail && selectedImage))} onClick={async () => { setBusy(true); setMessage(''); let copied = false; try {
+      if (selected.length) { await doc.save(text => copyVersionFields(text, source, selected)); copied = true; }
+      if (thumbnail && selectedImage) await postJson('/api/packaging/use-draft', { piece, image: selectedImage, version: target.path, thumbnail: true, title: false });
+      setMessage(`Selected packaging applied to ${target.name}.`); onChanged?.();
+    } catch (e) { setMessage(`${copied ? 'The selected text was saved, but the thumbnail was not: ' : ''}${e instanceof Error ? e.message : String(e)}`); if (copied) onChanged?.(); } finally { setBusy(false); } }}>Apply Selected to {target.name}</button>
+    {target.locked && <p className="muted small-text">Unlock {target.name} to apply changes.</p>}{message && <p role="status">{message}</p>}
+  </details>;
 }
 
 interface ThumbJobs {
@@ -131,7 +163,7 @@ function TopPicks({ piece, picks, choice, onChanged }: { piece: string; picks: B
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // The saved choice counts only while it's still one of these picks (a new brief brings new picks).
-  const chosen = choice && picks[choice.index]?.title === choice.pick.title ? choice.index : null;
+  const chosen = isCurrentChoice(choice, picks) ? choice!.index : null;
   const choose = (index: number) => {
     setBusy(true);
     setError('');

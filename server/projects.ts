@@ -65,6 +65,9 @@ export interface BriefPick {
   why: string;
   /** Which AIs suggested or ranked it highly. */
   backedBy: string[];
+  description?: string;
+  tags?: string;
+  pinnedComment?: string;
 }
 
 /** Packaging\Drafts: the brainstorming before a version is made. Not a version itself. */
@@ -125,6 +128,9 @@ export function parsePicks(data: unknown): BriefPick[] | null {
     background: text(p?.background),
     why: text(p?.why),
     backedBy: Array.isArray(p?.backedBy) ? p.backedBy.filter((b): b is string => typeof b === 'string') : [],
+    ...(text(p?.description) ? { description: text(p?.description) } : {}),
+    ...(text(p?.tags) ? { tags: text(p?.tags) } : {}),
+    ...(text(p?.pinnedComment) ? { pinnedComment: text(p?.pinnedComment) } : {}),
   }));
   return picks.every((p) => p.title && p.thumbnailText) ? picks : null;
 }

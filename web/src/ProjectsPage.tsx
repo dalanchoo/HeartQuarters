@@ -21,6 +21,7 @@ import { VersionNotes } from './VersionNotes';
 import { DraftsSection } from './DraftsSection';
 import { LocalVsYouTube, YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { VideoPreview } from './VideoPreview';
+import { VersionCompare } from './VersionCompare';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
 import type { YoutubeChecks } from './videoChecks';
@@ -619,7 +620,6 @@ function PieceCard({
           video={video}
           piece={piece.kind === 'longform' ? 'Longform' : piece.name}
           draft={draft ?? piece.name}
-          version={version?.path}
           canEdit={piece.kind === 'longform'}
           onFinished={reloadDocs}
         />
@@ -635,7 +635,7 @@ function PieceCard({
 
         <div className="piece-docs">
           {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
-          {!version && <p className="muted">No packaging yet.</p>}
+          {!version && <div><p className="muted">No packaging yet.</p><button onClick={() => { void postJson<{ name: string; path: string }>('/api/packaging/first-version', { piece: piece.path }).then(result => { setVersionName(result.name); setUnlocked(result.path); onChanged?.(); }, e => window.alert(e instanceof Error ? e.message : String(e))); }}>Create V01</button></div>}
           {version && (
             <div className="versions">
               {piece.versions.map((v) => (
@@ -653,7 +653,7 @@ function PieceCard({
               <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
             </div>
           )}
-          {version && <VersionNotes key={`notes-${version.path}`} version={version} />}
+          {version && <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />}
 
           <div className="versions piece-actions">
             {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
@@ -675,7 +675,8 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
+      {version && youtubeDoc && <VersionCompare key={version.path} versions={piece.versions} version={version} doc={youtubeDoc} locked={locked} onChanged={onChanged} />}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} doc={youtubeDoc} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );

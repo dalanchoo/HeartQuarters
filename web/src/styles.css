@@ -713,3 +713,6 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 
 .version-choice { display: inline-flex; align-items: center; gap: 0.2rem; }
 .version-padlock { min-width: 2rem; padding: 0.1rem 0.35rem; }
+
+.version-field-compare { margin: .8rem 0; }
+.version-field-compare > label { display: block; font-weight: 600; margin-bottom: .4rem; }

@@ -3,7 +3,7 @@ import { getText, postJson, type PackagingVersion } from './api';
 
 // The Notes box under a card's packaging versions: John's own notes about that version (what it tried, where it came
 // from), kept in Notes.md inside the version folder. Shown as plain text; Edit turns it into a box to type in.
-export function VersionNotes({ version }: { version: PackagingVersion }) {
+export function VersionNotes({ version, locked = false }: { version: PackagingVersion; locked?: boolean }) {
   // What the file says now: "" when the version has no Notes.md yet. null while loading.
   const [saved, setSaved] = useState<string | null>(version.notes ? null : '');
   const [draft, setDraft] = useState<string | null>(null);
@@ -17,7 +17,7 @@ export function VersionNotes({ version }: { version: PackagingVersion }) {
   if (saved === null) return error ? <p className="error">{error}</p> : null;
 
   const save = () => {
-    if (draft === null) return;
+    if (draft === null || locked) return;
     setSaving(true);
     setError(null);
     postJson('/api/packaging/notes', { version: version.path, text: draft, was: saved })
@@ -33,7 +33,7 @@ export function VersionNotes({ version }: { version: PackagingVersion }) {
       <div className="version-notes-head">
         <h4>Notes</h4>
         {draft === null && (
-          <button className="small" onClick={() => setDraft(saved)}>
+          <button className="small" disabled={locked} onClick={() => setDraft(saved)}>
             {saved.trim() ? 'Edit' : 'Add Notes'}
           </button>
         )}
@@ -42,9 +42,9 @@ export function VersionNotes({ version }: { version: PackagingVersion }) {
         saved.trim() ? <p className="version-notes-text">{saved.trim()}</p> : <p className="muted small-text">No notes for this version.</p>
       ) : (
         <>
-          <textarea rows={4} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} placeholder="What this version tried, where it came from…" />
+          <textarea rows={4} disabled={locked} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} placeholder="What this version tried, where it came from…" />
           <div className="claude-buttons">
-            <button className="small" disabled={saving || draft === saved} onClick={save}>
+            <button className="small" disabled={locked || saving || draft === saved} onClick={save}>
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button className="small" disabled={saving} onClick={() => setDraft(null)}>

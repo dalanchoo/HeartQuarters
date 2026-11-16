@@ -116,6 +116,12 @@ export function briefSource(piece: string): BriefSource | null {
   return found ? { kind: found.kind, path: rel(found.full) } : null;
 }
 
+/** Provide timestamps only when there is one unambiguous subtitle file for this piece. */
+function copySourceTimings(pieceDir: string, work: string): void {
+  const subs = path.join(pieceDir, 'Subtitles'); const files = filesIn(subs).filter(f => /\.srt$/i.test(f));
+  if (files.length === 1) fs.copyFileSync(path.join(subs, files[0]), path.join(work, 'source-timings.srt'));
+}
+
 // ---- What each AI is asked -----------------------------------------------------------------------------
 
 function skillFile(name: string): string {
@@ -137,13 +143,14 @@ export function shortNote(piece: string): string[] {
 
 export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string): string {
   return [
-    `Write a thumbnail and title brief for the Heart Mind Fusion video "${pieceName}", following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
+    `Write a YouTube packaging brief for the Heart Mind Fusion video "${pieceName}", following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
     ...shortNote(pieceName),
     `The source is the video's ${source.kind}, copied into source.txt in the current folder (from ${source.path}). Read all of it.`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     `Research with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits: for example keyword research for the main search words and one YouTube search for competing videos. If vidIQ isn't available, write the brief anyway and say so.`,
     CATEGORIES_NOTE(),
     `For "Recent thumbnails", look in "${config.videoProjectsDir}": the newest few numbered video folders, each Longform\\Packaging's newest version (its YouTube.md and thumbnail). Which version is on YouTube is written in each version's Notes.md ("On YouTube: ..."); don't assume the newest one is.`,
+    `Include proposed YouTube descriptions, tags, hashtags, pinned comments and, for longform only when supported by source-timings.srt if it exists, accurate chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags and any chapters inside the proposed description.`,
     `Today is ${today}. Don't create or change any file. Reply with only the brief in Markdown, starting with the line "# Brief:", in the skill's format, ending with the empty "## John's notes" section.`,
   ].join('\n\n');
 }
@@ -281,8 +288,9 @@ export function picksPrompt(hasNotes: boolean): string {
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
     'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on, follow John\'s notes, and keep to the skill\'s hard rules (paid off in the first 30 seconds, the most positive true expression, gaze toward the centre, nothing in the bottom-right corner). A pair may combine a title from one place with a thumbnail from another.',
+    'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. Read source-timings.srt if it exists for reliable chapter times. Put hashtags inside the description. Include chapters only for longform when accurate timestamps are available; otherwise omit them. Do not invent facts or timestamps.',
     "Don't create or change any file, and don't use vidIQ. Reply with only this JSON, nothing before or after it:",
-    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","background":"the background and any supporting image","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"]}]}',
+    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","background":"the background and any supporting image","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"],"description":"complete YouTube description including hashtags and accurate chapters only when available","tags":"comma-separated tags","pinnedComment":"proposed pinned comment"}]}',
   ].join('\n\n');
 }
 
@@ -305,6 +313,7 @@ async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boo
   step.state = 'working';
   try {
     const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes), work, shots));
+    if (picks.some(p => !p.description || !p.tags || !p.pinnedComment)) throw new Error('The generated package is missing a description, tags or pinned comment. Try Pick Top 3 Again.');
     keepOld(drafts, PICKS_FILE, when);
     fs.writeFileSync(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
     step.state = 'done';
@@ -395,6 +404,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
 
   const work = workFolder(piece);
   fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
+  if (found.kind === 'transcript') copySourceTimings(dir, work);
   const saved = saveResearchImages(path.join(dir, 'Packaging', DRAFTS_FOLDER), work, images, new Date());
   const shots = saved.map((s) => s.file);
   const notes = notesWithImages(rawNotes, saved);
@@ -465,6 +475,8 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
   const found = findSource(dir);
   const work = workFolder(piece);
   fs.copyFileSync(brief, path.join(work, 'brief.md'));
+  if (found) fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
+  if (found?.kind === 'transcript') copySourceTimings(dir, work);
   const saved = saveResearchImages(drafts, work, images, new Date());
   const shots = saved.map((s) => s.file);
   const notes = notesWithImages(rawNotes, saved);

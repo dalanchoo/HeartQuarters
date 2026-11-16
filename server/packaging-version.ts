@@ -29,6 +29,19 @@ export function nextVersionName(piece: string): string {
   return `V${String(Math.max(0, ...numbers) + 1).padStart(2, '0')}`;
 }
 
+/** Create the first packaging version when no version exists. */
+export function createFirstPackagingVersion(piece: string): { name: string; path: string } {
+  if (!piece) throw new Error('Choose a video.');
+  const pieceDir = safeResolve('projects', piece);
+  if (!fs.statSync(pieceDir, { throwIfNoEntry: false })?.isDirectory()) throw new Error('The video folder is not available.');
+  const parent = safeResolve('projects', path.join(piece, 'Packaging'));
+  fs.mkdirSync(parent, { recursive: true });
+  if (fs.lstatSync(parent).isSymbolicLink() || fs.readdirSync(parent).some(n => /^(?:V\d+|Legacy)/i.test(n))) throw new Error('A packaging version already exists or the folder is a shortcut.');
+  const folder = safeResolve('projects', path.join(piece, 'Packaging', 'V01')); fs.mkdirSync(folder);
+  fs.writeFileSync(path.join(folder, 'YouTube.md'), '# YouTube Info\n\nTitle:\n\nDescription:\n\nTags:\n\nPinned Comment:\n', { flag: 'wx' });
+  return { name: 'V01', path: path.relative(safeResolve('projects', ''), folder).split(path.sep).join('/') };
+}
+
 const NOT_YET = 'On YouTube: not yet.';
 
 /**

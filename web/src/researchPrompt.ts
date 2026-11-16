@@ -27,7 +27,7 @@ export function researchQuestion(f: ResearchFacts): string {
     '- what the image shows: my expression and anything around me;',
     "- why someone who doesn't know me would click, and what backs that up (search terms, or similar videos that did well).",
     '',
-    'Then say which pair you would choose and why. Every pair must be true to what actually happens in the video: no promises it does not keep.',
+    'Then say which pair you would choose and why. Suggest a description, comma-separated tags, hashtags, and a pinned comment. For longform, suggest chapters only if you have reliable timestamps; otherwise say you cannot determine them. Every suggestion must be true to what actually happens in the video; do not invent details or timestamps.',
   ].join('\n');
 }
 
