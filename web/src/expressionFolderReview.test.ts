@@ -8,18 +8,17 @@ const category = (name: string): ExpressionCategory => ({ name, path: `Example/$
 const names = expressionCategoryNames(['Warmth', 'Hostility', 'Intimidating'].map(category));
 
 describe('expression folder review', () => {
-  it('flags different guesses when the folder is absent, including low or unknown confidence', () => {
-    expect(reviewExpressionFolder(photo([tag('Hostility', 10), tag('Intimidating', null)]), names)?.alternatives.map(t => t.tag)).toEqual(['Hostility', 'Intimidating']);
+  it('shows different guesses only when the folder expression is missing', () => {
+    expect(reviewExpressionFolder(photo([tag('Hostility', 10), tag('Intimidating', null)]), names, 'missing')?.alternatives.map(t => t.tag)).toEqual(['Hostility', 'Intimidating']);
+    expect(reviewExpressionFolder(photo([tag('Warmth', 60), tag('Hostility', 90)]), names, 'missing')).toBeNull();
+    expect(reviewExpressionFolder(photo([tag('EyesClosed', 99)]), names, 'missing')).toBeNull();
   });
-  it('flags a stronger or confirmed alternative and keeps the folder score for context', () => {
-    const result = reviewExpressionFolder(photo([tag('Warmth', 60), tag('Hostility', 80), tag('Intimidating', 30)]), names);
+  it('shows higher scores only when the folder has a comparable score', () => {
+    const result = reviewExpressionFolder(photo([tag('Warmth', 60), tag('Hostility', 80), tag('Intimidating', 30)]), names, 'higher');
     expect(result?.folderTag?.confidence).toBe(60); expect(result?.alternatives.map(t => t.tag)).toEqual(['Hostility']);
-    expect(reviewExpressionFolder(photo([tag('Warmth', 90), tag('Hostility', null, true)]), names)?.alternatives[0].tag).toBe('Hostility');
-  });
-  it('does not flag a confirmed folder label, weaker guesses, missing assessments or non-expression tags', () => {
-    expect(reviewExpressionFolder(photo([tag('Warmth', null, true), tag('Hostility', 99)]), names)).toBeNull();
-    expect(reviewExpressionFolder(photo([tag('Warmth', 80), tag('Hostility', 30)]), names)).toBeNull();
-    expect(reviewExpressionFolder(photo([tag('EyesClosed', 99), tag('Unknown', 99)]), names)).toBeNull();
-    expect(reviewExpressionFolder(photo([]), names)).toBeNull();
+    expect(reviewExpressionFolder(photo([tag('Warmth', 80), tag('Hostility', 80)]), names, 'higher')).toBeNull();
+    expect(reviewExpressionFolder(photo([tag('Warmth', null, true), tag('Hostility', 99)]), names, 'higher')).toBeNull();
+    expect(reviewExpressionFolder(photo([tag('Hostility', 99)]), names, 'higher')).toBeNull();
+    expect(reviewExpressionFolder(photo([tag('Warmth', 60, true), tag('Hostility', 80)]), names, 'higher')).not.toBeNull();
   });
 });

@@ -17,7 +17,7 @@ import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
-import { expressionCategoryNames, reviewExpressionFolder } from './expressionFolderReview';
+import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 
 type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
@@ -48,7 +48,7 @@ export function ExpressionsPage() {
   const [query, setQuery] = useState('');
   const [starredOnly, setStarredOnly] = useState(false);
   const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
-  const [reviewFolders, setReviewFolders] = useState(false);
+  const [reviewFolders, setReviewFolders] = useState<FolderReviewMode | 'all'>('all');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [open, setOpen] = useState<number | null>(null); // index into `shown`
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
@@ -122,7 +122,7 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (!reviewFolders || reviewExpressionFolder(p, categoryNames) !== null));
+    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
   }, [index, current, includeSub, query, origin, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
 
   if (error) return <p className="error content">{error}</p>;
@@ -207,8 +207,8 @@ export function ExpressionsPage() {
           <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
           <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
         </div>
-        <label className="expression-review-filter"><input type="checkbox" checked={reviewFolders} onChange={e => { setReviewFolders(e.target.checked); setOpen(null); if (e.target.checked) goTo(''); }} /> Possible Wrong Folder</label>
-        {reviewFolders && <p className="muted">Shows photos whose folder expression is missing from the recorded guesses, or whose different expression has a higher score. Confirmed folder expressions are excluded. Other filters still apply; AI guesses can be wrong.</p>}
+        <label className="expression-review-filter">Folder Review <select value={reviewFolders} onChange={e => { const value = e.target.value as FolderReviewMode | 'all'; setReviewFolders(value); setOpen(null); if (value !== 'all') goTo(''); }}><option value="all">All Photos</option><option value="missing">Folder Expression Not Among Guesses</option><option value="higher">Another Expression Has a Higher Score</option></select></label>
+        {reviewFolders !== 'all' && <p className="muted">{reviewFolders === 'missing' ? 'Shows photos with recorded expression guesses, but none matching the folder. Photos without expression guesses are not included.' : 'Shows photos where the folder expression and another expression have scores, and the other score is higher. Photos without comparable scores are not included.'} Other filters still apply. AI guesses can be wrong.</p>}
         {referenceError && <p className="error">{referenceError}</p>}
         <p className="muted">
           {shown.length} photo{shown.length === 1 ? '' : 's'}
@@ -220,7 +220,7 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(i)} title={p.name}>
               <img src={thumbUrl('expressions', p.path)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button>{reviewFolders && (() => { const review = reviewExpressionFolder(p, categoryNames); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button>
+            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button>
               <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
             </div>
           ))}
