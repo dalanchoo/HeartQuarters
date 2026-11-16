@@ -440,9 +440,9 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, categ
           </div>
           {confirmError && <p className="error">{confirmError}</p>}
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
-          <button className="small" onClick={onClose}>Close (Esc)</button>
           </div>
           <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><div className="lb-zoom-track"><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(snapOriginalSize(Number(e.target.value)) / (fit * 100))} /><button type="button" className="lb-zoom-original" style={{ top: `calc(${10000 / (200 - originalSizePercent(fit, 1))}% + ${8 - 1600 / (200 - originalSizePercent(fit, 1))}px)` }} onClick={() => changeZoom(1 / fit)} aria-label="Set zoom to 100%">100%</button></div><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
+          <button type="button" className="lb-close" onClick={onClose} aria-label="Close photo viewer" title="Close (Esc)">×</button>
         </div>
       </div>
     </div>
