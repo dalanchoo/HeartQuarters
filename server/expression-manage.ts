@@ -92,13 +92,13 @@ function makePlan(photo: string, destination: string | null) {
 
 export function previewExpressionChange(photo: string, destination: string | null): ExpressionPlan { return makePlan(photo, destination).plan; }
 
-export function applyExpressionChange(photo: string, destination: string | null, token: string): ExpressionPlan {
+export function applyExpressionChange(photo: string, destination: string | null, token: string, sidecarUpdate?: { before: string; after: string }): ExpressionPlan {
   const { plan, links, references } = makePlan(photo, destination);
   if (plan.token !== token) throw new Error('The files changed since the preview. Review the action again.');
   if (!config.trashDir) throw new Error('No trash folder is configured. Nothing was changed.');
   const trash = path.join(config.trashDir, `Expression ${crypto.randomUUID()}`);
   const moved: { from: string; to: string }[] = [], written: JsonLink[] = [], copies: string[] = [];
-  let refsWritten = false;
+  let refsWritten = false; let updatedSidecar: string | undefined;
   try {
     fs.mkdirSync(trash, { recursive: true });
     for (const l of links) if (l.copyTo && l.copyFrom) {
@@ -119,6 +119,13 @@ export function applyExpressionChange(photo: string, destination: string | null,
         fs.renameSync(from, to); moved.push({ from, to });
       }
     }
+    if (sidecarUpdate) {
+      const target = plan.changes[0].to;
+      if (!target) throw new Error('Cannot update a deleted photo.');
+      const sidecar = safeResolve('expressions', target.slice(0, -path.extname(target).length) + '.txt');
+      if (!fs.lstatSync(sidecar).isFile() || fs.readFileSync(sidecar, 'utf8') !== sidecarUpdate.before) throw new Error('The sidecar changed. Nothing was changed.');
+      writeFileSafely(sidecar, sidecarUpdate.after); updatedSidecar = sidecar;
+    }
     for (const link of links) { writeFileSafely(link.file, link.after); written.push(link); }
     const next = references.flatMap(p => { const c = plan.changes.find(x => eq(x.from, p)); return c ? c.to ? [c.to] : [] : [p]; });
     if (JSON.stringify(next) !== JSON.stringify(references)) { saveExpressionReferences(next, false); refsWritten = true; }
@@ -126,6 +133,7 @@ export function applyExpressionChange(photo: string, destination: string | null,
     return plan;
   } catch (error) {
     const failures: string[] = [];
+    if (updatedSidecar && sidecarUpdate) try { writeFileSafely(updatedSidecar, sidecarUpdate.before); } catch { failures.push(updatedSidecar); }
     if (refsWritten) try { saveExpressionReferences(references, false); } catch { failures.push('reference list'); }
     for (const l of written.reverse()) try { writeFileSafely(l.file, l.before); } catch { failures.push(l.file); }
     for (const m of moved.reverse()) try { fs.renameSync(m.to, m.from); } catch { failures.push(m.to); }

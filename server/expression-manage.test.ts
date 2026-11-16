@@ -57,6 +57,15 @@ describe('managing expression photos', () => {
     expect(JSON.parse(fs.readFileSync(path.join(tmp, 'Projects', choice), 'utf8')).photo).toBe('Positive/Joy/Joy_002.jpg');
     expect(readExpressionReferences().paths).toEqual(['Positive/Joy/Joy_002.jpg', 'Communication/Listening/Listening_002.webp']);
   });
+  it('rolls back photo moves and sidecars if the confirmation update cannot be applied', () => {
+    const plan = previewExpressionChange(a, 'Positive/Joy');
+    expect(() => applyExpressionChange(a, 'Positive/Joy', plan.token, { before: 'stale sidecar', after: 'new tags' })).toThrow(/sidecar changed/i);
+    expect(fs.readFileSync(path.join(tmp, 'Expressions', a), 'utf8')).toBe('bad photo');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Communication/Listening/Listening_002.txt'), 'utf8')).toBe('bad tags');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions', b), 'utf8')).toBe('good photo');
+    expect(fs.existsSync(path.join(tmp, 'Expressions/Positive/Joy/Joy_002.jpg'))).toBe(false);
+    expect(readExpressionReferences().paths).toEqual([a, b]);
+  });
   it('uses the AI naming sequence when moving a photo marked as generated', () => {
     fs.writeFileSync(path.join(tmp, 'Expressions/Communication/Listening/Listening_002.txt'), 'AIGenerated, N/A, CONFIRMED\n');
     const plan = previewExpressionChange(a, 'Positive/Joy');

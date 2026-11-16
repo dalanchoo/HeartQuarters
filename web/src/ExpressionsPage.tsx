@@ -20,7 +20,7 @@ import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 
-type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number] } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
+type TagAction = { kind: 'confirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
 function categoryFromHash(): string {
@@ -72,11 +72,21 @@ export function ExpressionsPage() {
     return () => { active = false; clearInterval(timer); };
   }, [candidateRevision]);
   const changeTag = async (photo: ExpressionPhoto, action: TagAction) => {
+    let newPath = photo.path;
     if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name, group: action.group });
-    else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
-    const updated = await getJson<ExpressionIndex>('/api/expressions');
+    else if (action.kind === 'confirm' && action.expression) {
+      const result = await postJson<{ path: string }>('/api/expressions/confirm-expression', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence });
+      newPath = result.path;
+    } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed });
+    const [updated, refs] = await Promise.all([getJson<ExpressionIndex>('/api/expressions'), newPath !== photo.path ? getJson<{ paths: string[] }>('/api/expression-references').catch(() => null) : Promise.resolve(null)]);
     setIndex(updated);
-    const refreshed = updated.photos.find(p => p.path === photo.path);
+    if (newPath !== photo.path) {
+      setOpen(current => current === photo.path ? newPath : current);
+      setChangeMessage(`Photo moved to ${newPath.split('/').join(' › ')}.`);
+      if (refs) { setReferences(refs.paths); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } window.dispatchEvent(new Event('hq-starred-photos-changed')); }
+      else setReferenceError('The photo moved, but starred photos could not be refreshed. Refresh HeartQuarters to reload them.');
+    }
+    const refreshed = updated.photos.find(p => p.path === newPath);
     if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
   };
   const setReference = async (path: string, checked: boolean) => {
@@ -424,9 +434,9 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
-  const showTags = (tags: ExpressionPhoto['tags']) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : ''}`}>
+  const showTags = (tags: ExpressionPhoto['tags'], expression = false) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : ''}`}>
     <span title={t.confirmed ? 'Confirmed' : 'AI suggestion'}>{t.tag}{!t.confirmed && !t.assessments && t.confidence !== null && ` ${t.confidence}%`}</span>{t.assessments && <span className="attribute-assessments">{([['claude', 'Claude'], ['codex', 'ChatGPT'], ['gemini', 'Gemini']] as const).filter(([id]) => t.assessments?.[id] !== undefined).map(([id, name]) => `${name} ${t.assessments?.[id]}%`).join(' · ')}</span>}
-    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
+    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t, expression })}>Confirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
   </span>)}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
 
   return (
@@ -464,7 +474,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Pose" value={newPose} disabled={savingTag} onChange={setNewPose} placeholder="Choose…" searchPlaceholder="Search pose…" emptyMessage="No matching attributes." options={POSE_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add pose" disabled={savingTag || !newPose} onClick={() => void saveTag({ kind: 'add', name: newPose, group: 'pose' })}>Add</button></div>}</div>
             <div className="attribute-row"><section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Morphology" value={newMorphology} disabled={savingTag} onChange={setNewMorphology} placeholder="Choose…" searchPlaceholder="Search morphology…" emptyMessage="No matching attributes." options={MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add morphology" disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add</button></div>}</div>
-            <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions) : <p className="muted small-text">None recorded.</p>}
+            <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions, true) : <p className="muted small-text">None recorded.</p>}
             </section>
           </div>
           {confirmError && <p className="error">{confirmError}</p>}
