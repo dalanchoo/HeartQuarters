@@ -427,8 +427,11 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot details > summary { cursor: pointer; }
 .expression-inbox-drop { border: 2px dashed #9bacbf; border-radius: 9px; padding: 1rem; margin: .7rem 0; }
 .expression-inbox-drop label { display: block; margin: .4rem 0; }
+.expression-inbox-import { margin-bottom: .6rem; }
+.expression-inbox .photo-grid { margin-top: .75rem; }
 .expression-inbox .expression-photo-choice { padding: .6rem; border: 1px solid var(--line); border-radius: 9px; }
-.expression-inbox .expression-photo-choice > button:not(.photo), .expression-inbox .expression-photo-choice details button { margin: .2rem; }
+.expression-inbox-origin { margin: .3rem 0; }
+.expression-inbox-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .expression-category-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 0.7rem 0; }
 .expression-category-picker .category-picker { flex: 0 1 320px; width: min(100%, 320px); }
 .expression-category-picker p { flex: 1 1 240px; margin: 0 0 0.2rem; }
