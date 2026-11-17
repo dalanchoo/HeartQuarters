@@ -10,11 +10,12 @@
 // Folders starting with "_" (e.g. _blind_pending) are skipped.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.js';
+import { config, safeResolve } from './config.js';
 import { requireFolder } from './projects.js';
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const CACHE_MS = 30_000;
+export const EXPRESSION_INBOX = '_Inbox';
 
 export interface Tag {
   tag: string;
@@ -87,6 +88,29 @@ function readText(file: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Photos waiting to be classified stay separate from the library index. */
+export function inboxExpressionPhotos(): ExpressionPhoto[] {
+  const dir = safeResolve('expressions', EXPRESSION_INBOX);
+  if (!fs.existsSync(dir)) return [];
+  if (!fs.lstatSync(dir).isDirectory() || fs.lstatSync(dir).isSymbolicLink()) throw new Error('The expression inbox must be a real folder.');
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const images = entries.filter(e => e.isFile() && !e.isSymbolicLink() && IMAGE_EXTS.has(path.extname(e.name).toLowerCase()));
+  return images.map(e => {
+    const base = path.basename(e.name, path.extname(e.name));
+    const sameBase = images.filter(other => path.basename(other.name, path.extname(other.name)).toLowerCase() === base.toLowerCase());
+    const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
+    const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, tags: sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? parseTagsFile(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : [] };
+  }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+export function findExpressionPhoto(index: ExpressionIndex, photoPath: string): ExpressionPhoto | undefined {
+  const library = index.photos.find(photo => photo.path === photoPath);
+  if (library || !photoPath.startsWith(`${EXPRESSION_INBOX}/`)) return library;
+  const photos = inboxExpressionPhotos(); const photo = photos.find(item => item.path === photoPath);
+  return photo && photos.filter(item => item.name.toLowerCase() === photo.name.toLowerCase()).length === 1 ? photo : undefined;
 }
 
 export function buildExpressionIndex(): ExpressionIndex {

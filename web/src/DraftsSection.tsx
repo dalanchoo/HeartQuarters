@@ -628,6 +628,7 @@ function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onC
       {current && <ThumbnailFeedback key={current.path} piece={piece} image={current.path} hasMetadata={!!conversation.pick} />}
       {current && !working && target && (
         <div className="draft-use">
+          <button className="small" disabled={using} onClick={() => { setUsing(true); setError(''); postJson<{ path: string }>('/api/expressions/inbox/copy-thumbnail', { piece, image: current.path }).then(result => { setUsed(`Copied to Expression Inbox: ${result.path}`); window.dispatchEvent(new Event('hq-expression-inbox-changed')); }, (e: Error) => setError(e.message)).finally(() => setUsing(false)); }}>Copy to Expression Inbox</button>
           <button className="small" disabled={using || target.locked} onClick={() => use(true, false)}>
             Use Thumbnail
           </button>

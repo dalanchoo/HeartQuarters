@@ -15,7 +15,8 @@ import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersio
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
-import { expressionIndex } from './expressions.js';
+import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
+import { copyThumbnailToInbox, ensureExpressionInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -64,6 +65,7 @@ const app = express();
 app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
+app.use('/api/expressions/inbox/import', express.json({ limit: '24mb' }));
 app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
 app.use(['/api/brief/start', '/api/brief/picks'], express.json({ limit: '120mb' })); // screenshots pasted into the brief's boxes
 app.use(express.json());
@@ -239,6 +241,13 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.get('/api/expressions/inbox', handle((_req, res) => { res.json(inboxExpressionPhotos()); }));
+app.post('/api/expressions/inbox/open', handle((_req, res) => { ensureExpressionInbox(); res.json({ ok: true }); }));
+app.post('/api/expressions/inbox/import', handle((req, res) => { res.json(importInboxPhoto(req.body?.name, req.body?.data, req.body?.ai)); }));
+app.post('/api/expressions/inbox/copy-thumbnail', handle((req, res) => { res.json(copyThumbnailToInbox(String(req.body?.piece ?? ''), String(req.body?.image ?? ''))); }));
+app.post('/api/expressions/inbox/file', handle((req, res) => { res.json(fileInboxPhoto(String(req.body?.photo ?? ''), String(req.body?.category ?? ''))); }));
+app.post('/api/expressions/inbox/prepare', handle((req, res) => { res.json(normalizeInboxPhoto(String(req.body?.photo ?? ''), req.body?.ai)); }));
+app.get('/api/expressions/inbox/prepare', handle((req, res) => { res.json(inboxNormalizationJob(String(req.query.id ?? ''))); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));

@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
+import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto } from './expressions.js';
 import { isAiExpression } from './expression-origin.js';
 import { writeFileSafely } from './files.js';
 
 /** The explicit Mark as AI action adds a tag while preserving the other tags. */
 export function markExpressionAi(photoPath: string): void {
-  const photo = buildExpressionIndex().photos.find(p => p.path === photoPath);
+  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
   if (!photo) throw new Error('That expression photo is no longer available.');
   if (isAiExpression(photo)) return;
   const image = safeResolve('expressions', photoPath);

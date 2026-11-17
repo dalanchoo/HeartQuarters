@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex, parseTags, type ExpressionCategory } from './expressions.js';
+import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, type ExpressionCategory } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
@@ -91,7 +91,7 @@ export function mergeModelAssessments(text: string, results: Record<AiId, Assess
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
 export function startAssessment(photoPath: string, ask: AskAi = askReadOnlyImage, prepare: (source: string, dest: string) => Promise<void> = prepareImage): Job {
   const index = buildExpressionIndex();
-  if (!index.photos.some(p => p.path === photoPath)) throw new Error('Choose a photo in the expression library.');
+  if (!findExpressionPhoto(index, photoPath)) throw new Error('Choose a photo in the expression library or inbox.');
   if (active.has(photoPath)) throw new Error('This photo is already being assessed.');
   const source = safeResolve('expressions', photoPath); const original = fs.statSync(source); if (!original.isFile()) throw new Error('Photo not found.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');

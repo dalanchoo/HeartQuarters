@@ -38,6 +38,7 @@ see your projects, edit metadata, watch videos, and run jobs
 | Substack writing | `D:\Google Drive\HeartMind\Writing\<My Journey / My Reflections / My Wisdom>\<piece>\` with `Drafts\*.docx` and `Substack Metadata\Preview.png` |
 | Expressions library (thumbnail photos) | `D:\Google Drive\HeartMind\Assets\Expressions\<Category>\<Sub>\` with `<Name>.txt` (definition), `_<Name>.png` (reference), photos + `<photo>.txt` tags |
 | Expression shot list | `D:\Google Drive\HeartMind\Assets\Expressions\Expression Shot List.json`; suggested looks, their video sources, and whether they have been photographed |
+| Expression inbox | `D:\Google Drive\HeartMind\Assets\Expressions\_Inbox\`; photos and sidecars awaiting assessment and classification |
 | Photo previews (cache) | `C:\Dev\HeartQuarters\data\thumbs` (made by FFmpeg; safe to delete) |
 | Downloaded Substack archive | `HMF_SYS\Generated\Substack` (made by SubstackDownloader.py; not shown in the app yet) |
 | Tools (standalone Python scripts the Tools tab runs) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |

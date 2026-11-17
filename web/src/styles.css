@@ -425,6 +425,10 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot p { margin: .45rem 0; }
 .expression-shot.is-done { opacity: .7; }
 .expression-shot details > summary { cursor: pointer; }
+.expression-inbox-drop { border: 2px dashed #9bacbf; border-radius: 9px; padding: 1rem; margin: .7rem 0; }
+.expression-inbox-drop label { display: block; margin: .4rem 0; }
+.expression-inbox .expression-photo-choice { padding: .6rem; border: 1px solid var(--line); border-radius: 9px; }
+.expression-inbox .expression-photo-choice > button:not(.photo), .expression-inbox .expression-photo-choice details button { margin: .2rem; }
 .expression-category-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 0.7rem 0; }
 .expression-category-picker .category-picker { flex: 0 1 320px; width: min(100%, 320px); }
 .expression-category-picker p { flex: 1 1 240px; margin: 0 0 0.2rem; }
@@ -753,3 +757,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 
 .version-field-compare { margin: .8rem 0; }
 .version-field-compare > label { display: block; font-weight: 600; margin-bottom: .4rem; }
+
+.expression-inbox-comparison { display: flex; gap: 0.75rem; }
+.expression-inbox-comparison > div { min-width: 0; flex: 1; }
+.expression-inbox-comparison img { display: block; width: 100%; height: auto; }

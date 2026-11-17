@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -15,6 +15,7 @@ import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { ExpressionShotList } from './ExpressionShotList';
+import { ExpressionInbox } from './ExpressionInbox';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
@@ -42,7 +43,7 @@ export function ExpressionsPage() {
   const [index, setIndex] = useState<ExpressionIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
-  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>('library');
   const [generationCategory, setGenerationCategory] = useState('');
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
@@ -53,6 +54,8 @@ export function ExpressionsPage() {
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
+  const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
+  const refreshInbox = useCallback(() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); void getJson<ExpressionPhoto[]>('/api/expressions/inbox').then(photos => { setInbox(photos); setPreview(current => { if (!current || current.imageUrl || current.photo.category !== '_Inbox') return current; const photo = photos.find(item => item.path === current.photo.path); return photo ? { ...current, photo } : null; }); }, e => setError(e.message)); }, []);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
   const [referenceError, setReferenceError] = useState('');
   const [referenceReady, setReferenceReady] = useState(false);
@@ -60,10 +63,12 @@ export function ExpressionsPage() {
   const [changeMessage, setChangeMessage] = useState('');
   const [candidateRevision, setCandidateRevision] = useState(0);
   const [assessmentJobs, setAssessmentJobs] = useState<string[]>([]);
+  useEffect(() => { if (activeTab === 'inbox') refreshInbox(); }, [activeTab, refreshInbox]);
+  useEffect(() => { window.addEventListener('hq-expression-inbox-changed', refreshInbox); return () => window.removeEventListener('hq-expression-inbox-changed', refreshInbox); }, [refreshInbox]);
   useEffect(() => {
     if (!assessmentJobs.length) return;
     let active = true;
-    const check = () => { void Promise.all(assessmentJobs.map(id => getJson<{ id: string; state: string }>(`/api/expressions/assessment?id=${encodeURIComponent(id)}`).catch(() => null))).then(jobs => { if (!active) return; const completed = jobs.filter(job => job && job.state !== 'working'); if (completed.length) { setAssessmentJobs(ids => ids.filter(id => !completed.some(job => job?.id === id))); if (completed.some(job => job?.state === 'done')) void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); } }); };
+    const check = () => { void Promise.all(assessmentJobs.map(id => getJson<{ id: string; state: string }>(`/api/expressions/assessment?id=${encodeURIComponent(id)}`).catch(() => null))).then(jobs => { if (!active) return; const completed = jobs.filter(job => job && job.state !== 'working'); if (completed.length) { setAssessmentJobs(ids => ids.filter(id => !completed.some(job => job?.id === id))); if (completed.some(job => job?.state === 'done')) { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); refreshInbox(); } } }); };
     const timer = setInterval(check, 3000); return () => { active = false; clearInterval(timer); };
   }, [assessmentJobs]);
   useEffect(() => {
@@ -79,6 +84,7 @@ export function ExpressionsPage() {
       const result = await postJson<{ path: string }>('/api/expressions/confirm-expression', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence });
       newPath = result.path;
     } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : action.kind === 'disconfirm' ? '/api/expressions/disconfirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed, disconfirmed: !!action.tag.disconfirmed });
+    if (photo.category === '_Inbox') { refreshInbox(); if (newPath !== photo.path) { setPreview(null); setChangeMessage(`Photo filed as ${newPath}.`); void getJson<ExpressionIndex>('/api/expressions').then(setIndex); } return; }
     const [updated, refs] = await Promise.all([getJson<ExpressionIndex>('/api/expressions'), newPath !== photo.path ? getJson<{ paths: string[] }>('/api/expression-references').catch(() => null) : Promise.resolve(null)]);
     setIndex(updated);
     if (newPath !== photo.path) {
@@ -155,7 +161,7 @@ export function ExpressionsPage() {
   const subs = children.get(current.path) ?? [];
   const availableCategories = generationCategories(index.categories);
   const generationSelection = availableCategories.find(c => c.path === generationCategory);
-  const switchTab = (tab: 'library' | 'generation' | 'shots') => {
+  const switchTab = (tab: 'library' | 'generation' | 'shots' | 'inbox') => {
     if (tab === 'generation' && activeTab !== 'generation') setGenerationCategory(previous => generationCategoryOnSwitch(index.categories, current.path, previous));
     setActiveTab(tab); setOpen(null); setPreview(null);
   };
@@ -174,11 +180,13 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
-        <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const tabs = ['library', 'generation', 'shots'] as const; const next = e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (e.key === 'ArrowRight' ? 1 : 2)) % tabs.length]; switchTab(next); document.getElementById(`expression-${next}-tab`)?.focus(); }}>
+        <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const tabs = ['library', 'inbox', 'generation', 'shots'] as const; const next = e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[3] : tabs[(tabs.indexOf(activeTab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; switchTab(next); document.getElementById(`expression-${next}-tab`)?.focus(); }}>
           <button role="tab" aria-selected={activeTab === 'library'} aria-controls="expression-library" id="expression-library-tab" onClick={() => switchTab('library')}>Library</button>
+          <button role="tab" aria-selected={activeTab === 'inbox'} aria-controls="expression-inbox" id="expression-inbox-tab" onClick={() => switchTab('inbox')}>Inbox</button>
           <button role="tab" aria-selected={activeTab === 'generation'} aria-controls="expression-generation" id="expression-generation-tab" onClick={() => switchTab('generation')}>Generate &amp; Review{readyCount !== null && readyCount > 0 ? ` · ${readyCount}` : ''}</button>
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
+        <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} categories={index.categories} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} /></div>
         <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
@@ -261,7 +269,7 @@ export function ExpressionsPage() {
           onNext={viewedIndex < 0 ? undefined : () => setOpen(shown[(viewedIndex + 1) % shown.length].path)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onTagAction={!preview.imageUrl && index.photos.some(p => p.path === preview.photo.path) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
+      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onTagAction={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { if (preview.photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
     </div>
   );
 }
