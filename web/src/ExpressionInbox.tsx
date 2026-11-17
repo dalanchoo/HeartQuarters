@@ -29,8 +29,7 @@ export function ExpressionInbox({ photos, onView, onRefresh }: { photos: Express
     {!photos.length && <p className="muted">No photos waiting to be reviewed.</p>}
     <div className="photo-grid">{photos.map(photo => {
       return <article className="expression-photo-choice" key={photo.path}>
-        <button className="photo" onClick={() => onView(photo)}><img src={thumbUrl('expressions', photo.path, 360, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
-        <p className="small-text expression-inbox-origin">{isAiExpression(photo) ? 'AI Image' : 'Not Marked as AI'}</p>
+        <button className="photo" onClick={() => onView(photo)}><img src={thumbUrl('expressions', photo.path, 360, photo.revision)} alt={photo.name} loading="lazy" /><span className="expression-inbox-caption"><span className="expression-inbox-name">{photo.name}</span><span className="expression-inbox-origin">{isAiExpression(photo) ? 'AI Image' : 'Not Marked as AI'}</span></span></button>
         <div className="expression-inbox-actions">
         <button disabled={busy} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
         <a className="button-link" href="https://www.photopea.com/" target="_blank" rel="noopener noreferrer" aria-disabled={busy} onClick={e => { if (busy) { e.preventDefault(); return; } void run(async () => { const copy = await postJson<{ path: string }>('/api/expressions/inbox/photopea-copy', { photo: photo.path }); setMessage(`Created ${copy.path}. Drag the selected file from File Explorer into Photopea.`); onRefresh(); }); }}>Prepare Copy for Photopea</a>

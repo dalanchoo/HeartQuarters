@@ -430,8 +430,11 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-inbox-import { margin-bottom: .6rem; }
 .expression-inbox .photo-grid { margin-top: .75rem; }
 .expression-inbox .expression-photo-choice { padding: .6rem; border: 1px solid var(--line); border-radius: 9px; }
-.expression-inbox-origin { margin: .3rem 0; }
-.expression-inbox-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.expression-inbox .photo .expression-inbox-caption { display: flex; align-items: center; gap: .5rem; width: 100%; }
+.expression-inbox .photo .expression-inbox-caption span { padding: 0; }
+.expression-inbox-name { min-width: 0; flex: 1; }
+.expression-inbox-origin { flex: none; }
+.expression-inbox-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .3rem; }
 .expression-category-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 0.7rem 0; }
 .expression-category-picker .category-picker { flex: 0 1 320px; width: min(100%, 320px); }
 .expression-category-picker p { flex: 1 1 240px; margin: 0 0 0.2rem; }
