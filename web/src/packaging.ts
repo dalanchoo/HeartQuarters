@@ -123,6 +123,23 @@ export function setFieldValue(text: string, index: number, value: string): strin
   return [...lines.slice(0, span.from), ...newBody, ...(endsWithBlank ? [''] : []), ...lines.slice(span.to)].join(eol);
 }
 
+/** Restore a field from the saved file, or remove it when the draft introduced it. */
+export function undoFieldEdit(text: string, saved: string, label: string): string {
+  const current = parseFields(text); const original = parseFields(saved);
+  if (!current || !original) throw new Error('The packaging file does not have recognizable fields.');
+  const matching = current.map((field, i) => ({ field, i })).filter(item => item.field.label.toLowerCase() === label.toLowerCase());
+  const was = original.filter(field => field.label.toLowerCase() === label.toLowerCase());
+  if (matching.length !== 1 || was.length > 1) throw new Error(`Cannot undo ${label}: the field is missing or duplicated.`);
+  if (was.length) {
+    const restored = setFieldValue(text, matching[0].i, was[0].value);
+    return restored.trimEnd() === saved.trimEnd() ? saved : restored;
+  }
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/); const span = fieldSpans(lines)[matching[0].i];
+  const restored = [...lines.slice(0, span.from - 1), ...lines.slice(span.to)].join(eol);
+  return restored.trimEnd() === saved.trimEnd() ? saved : restored;
+}
+
 // ---- The AI-generated lines in a YouTube description ------------------------------
 
 const VISUALS_LINE = 'Some visuals are AI-generated or AI-enhanced.';

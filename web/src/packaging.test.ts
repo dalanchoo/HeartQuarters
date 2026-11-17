@@ -1,6 +1,22 @@
 // Splitting YouTube.md and similar files into fields for the Copy buttons.
 import { describe, expect, it } from 'vitest';
-import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags } from './packaging';
+import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags, undoFieldEdit } from './packaging';
+
+describe('undoing an individual field edit', () => {
+  it('restores the saved field while keeping other edits', () => {
+    const saved = 'Title:\nOld\n\nTags:\nA\n';
+    const draft = 'Title:\nNew\n\nTags:\nB\n';
+    expect(parseFields(undoFieldEdit(draft, saved, 'Title'))).toEqual([{ label: 'Title', value: 'Old' }, { label: 'Tags', value: 'B' }]);
+  });
+  it('removes a field introduced by the draft', () => {
+    const saved = 'Title:\nOld\n';
+    const draft = 'Title:\nOld\n\nTags:\nB\n';
+    expect(undoFieldEdit(draft, saved, 'Tags')).toBe(saved);
+  });
+  it('refuses to guess when a field is duplicated', () => {
+    expect(() => undoFieldEdit('Title:\nA\n\nTitle:\nB\n', 'Title:\nA\n', 'Title')).toThrow(/duplicated/);
+  });
+});
 
 describe('alphabetical YouTube tags', () => {
   it('sorts case insensitively while keeping spelling and duplicates', () => {

@@ -22,4 +22,9 @@ describe('copy direction indicator', () => {
     expect(html).toMatch(/type="radio"[^>]*checked=""\/> V03 → V05/);
     expect(html).toMatch(/type="radio"[^>]*disabled=""[^>]*\/> V03 ← V05/);
   });
+  it('hides a direction when its destination is locked', () => {
+    const html = renderToStaticMarkup(createElement(CopyDirectionControls, { left: 'V03', right: 'V05', selected: null, canCopyRight: true, canCopyLeft: false, showCopyLeft: false, copyRight: () => {}, copyLeft: () => {} }));
+    expect(html).toContain('V03 → V05');
+    expect(html).not.toContain('V03 ← V05');
+  });
 });

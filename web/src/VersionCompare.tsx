@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fileStamp, getText, postJson, thumbUrl, type PackagingVersion } from './api';
 import type { LoadedDoc } from './PackagingDoc';
-import { parseFields, sortTags } from './packaging';
+import { parseFields, sortTags, undoFieldEdit } from './packaging';
 import { comparisonLabels, copyVersionFields } from './versionFields';
 import { metadataDiff } from './metadataDiff';
 import { DiffText, EditableComparisonValue, FieldEditor } from './YouTubeCard';
@@ -112,20 +112,19 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
       const status = <>{diff && <span className={`comparison-status ${diff.same && leftValue !== undefined && rightValue !== undefined ? 'comparison-same' : 'comparison-different'}`}>{diff.same && leftValue !== undefined && rightValue !== undefined ? '✓ Same' : '≠ Different'}</span>}{direction && <span className="comparison-status comparison-waiting">Selected to Copy</span>}</>;
       const side = (which: 'left' | 'right', value: string | undefined) => {
         const preview = <pre className="lvy-value">{value === undefined ? '(not provided)' : value ? <DiffText parts={which === 'left' ? diff!.left : diff!.right} side={which === 'left' ? 'local' : 'youtube'} /> : '(empty)'}</pre>;
-        return <div><strong>{which === 'left' ? leftVersion?.name : rightVersion?.name}</strong>{!locked && (which === 'left' ? targetIsLeft : targetIsRight) && index >= 0 ? <EditableComparisonValue doc={doc} index={index} field={{ ...doc.fields![index], value: displayValue(doc.fields![index].value) ?? '' }} current={preview} edited={edited} copySelected={!!direction} busy={busy} cancelCopy={() => toggle(label)} /> : preview}</div>;
+        return <div><strong>{which === 'left' ? leftVersion?.name : rightVersion?.name}</strong>{!locked && (which === 'left' ? targetIsLeft : targetIsRight) && index >= 0 ? <EditableComparisonValue doc={doc} index={index} field={{ ...doc.fields![index], value: displayValue(doc.fields![index].value) ?? '' }} current={preview} edited={edited} copySelected={!!direction} busy={busy} cancelCopy={() => toggle(label)} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} /> : preview}</div>;
       };
       return <ComparisonRow key={label} label={label} status={status} collapsible={isLongComparisonField(label, leftValue, rightValue)}>
-        {draft.changes.includes(label) && originalDoc.fields?.some(f => f.label.toLowerCase() === label.toLowerCase()) && <button className="small" disabled={busy} onClick={() => { if (originalDoc.text !== null) void doc.save(t => copyVersionFields(t, originalDoc.text!, [label])); }}>Undo Edit</button>}
         {right ? <CopyDirectionFrame left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={direction}>
-          <CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={direction} disabled={busy} canCopyRight={!busy && canCopy && targetIsRight && sourceHas(label) && canSelectIncomingCopy(edited, !!direction)} canCopyLeft={!busy && canCopy && targetIsLeft && sourceHas(label) && canSelectIncomingCopy(edited, !!direction)} copyRight={() => toggle(label)} copyLeft={() => toggle(label)} />
-          {edited && canCopy && sourceHas(label) && <p className="comparison-edit-warning">This field has an unsaved edit. Use Undo Edit before selecting a copy into {version.name}.</p>}
+          <CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={direction} disabled={busy} showCopyRight={targetIsRight} showCopyLeft={targetIsLeft} canCopyRight={!busy && canCopy && targetIsRight && sourceHas(label) && canSelectIncomingCopy(edited, !!direction)} canCopyLeft={!busy && canCopy && targetIsLeft && sourceHas(label) && canSelectIncomingCopy(edited, !!direction)} copyRight={() => toggle(label)} copyLeft={() => toggle(label)} />
+          {edited && canCopy && sourceHas(label) && <p className="comparison-edit-warning">This field has an unsaved edit. Choose Edited, then Undo Edit before selecting a copy into {version.name}.</p>}
           <div className="compare-columns">{side('left', leftValue)}{side('right', rightValue)}</div>
         </CopyDirectionFrame> : left === version.path && index >= 0 ? <FieldEditor doc={doc} index={index} field={doc.fields![index]} /> : <pre className="lvy-value">{leftValue || '(empty)'}</pre>}
         {diff?.reordered && <p className="muted small-text">The same tags are present in a different order.</p>}
       </ComparisonRow>;
     })}
     {ready && (leftThumb || rightThumb) && <div className="version-field-compare"><strong>Thumbnail</strong><CopyDirectionFrame left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)}>
-      {right && <CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)} disabled={busy} canCopyRight={!busy && canCopy && targetIsRight && !!sourceThumb} canCopyLeft={!busy && canCopy && targetIsLeft && !!sourceThumb} copyRight={() => toggle('Thumbnail')} copyLeft={() => toggle('Thumbnail')} />}
+      {right && <CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)} disabled={busy} showCopyRight={targetIsRight} showCopyLeft={targetIsLeft} canCopyRight={!busy && canCopy && targetIsRight && !!sourceThumb} canCopyLeft={!busy && canCopy && targetIsLeft && !!sourceThumb} copyRight={() => toggle('Thumbnail')} copyLeft={() => toggle('Thumbnail')} />}
       <div className={right ? 'compare-columns' : undefined}>{(right ? [leftThumb, rightThumb] : [leftThumb]).map((thumb, i) => <div key={i}><strong>{i === 0 ? leftVersion?.name : rightVersion?.name}</strong><div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${i === 0 ? leftVersion?.name : rightVersion?.name} thumbnail`} /> : '(empty)'}</div></div>)}</div>
     </CopyDirectionFrame></div>}
     {ready && right && !sourceVersion && <p className="muted small-text">To edit or copy, unlock one of the two versions above.</p>}
