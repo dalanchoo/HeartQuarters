@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, youtubeValues } from './youtubePackaging';
+import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, youtubeValues, wouldLoseChapters } from './youtubePackaging';
+
+describe('chapter safety', () => {
+  const chapters = 'About the video\n\nCHAPTERS\n0:00 First\n1:08 Second\n1:02:03 Third';
+  it('warns when a chaptered description would be replaced with an unchaptered one', () => {
+    expect(wouldLoseChapters(chapters, 'A new description')).toBe(true);
+    expect(wouldLoseChapters(chapters, chapters)).toBe(false);
+    expect(wouldLoseChapters('No chapters', 'A new description')).toBe(false);
+  });
+  it('does not treat one incidental timestamp as a chapter list', () => {
+    expect(wouldLoseChapters('The story starts at 1:00\n2:00 One moment', 'New')).toBe(false);
+  });
+});
 
 describe('hashtags kept in their own field (older files)', () => {
   const OLD = 'Title:\nT\n\nDescription:\nAbout the video.\n\nHashtags:\n#ayahuasca #mensmentalhealth\n\nTags:\na, b\n';

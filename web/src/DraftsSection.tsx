@@ -6,7 +6,7 @@ import { categoriesIn, photosIn } from './expressionPick';
 import { CopyButton, type LoadedDoc } from './PackagingDoc';
 import { parseFields } from './packaging';
 import { copyVersionFields } from './versionFields';
-import { splitHashtags } from './youtubePackaging';
+import { splitHashtags, wouldLoseChapters } from './youtubePackaging';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
@@ -119,12 +119,16 @@ function DraftPackagingCompare({ piece, choice, conversations, target, doc, onCh
   const values = [{ label: 'Title', value: pick.title }, { label: 'Description', value: descriptionParts.description }, { label: 'Hashtags', value: descriptionParts.hashtags }, { label: 'Tags', value: pick.tags }, { label: 'Pinned Comment', value: pick.pinnedComment }].filter((f): f is { label: string; value: string } => !!f.value);
   const source = values.map(f => `${f.label}:\n${f.value}`).join('\n\n') + '\n';
   const available = conversations.filter(c => c.pick?.title === pick.title).flatMap(c => c.images.map(image => ({ path: image.path, label: `${c.name} · ${image.name}` })));
-  const [image, setImage] = useState(''); const [thumbnail, setThumbnail] = useState(true); const [selected, setSelected] = useState<string[]>(() => values.map(f => f.label)); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  useEffect(() => { setSelected(values.map(f => f.label)); setImage(''); }, [choice.index, pick.title, pick.description, pick.tags, pick.pinnedComment]);
-  const selectedImage = image || available.at(-1)?.path || '';
   const fields = doc.text ? parseFields(doc.text) ?? [] : [];
+  const existingDescription = fields.find(f => f.label.toLowerCase() === 'description')?.value ?? '';
+  const chapterRisk = wouldLoseChapters(existingDescription, descriptionParts.description);
+  const defaultSelected = () => values.map(f => f.label).filter(label => !(label === 'Description' && chapterRisk));
+  const [image, setImage] = useState(''); const [thumbnail, setThumbnail] = useState(true); const [selected, setSelected] = useState<string[]>(defaultSelected); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
+  useEffect(() => { setSelected(defaultSelected()); setImage(''); }, [choice.index, pick.title, pick.description, pick.tags, pick.pinnedComment, target.path, chapterRisk]);
+  const selectedImage = image || available.at(-1)?.path || '';
   return <details className="yt-section"><summary>Review and Apply Generated Packaging</summary>
     <p className="muted small-text">Compare the selected draft with {target.name}. Chapters are part of the description; hashtags are combined with it when sent to YouTube. No changes are sent to YouTube here.</p>
+    {chapterRisk && <p role="alert">The generated description has no chapter list, but {target.name} has chapters. Description is unchecked to protect them. Selecting it will replace the entire description, including those chapters.</p>}
     {values.map(field => <div className="version-field-compare" key={field.label}><label><input type="checkbox" checked={selected.includes(field.label)} onChange={e => setSelected(e.target.checked ? [...selected, field.label] : selected.filter(s => s !== field.label))} /> {field.label}</label><div className="compare-columns"><div><strong>Generated Draft</strong><pre className="lvy-value">{field.value}</pre></div><div><strong>{target.name}</strong><pre className="lvy-value">{fields.find(f => f.label.toLowerCase() === field.label.toLowerCase())?.value || '(empty)'}</pre></div></div></div>)}
     {available.length > 0 && <div className="version-field-compare"><label><input type="checkbox" checked={thumbnail} onChange={e => setThumbnail(e.target.checked)} /> Thumbnail</label> <select value={selectedImage} onChange={e => setImage(e.target.value)}>{available.map(item => <option key={item.path} value={item.path}>{item.label}</option>)}</select><div><img className="lvy-thumb" src={thumbUrl('projects', selectedImage, 320)} alt="Selected generated thumbnail" /></div></div>}
     {!pick.description && <p className="muted small-text">This older draft has no generated description, tags or pinned comment. Write a new brief to generate the full package.</p>}

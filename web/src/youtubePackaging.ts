@@ -25,6 +25,12 @@ export function splitHashtags(description: string): { description: string; hasht
   return { description: paragraphs.slice(0, -1).join('\n\n'), hashtags: last };
 }
 
+/** Warn before replacing a chaptered description with one that has no chapter list. */
+export function wouldLoseChapters(existing: string, replacement: string): boolean {
+  const hasChapters = (text: string) => (text.match(/^\s*(?:\d{1,2}:)?\d{1,2}:\d{2}(?=\s|[-–—])[^\r\n]*$/gm) ?? []).length >= 3;
+  return hasChapters(existing) && !hasChapters(replacement);
+}
+
 export function localValue(text: string, label: SyncField): string | null {
   const fields = parseFields(text);
   if (!fields) return null;

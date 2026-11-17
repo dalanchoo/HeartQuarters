@@ -102,6 +102,38 @@ describe('writing the brief', () => {
     expect(sawTimes).toBe(true);
   });
 
+  it('supplies WebVTT timestamps when a transcript has a single VTT subtitle file', async () => {
+    const subs = path.join(tmp, LONGFORM, 'Subtitles');
+    fs.unlinkSync(path.join(subs, '022-captions.srt'));
+    fs.writeFileSync(path.join(subs, '022-captions.txt'), 'A transcript without timestamps about being agonized.');
+    fs.writeFileSync(path.join(subs, '022-captions.vtt'), 'WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nA chapter.\n');
+    let sawTimes = false;
+    const inspect: AskAi = (ai, prompt, cwd, images) => { if (prompt.includes('"picks"')) sawTimes = fs.readFileSync(path.join(cwd, 'source-timings.vtt'), 'utf8').includes('00:00:02.000'); return fakeAi(ai, prompt, cwd, images); };
+    const { finished } = await startBrief(LONGFORM, '', inspect); await finished;
+    expect(sawTimes).toBe(true);
+  });
+
+  it('supplies WebVTT timestamps when picking from an existing brief', async () => {
+    const subs = path.join(tmp, LONGFORM, 'Subtitles');
+    fs.unlinkSync(path.join(subs, '022-captions.srt'));
+    fs.writeFileSync(path.join(subs, '022-captions.txt'), 'A transcript about being agonized.');
+    fs.writeFileSync(path.join(subs, '022-captions.vtt'), 'WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nA chapter.\n');
+    fs.mkdirSync(draftsDir(), { recursive: true });
+    fs.writeFileSync(path.join(draftsDir(), 'Brief.md'), '# Brief: 022\n');
+    let sawTimes = false;
+    const inspect: AskAi = (ai, prompt, cwd, images) => { if (prompt.includes('"picks"')) sawTimes = fs.readFileSync(path.join(cwd, 'source-timings.vtt'), 'utf8').includes('00:00:02.000'); return fakeAi(ai, prompt, cwd, images); };
+    const { finished } = await startPicks(LONGFORM, '', inspect); await finished;
+    expect(sawTimes).toBe(true);
+  });
+
+  it('does not guess which timed subtitles to use when multiple files exist', async () => {
+    fs.writeFileSync(path.join(tmp, LONGFORM, 'Subtitles', 'other.vtt'), 'WEBVTT\n');
+    let timedFiles: string[] = [];
+    const inspect: AskAi = (ai, prompt, cwd, images) => { if (prompt.includes('"picks"')) timedFiles = fs.readdirSync(cwd).filter(name => name.startsWith('source-timings.')); return fakeAi(ai, prompt, cwd, images); };
+    const { finished } = await startBrief(LONGFORM, '', inspect); await finished;
+    expect(timedFiles).toEqual([]);
+  });
+
   it('keeps an earlier brief, renamed with its date and time', async () => {
     fs.mkdirSync(draftsDir(), { recursive: true });
     fs.writeFileSync(path.join(draftsDir(), 'Brief.md'), 'the old brief');
