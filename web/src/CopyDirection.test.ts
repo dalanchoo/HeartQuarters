@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { localCopyDirection, youtubeCopyDirection } from './CopyDirection';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { CopyDirectionControls, localCopyDirection, youtubeCopyDirection } from './CopyDirection';
 
 describe('copy direction indicator', () => {
   it('points toward YouTube or the local version on either side', () => {
@@ -13,5 +15,11 @@ describe('copy direction indicator', () => {
     expect(localCopyDirection(true, true)).toBe('left-to-right');
     expect(localCopyDirection(true, false)).toBe('right-to-left');
     expect(localCopyDirection(false, true)).toBeNull();
+  });
+  it('offers an explicit No Copy radio choice and marks the chosen direction', () => {
+    const html = renderToStaticMarkup(createElement(CopyDirectionControls, { left: 'V03', right: 'V05', selected: 'left-to-right', canCopyRight: true, canCopyLeft: false, copyRight: () => {}, copyLeft: () => {} }));
+    expect(html).toContain('No Copy');
+    expect(html).toMatch(/type="radio"[^>]*checked=""\/> V03 → V05/);
+    expect(html).toMatch(/type="radio"[^>]*disabled=""[^>]*\/> V03 ← V05/);
   });
 });

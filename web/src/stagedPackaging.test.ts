@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyStagedText, changedPackagingFields } from './stagedPackaging';
+import { applyStagedText, canSelectIncomingCopy, changedPackagingFields } from './stagedPackaging';
 
 describe('pending packaging changes', () => {
   it('lists changed, added and removed fields without treating unchanged fields as changes', () => {
@@ -11,5 +11,10 @@ describe('pending packaging changes', () => {
   it('applies the draft only while the original still matches', () => {
     expect(applyStagedText('original', 'original', 'edited')).toBe('edited');
     expect(() => applyStagedText('changed elsewhere', 'original', 'edited')).toThrow(/changed since/);
+  });
+  it('prevents an incoming copy from overwriting an edit while allowing a selected copy to be cancelled', () => {
+    expect(canSelectIncomingCopy(true, false)).toBe(false);
+    expect(canSelectIncomingCopy(false, false)).toBe(true);
+    expect(canSelectIncomingCopy(true, true)).toBe(true);
   });
 });

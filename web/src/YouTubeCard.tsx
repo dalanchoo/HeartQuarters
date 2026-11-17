@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fileStamp, fileUrl, getJson, getText, postJson, type FileRef, type Piece } from './api';
 import { CopyButton, type LoadedDoc } from './PackagingDoc';
 import type { UploadJob } from '../../server/youtube';
@@ -17,6 +17,7 @@ import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCo
 import { useStagedDoc } from './useStagedDoc';
 import { copyVersionFields } from './versionFields';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
+import { canSelectIncomingCopy } from './stagedPackaging';
 
 // A video's YouTube metadata in one place (John, 2026-11-14): the link to YouTube sits on the card's status line, and
 // "Local vs YouTube" shows every field of YouTube.md, with one switch for all of them: the local file, what YouTube
@@ -485,7 +486,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
     }
   };
 
-  const saveToFile = (field: SyncField) => { if (localBaseline.current === null) localBaseline.current = originalDoc.text; setFromYoutube(items => items.includes(field) ? items.filter(item => item !== field) : [...items, field]); setStaged(items => items.filter(item => item !== field)); };
+  const saveToFile = (field: SyncField) => { if (!canSelectIncomingCopy(draft.changes.some(label => label.toLowerCase() === field.toLowerCase()), fromYoutube.includes(field))) return; if (localBaseline.current === null) localBaseline.current = originalDoc.text; setFromYoutube(items => items.includes(field) ? items.filter(item => item !== field) : [...items, field]); setStaged(items => items.filter(item => item !== field)); };
   const saveThumbnail = () => { setYoutubeThumbnail(value => !value); setStaged(items => items.filter(item => item !== 'Thumbnail')); };
 
   const dirty = draft.pending || fromYoutube.length > 0 || youtubeThumbnail || pending.length > 0;
@@ -523,7 +524,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const shownView: View = linked ? (display ?? view) : 'local';
   const leftName = reverse ? 'YouTube' : versionName ?? 'Local';
   const rightName = reverse ? versionName ?? 'Local' : 'YouTube';
-  const directionControls = (selected: CopyDirection | null, canPush: boolean, canPull: boolean, pushChoice: () => void, pullChoice: () => void) => <CopyDirectionControls left={leftName} right={rightName} selected={selected} canCopyRight={reverse ? canPull : canPush} canCopyLeft={reverse ? canPush : canPull} copyRight={reverse ? pullChoice : pushChoice} copyLeft={reverse ? pushChoice : pullChoice} />;
+  const directionControls = (selected: CopyDirection | null, canPush: boolean, canPull: boolean, pushChoice: () => void, pullChoice: () => void) => <CopyDirectionControls left={leftName} right={rightName} selected={selected} disabled={busy} canCopyRight={reverse ? canPull : canPush} canCopyLeft={reverse ? canPush : canPull} copyRight={reverse ? pullChoice : pushChoice} copyLeft={reverse ? pushChoice : pullChoice} />;
   const columns = (localPart: React.ReactNode, youtubePart: React.ReactNode, waiting: boolean) =>
     shownView === 'local' ? (
       <div className={waiting ? 'compare-waiting' : undefined}>{waiting && <WaitingBadge />}{localPart}</div>
@@ -562,7 +563,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       </div>
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
-      <AiLineBoxes doc={doc} />
+      <AiLineBoxes doc={busy ? { ...doc, locked: true } : doc} />
 
       {doc.text !== null &&
         shownLabels.map((label) => {
@@ -570,18 +571,22 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const field = index >= 0 ? fields[index] : null;
           const sync = isSync(label);
           const rawLocal = sync ? (() => { try { return localValue(text, label); } catch { return field?.value ?? null; } })() : field?.value ?? null;
-          const local = label.toLowerCase() === 'tags' && rawLocal !== null ? sortTags(rawLocal) : rawLocal;
+          const savedField = originalDoc.fields?.find(f => f.label.toLowerCase() === label.toLowerCase());
+          const savedLocal = sync ? (() => { try { return localValue(originalDoc.text ?? '', label); } catch { return savedField?.value ?? null; } })() : savedField?.value ?? null;
+          const local = label.toLowerCase() === 'tags' && savedLocal !== null ? sortTags(savedLocal) : savedLocal;
           const remote = sync && online ? online[label] : null;
           const diff = sync && local !== null && remote !== null ? metadataDiff(label, local, remote) : null;
           const waiting = staged.includes(label as RowKey);
           const note = LOCAL_ONLY_NOTE[label.toLowerCase()];
           const pulling = sync && fromYoutube.includes(label);
+          const edited = draft.changes.some(name => name.toLowerCase() === label.toLowerCase());
           const direction = youtubeCopyDirection(reverse, waiting, pulling);
           const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
-          const localPart = field ? (
-            <FieldEditor doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} onEdited={() => setFromYoutube(items => items.filter(item => item !== label))} />
+          const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : local : '(empty)'}</pre>;
+          const localPart = field ? (doc.locked ? localPreview :
+            <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} />
           ) : (
-            <MissingField doc={doc} label={label} />
+            <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
           );
           const youtubePart = !sync ? (
             <p className="muted small-text">{note ?? 'Only in the local file.'}</p>
@@ -599,7 +604,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
                 {draft.changes.includes(label) && originalDoc.fields?.some(f => f.label.toLowerCase() === label.toLowerCase()) && <button className="small" disabled={busy} onClick={() => { if (originalDoc.text !== null) void doc.save(t => copyVersionFields(t, originalDoc.text!, [label])); }}>Undo Edit</button>}
               </div>
               <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? direction : null}>
-              {showCopyActions && sync && shownView === 'diff' && directionControls(direction, !!(canCompare && local !== null && !busy), !!(canCompare && remote !== null && !busy && !out && !doc.locked), () => stage(label), () => saveToFile(label))}
+              {showCopyActions && sync && shownView === 'diff' && directionControls(direction, !!(canCompare && rawLocal !== null && !busy), !!(canCompare && remote !== null && !busy && !out && !doc.locked && canSelectIncomingCopy(edited, pulling)), () => stage(label), () => saveToFile(label))}
+              {showCopyActions && sync && shownView === 'diff' && edited && !doc.locked && remote !== null && <p className="comparison-edit-warning">This field has an unsaved edit. Use Undo Edit before selecting a copy from YouTube.</p>}
+              {waiting && edited && <p className="comparison-edit-warning">Your edited {label} will be sent to YouTube when you apply changes.</p>}
               {/* Locked: both sides highlighted. Unlocked: the local side is a box to type in, beside YouTube's highlighted. */}
               {shownView === 'diff' && diff && local !== null && field && !waiting && doc.locked ? (
                 <div className={`compare-columns${reverse ? ' compare-reversed' : ''}`}>
@@ -737,6 +744,18 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
 
 function WaitingBadge() {
   return <span className="waiting-badge" title="Apply Changes, at the bottom, sends this">✓ Waiting to Apply</span>;
+}
+
+/** Show either the saved value or the draft, without displaying two large text blocks at once. */
+export function EditableComparisonValue({ doc, index, field, current, edited, copySelected, cancelCopy, onEdited, busy = false }: { doc: LoadedDoc; index: number; field: Field; current: ReactNode; edited: boolean; copySelected: boolean; cancelCopy: () => void; onEdited?: () => void; busy?: boolean }) {
+  const [tab, setTab] = useState<'current' | 'edited'>('current');
+  return <div>
+    <div className="comparison-text-tabs" role="group" aria-label={`${field.label} view`}>
+      <button type="button" className="small" aria-pressed={tab === 'current'} onClick={() => setTab('current')}>Current</button>
+      <button type="button" className="small" aria-pressed={tab === 'edited'} onClick={() => setTab('edited')}>Edited {edited ? '● Changed' : '✓ Same'}</button>
+    </div>
+    {tab === 'current' ? current : copySelected ? <div className="comparison-edit-warning">A copy into this field is selected. Choose No Copy before editing.{' '}<button type="button" className="small" disabled={busy} onClick={cancelCopy}>Cancel Copy and Edit</button></div> : <FieldEditor doc={busy ? { ...doc, locked: true } : doc} index={index} field={field} onEdited={onEdited} />}
+  </div>;
 }
 
 /** Editing changes the in-memory draft. Apply Changes writes it to the file. */

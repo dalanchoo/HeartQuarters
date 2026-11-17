@@ -364,9 +364,15 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .compare-reversed > :first-child { order: 2; }
 .copy-direction-frame { border: 3px solid transparent; border-radius: 10px; padding: .45rem .6rem; margin: .35rem 0; }
 .copy-direction-frame.is-pending { border-color: #1f6feb; background: #eef4ff; }
-.copy-direction-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem; margin: .1rem 0 .55rem; }
-.copy-direction-button.is-selected { opacity: .62; box-shadow: none; background: #d1d8e4; }
-.copy-direction-button.is-selected:hover { opacity: .85; }
+.copy-direction-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: .45rem; margin: .1rem 0 .55rem; border: 0; padding: 0; }
+.copy-direction-controls legend { float: left; width: 100%; text-align: center; font-size: .8rem; color: var(--muted); margin-bottom: .3rem; }
+.copy-direction-option { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .6rem; border: 1px solid #aab8cb; border-radius: 7px; background: #f3f6fb; cursor: pointer; }
+.copy-direction-option:has(input:checked) { background: #d9eaff; border-color: #2864b5; color: #123f80; font-weight: 700; }
+.copy-direction-option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.copy-direction-option input { margin: 0; }
+.comparison-text-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0; }
+.comparison-text-tabs [aria-pressed='true'] { background: #d9eaff; border-color: #2864b5; color: #123f80; }
+.comparison-edit-warning { color: #7a3d00; background: #fff3da; border: 1px solid #dca759; border-radius: 6px; padding: .45rem .6rem; margin: .4rem 0; }
 .copy-direction-notice { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .5rem; color: #fff; background: #155ac0; border-radius: 6px; padding: .35rem .65rem; font-weight: 700; }
 .copy-direction-notice span[aria-hidden] { font-size: 1.5rem; line-height: 1; }
 .copy-direction-notice-detail { font-size: .85rem; font-weight: 500; }

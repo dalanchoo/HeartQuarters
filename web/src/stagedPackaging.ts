@@ -13,3 +13,8 @@ export function applyStagedText(current: string, baseline: string, draft: string
   if (current !== baseline) throw new Error('This local file changed since you started editing. Reload and review it before applying.');
   return draft;
 }
+
+/** Allow cancelling a selected copy, but never select one that would replace an unsaved edit. */
+export function canSelectIncomingCopy(edited: boolean, alreadySelected: boolean): boolean {
+  return !edited || alreadySelected;
+}
