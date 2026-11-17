@@ -49,7 +49,7 @@ export function ExpressionInbox({ photos, categories, onView, onRefresh }: { pho
         <button disabled={busy || !!job} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
         <CategoryPicker label="File in Category" value={destination[photo.path] ?? ''} options={categories.filter(c => c.path && !parents.has(c.path)).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={value => setDestination(old => ({ ...old, [photo.path]: value }))} />
         <button disabled={busy || !destination[photo.path]} onClick={() => void run(async () => { const result = await postJson<{ path: string }>('/api/expressions/inbox/file', { photo: photo.path, category: destination[photo.path] }); setMessage(`Filed ${result.path}.`); onRefresh(); })}>File in Category</button>
-        <button disabled={busy} onClick={() => { setEditing(null); setOutlining(photo); }}>Outline and Crop</button>
+        <button disabled={busy} onClick={() => { setEditing(null); setOutlining(photo); }}>Select Subject and Crop</button>
         <button disabled={busy} onClick={() => { setOutlining(null); setEditing(photo); }}>Edit in Photopea</button>
         <details><summary>Prepare Portrait With AI</summary><p className="small-text">Creates a separate AI candidate with a neutral background. Check the expression carefully; AI may change it. The original stays in the inbox.</p>
           {(['codex', 'gemini'] as const).map(model => <button key={model} disabled={busy || !!job} onClick={() => void run(async () => { const next = await postJson<Job>('/api/expressions/inbox/prepare', { photo: photo.path, ai: model }); setJobs(old => [...old, next]); })}>Prepare With {model === 'codex' ? 'ChatGPT' : 'Gemini'}</button>)}
@@ -87,7 +87,7 @@ function PhotopeaEditor({ photo, onClose, onSaved }: { photo: ExpressionPhoto; o
     return () => { alive = false; window.removeEventListener('message', receive); };
   }, [photo.path, photo.revision]);
   return <section className="expression-photopea"><h3>Edit in Photopea: {photo.name}</h3>
-    <p>Photopea is an online editor. Edit the photo, then save an edited copy below; the original stays in the inbox. Some Photopea features may be unavailable. For a simple manual cutout, use Outline and Crop instead.</p>
+    <p>Photopea is an online editor. Edit the photo, then save an edited copy below; the original stays in the inbox. Some Photopea features may be unavailable. For a simple manual cutout, use Select Subject and Crop instead.</p>
     <p><button disabled={!ready || saving} onClick={() => { setSaving(true); setError(''); pending.current = true; frame.current?.contentWindow?.postMessage('app.activeDocument.saveToOE("png");', 'https://www.photopea.com'); }}>Save Edited Copy to Inbox</button>{' '}<button disabled={saving} onClick={onClose}>Close Editor</button></p>
     {error && <p role="alert">{error}</p>}
     {!ready && !error && <p>Loading Photopea…</p>}
