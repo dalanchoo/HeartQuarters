@@ -1,6 +1,7 @@
 // The HeartQuarters engine: a small web server on this PC only (127.0.0.1).
 // The screens (web/) talk to it through the /api routes below.
 import express, { type Request, type Response } from 'express';
+import { shouldOpenBrowser } from './browser-session.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -578,32 +579,13 @@ app.use((_req, res) => {
   });
 });
 
-/**
- * With auto-reload, the engine restarts whenever its code changes. Only open
- * the browser on the first start: the watcher (our parent process) stays the
- * same across restarts, so remember which watcher already opened it.
- */
-function shouldOpenBrowser(): boolean {
-  if (!process.argv.includes('--open')) return false;
-  const marker = path.join(appDir, 'data', 'browser-opened-by.txt');
-  const watcher = String(process.ppid);
-  try {
-    if (fs.readFileSync(marker, 'utf8') === watcher) return false;
-  } catch {
-    /* first run */
-  }
-  fs.mkdirSync(path.dirname(marker), { recursive: true });
-  fs.writeFileSync(marker, watcher);
-  return true;
-}
-
 // HQ_PORT lets a second copy run alongside (e.g. for testing).
 const port = Number(process.env.HQ_PORT) || config.port;
 const url = `http://127.0.0.1:${port}`;
 app.listen(port, '127.0.0.1', () => {
   console.log(`HeartQuarters is running at ${url}`);
   console.log('Close this window (or press Ctrl+C) to stop it.');
-  if (shouldOpenBrowser()) {
+  if (shouldOpenBrowser(process.argv.includes('--open'), path.join(appDir, 'data'), process.env.HQ_BROWSER_SESSION, process.ppid)) {
     spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
   }
 });
