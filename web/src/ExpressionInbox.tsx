@@ -1,22 +1,9 @@
-import { useEffect, useState } from 'react';
-import { getJson, openInExplorer, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
-import { CategoryPicker } from './CategoryPicker';
-import { PortraitOutlineEditor } from './PortraitOutlineEditor';
+import { useState } from 'react';
+import { openInExplorer, postJson, thumbUrl, type ExpressionPhoto } from './api';
 import { isAiExpression } from '../../server/expression-origin';
 
-type Job = { id: string; photo: string; state: 'working' | 'done' | 'failed'; result?: string; error?: string };
-
-export function ExpressionInbox({ photos, categories, onView, onRefresh }: { photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onView: (photo: ExpressionPhoto) => void; onRefresh: () => void }) {
+export function ExpressionInbox({ photos, onView, onRefresh }: { photos: ExpressionPhoto[]; onView: (photo: ExpressionPhoto) => void; onRefresh: () => void }) {
   const [ai, setAi] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  const [outlining, setOutlining] = useState<ExpressionPhoto | null>(null);
-  const [destination, setDestination] = useState<Record<string, string>>({}); const [jobs, setJobs] = useState<Job[]>([]);
-  const parents = new Set(categories.map(c => c.parent));
-  useEffect(() => {
-    if (!jobs.some(job => job.state === 'working')) return;
-    let alive = true;
-    const timer = setInterval(() => { void Promise.all(jobs.filter(job => job.state === 'working').map(job => getJson<Job>(`/api/expressions/inbox/prepare?id=${encodeURIComponent(job.id)}`))).then(updated => { if (!alive) return; setJobs(current => current.map(job => updated.find(item => item.id === job.id) ?? job)); if (updated.some(job => job.state === 'done')) onRefresh(); }, () => undefined); }, 3000);
-    return () => { alive = false; clearInterval(timer); };
-  }, [jobs, onRefresh]);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setMessage(''); try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const upload = (files: File[]) => void run(async () => {
     try { for (const file of files) {
@@ -37,23 +24,12 @@ export function ExpressionInbox({ photos, categories, onView, onRefresh }: { pho
     <div className="versions"><button disabled={busy} onClick={() => void run(async () => { await postJson('/api/expressions/inbox/open'); await openInExplorer('expressions', '_Inbox'); })}>Open Inbox Folder</button><button disabled={busy} onClick={onRefresh}>Refresh Inbox</button></div>
     {message && <p role="status">{message}</p>}
     {!photos.length && <p className="muted">No photos waiting to be reviewed.</p>}
-    {outlining && <PortraitOutlineEditor key={outlining.path} photo={outlining} onClose={() => setOutlining(null)} onSaved={() => { onRefresh(); setMessage('Cutout copy added to the inbox.'); setOutlining(null); }} />}
     <div className="photo-grid">{photos.map(photo => {
-      const job = jobs.find(item => item.photo === photo.path && item.state === 'working');
       return <article className="expression-photo-choice" key={photo.path}>
         <button className="photo" onClick={() => onView(photo)}><img src={thumbUrl('expressions', photo.path, 360, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
         <p className="small-text">{isAiExpression(photo) ? 'AI Image' : 'Not Marked as AI'}</p>
-        {!isAiExpression(photo) && <button disabled={busy} onClick={() => void run(async () => { await postJson('/api/expressions/mark-ai', { photo: photo.path }); onRefresh(); })}>Mark as AI</button>}
-        <button disabled={busy || !!job} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
-        <CategoryPicker label="File in Category" value={destination[photo.path] ?? ''} options={categories.filter(c => c.path && !parents.has(c.path)).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={value => setDestination(old => ({ ...old, [photo.path]: value }))} />
-        <button disabled={busy || !destination[photo.path]} onClick={() => void run(async () => { const result = await postJson<{ path: string }>('/api/expressions/inbox/file', { photo: photo.path, category: destination[photo.path] }); setMessage(`Filed ${result.path}.`); onRefresh(); })}>File in Category</button>
-        <button disabled={busy} onClick={() => setOutlining(photo)}>Select Subject and Crop</button>
-        <a className="button-link" href="https://www.photopea.com/" target="_blank" rel="noopener noreferrer" aria-disabled={busy} onClick={e => { if (busy) { e.preventDefault(); return; } setOutlining(null); void run(async () => { const copy = await postJson<{ path: string }>('/api/expressions/inbox/photopea-copy', { photo: photo.path }); setMessage(`Created ${copy.path}. Drag the selected file from File Explorer into Photopea.`); onRefresh(); }); }}>Prepare Copy for Photopea</a>
-        <details><summary>Prepare Portrait With AI</summary><p className="small-text">Creates a separate AI candidate with a neutral background. Check the expression carefully; AI may change it. The original stays in the inbox.</p>
-          {(['codex', 'gemini'] as const).map(model => <button key={model} disabled={busy || !!job} onClick={() => void run(async () => { const next = await postJson<Job>('/api/expressions/inbox/prepare', { photo: photo.path, ai: model }); setJobs(old => [...old, next]); })}>Prepare With {model === 'codex' ? 'ChatGPT' : 'Gemini'}</button>)}
-          {job && <p role="status">Preparing a separate candidate…</p>}
-          {jobs.filter(item => item.photo === photo.path && item.state !== 'working').map(item => <div key={item.id} role="status">{item.state === 'done' && item.result ? <><p>Compare the expression before filing the candidate.</p><div className="expression-inbox-comparison"><div><strong>Original</strong><img src={thumbUrl('expressions', photo.path, 360, photo.revision)} alt="Original portrait" /></div><div><strong>Prepared Candidate</strong><img src={thumbUrl('expressions', item.result, 360)} alt="Prepared candidate" /></div></div></> : <p>{item.error}</p>}</div>)}
-        </details>
+        <button disabled={busy} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
+        <a className="button-link" href="https://www.photopea.com/" target="_blank" rel="noopener noreferrer" aria-disabled={busy} onClick={e => { if (busy) { e.preventDefault(); return; } void run(async () => { const copy = await postJson<{ path: string }>('/api/expressions/inbox/photopea-copy', { photo: photo.path }); setMessage(`Created ${copy.path}. Drag the selected file from File Explorer into Photopea.`); onRefresh(); }); }}>Prepare Copy for Photopea</a>
       </article>;
     })}</div>
   </section>;

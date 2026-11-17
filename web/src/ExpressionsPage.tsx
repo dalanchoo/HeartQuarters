@@ -186,7 +186,7 @@ export function ExpressionsPage() {
           <button role="tab" aria-selected={activeTab === 'generation'} aria-controls="expression-generation" id="expression-generation-tab" onClick={() => switchTab('generation')}>Generate &amp; Review{readyCount !== null && readyCount > 0 ? ` · ${readyCount}` : ''}</button>
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
-        <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} categories={index.categories} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} /></div>
+        <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} /></div>
         <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
