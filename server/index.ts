@@ -29,6 +29,7 @@ import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
+import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
 import {
   hasRetention,
@@ -491,6 +492,14 @@ app.post('/api/packaging/use-draft', async (req, res) => {
 // ?piece=: the thumbnails being made for this video, and how each went.
 app.get('/api/thumbs', handle((req, res) => {
   res.json(thumbJobs(String(req.query.piece ?? '')));
+}));
+
+// Feedback reviews an existing image and its generated packaging without changing either.
+app.get('/api/thumbs/reviews', handle((req, res) => {
+  res.json(thumbnailReviews(String(req.query.piece ?? ''), String(req.query.image ?? '')));
+}));
+app.post('/api/thumbs/reviews', handle((req, res) => {
+  res.json(startThumbnailReview(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.question ?? '').job);
 }));
 
 // { piece, ai }: Make Thumbnail with ChatGPT ("codex") or Gemini, from the chosen pair and photo, in the background.

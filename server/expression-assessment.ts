@@ -89,7 +89,7 @@ export function mergeModelAssessments(text: string, results: Record<AiId, Assess
   }).join(newline);
 }
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
-export function startAssessment(photoPath: string, ask: AskAi = askBlind, prepare: (source: string, dest: string) => Promise<void> = prepareImage): Job {
+export function startAssessment(photoPath: string, ask: AskAi = askReadOnlyImage, prepare: (source: string, dest: string) => Promise<void> = prepareImage): Job {
   const index = buildExpressionIndex();
   if (!index.photos.some(p => p.path === photoPath)) throw new Error('Choose a photo in the expression library.');
   if (active.has(photoPath)) throw new Error('This photo is already being assessed.');
@@ -125,7 +125,7 @@ async function prepareImage(source: string, dest: string): Promise<void> {
 }
 
 /** Run with only the temporary image explicitly provided; no project or skill directories are added. */
-const askBlind: AskAi = async (ai, prompt, cwd, images = []) => {
+export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
   const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]

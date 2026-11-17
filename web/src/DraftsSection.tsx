@@ -10,6 +10,8 @@ import { splitHashtags } from './youtubePackaging';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
+import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
+import type { AiId } from '../../server/ai';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
@@ -584,6 +586,7 @@ function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onC
           <div className="muted small-text">Thumbnail text: {conversation.pick.thumbnailText.toUpperCase()}</div>
         </div>
       )}
+      {current && <ThumbnailFeedback key={current.path} piece={piece} image={current.path} hasMetadata={!!conversation.pick} />}
       {current && !working && target && (
         <div className="draft-use">
           <button className="small" disabled={using || target.locked} onClick={() => use(true, false)}>
@@ -668,6 +671,44 @@ function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onC
       {conversation.requests && <TextToggle label="Requests" path={conversation.requests.path} />}
     </div>
   );
+}
+
+/** Review the image currently shown, independently of making another image. */
+function ThumbnailFeedback({ piece, image, hasMetadata }: { piece: string; image: string; hasMetadata: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [reviews, setReviews] = useState<ThumbnailReview[]>([]);
+  const [jobs, setJobs] = useState<ThumbnailReviewJob[]>([]);
+  const [starting, setStarting] = useState<AiId[]>([]);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    const load = () => { void getJson<{ reviews: ThumbnailReview[]; jobs: ThumbnailReviewJob[] }>(`/api/thumbs/reviews?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`).then(data => { if (active) { setReviews(data.reviews); setJobs(data.jobs); setError(''); } }, (e: Error) => { if (active) setError(e.message); }); };
+    load(); const timer = setInterval(load, 4000);
+    return () => { active = false; clearInterval(timer); };
+  }, [open, piece, image]);
+  const ask = (ai: AiId) => {
+    setError(''); setStarting(items => [...items, ai]);
+    postJson<ThumbnailReviewJob>('/api/thumbs/reviews', { piece, image, ai, question }).then(job => setJobs(items => [...items.filter(item => item.ai !== ai), job]), (e: Error) => setError(e.message)).finally(() => setStarting(items => items.filter(item => item !== ai)));
+  };
+  return <details className="yt-section thumbnail-feedback" open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary>Ask for Feedback</summary>
+    <p className="muted small-text">Review this image{hasMetadata ? ' and the packaging generated with it' : ' (the generated packaging is unavailable for this older draft)'}. Feedback focuses on the expression and also checks the title, text and other available metadata. Reviews are saved on this computer.</p>
+    <label>Question or Concern (Optional)<textarea rows={2} value={question} maxLength={4000} onChange={e => setQuestion(e.target.value)} placeholder="For example: Does my expression fit this title?" /></label>
+    <div className="claude-buttons">{([{ ai: 'codex', name: 'ChatGPT' }, { ai: 'gemini', name: 'Gemini' }, { ai: 'claude', name: 'Claude' }] as const).map(({ ai, name }) => {
+      const working = starting.includes(ai) || jobs.some(job => job.ai === ai && job.state === 'working');
+      return <button key={ai} className="small" disabled={working} onClick={() => ask(ai)}>{working ? `${name} Is Reviewing…` : `Ask ${name}`}</button>;
+    })}</div>
+    {error && <p className="error" role="alert">{error}</p>}
+    {jobs.filter(job => job.state === 'failed').map(job => <p className="error small-text" key={job.ai}>{job.ai === 'codex' ? 'ChatGPT' : job.ai === 'gemini' ? 'Gemini' : 'Claude'}: {job.error}</p>)}
+    {reviews.map(review => <details key={review.id} className="feedback-review" open><summary><strong>{review.name}</strong> · {new Date(review.createdAt).toLocaleString()}{review.outdated && ' · Image Has Changed'}{review.packagingOutdated && ' · Packaging Has Changed'}</summary>
+      {review.question && <p className="small-text"><strong>Question:</strong> {review.question}</p>}
+      {review.outdated && <p className="comparison-edit-warning">This feedback is for an earlier image saved under the same name.</p>}
+      {review.packagingOutdated && <p className="comparison-edit-warning">The generated packaging has changed since this feedback was requested.</p>}
+      <div className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{review.answer}</Markdown></div>
+    </details>)}
+  </details>;
 }
 
 /** A button that shows or hides a text file from the drafts, as formatted text (headings, bold, lists). */
