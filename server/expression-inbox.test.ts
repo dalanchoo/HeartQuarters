@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
-import { copyThumbnailToInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto } from './expression-inbox';
+import { copyThumbnailToInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox';
 import { assessmentJob, startAssessment } from './expression-assessment';
 import { confirmExpressionFolder } from './confirm-expression-folder';
 import { addExpressionTag } from './confirm-expression-tag';
@@ -12,13 +12,13 @@ import type { MakeImage } from './thumbnails';
 
 const png = Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]), Buffer.from('fake image')]);
 const piece = 'Video/Longform'; const thumbnail = `${piece}/Packaging/Drafts/ChatGPT 01/01.png`;
-let root: string; let old: { projects: string; expressions: string };
+let root: string; let old: { projects: string; expressions: string; trash: string };
 beforeEach(() => {
   root = makeTree({ 'Expressions/Positive/Warmth/Warmth.txt': 'A kind look', 'Expressions/Framing.txt': 'framing', 'Expressions/PoseGaze.txt': 'pose', 'Expressions/Morphology.txt': 'morphology', 'Expressions/ExpressionCategories.txt': 'expressions', [`Projects/${thumbnail}`]: '' });
-  old = { projects: config.videoProjectsDir, expressions: config.expressionsDir }; config.videoProjectsDir = path.join(root, 'Projects'); config.expressionsDir = path.join(root, 'Expressions');
+  old = { projects: config.videoProjectsDir, expressions: config.expressionsDir, trash: config.trashDir }; config.trashDir = path.join(root, 'Trash'); config.videoProjectsDir = path.join(root, 'Projects'); config.expressionsDir = path.join(root, 'Expressions');
   fs.writeFileSync(path.join(config.videoProjectsDir, thumbnail), png);
 });
-afterEach(() => { config.videoProjectsDir = old.projects; config.expressionsDir = old.expressions; removeTree(root); });
+afterEach(() => { config.videoProjectsDir = old.projects; config.expressionsDir = old.expressions; config.trashDir = old.trash; removeTree(root); });
 
 describe('expression inbox', () => {
   it('imports with unique names, keeps the inbox out of the library and marks AI photos', () => {
@@ -51,6 +51,21 @@ describe('expression inbox', () => {
     const result = confirmExpressionFolder(photo.path, 'Warmth', 91);
     expect(result.path).toBe('Positive/Warmth/Warmth_001.png');
     expect(fs.readFileSync(path.join(config.expressionsDir, 'Positive/Warmth/Warmth_001.txt'), 'utf8')).toContain('Warmth, 91%, CONFIRMED');
+  });
+  it('moves only the chosen inbox photo and its sidecars to recoverable trash', () => {
+    const photo = importInboxPhoto('candidate.png', png.toString('base64'), true);
+    const other = importInboxPhoto('other.png', png.toString('base64'), false);
+    const result = trashInboxPhoto(photo.path);
+    expect(fs.readFileSync(path.join(result.trashPath, 'candidate.png'))).toEqual(png);
+    expect(fs.readFileSync(path.join(result.trashPath, 'candidate.txt'), 'utf8')).toContain('AIGenerated');
+    expect(fs.existsSync(path.join(config.expressionsDir, other.path))).toBe(true);
+    expect(() => trashInboxPhoto('Positive/Warmth/Warmth.txt')).toThrow();
+  });
+  it('refuses ambiguous photo names and does not move either photo', () => {
+    const photo = importInboxPhoto('same.png', png.toString('base64'), false);
+    fs.writeFileSync(path.join(config.expressionsDir, '_Inbox/same.jpg'), png);
+    expect(() => trashInboxPhoto(photo.path)).toThrow(/ambiguous/);
+    expect(fs.existsSync(path.join(config.expressionsDir, photo.path))).toBe(true);
   });
   it('prepares a separate AI candidate from a temporary copy, preserving the inbox original', async () => {
     const photo = importInboxPhoto('original.png', png.toString('base64'), true);

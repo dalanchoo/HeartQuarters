@@ -94,6 +94,37 @@ export function fileInboxPhoto(photoPath: string, destination: string, sidecarUp
   }
 }
 
+/** Move one inbox photo and its sidecars to a unique, recoverable trash folder. */
+export function trashInboxPhoto(photoPath: string): { trashPath: string } {
+  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
+  if (!photo || photo.category !== EXPRESSION_INBOX) throw new Error('That inbox photo is unavailable or has an ambiguous name.');
+  if ([...jobs.values()].some(job => job.photo === photoPath && job.state === 'working')) throw new Error('Wait for portrait preparation to finish before trashing this photo.');
+  const inbox = ensureExpressionInbox();
+  const library = path.resolve(config.expressionsDir), trash = path.resolve(config.trashDir);
+  if (!config.trashDir || isInside(library, trash) || isInside(trash, library)) throw new Error('The trash folder must be outside the expression library.');
+  const base = path.basename(photoPath, path.extname(photoPath)).toLowerCase();
+  const related = fs.readdirSync(inbox, { withFileTypes: true }).filter(entry => entry.name.toLowerCase() === path.basename(photoPath).toLowerCase() || entry.name.toLowerCase().startsWith(`${base}.`) || entry.name.toLowerCase().startsWith(`${base}_`));
+  if (related.some(entry => !entry.isFile() || entry.isSymbolicLink() || (IMAGE.test(entry.name) && entry.name.toLowerCase() !== path.basename(photoPath).toLowerCase()))) throw new Error('Related files are ambiguous or include a shortcut. Nothing was moved.');
+  fs.mkdirSync(trash, { recursive: true });
+  const holder = fs.mkdtempSync(path.join(trash, 'Expression Inbox '));
+  const moved: { from: string; to: string }[] = [];
+  try {
+    for (const entry of related) {
+      const from = safeResolve('expressions', `${EXPRESSION_INBOX}/${entry.name}`), to = path.join(holder, entry.name);
+      fs.renameSync(from, to); moved.push({ from, to });
+    }
+    return { trashPath: holder };
+  } catch (error) {
+    const failed: string[] = [];
+    for (const item of moved.reverse()) {
+      try { if (fs.existsSync(item.from)) throw new Error('Original name is occupied'); fs.renameSync(item.to, item.from); } catch { failed.push(item.to); }
+    }
+    if (failed.length) throw new Error(`Some files could not be restored. They remain in ${holder}: ${failed.join(', ')}`);
+    try { fs.rmdirSync(holder); } catch { /* Keep any remaining files safely in trash. */ }
+    throw error;
+  }
+}
+
 export function normalizationPrompt(): string {
   return 'Edit the attached photo into a high-resolution, photorealistic expression-library portrait of the same person. Preserve the exact facial expression, gaze, face shape, identity, age, hair and facial hair. Do not alter the expression, retouch the face, change his features, or make an exaggerated face. Center the portrait and frame it tightly with natural head-and-shoulders or upper-body proportions, without unnecessary empty space. Remove the existing background, text, graphics and other people, and replace it with a plain neutral contrasting studio background and soft, even lighting. Only extend missing shoulders or body where needed, naturally matching the existing photograph. Use the image generation tool, not code; save the result in the current folder as candidate.png. This is a candidate for human review.';
 }
