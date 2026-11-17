@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { subjectBounds } from './portrait-segmentation';
+import { strengthenMask, subjectBounds } from './portrait-segmentation';
+describe('mask opacity', () => {
+  it('makes confident foreground opaque while keeping partial edge transparency', () => {
+    const data = new Uint8ClampedArray([10, 20, 30, 0, 10, 20, 30, 64, 10, 20, 30, 128, 10, 20, 30, 255]);
+    strengthenMask(data, 128);
+    expect([...data]).toEqual([10, 20, 30, 0, 10, 20, 30, 128, 10, 20, 30, 255, 10, 20, 30, 255]);
+    expect(() => strengthenMask(data, 0)).toThrow();
+  });
+});
 describe('subject crop', () => {
   it('finds visible pixels and adds padding', () => {
     const data = new Uint8ClampedArray(20 * 20 * 4); data[(5 * 20 + 6) * 4 + 3] = 255; data[(12 * 20 + 14) * 4 + 3] = 64;

@@ -9,3 +9,8 @@ export function subjectBounds(data: Uint8ClampedArray, width: number, height: nu
   const x = Math.max(0, left - padding), y = Math.max(0, top - padding);
   return { x, y, width: Math.min(width, right + 1 + padding) - x, height: Math.min(height, bottom + 1 + padding) - y };
 }
+/** Make confident foreground opaque while retaining a gradual transparent edge. */
+export function strengthenMask(data: Uint8ClampedArray, opaqueAt: number) {
+  if (!Number.isFinite(opaqueAt) || opaqueAt < 1 || opaqueAt > 255) throw new Error('Invalid mask strength.');
+  for (let i = 3; i < data.length; i += 4) data[i] = Math.min(255, Math.round(data[i] * 255 / opaqueAt));
+}
