@@ -541,6 +541,10 @@ body.expression-viewer-open .split > .content, body.expression-viewer-open .spli
 @media (max-width: 700px) { .lb-title { grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; } .lb-title .expression-assess { grid-row: 2; } .lb-info.is-collapsed .lb-details { flex-basis: auto; } }
 @media (max-width: 600px) { .attribute-row { grid-template-columns: minmax(0, 1fr) minmax(110px, 150px); gap: 0.4rem; } }
 .attribute-groups h4 { margin: 0 0 0.3rem; }
+.attribute-heading { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-bottom: .3rem; }
+.attribute-heading h4 { margin: 0; }
+.attribute-definitions { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: .65rem; margin-bottom: .5rem; }
+.attribute-definitions pre { max-height: 15rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: .4rem 0 0; }
 .attribute-groups .chips { margin: 0; }
 .attribute-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.35rem 0.15rem 0.55rem; border: 1px dashed var(--line); border-radius: 8px; background: var(--bg); font-size: 0.85rem; }
 .attribute-chip.confirmed { border: 1px solid #83ba92; background: #e3f4e8; color: #1d6834; }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   fileUrl,
   getJson,
+  getText,
   openInExplorer,
   postJson,
   thumbUrl,
@@ -497,11 +498,11 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
-            <div className="attribute-row"><section><h4>Framing</h4>{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
+            <div className="attribute-row"><section><AttributeDefinitions title="Framing" file="Framing.txt" />{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Framing" value={newFraming} disabled={savingTag} onChange={setNewFraming} placeholder="Choose…" searchPlaceholder="Search framing…" emptyMessage="No matching attributes." options={FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add framing" disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add</button></div>}</div>
-            <div className="attribute-row"><section><h4>Pose &amp; Gaze</h4>{groups.pose.length ? showTags(groups.pose) : <p className="muted small-text">None recorded.</p>}</section>
+            <div className="attribute-row"><section><AttributeDefinitions title="Pose & Gaze" file="PoseGaze.txt" />{groups.pose.length ? showTags(groups.pose) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Pose" value={newPose} disabled={savingTag} onChange={setNewPose} placeholder="Choose…" searchPlaceholder="Search pose…" emptyMessage="No matching attributes." options={POSE_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add pose" disabled={savingTag || !newPose} onClick={() => void saveTag({ kind: 'add', name: newPose, group: 'pose' })}>Add</button></div>}</div>
-            <div className="attribute-row"><section><h4>Morphology</h4>{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
+            <div className="attribute-row"><section><AttributeDefinitions title="Morphology" file="Morphology.txt" />{groups.morphology.length ? showTags(groups.morphology) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Morphology" value={newMorphology} disabled={savingTag} onChange={setNewMorphology} placeholder="Choose…" searchPlaceholder="Search morphology…" emptyMessage="No matching attributes." options={MORPHOLOGY_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add morphology" disabled={savingTag || !newMorphology} onClick={() => void saveTag({ kind: 'add', name: newMorphology, group: 'morphology' })}>Add</button></div>}</div>
             <section><h4>Expressions</h4>{groups.expressions.length ? showTags(groups.expressions, true) : <p className="muted small-text">None recorded.</p>}
             </section>
@@ -516,4 +517,24 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
       </div>
     </div>
   );
+}
+
+/** Show the current library reference without leaving the photo viewer. */
+function AttributeDefinitions({ title, file }: { title: string; file: string }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setText(null); setError('');
+    void getText('expressions', file).then(value => { if (active) setText(value); }, (e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [open, file]);
+  return <><div className="attribute-heading"><h4>{title}</h4><button type="button" aria-label={`${open ? 'Hide' : 'View'} ${title} Definitions`} aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide Definitions' : 'View Definitions'}</button></div>
+    {open && <div className="attribute-definitions" aria-label={`${title} Definitions`}>
+      <strong>{title} Definitions</strong>
+      {error ? <p role="alert">Could not load {file}: {error}</p> : text === null ? <p>Loading definitions…</p> : text ? <pre>{text}</pre> : <p>This file is empty.</p>}
+    </div>}
+  </>;
 }
