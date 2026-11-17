@@ -44,6 +44,16 @@ export function importInboxPhoto(name: unknown, encoded: unknown, ai: unknown): 
   return addBytes(name, data, ext, ai);
 }
 
+/** Create a separate Photopea working copy, keeping the original untouched. */
+export function copyInboxPhotoForPhotopea(photoPath: string): { path: string } {
+  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
+  if (!photo || photo.category !== EXPRESSION_INBOX) throw new Error('Choose an unambiguous inbox photo.');
+  ensureExpressionInbox();
+  const source = safeResolve('expressions', photoPath);
+  if (!fs.lstatSync(source).isFile() || fs.lstatSync(source).isSymbolicLink()) throw new Error('The inbox photo must be a real file.');
+  return addBytes(`${photo.name} - Photopea Copy`, fs.readFileSync(source), path.extname(source), isAiExpression(photo));
+}
+
 /** Copy a draft or packaging thumbnail from this video, leaving the source untouched. */
 export function copyThumbnailToInbox(piece: string, image: string): { path: string } {
   if (!piece || !image) throw new Error('Choose a video and thumbnail.');

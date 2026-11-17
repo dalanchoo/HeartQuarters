@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
-import { copyThumbnailToInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox';
+import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox';
 import { assessmentJob, startAssessment } from './expression-assessment';
 import { confirmExpressionFolder } from './confirm-expression-folder';
 import { addExpressionTag } from './confirm-expression-tag';
@@ -21,6 +21,15 @@ beforeEach(() => {
 afterEach(() => { config.videoProjectsDir = old.projects; config.expressionsDir = old.expressions; config.trashDir = old.trash; removeTree(root); });
 
 describe('expression inbox', () => {
+  it('creates distinct Photopea copies and preserves the original and AI marker', () => {
+    const source = importInboxPhoto('portrait.png', png.toString('base64'), true);
+    const first = copyInboxPhotoForPhotopea(source.path), second = copyInboxPhotoForPhotopea(source.path);
+    expect(first.path).toMatch(/Photopea Copy/); expect(first.path).not.toBe(second.path);
+    expect(fs.readFileSync(path.join(config.expressionsDir, source.path))).toEqual(png);
+    expect(fs.readFileSync(path.join(config.expressionsDir, first.path))).toEqual(png);
+    expect(inboxExpressionPhotos().find(photo => photo.path === first.path)?.tags).toContainEqual(expect.objectContaining({ tag: 'AIGenerated', confirmed: true }));
+    expect(() => copyInboxPhotoForPhotopea('Positive/Warmth/Warmth.txt')).toThrow();
+  });
   it('imports with unique names, keeps the inbox out of the library and marks AI photos', () => {
     const a = importInboxPhoto('My photo.png', png.toString('base64'), false);
     const b = importInboxPhoto('My photo.png', png.toString('base64'), true);

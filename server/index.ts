@@ -16,7 +16,7 @@ import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from '.
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
-import { copyThumbnailToInbox, ensureExpressionInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
+import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -244,6 +244,12 @@ app.get('/api/expressions', handle((_req, res) => {
 app.get('/api/expressions/inbox', handle((_req, res) => { res.json(inboxExpressionPhotos()); }));
 app.post('/api/expressions/inbox/open', handle((_req, res) => { ensureExpressionInbox(); res.json({ ok: true }); }));
 app.post('/api/expressions/inbox/import', handle((req, res) => { res.json(importInboxPhoto(req.body?.name, req.body?.data, req.body?.ai)); }));
+app.post('/api/expressions/inbox/photopea-copy', handle((req, res) => {
+  const result = copyInboxPhotoForPhotopea(String(req.body?.photo ?? ''));
+  const full = safeResolve('expressions', result.path);
+  spawn('explorer.exe', ['/select,', full], { detached: true, stdio: 'ignore' }).unref();
+  res.json(result);
+}));
 app.post('/api/expressions/inbox/copy-thumbnail', handle((req, res) => { res.json(copyThumbnailToInbox(String(req.body?.piece ?? ''), String(req.body?.image ?? ''))); }));
 app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashInboxPhoto(String(req.body?.photo ?? ''))); }));
 app.post('/api/expressions/inbox/file', handle((req, res) => { res.json(fileInboxPhoto(String(req.body?.photo ?? ''), String(req.body?.category ?? ''))); }));
