@@ -373,6 +373,8 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .comparison-text-tabs { display: flex; align-items: end; gap: .2rem; min-height: 2rem; margin: .3rem 0; border-bottom: 1px solid #aab8cb; }
 .comparison-text-tabs [role='tab'] { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: transparent; box-shadow: none; padding: .25rem .65rem; margin: 0 0 -1px; color: #46566a; }
 .comparison-text-tabs [role='tab'][aria-selected='true'] { background: var(--panel); border-color: #aab8cb; border-bottom: 1px solid var(--panel); color: #123f80; font-weight: 700; }
+.edit-view-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .4rem; }
+.lvy-captions-section > summary + .lvy-row-head { margin-top: .6rem; }
 .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs)) > strong { display: block; }
 .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs)) > strong::after { content: ''; display: block; height: 2.6rem; }
 .comparison-edit-warning { color: #7a3d00; background: #fff3da; border: 1px solid #dca759; border-radius: 6px; padding: .45rem .6rem; margin: .4rem 0; }

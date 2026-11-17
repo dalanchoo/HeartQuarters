@@ -4,6 +4,12 @@ const plain = (text: string): DiffPart[] => [{ text, changed: false }];
 const tagKey = (value: string) => value.trim().toLocaleLowerCase();
 const tags = (value: string) => value.split(',').map((tag) => tag.trim()).filter(Boolean);
 
+/** A missing value is not the same as an explicitly empty one. */
+export function copyValuesMatch(field: string, left: string | null | undefined, right: string | null | undefined): boolean {
+  if (left == null || right == null) return false;
+  return field.toLowerCase() === 'tags' ? compareTags(left, right).same : left === right;
+}
+
 /** Compare tags as a set: YouTube can return the same tags in a different order. */
 function compareTags(left: string, right: string): MetadataDiff {
   const a = tags(left); const b = tags(right);
