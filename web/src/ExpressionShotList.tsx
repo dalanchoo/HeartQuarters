@@ -19,18 +19,23 @@ export function ExpressionShotList({ active }: { active: boolean }) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   };
-  const ordered = [...(shots ?? [])].sort((a, b) => Number(a.done) - Number(b.done));
+  const remaining = shots?.filter(shot => !shot.done) ?? [];
+  const photographed = shots?.filter(shot => shot.done) ?? [];
+  const group = (title: string, items: ExpressionShot[], initiallyOpen: boolean) => <details className="yt-section expression-shot-group" open={initiallyOpen}>
+    <summary>{title} ({items.length})</summary>
+    {!items.length && <p className="muted small-text">{initiallyOpen ? 'No shots waiting to be photographed.' : 'No photographed shots yet.'}</p>}
+    {items.map(shot => <article className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
+      <label><input type="checkbox" checked={shot.done} disabled={!!busy} onChange={e => void setDone(shot, e.target.checked)} /> <strong>{shot.done ? 'Done' : 'To Photograph'}</strong></label>
+      <p>{shot.expression}</p>
+      {shot.sources.length > 0 && <details><summary>Suggested For ({shot.sources.length})</summary><ul>{shot.sources.map((source, i) => <li key={`${source.piece}-${source.context}-${i}`}>{source.piece.split('/').join(' › ')}{source.context && ` · ${source.context}`}</li>)}</ul></details>}
+    </article>)}
+  </details>;
   return <section className="expression-shot-list">
     <h2>Expression Shot List</h2>
     <p>Expressions to photograph when you have time. Add suggestions from a video’s Generate Packaging section.</p>
     <p className="muted small-text">Saved in Expression Shot List.json in your Expressions folder.</p>
     {error && <p className="error" role="alert">{error}</p>}
     {!shots && !error && <p className="muted">Loading Shot List…</p>}
-    {shots && !shots.length && <p className="muted">No shots on the list yet.</p>}
-    {ordered.map(shot => <article className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
-      <label><input type="checkbox" checked={shot.done} disabled={!!busy} onChange={e => void setDone(shot, e.target.checked)} /> <strong>{shot.done ? 'Done' : 'To Photograph'}</strong></label>
-      <p>{shot.expression}</p>
-      {shot.sources.length > 0 && <details><summary>Suggested For ({shot.sources.length})</summary><ul>{shot.sources.map((source, i) => <li key={`${source.piece}-${source.context}-${i}`}>{source.piece.split('/').join(' › ')}{source.context && ` · ${source.context}`}</li>)}</ul></details>}
-    </article>)}
+    {shots && <>{group('To Photograph', remaining, true)}{group('Photographed', photographed, false)}</>}
   </section>;
 }
