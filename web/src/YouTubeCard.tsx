@@ -325,7 +325,7 @@ function captionWords(srt: string): string {
     .join(' ');
 }
 
-export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, longform }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; version?: string; link: YoutubeLink; onChanged?: () => void; longform?: string }) {
+export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, longform, display, reverse = false, versionName }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; version?: string; link: YoutubeLink; onChanged?: () => void; longform?: string; display?: View; reverse?: boolean; versionName?: string }) {
   const [view, setView] = useState<View>(loadView);
   const chooseView = (v: View) => {
     setView(v);
@@ -371,8 +371,8 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
     setStaged([]);
   }, [job?.id]);
   useEffect(() => {
-    if (linked && view !== 'local' && !data && !loading) void load();
-  }, [linked, view, job?.id]);
+    if (linked && (display ?? view) !== 'local' && !data && !loading) void load();
+  }, [linked, view, display, job?.id]);
   const seenReloads = useRef(link.reloads);
   useEffect(() => {
     if (link.reloads === seenReloads.current) return;
@@ -518,17 +518,18 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   const noteFor = (row: string) => (rowNote?.row === row ? <p className={rowNote.failed ? 'error small-text' : 'small-text picked-label'}>{rowNote.text}</p> : null);
 
   const canCompare = linked && !!data;
-  const shownView: View = linked ? view : 'local';
+  const showCopyActions = !display || display === 'diff';
+  const shownView: View = linked ? (display ?? view) : 'local';
   const columns = (localPart: React.ReactNode, youtubePart: React.ReactNode, waiting: boolean) =>
     shownView === 'local' ? (
       <div className={waiting ? 'compare-waiting' : undefined}>{waiting && <WaitingBadge />}{localPart}</div>
     ) : shownView === 'youtube' ? (
       <div>{youtubePart}</div>
     ) : (
-      <div className="compare-columns">
+      <div className={`compare-columns${reverse ? ' compare-reversed' : ''}`}>
         <div className={waiting ? 'compare-waiting' : undefined}>
           {waiting && <WaitingBadge />}
-          <strong>Local file</strong>
+          <strong>{versionName ?? 'Local file'}</strong>
           {localPart}
         </div>
         <div>
@@ -541,13 +542,13 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   return (
     <div className="local-vs-youtube">
       <div className="lvy-head">
-        <div className="view-switch" role="group" aria-label="What to show">
+        {!display && <div className="view-switch" role="group" aria-label="What to show">
           {(['local', 'youtube', 'diff'] as View[]).map((v) => (
             <button key={v} className={`small ${shownView === v ? 'active' : ''}`} disabled={!linked && v !== 'local'} onClick={() => chooseView(v)}>
               {v === 'local' ? 'Local' : v === 'youtube' ? 'YouTube' : 'Differences'}
             </button>
           ))}
-        </div>
+        </div>}
         {doc.text && <CopyButton text={doc.text} label="Copy All" />}
         <span className="muted small-text">
           {doc.file.name}
@@ -590,22 +591,22 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
                 <strong>{label}</strong>
                 {state && <span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span>}
                 {field?.value && <CopyButton text={field.value} />}
-                {sync && canCompare && local !== null && (
+                {showCopyActions && sync && canCompare && local !== null && (
                   <button className="small" disabled={busy} onClick={() => stage(label)}>
-                    {waiting ? 'Don’t Push' : 'Use Local on YouTube →'}
+                    {waiting ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
                   </button>
                 )}
-                {sync && canCompare && remote !== null && (
+                {showCopyActions && sync && canCompare && remote !== null && (
                   <button className="small" disabled={busy || out || doc.locked} onClick={() => void saveToFile(label)}>
-                    ← Save YouTube Value to File
+                    {reverse ? '→' : '←'} Save YouTube Value to File
                   </button>
                 )}
               </div>
               {/* Locked: both sides highlighted. Unlocked: the local side is a box to type in, beside YouTube's highlighted. */}
               {shownView === 'diff' && diff && local !== null && field && !waiting && doc.locked ? (
-                <div className="compare-columns">
+                <div className={`compare-columns${reverse ? ' compare-reversed' : ''}`}>
                   <div>
-                    <strong>Local file</strong>
+                    <strong>{versionName ?? 'Local file'}</strong>
                     <pre className="lvy-value">
                       <DiffText parts={diff.left} side="local" />
                     </pre>
@@ -630,14 +631,14 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
         <div className="lvy-row-head">
           <strong>Thumbnail</strong>
           {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Push</span>}
-          {canCompare && localThumb && (
+          {showCopyActions && canCompare && localThumb && (
             <button className="small" disabled={busy} onClick={() => stage('Thumbnail')}>
-              {staged.includes('Thumbnail') ? 'Don’t Push' : 'Use Local on YouTube →'}
+              {staged.includes('Thumbnail') ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
             </button>
           )}
-          {canCompare && data?.video.thumbnail && version && (
+          {showCopyActions && canCompare && data?.video.thumbnail && version && (
             <button className="small" disabled={busy || out || doc.locked} onClick={saveThumbnail} title="Saves YouTube's copy into this version, if it has no thumbnail yet">
-              ← Save YouTube Value to File
+              {reverse ? '→' : '←'} Save YouTube Value to File
             </button>
           )}
         </div>
@@ -654,7 +655,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
         <div className="lvy-row-head">
           <strong>Captions</strong>
           {staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Push</span>}
-          {canCompare && ytCaptions && subtitle && (
+          {showCopyActions && canCompare && ytCaptions && subtitle && (
             <button className="small" disabled={busy} onClick={() => stage('Captions')} title="Sending captions costs 400 units to add a track, 450 to replace one">
               {staged.includes('Captions') ? 'Don’t Push' : 'Use Local on YouTube →'}
             </button>
@@ -759,7 +760,7 @@ function WaitingBadge() {
 }
 
 /** One local field, editable where it stands. It saves when you leave the box, like the app's other boxes. */
-function FieldEditor({ doc, index, field }: { doc: LoadedDoc; index: number; field: Field }) {
+export function FieldEditor({ doc, index, field }: { doc: LoadedDoc; index: number; field: Field }) {
   const [draft, setDraft] = useState(field.value);
   const [status, setStatus] = useState<'saving' | 'saved' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -833,7 +834,7 @@ function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
   );
 }
 
-function DiffText({ parts, side }: { parts: DiffPart[]; side: 'local' | 'youtube' }) {
+export function DiffText({ parts, side }: { parts: DiffPart[]; side: 'local' | 'youtube' }) {
   return (
     <>
       {parts.map((part, i) => (

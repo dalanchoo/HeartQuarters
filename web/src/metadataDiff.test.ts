@@ -18,6 +18,11 @@ describe('metadata comparison', () => {
     expect(result.left.some((p) => p.changed && p.text.includes('red'))).toBe(true);
     expect(result.right.some((p) => p.changed && p.text.includes('blue'))).toBe(true);
   });
+  it('highlights changes in local-only fields as well', () => {
+    const result = metadataDiff('Thumbnail idea', 'A quiet forest', 'A sunny forest');
+    expect(result.left.some(p => p.changed && p.text.includes('quiet'))).toBe(true);
+    expect(result.right.some(p => p.changed && p.text.includes('sunny'))).toBe(true);
+  });
   it('bounds work for unusually large comparisons', () => {
     const result = metadataDiff('Description', 'one '.repeat(1000), 'two '.repeat(1000));
     expect(result.limited).toBe(true);

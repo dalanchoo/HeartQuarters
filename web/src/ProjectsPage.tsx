@@ -19,9 +19,9 @@ import { PieceAI } from './PieceAI';
 import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
 import { DraftsSection } from './DraftsSection';
-import { LocalVsYouTube, YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
+import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { VideoPreview } from './VideoPreview';
-import { VersionCompare } from './VersionCompare';
+import { PackagingCompare } from './PackagingCompare';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
 import type { YoutubeChecks } from './videoChecks';
@@ -664,11 +664,8 @@ function PieceCard({
       </div>
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
-      {version && youtubeDoc && <VersionCompare key={version.path} versions={piece.versions} version={version} doc={youtubeDoc} locked={locked} onChanged={onChanged} />}
-      {youtubeDoc && piece.kind !== 'reel' ? (
-        <details className="yt-section" open><summary>Compare Vs YouTube</summary>
-          <LocalVsYouTube key={youtubeDoc.file.path} piece={piece} doc={youtubeDoc} covers={version?.covers ?? []} version={version?.path} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
-        </details>
+      {version && youtubeDoc && piece.kind !== 'reel' ? (
+        <PackagingCompare key={version.path} piece={piece} version={version} doc={youtubeDoc} locked={locked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}

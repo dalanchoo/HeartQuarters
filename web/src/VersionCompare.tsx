@@ -3,6 +3,8 @@ import { fileStamp, getText, postJson, thumbUrl, type PackagingVersion } from '.
 import type { LoadedDoc } from './PackagingDoc';
 import { parseFields } from './packaging';
 import { comparisonLabels, copyVersionFields } from './versionFields';
+import { metadataDiff } from './metadataDiff';
+import { DiffText, FieldEditor } from './YouTubeCard';
 
 const youtubeFile = (version?: PackagingVersion) => version?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name));
 const thumbnail = (version?: PackagingVersion) => version?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
@@ -25,10 +27,8 @@ function useVersionText(path: string, version: PackagingVersion | undefined, cur
   return loaded.path === path ? loaded : { text: null, error: undefined };
 }
 
-export function VersionCompare({ versions, version, doc, locked, onChanged }: { versions: PackagingVersion[]; version: PackagingVersion; doc: LoadedDoc; locked: boolean; onChanged?: () => void }) {
+export function VersionCompare({ versions, version, doc, locked, onChanged, left, right }: { versions: PackagingVersion[]; version: PackagingVersion; doc: LoadedDoc; locked: boolean; onChanged?: () => void; left: string; right: string }) {
   const options = versions.filter(v => youtubeFile(v));
-  const [left, setLeft] = useState('');
-  const [right, setRight] = useState(version.path);
   const [selected, setSelected] = useState<string[]>([]);
   const [copyThumb, setCopyThumb] = useState(false);
   const [message, setMessage] = useState('');
@@ -37,14 +37,12 @@ export function VersionCompare({ versions, version, doc, locked, onChanged }: { 
   const rightVersion = options.find(v => v.path === right);
   const leftData = useVersionText(left, leftVersion, version.path, doc);
   const rightData = useVersionText(right, rightVersion, version.path, doc);
-  if (options.length < 2) return null;
-
   const leftText = leftData.text;
   const rightText = rightData.text;
-  const ready = leftText !== null && rightText !== null;
+  const ready = leftText !== null && (!right || rightText !== null);
   const leftFields = parseFields(leftText ?? '') ?? [];
   const rightFields = parseFields(rightText ?? '') ?? [];
-  const labels = ready ? comparisonLabels(leftText, rightText) : [];
+  const labels = ready ? comparisonLabels(leftText, rightText ?? '') : [];
   const leftThumb = thumbnail(leftVersion);
   const rightThumb = thumbnail(rightVersion);
   const targetIsLeft = left === version.path && right !== version.path;
@@ -56,25 +54,21 @@ export function VersionCompare({ versions, version, doc, locked, onChanged }: { 
   const targetThumb = thumbnail(version);
   const canCopy = !!sourceVersion && sourceText !== null && !locked;
   const sourceHas = (label: string) => sourceFields.some(f => f.label.toLowerCase() === label.toLowerCase());
-  const reset = () => { setSelected([]); setCopyThumb(false); setMessage(''); };
-  const optionList = options.map(v => <option key={v.path} value={v.path}>{v.name}{v.path === version.path ? ' (Current)' : ''}</option>);
-
-  return <details className="yt-section"><summary>Compare Local Versions</summary>
-    <div className="compare-columns">
-      <label>Left Version <select value={left} onChange={e => { setLeft(e.target.value); reset(); }}><option value="">Choose a Version…</option>{optionList}</select></label>
-      <label>Right Version <select value={right} onChange={e => { setRight(e.target.value); reset(); }}><option value="">Choose a Version…</option>{optionList}</select></label>
-    </div>
+  return <div>
     {(leftData.error || rightData.error) && <p className="error">Could Not Read Version: {leftData.error || rightData.error}</p>}
-    {left && right && !ready && !leftData.error && !rightData.error && <p className="muted">Loading Versions…</p>}
+    {left && !ready && !leftData.error && !rightData.error && <p className="muted">Loading Versions…</p>}
     {ready && labels.map(label => {
       const leftValue = leftFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value;
       const rightValue = rightFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value;
+      const diff = right ? metadataDiff(label, leftValue ?? '', rightValue ?? '') : null;
+      const index = (doc.fields ?? []).findIndex(f => f.label.toLowerCase() === label.toLowerCase());
       return <div className="version-field-compare" key={label}>
-        <label><input type="checkbox" disabled={!canCopy || !sourceHas(label)} checked={selected.includes(label)} onChange={e => setSelected(e.target.checked ? [...selected, label] : selected.filter(s => s !== label))} /> {label} <span className={`comparison-status ${leftValue === rightValue ? 'comparison-same' : 'comparison-different'}`}>{leftValue === rightValue ? 'Same' : 'Different'}</span></label>
-        <div className="compare-columns"><div><strong>{leftVersion?.name}</strong><pre className="lvy-value">{leftValue || '(empty)'}</pre></div><div><strong>{rightVersion?.name}</strong><pre className="lvy-value">{rightValue || '(empty)'}</pre></div></div>
+        <label>{right && <input type="checkbox" disabled={!canCopy || !sourceHas(label)} checked={selected.includes(label)} onChange={e => setSelected(e.target.checked ? [...selected, label] : selected.filter(s => s !== label))} />} {label} {diff && <span className={`comparison-status ${diff.same && leftValue !== undefined && rightValue !== undefined ? 'comparison-same' : 'comparison-different'}`}>{diff.same && leftValue !== undefined && rightValue !== undefined ? 'Same' : 'Different'}</span>}</label>
+        {right ? <div className="compare-columns"><div><strong>{leftVersion?.name}</strong><pre className="lvy-value">{leftValue === undefined ? '(not provided)' : leftValue ? <DiffText parts={diff!.left} side="local" /> : '(empty)'}</pre></div><div><strong>{rightVersion?.name}</strong><pre className="lvy-value">{rightValue === undefined ? '(not provided)' : rightValue ? <DiffText parts={diff!.right} side="youtube" /> : '(empty)'}</pre></div></div> : left === version.path && index >= 0 ? <FieldEditor doc={doc} index={index} field={doc.fields![index]} /> : <pre className="lvy-value">{leftValue || '(empty)'}</pre>}
+        {diff?.reordered && <p className="muted small-text">The same tags are present in a different order.</p>}
       </div>;
     })}
-    {ready && (leftThumb || rightThumb) && <div className="version-field-compare"><label><input type="checkbox" disabled={!canCopy || !sourceThumb} checked={copyThumb} onChange={e => setCopyThumb(e.target.checked)} /> Thumbnail</label><div className="compare-columns">{[leftThumb, rightThumb].map((thumb, i) => <div key={i}><strong>{i === 0 ? leftVersion?.name : rightVersion?.name}</strong><div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${i === 0 ? leftVersion?.name : rightVersion?.name} thumbnail`} /> : '(empty)'}</div></div>)}</div></div>}
+    {ready && (leftThumb || rightThumb) && <div className="version-field-compare"><label>{right && <input type="checkbox" disabled={!canCopy || !sourceThumb} checked={copyThumb} onChange={e => setCopyThumb(e.target.checked)} />} Thumbnail</label><div className={right ? 'compare-columns' : undefined}>{(right ? [leftThumb, rightThumb] : [leftThumb]).map((thumb, i) => <div key={i}><strong>{i === 0 ? leftVersion?.name : rightVersion?.name}</strong><div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${i === 0 ? leftVersion?.name : rightVersion?.name} thumbnail`} /> : '(empty)'}</div></div>)}</div></div>}
     {ready && sourceVersion && <button disabled={!canCopy || busy || (!selected.length && !copyThumb)} onClick={async () => {
       if (sourceText === null) return;
       setBusy(true); setMessage(''); let copied = false;
@@ -92,7 +86,7 @@ export function VersionCompare({ versions, version, doc, locked, onChanged }: { 
       } catch (e) { setMessage(`${copied ? 'The selected text was saved, but the thumbnail was not: ' : ''}${e instanceof Error ? e.message : String(e)}`); }
       finally { setBusy(false); }
     }}>Copy Selected to {version.name}</button>}
-    {ready && (!sourceVersion || locked) && <p className="muted small-text">{locked && sourceVersion ? `Unlock ${version.name} to copy into it.` : 'To copy, select the current version on one side and another version on the other.'}</p>}
+    {ready && right && (!sourceVersion || locked) && <p className="muted small-text">{locked && sourceVersion ? `Unlock ${version.name} to copy into it.` : 'To copy, select the current version on one side and another version on the other.'}</p>}
     {message && <p role="status">{message}</p>}
-  </details>;
+  </div>;
 }

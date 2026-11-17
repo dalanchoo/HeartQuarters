@@ -1,5 +1,3 @@
-import type { SyncField } from './youtubePackaging';
-
 export interface DiffPart { text: string; changed: boolean }
 export interface MetadataDiff { left: DiffPart[]; right: DiffPart[]; same: boolean; reordered: boolean; limited: boolean }
 const plain = (text: string): DiffPart[] => [{ text, changed: false }];
@@ -16,8 +14,8 @@ function compareTags(left: string, right: string): MetadataDiff {
 }
 
 /** Highlight word and punctuation changes while preserving the text on both sides. */
-export function metadataDiff(field: SyncField, left: string, right: string): MetadataDiff {
-  if (field === 'Tags') return compareTags(left, right);
+export function metadataDiff(field: string, left: string, right: string): MetadataDiff {
+  if (field.toLowerCase() === 'tags') return compareTags(left, right);
   if (left === right) return { left: plain(left), right: plain(right), same: true, reordered: false, limited: false };
   const tokenize = (text: string) => text.match(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]+/gu) ?? [];
   const a = tokenize(left); const b = tokenize(right);
