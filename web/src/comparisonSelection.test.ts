@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { comparisonSelection, localCopyTarget, YOUTUBE_SELECTION as yt } from './comparisonSelection';
+import { availableComparisonChoices, comparisonSelection, localCopyTarget, YOUTUBE_SELECTION as yt } from './comparisonSelection';
 
 describe('packaging comparison selections', () => {
+  it('preserves both choices when the current or unlocked version changes', () => {
+    const chosen = { left: 'v3', right: 'v5' };
+    expect(availableComparisonChoices(chosen, 'v4', ['v3', 'v4', 'v5'])).toEqual(chosen);
+    expect(availableComparisonChoices(chosen, 'v5', ['v3', 'v4', 'v5'])).toEqual(chosen);
+  });
+  it('falls back only when a selected version is unavailable', () => {
+    expect(availableComparisonChoices({ left: 'v3', right: 'v5' }, 'v4', ['v4', 'v5'])).toEqual({ left: 'v4', right: 'v5' });
+    expect(availableComparisonChoices({ left: yt, right: 'v3' }, 'v4', ['v4'])).toEqual({ left: yt, right: yt });
+    expect(availableComparisonChoices({ left: 'v4', right: '' }, 'v4', ['v4'])).toEqual({ left: 'v4', right: '' });
+  });
   it('compares the chosen version with YouTube in either order', () => {
     expect(comparisonSelection('v1', yt, 'v2')).toEqual({ youtube: true, localPath: 'v1', display: 'diff', reverse: false });
     expect(comparisonSelection(yt, 'v1', 'v2')).toEqual({ youtube: true, localPath: 'v1', display: 'diff', reverse: true });

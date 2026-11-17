@@ -1,5 +1,13 @@
 export const YOUTUBE_SELECTION = '__youtube__';
 
+export interface ComparisonChoices { left: string; right: string }
+
+/** Preserve choices across version/lock changes, falling back only if a version no longer exists. */
+export function availableComparisonChoices(choices: ComparisonChoices, current: string, versions: string[]): ComparisonChoices {
+  const available = (value: string) => value === YOUTUBE_SELECTION || versions.includes(value);
+  return { left: available(choices.left) ? choices.left : current, right: choices.right === '' || available(choices.right) ? choices.right : YOUTUBE_SELECTION };
+}
+
 /** Only the unlocked version may receive a copy, even if another version is current. */
 export function localCopyTarget(left: string, right: string, unlocked: string | null) {
   if (!unlocked || left === right) return null;

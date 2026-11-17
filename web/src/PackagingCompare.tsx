@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { PackagingVersion, Piece } from './api';
 import { lockDocs, usePackagingDocs, type LoadedDoc } from './PackagingDoc';
 import { LocalVsYouTube, type YoutubeLink } from './YouTubeCard';
 import { VersionCompare } from './VersionCompare';
-import { comparisonSelection, YOUTUBE_SELECTION as YOUTUBE } from './comparisonSelection';
+import { availableComparisonChoices, comparisonSelection, YOUTUBE_SELECTION as YOUTUBE, type ComparisonChoices } from './comparisonSelection';
 import { setPendingPackaging } from './pendingPackaging';
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
-export function PackagingCompare({ piece, version, doc, locked, unlocked, link, onChanged, longform, onDirtyChange }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void }) {
+export function PackagingCompare({ piece, version, doc, locked, unlocked, link, onChanged, longform, onDirtyChange, choices, setChoices }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>> }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
-  const [left, setLeft] = useState(version.path);
-  const [right, setRight] = useState(YOUTUBE);
+  const { left, right } = availableComparisonChoices(choices, version.path, versions.map(v => v.path));
   const [dirty, setDirty] = useState(false);
   const pendingId = useRef(Symbol('packaging'));
   useEffect(() => { const id = pendingId.current; setPendingPackaging(id, dirty); return () => setPendingPackaging(id, false); }, [dirty]);
@@ -20,7 +19,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, link, 
     if (value === (side === 'left' ? left : right)) return;
     if (dirty && !window.confirm('You have unapplied changes. Discard them and change the comparison?')) return;
     setDirty(false);
-    if (side === 'left') setLeft(value); else setRight(value);
+    setChoices({ left: side === 'left' ? value : left, right: side === 'right' ? value : right });
   };
   const selection = comparisonSelection(left, right, version.path);
   const { youtube: usesYoutube, localPath, display } = selection;

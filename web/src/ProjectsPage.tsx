@@ -22,6 +22,7 @@ import { DraftsSection } from './DraftsSection';
 import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { VideoPreview } from './VideoPreview';
 import { PackagingCompare } from './PackagingCompare';
+import { YOUTUBE_SELECTION } from './comparisonSelection';
 import { hasPendingPackaging } from './pendingPackaging';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
@@ -590,6 +591,7 @@ function PieceCard({
   const [compareDirty, setCompareDirty] = useState(false);
   const allowVersionChange = () => !compareDirty || window.confirm('You have unapplied packaging changes. Discard them and change versions?');
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
+  const [compareChoices, setCompareChoices] = useState(() => ({ left: version?.path ?? '', right: YOUTUBE_SELECTION }));
   const latest = piece.versions.at(-1)?.name;
   // Every version is locked until John clicks its padlock, so nothing in it changes by accident. Unlocking lasts until
   // the page is reloaded; a version he has just copied starts unlocked, since he made it to change it.
@@ -602,7 +604,7 @@ function PieceCard({
   const { focus } = useContext(StatusContext);
   // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
   const link = useYoutubeLink(piece, longformProject, (plain || open) && piece.kind !== 'reel');
-  const youtubeDoc = docs.find((d) => /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
+  const youtubeDoc = docs.find((d) => version?.docs.some(file => file.path === d.file.path) && /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
 
@@ -680,7 +682,7 @@ function PieceCard({
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
-        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} />
+        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
