@@ -75,6 +75,11 @@ describe('the source', () => {
 });
 
 describe('writing the brief', () => {
+  it('asks each AI to label complete expression suggestions so they can be reviewed for the shot list', () => {
+    const source = { kind: 'transcript' as const, path: 'captions.txt' };
+    expect(writerPrompt('Video/Longform', source, false, '2026-11-17')).toContain('beginning "Expression:"');
+    expect(reviewerPrompt('ChatGPT', source)).toContain('beginning "Expression:"');
+  });
   it('Claude writes it, then ChatGPT and Gemini add their reviews, and the brief says who took part', async () => {
     const { job, finished } = await startBrief(LONGFORM, 'V01 is on YouTube. Ask Studio says: SDAM is rising', fakeAi);
     expect(job.status).toBe('running');

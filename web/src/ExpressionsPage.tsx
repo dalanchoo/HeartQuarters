@@ -14,6 +14,7 @@ import { filterSelectablePhotos, openPhotoSelection, generationCategories, gener
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
+import { ExpressionShotList } from './ExpressionShotList';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
@@ -41,7 +42,7 @@ export function ExpressionsPage() {
   const [index, setIndex] = useState<ExpressionIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
-  const [activeTab, setActiveTab] = useState<'library' | 'generation'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots'>('library');
   const [generationCategory, setGenerationCategory] = useState('');
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
@@ -154,7 +155,7 @@ export function ExpressionsPage() {
   const subs = children.get(current.path) ?? [];
   const availableCategories = generationCategories(index.categories);
   const generationSelection = availableCategories.find(c => c.path === generationCategory);
-  const switchTab = (tab: 'library' | 'generation') => {
+  const switchTab = (tab: 'library' | 'generation' | 'shots') => {
     if (tab === 'generation' && activeTab !== 'generation') setGenerationCategory(previous => generationCategoryOnSwitch(index.categories, current.path, previous));
     setActiveTab(tab); setOpen(null); setPreview(null);
   };
@@ -173,10 +174,12 @@ export function ExpressionsPage() {
       </aside>
 
       <section className="content">
-        <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const next = e.key === 'Home' ? 'library' : e.key === 'End' ? 'generation' : activeTab === 'library' ? 'generation' : 'library'; switchTab(next); document.getElementById(next === 'library' ? 'expression-library-tab' : 'expression-generation-tab')?.focus(); }}>
+        <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const tabs = ['library', 'generation', 'shots'] as const; const next = e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (e.key === 'ArrowRight' ? 1 : 2)) % tabs.length]; switchTab(next); document.getElementById(`expression-${next}-tab`)?.focus(); }}>
           <button role="tab" aria-selected={activeTab === 'library'} aria-controls="expression-library" id="expression-library-tab" onClick={() => switchTab('library')}>Library</button>
           <button role="tab" aria-selected={activeTab === 'generation'} aria-controls="expression-generation" id="expression-generation-tab" onClick={() => switchTab('generation')}>Generate &amp; Review{readyCount !== null && readyCount > 0 ? ` · ${readyCount}` : ''}</button>
+          <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
+        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
           <h2>Choose an Expression to Generate</h2>

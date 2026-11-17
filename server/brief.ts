@@ -151,6 +151,7 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     CATEGORIES_NOTE(),
     `For "Recent thumbnails", look in "${config.videoProjectsDir}": the newest few numbered video folders, each Longform\\Packaging's newest version (its YouTube.md and thumbnail). Which version is on YouTube is written in each version's Notes.md ("On YouTube: ..."); don't assume the newest one is.`,
     `Include proposed YouTube descriptions, tags, hashtags, pinned comments and, for longform only when supported by source-timings.srt if it exists, accurate chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags and any chapters inside the proposed description.`,
+    'For each thumbnail idea, put the complete suggested expression on its own line beginning "Expression:", including category paths and the detailed look to photograph.',
     `Today is ${today}. Don't create or change any file. Reply with only the brief in Markdown, starting with the line "# Brief:", in the skill's format, ending with the empty "## John's notes" section.`,
   ].join('\n\n');
 }
@@ -167,6 +168,7 @@ export function reviewerPrompt(name: string, source: BriefSource, hasNotes = fal
     '- your ranking of the thumbnail ideas, one line each;',
     '- what is weak or wrong in the brief, and why;',
     '- at least one title and one thumbnail idea of your own (text, expression categories from the expressions library, background and supporting image, why a stranger would click, 30-second check), different from the ones in the brief.',
+    'For each thumbnail idea of your own, put the complete suggested expression on its own line beginning "Expression:", including category paths and the detailed look to photograph.',
   ].join('\n');
 }
 

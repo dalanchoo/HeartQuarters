@@ -26,6 +26,7 @@ Automation levels:
 
 ## Done since v0.1
 
+- Expression shot list: review expression suggestions from packaging briefs and final picks, add the looks still needed, and mark shots photographed in Expressions.
 - Icon (shortcut, browser tab, header) and taskbar pinning.
 - Browse every packaging version (Legacy, V01, V05 Shock...).
 - Collapsible packaging fields; Copy with a fallback.

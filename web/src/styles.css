@@ -419,6 +419,12 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.75rem; }
 .expression-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
 .expression-tabs [role='tab'][aria-selected='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.shot-suggestion { display: flex; align-items: flex-start; gap: .5rem; padding: .45rem 0; border-top: 1px solid var(--line); }
+.shot-suggestion input { margin-top: .25rem; flex-shrink: 0; }
+.expression-shot { padding: .8rem; margin: .65rem 0; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.expression-shot p { margin: .45rem 0; }
+.expression-shot.is-done { opacity: .7; }
+.expression-shot details > summary { cursor: pointer; }
 .expression-category-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 0.7rem 0; }
 .expression-category-picker .category-picker { flex: 0 1 320px; width: min(100%, 320px); }
 .expression-category-picker p { flex: 1 1 240px; margin: 0 0 0.2rem; }

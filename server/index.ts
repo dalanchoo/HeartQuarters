@@ -16,6 +16,7 @@ import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from '.
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex } from './expressions.js';
+import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
 import { markExpressionAi } from './mark-expression-ai.js';
@@ -238,6 +239,9 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
+app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
+app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
 app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''))); }));
 app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmentJob(String(req.query.id ?? ''))); }));
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));

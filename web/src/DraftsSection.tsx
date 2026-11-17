@@ -12,6 +12,8 @@ import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
 import type { AiId } from '../../server/ai';
+import type { ExpressionShot } from '../../server/expression-shot-list';
+import { expressionShotSuggestions } from './expressionShotSuggestions';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
@@ -50,6 +52,7 @@ export function DraftsSection({ piece, drafts, target, doc, research, onChanged 
             Brief, Top 3, Photo and Make Thumbnail <span className="muted small-text">· {briefSummary}</span>
           </summary>
           <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} research={research} onChanged={onChanged} />
+          {drafts && (drafts.brief || drafts.picks) && <ShotListSuggestions piece={piece} brief={drafts.brief} picks={drafts.picks ?? []} />}
           {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
           {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
         </details>
@@ -72,6 +75,42 @@ export function DraftsSection({ piece, drafts, target, doc, research, onChanged 
       )}
     </details>
   );
+}
+
+function ShotListSuggestions({ piece, brief, picks }: { piece: string; brief: { path: string; modified?: number } | null; picks: BriefPick[] }) {
+  const [text, setText] = useState('');
+  const [shots, setShots] = useState<ExpressionShot[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setText(''); setSelected([]); setError('');
+    if (brief) void getText('projects', brief.path).then(value => { if (active) setText(value); }, (e: Error) => { if (active) setError(`Could Not Read the Brief: ${e.message}`); });
+    void getJson<ExpressionShot[]>('/api/expressions/shot-list').then(value => { if (active) setShots(value); }, (e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [piece, brief?.path, brief?.modified]);
+  const suggestions = expressionShotSuggestions(text, picks);
+  const validSelected = selected.filter(value => suggestions.some(item => item.expression === value));
+  const normalized = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const add = async () => {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const chosen = suggestions.filter(s => validSelected.includes(s.expression));
+      const result = await postJson<ExpressionShot[]>('/api/expressions/shot-list/add', { piece, shots: chosen });
+      setShots(result); setSelected([]); setMessage(`${chosen.length} ${chosen.length === 1 ? 'suggestion added' : 'suggestions added'} to the Expression Shot List.`);
+      window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return <details className="yt-section shot-suggestions"><summary>Expression Suggestions for the Shot List ({suggestions.length})</summary>
+    <p className="muted small-text">Select the expressions you still need to photograph, then add them to the shot list in Expressions. The suggestions include the brief and the final picks.</p>
+    {suggestions.map(item => <label key={item.expression} className="shot-suggestion"><input type="checkbox" checked={selected.includes(item.expression)} disabled={busy} onChange={e => setSelected(values => e.target.checked ? [...values, item.expression] : values.filter(value => value !== item.expression))} /><span><strong>{item.context}</strong> · {item.expression}{shots.some(shot => normalized(shot.expression) === normalized(item.expression)) && <span className="muted"> · Already on Shot List</span>}</span></label>)}
+    {!suggestions.length && !error && <p className="muted small-text">No labelled expression suggestions found.</p>}
+    <button disabled={busy || !validSelected.length} onClick={() => void add()}>Add Selected to Shot List</button>
+    {message && <p role="status">{message}</p>}{error && <p className="error" role="alert">{error}</p>}
+  </details>;
 }
 
 function DraftPackagingCompare({ piece, choice, conversations, target, doc, onChanged }: { piece: string; choice: BriefChoice; conversations: DraftConversation[]; target: UseTarget; doc: LoadedDoc; onChanged?: () => void }) {
