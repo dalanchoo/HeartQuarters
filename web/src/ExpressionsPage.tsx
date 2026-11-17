@@ -16,7 +16,7 @@ import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilt
 import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { ExpressionShotList } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
-import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
+import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
 import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
@@ -389,6 +389,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
   const [newMorphology, setNewMorphology] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
   const viewport = useRef<HTMLDivElement>(null);
@@ -396,6 +397,8 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
   const suppressClick = useRef(false);
   const center = useRef<{ x: number; y: number } | null>(null);
   const fit = fitScale(imageSize.width, imageSize.height, viewSize.width, viewSize.height);
+  const viewerSize = useRef({ fit, zoom, imageSize, viewSize });
+  viewerSize.current = { fit, zoom, imageSize, viewSize };
   const maximum = 2 / fit;
   const percent = originalSizePercent(fit, zoom);
   const changeZoom = (next: number | ((previous: number) => number)) => {
@@ -407,9 +410,22 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
-    const measure = () => setViewSize({ width: el.clientWidth, height: el.clientHeight });
+    const measure = () => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      const previous = viewerSize.current;
+      if (next.width === previous.viewSize.width && next.height === previous.viewSize.height) return;
+      if (previous.imageSize.width && next.width && next.height) {
+        const nextFit = fitScale(previous.imageSize.width, previous.imageSize.height, next.width, next.height);
+        setZoom(zoomAfterResize(previous.fit, previous.zoom, nextFit));
+      }
+      setViewSize(next);
+    };
     measure(); const observer = new ResizeObserver(measure); observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    document.body.classList.add('expression-viewer-open');
+    return () => document.body.classList.remove('expression-viewer-open');
   }, []);
   useLayoutEffect(() => {
     const el = viewport.current;
@@ -469,13 +485,15 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
           </div>
         </div>
         {onNext && <button className="lb-nav lb-next" onClick={onNext} title="Next (→)">›</button>}
-        <div className="lb-info">
+        <div className={`lb-info${detailsExpanded ? '' : ' is-collapsed'}`}>
           <div className="lb-details">
           <div className="lb-title">
             <div className="lb-title-name"><strong>{photo.name}</strong>
             <span className="muted">{photo.category.split('/').join(' › ')}</span></div>
-            {onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
+            {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
+            <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>
+          <div id="expression-photo-details" hidden={!detailsExpanded}>
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
           {groups.details.length > 0 && showTags(groups.details)}
           <div className="attribute-groups">
@@ -490,6 +508,7 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
           </div>
           {confirmError && <p className="error">{confirmError}</p>}
           <p className="muted small-text">Use the mouse wheel or slider to zoom, and drag to pan. Click the photo to switch between fit and full size.</p>
+          </div>
           </div>
           <div className="lb-zoom"><label htmlFor="expression-zoom">Zoom</label><div className="lb-zoom-track"><input id="expression-zoom" type="range" min={originalSizePercent(fit, 1)} max="200" step="any" value={percent} onChange={(e) => changeZoom(snapOriginalSize(Number(e.target.value)) / (fit * 100))} /><button type="button" className="lb-zoom-original" style={{ top: `calc(${10000 / (200 - originalSizePercent(fit, 1))}% + ${8 - 1600 / (200 - originalSizePercent(fit, 1))}px)` }} onClick={() => changeZoom(1 / fit)} aria-label="Set zoom to 100%">100%</button></div><span>{percent < 10 ? percent.toFixed(1) : Math.round(percent)}%</span></div>
           <button type="button" className="lb-close" onClick={onClose} aria-label="Close photo viewer" title="Close (Esc)">×</button>

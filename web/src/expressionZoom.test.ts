@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampZoom, fitScale, originalSizePercent, snapOriginalSize } from './expressionZoom';
+import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
 
 describe('expression photo zoom', () => {
   it('fits wide and tall photos without enlarging small ones', () => {
@@ -11,6 +11,12 @@ describe('expression photo zoom', () => {
     expect(clampZoom(0.5, 4)).toBe(1);
     expect(clampZoom(5, 4)).toBe(4);
     expect(clampZoom(2, 4)).toBe(2);
+  });
+  it('keeps the original-size zoom when the viewing area changes, unless fitting needs more space', () => {
+    expect(zoomAfterResize(0.2, 3.4, 0.4)).toBeCloseTo(1.7);
+    expect(zoomAfterResize(0.4, 1.7, 0.2)).toBeCloseTo(3.4);
+    expect(zoomAfterResize(0.2, 1, 0.4)).toBe(1);
+    expect(zoomAfterResize(0.2, 1.5, 0.4)).toBe(1);
   });
   it('reports zoom relative to the original photo rather than the fitted size', () => {
     const fit = fitScale(4000, 2000, 500, 500);
