@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fileUrl, getJson, openInExplorer, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
 import { CategoryPicker } from './CategoryPicker';
+import { PortraitOutlineEditor } from './PortraitOutlineEditor';
 import { isAiExpression } from '../../server/expression-origin';
 
 type Job = { id: string; photo: string; state: 'working' | 'done' | 'failed'; result?: string; error?: string };
@@ -8,6 +9,7 @@ type Job = { id: string; photo: string; state: 'working' | 'done' | 'failed'; re
 export function ExpressionInbox({ photos, categories, onView, onRefresh }: { photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onView: (photo: ExpressionPhoto) => void; onRefresh: () => void }) {
   const [ai, setAi] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   const [editing, setEditing] = useState<ExpressionPhoto | null>(null);
+  const [outlining, setOutlining] = useState<ExpressionPhoto | null>(null);
   const [destination, setDestination] = useState<Record<string, string>>({}); const [jobs, setJobs] = useState<Job[]>([]);
   const parents = new Set(categories.map(c => c.parent));
   useEffect(() => {
@@ -36,6 +38,7 @@ export function ExpressionInbox({ photos, categories, onView, onRefresh }: { pho
     <div className="versions"><button disabled={busy} onClick={() => void run(async () => { await postJson('/api/expressions/inbox/open'); await openInExplorer('expressions', '_Inbox'); })}>Open Inbox Folder</button><button disabled={busy} onClick={onRefresh}>Refresh Inbox</button></div>
     {message && <p role="status">{message}</p>}
     {!photos.length && <p className="muted">No photos waiting to be reviewed.</p>}
+    {outlining && <PortraitOutlineEditor key={outlining.path} photo={outlining} onClose={() => setOutlining(null)} onSaved={() => { onRefresh(); setMessage('Cutout copy added to the inbox.'); setOutlining(null); }} />}
     {editing && <PhotopeaEditor key={editing.path} photo={editing} onClose={() => setEditing(null)} onSaved={() => { onRefresh(); setMessage('Edited copy added to the inbox.'); setEditing(null); }} />}
     <div className="photo-grid">{photos.map(photo => {
       const job = jobs.find(item => item.photo === photo.path && item.state === 'working');
@@ -46,7 +49,8 @@ export function ExpressionInbox({ photos, categories, onView, onRefresh }: { pho
         <button disabled={busy || !!job} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
         <CategoryPicker label="File in Category" value={destination[photo.path] ?? ''} options={categories.filter(c => c.path && !parents.has(c.path)).map(c => ({ value: c.path, label: c.path.split('/').join(' > ') }))} onChange={value => setDestination(old => ({ ...old, [photo.path]: value }))} />
         <button disabled={busy || !destination[photo.path]} onClick={() => void run(async () => { const result = await postJson<{ path: string }>('/api/expressions/inbox/file', { photo: photo.path, category: destination[photo.path] }); setMessage(`Filed ${result.path}.`); onRefresh(); })}>File in Category</button>
-        <button disabled={busy} onClick={() => setEditing(photo)}>Edit in Photopea</button>
+        <button disabled={busy} onClick={() => { setEditing(null); setOutlining(photo); }}>Outline and Crop</button>
+        <button disabled={busy} onClick={() => { setOutlining(null); setEditing(photo); }}>Edit in Photopea</button>
         <details><summary>Prepare Portrait With AI</summary><p className="small-text">Creates a separate AI candidate with a neutral background. Check the expression carefully; AI may change it. The original stays in the inbox.</p>
           {(['codex', 'gemini'] as const).map(model => <button key={model} disabled={busy || !!job} onClick={() => void run(async () => { const next = await postJson<Job>('/api/expressions/inbox/prepare', { photo: photo.path, ai: model }); setJobs(old => [...old, next]); })}>Prepare With {model === 'codex' ? 'ChatGPT' : 'Gemini'}</button>)}
           {job && <p role="status">Preparing a separate candidate…</p>}
@@ -83,10 +87,10 @@ function PhotopeaEditor({ photo, onClose, onSaved }: { photo: ExpressionPhoto; o
     return () => { alive = false; window.removeEventListener('message', receive); };
   }, [photo.path, photo.revision]);
   return <section className="expression-photopea"><h3>Edit in Photopea: {photo.name}</h3>
-    <p>Photopea is an online editor. Use Select → Remove BG, then crop and position the portrait. Save an edited copy below; the original stays in the inbox. Background removal may use AI to identify the subject, but does not regenerate your face.</p>
+    <p>Photopea is an online editor. Edit the photo, then save an edited copy below; the original stays in the inbox. Some Photopea features may be unavailable. For a simple manual cutout, use Outline and Crop instead.</p>
     <p><button disabled={!ready || saving} onClick={() => { setSaving(true); setError(''); pending.current = true; frame.current?.contentWindow?.postMessage('app.activeDocument.saveToOE("png");', 'https://www.photopea.com'); }}>Save Edited Copy to Inbox</button>{' '}<button disabled={saving} onClick={onClose}>Close Editor</button></p>
     {error && <p role="alert">{error}</p>}
     {!ready && !error && <p>Loading Photopea…</p>}
-    <iframe ref={frame} title="Photopea Image Editor" src="https://www.photopea.com/" style={{ width: '100%', height: 'min(75vh, 800px)', border: '1px solid #bbc4cf' }} />
+    <iframe ref={frame} title="Photopea Image Editor" src="https://www.photopea.com/#%7B%7D" style={{ width: '100%', height: 'min(75vh, 800px)', border: '1px solid #bbc4cf' }} />
   </section>;
 }
