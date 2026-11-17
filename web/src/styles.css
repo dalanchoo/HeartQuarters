@@ -711,7 +711,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 
 .copy-thumbnail { display: flex; flex-wrap: wrap; align-items: end; gap: 0.6rem; margin: 0.6rem 0; }
 
-.version-choice { display: inline-flex; align-items: center; gap: 0.2rem; }
+.version-choice { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.25rem 0.3rem 0.4rem; border: 1px solid #bcc7d5; border-radius: 8px; background: #f7f9fc; }
 .version-padlock { min-width: 2rem; padding: 0.1rem 0.35rem; }
 
 .version-field-compare { margin: .8rem 0; }
