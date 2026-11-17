@@ -16,6 +16,7 @@ import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
 import { copyVersionFields } from './versionFields';
+import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
 
 // A video's YouTube metadata in one place (John, 2026-11-14): the link to YouTube sits on the card's status line, and
 // "Local vs YouTube" shows every field of YouTube.md, with one switch for all of them: the local file, what YouTube
@@ -520,6 +521,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const canCompare = linked && !!data;
   const showCopyActions = !display || display === 'diff';
   const shownView: View = linked ? (display ?? view) : 'local';
+  const leftName = reverse ? 'YouTube' : versionName ?? 'Local';
+  const rightName = reverse ? versionName ?? 'Local' : 'YouTube';
+  const directionControls = (selected: CopyDirection | null, canPush: boolean, canPull: boolean, pushChoice: () => void, pullChoice: () => void) => <CopyDirectionControls left={leftName} right={rightName} selected={selected} canCopyRight={reverse ? canPull : canPush} canCopyLeft={reverse ? canPush : canPull} copyRight={reverse ? pullChoice : pushChoice} copyLeft={reverse ? pushChoice : pullChoice} />;
   const columns = (localPart: React.ReactNode, youtubePart: React.ReactNode, waiting: boolean) =>
     shownView === 'local' ? (
       <div className={waiting ? 'compare-waiting' : undefined}>{waiting && <WaitingBadge />}{localPart}</div>
@@ -571,7 +575,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const diff = sync && local !== null && remote !== null ? metadataDiff(label, local, remote) : null;
           const waiting = staged.includes(label as RowKey);
           const note = LOCAL_ONLY_NOTE[label.toLowerCase()];
-          const state = waiting ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
+          const pulling = sync && fromYoutube.includes(label);
+          const direction = youtubeCopyDirection(reverse, waiting, pulling);
+          const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPart = field ? (
             <FieldEditor doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} onEdited={() => setFromYoutube(items => items.filter(item => item !== label))} />
           ) : (
@@ -587,21 +593,13 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
             <pre className="lvy-value">{shownView === 'diff' && diff ? <DiffText parts={diff.right} side="youtube" /> : remote || '(empty)'}</pre>
           );
           return (
-            <ComparisonRow key={label} label={label} collapsible={isLongComparisonField(label, local, remote)} status={state && <span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state === 'Same' ? '✓ Same' : state === 'Different' ? '≠ Different' : state}</span>}>
+            <ComparisonRow key={label} label={label} collapsible={isLongComparisonField(label, local, remote)} status={state && <span className={`comparison-status ${direction ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state === 'Same' ? '✓ Same' : state === 'Different' ? '≠ Different' : state}</span>}>
               <div className="lvy-row-head">
                 {field?.value && <CopyButton text={field.value} />}
                 {draft.changes.includes(label) && originalDoc.fields?.some(f => f.label.toLowerCase() === label.toLowerCase()) && <button className="small" disabled={busy} onClick={() => { if (originalDoc.text !== null) void doc.save(t => copyVersionFields(t, originalDoc.text!, [label])); }}>Undo Edit</button>}
-                {showCopyActions && sync && canCompare && local !== null && (
-                  <button className="small" disabled={busy} onClick={() => stage(label)}>
-                    {waiting ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
-                  </button>
-                )}
-                {showCopyActions && sync && canCompare && remote !== null && (
-                  <button className="small" disabled={busy || out || doc.locked} onClick={() => void saveToFile(label)}>
-                    {fromYoutube.includes(label) ? 'Don’t Copy' : `${reverse ? '→' : '←'} Copy YouTube to ${versionName ?? 'Local'}`}
-                  </button>
-                )}
               </div>
+              <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? direction : null}>
+              {showCopyActions && sync && shownView === 'diff' && directionControls(direction, !!(canCompare && local !== null && !busy), !!(canCompare && remote !== null && !busy && !out && !doc.locked), () => stage(label), () => saveToFile(label))}
               {/* Locked: both sides highlighted. Unlocked: the local side is a box to type in, beside YouTube's highlighted. */}
               {shownView === 'diff' && diff && local !== null && field && !waiting && doc.locked ? (
                 <div className={`compare-columns${reverse ? ' compare-reversed' : ''}`}>
@@ -617,8 +615,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
                   </div>
                 </div>
               ) : (
-                columns(localPart, youtubePart, waiting)
+                columns(localPart, youtubePart, false)
               )}
+              </CopyDirectionFrame>
               {diff?.reordered && shownView === 'diff' && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
               {note && shownView === 'local' && <p className="muted small-text">{note}</p>}
             </ComparisonRow>
@@ -630,22 +629,15 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         <div className="lvy-row-head">
           <strong>Thumbnail</strong>
           {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}
-          {showCopyActions && canCompare && localThumb && (
-            <button className="small" disabled={busy} onClick={() => stage('Thumbnail')}>
-              {staged.includes('Thumbnail') ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
-            </button>
-          )}
-          {showCopyActions && canCompare && data?.video.thumbnail && version && (
-            <button className="small" disabled={busy || out || doc.locked} onClick={saveThumbnail} title="Saves YouTube's copy into this version, if it has no thumbnail yet">
-              {youtubeThumbnail ? 'Don’t Copy' : `${reverse ? '→' : '←'} Copy YouTube to ${versionName ?? 'Local'}`}
-            </button>
-          )}
         </div>
+        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail) : null}>
+        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail), !!(canCompare && localThumb && !busy), !!(canCompare && data?.video.thumbnail && version && !busy && !out && !doc.locked), () => stage('Thumbnail'), saveThumbnail)}
         {columns(
           localThumb ? <img className="lvy-thumb" src={fileUrl('projects', localThumb.path, fileStamp(localThumb))} alt="Local thumbnail" /> : <p className="muted small-text">No thumbnail in this version.</p>,
           data ? data.video.thumbnail ? <img className="lvy-thumb" src={data.video.thumbnail} alt="YouTube thumbnail" /> : <p className="muted small-text">Not available.</p> : <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>,
-          staged.includes('Thumbnail'),
+          false,
         )}
+        </CopyDirectionFrame>
       </div>
 
       {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. */}
@@ -653,11 +645,6 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         <div className="lvy-row-head">
           <strong>Captions</strong>
           {staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}
-          {showCopyActions && canCompare && ytCaptions && subtitle && (
-            <button className="small" disabled={busy} onClick={() => stage('Captions')} title="Sending captions costs 400 units to add a track, 450 to replace one">
-              {staged.includes('Captions') ? 'Don’t Push' : 'Use Local on YouTube →'}
-            </button>
-          )}
           {linked && !ytCaptions && (
             <button className="small" disabled={busy || out} onClick={downloadCaptions}>
               Download YouTube Captions
@@ -665,6 +652,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           )}
           {linked && !ytCaptions && <span className="muted small-text">about 250 units</span>}
         </div>
+        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Captions'), false) : null}>
+        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), false), !!(canCompare && ytCaptions && subtitle && !busy), false, () => stage('Captions'), () => undefined)}
         {columns(
           subtitles.length ? (
             <>
@@ -695,8 +684,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           ) : (
             <p className="muted small-text">Not downloaded. Use Download YouTube Captions to compare them; until then they aren't pushed.</p>
           ),
-          staged.includes('Captions'),
+          false,
         )}
+        </CopyDirectionFrame>
       </div>
 
       {error && <p className="error">{plainYoutubeError(error, quota)}</p>}
