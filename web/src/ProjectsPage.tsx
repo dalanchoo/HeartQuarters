@@ -22,6 +22,7 @@ import { DraftsSection } from './DraftsSection';
 import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { VideoPreview } from './VideoPreview';
 import { PackagingCompare } from './PackagingCompare';
+import { hasPendingPackaging } from './pendingPackaging';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
 import type { YoutubeChecks } from './videoChecks';
@@ -81,13 +82,25 @@ export function ProjectsPage() {
   const scanEpoch = useRef(0);
   const quota = useYoutubeQuota();
 
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const lastVideoHash = useRef(location.hash);
   useEffect(() => {
     getJson<ProjectNode[]>('/api/projects').then(setProjects, (e) => setError(e.message));
   }, [reloads]);
 
   useEffect(() => {
     // Another tab's address isn't for this page: it stays as it was while hidden.
-    const onHash = () => { if (!/^#(Videos|Projects)(\/|$)/.test(location.hash)) return; setSelected(projectFromHash()); setFocus(shortFocus()); };
+    const onHash = () => {
+      if (!/^#(Videos|Projects)(\/|$)/.test(location.hash)) return;
+      const next = projectFromHash();
+      if (next !== selectedRef.current && hasPendingPackaging() && !window.confirm('You have unapplied packaging changes. Discard them and open another project?')) {
+        history.replaceState(null, '', lastVideoHash.current);
+        return;
+      }
+      lastVideoHash.current = location.hash;
+      setSelected(next); setFocus(shortFocus());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -574,6 +587,8 @@ function PieceCard({
   manage?: { path: string; onDone: (result: ManageResult) => void };
 }) {
   const [versionName, setVersionName] = useState(piece.packagingVersion);
+  const [compareDirty, setCompareDirty] = useState(false);
+  const allowVersionChange = () => !compareDirty || window.confirm('You have unapplied packaging changes. Discard them and change versions?');
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const latest = piece.versions.at(-1)?.name;
   // Every version is locked until John clicks its padlock, so nothing in it changes by accident. Unlocking lasts until
@@ -640,10 +655,10 @@ function PieceCard({
             <div className="versions">
               {piece.versions.map((v) => (
                 <div key={v.path} className="version-choice">
-                  <button type="button" className="small version-padlock" aria-label={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} aria-pressed={unlocked === v.path} title={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} onClick={() => { setVersionName(v.name); setUnlocked(unlocked === v.path ? null : v.path); }}>
+                  <button type="button" className="small version-padlock" aria-label={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} aria-pressed={unlocked === v.path} title={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} onClick={() => { if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(unlocked === v.path ? null : v.path); }}>
                     {unlocked === v.path ? '🔓' : '🔒'}
                   </button>
-                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => setVersionName(v.name)} title={v.name === latest ? 'Latest version' : undefined}>
+                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); }} title={v.name === latest ? 'Latest version' : undefined}>
                     {versionLabel(v.name)}{v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
                   </button>
                 </div>
@@ -665,7 +680,7 @@ function PieceCard({
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
-        <PackagingCompare key={version.path} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
+        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}

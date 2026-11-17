@@ -7,13 +7,15 @@ import { VIDEO_LANGUAGES } from '../../server/youtube-language';
 import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-playlists';
 import { readAiLines, setAiLines, setFieldValue, sortTags, type AiLines, type Field } from './packaging';
 import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
-import { alteredContentValue, localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
+import { localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo } from './videoChecks';
 import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
+import { useStagedDoc } from './useStagedDoc';
+import { copyVersionFields } from './versionFields';
 
 // A video's YouTube metadata in one place (John, 2026-11-14): the link to YouTube sits on the card's status line, and
 // "Local vs YouTube" shows every field of YouTube.md, with one switch for all of them: the local file, what YouTube
@@ -326,7 +328,9 @@ function captionWords(srt: string): string {
     .join(' ');
 }
 
-export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, longform, display, reverse = false, versionName }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; version?: string; link: YoutubeLink; onChanged?: () => void; longform?: string; display?: View; reverse?: boolean; versionName?: string }) {
+export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link, onChanged, longform, display, reverse = false, versionName, onDirty }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; version?: string; link: YoutubeLink; onChanged?: () => void; longform?: string; display?: View; reverse?: boolean; versionName?: string; onDirty?: (dirty: boolean) => void }) {
+  const draft = useStagedDoc(originalDoc);
+  const doc = draft.doc;
   const [view, setView] = useState<View>(loadView);
   const chooseView = (v: View) => {
     setView(v);
@@ -347,6 +351,9 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [staged, setStaged] = useState<RowKey[]>([]);
+  const [fromYoutube, setFromYoutube] = useState<SyncField[]>([]);
+  const [youtubeThumbnail, setYoutubeThumbnail] = useState(false);
+  const localBaseline = useRef<string | null>(null);
   const [privacy, setPrivacy] = useState<YoutubeVideoSettings['privacy']>('private');
   const [playlists, setPlaylists] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -379,14 +386,15 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
     if (link.reloads === seenReloads.current) return;
     seenReloads.current = link.reloads;
     if (!data) return;
-    if (staged.length && !window.confirm('Reloading from YouTube clears what is marked to push. Continue?')) return;
+    if ((staged.length || fromYoutube.length || youtubeThumbnail) && !window.confirm('Reloading from YouTube clears the selected YouTube changes. Continue?')) return;
+    setFromYoutube([]); setYoutubeThumbnail(false); localBaseline.current = null;
     void load(true);
   }, [link.reloads]);
 
   const fields = doc.fields ?? [];
   const text = doc.text ?? '';
   const online = data ? youtubeValues(data.video) : null;
-  const stage = (key: RowKey) => setStaged((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]));
+  const stage = (key: RowKey) => { setStaged((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key])); if (isSync(key)) setFromYoutube(items => items.filter(item => item !== key)); if (key === 'Thumbnail') setYoutubeThumbnail(false); };
 
   // The local thumbnail: this version's Thumbnail/Thumbnail.png (or .jpg), else its first image.
   const localThumb = covers.find((c) => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name)) ?? covers.find((c) => /\.(png|jpe?g)$/i.test(c.name));
@@ -434,7 +442,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   const pushCost = playlistsRead + 1 + (fieldsStaged ? 50 : 0) + playlistsRead + 50 * playlistChanges + (staged.includes('Thumbnail') ? 50 : 0) + (staged.includes('Captions') ? 500 : 0) + readVideoCost(quota);
 
   const push = async () => {
-    if (!job || !data) return;
+    if (!job || !data) return false;
     setBusy(true);
     setError('');
     setMessage('');
@@ -463,60 +471,51 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
         subtitle: staged.includes('Captions') ? subtitle : '',
         cover: staged.includes('Thumbnail') ? localThumb?.path ?? '' : '',
       });
-      // YouTube doesn't report Altered content back, so the file keeps the answer that was sent.
-      const altered = alteredContentValue(desired.synthetic);
-      if (altered && localValue(text, 'Altered content') !== altered) {
-        try {
-          await doc.save((t) => setLocalValue(t, 'Altered content', altered));
-        } catch (e) {
-          result.errors.push(`Altered content wasn't saved to the file: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
       await load(true);
       if (staged.includes('Captions')) setYtCaptions(null);
       if (result.errors.length) setError(`Some changes were not confirmed: ${result.errors.join('; ')}`);
       else setMessage('Changes saved to YouTube.');
+      return result.errors.length === 0;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  // ← Save YouTube Value to File, checked against YouTube once more first.
-  // What happened after a row's button, shown under that row (the section's own messages are far below).
-  const [rowNote, setRowNote] = useState<{ row: string; text: string; failed?: boolean } | null>(null);
-  const saveToFile = async (field: SyncField) => {
-    if (!job || !online) return;
-    const remote = online[field];
-    if (remote === null || !window.confirm(`Save YouTube's ${field} into ${doc.file.name}? This changes your local file.`)) return;
-    setBusy(true);
-    setError('');
-    setRowNote(null);
+  const saveToFile = (field: SyncField) => { if (localBaseline.current === null) localBaseline.current = originalDoc.text; setFromYoutube(items => items.includes(field) ? items.filter(item => item !== field) : [...items, field]); setStaged(items => items.filter(item => item !== field)); };
+  const saveThumbnail = () => { setYoutubeThumbnail(value => !value); setStaged(items => items.filter(item => item !== 'Thumbnail')); };
+
+  const dirty = draft.pending || fromYoutube.length > 0 || youtubeThumbnail || pending.length > 0;
+  useEffect(() => { onDirty?.(dirty); return () => onDirty?.(false); }, [dirty, onDirty]);
+  const applyChanges = async () => {
+    if ((draft.pending || fromYoutube.length || youtubeThumbnail) && originalDoc.locked) return;
+    setBusy(true); setError(''); setMessage(''); let localSaved = false;
     try {
-      const current = await cachedYoutube<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`, true);
-      if (youtubeValues(current.video)[field] !== remote) throw new Error('The YouTube value changed since it was loaded. Reload from YouTube and compare again.');
-      await doc.save((t) => setLocalValue(t, field, remote));
-      setRowNote({ row: field, text: `YouTube's ${field} is saved in ${doc.file.name}.` });
-    } catch (e) {
-      setRowNote({ row: field, text: `Not saved: ${e instanceof Error ? e.message : String(e)}`, failed: true });
-    } finally {
-      setBusy(false);
-    }
+      if (staged.some(isSync) && (await getText('projects', originalDoc.file.path)) !== originalDoc.text) throw new Error('The local source file changed. Reload and compare it before applying.');
+      if (fromYoutube.length || youtubeThumbnail) {
+        if (!job || !online || !data) throw new Error('YouTube data is not available. Reload and try again.');
+        const current = await cachedYoutube<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`, true);
+        for (const field of fromYoutube) if (youtubeValues(current.video)[field] !== online[field]) throw new Error(`YouTube's ${field} changed. Reload and compare again.`);
+        if (youtubeThumbnail && current.video.thumbnail !== data.video.thumbnail) throw new Error('The YouTube thumbnail changed. Reload and compare again.');
+      }
+      if (draft.pending || fromYoutube.length) {
+        await draft.apply(fromYoutube.length ? text => fromYoutube.reduce((result, field) => setLocalValue(result, field, online![field]!), text) : undefined, localBaseline.current ?? undefined);
+        localSaved = true; setFromYoutube([]); localBaseline.current = null;
+      }
+      if (youtubeThumbnail) {
+        if (!job || !version) throw new Error('No YouTube video or packaging version is selected.');
+        await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version });
+        localSaved = true; setYoutubeThumbnail(false); onChanged?.();
+      }
+      if (pending.length) {
+        const success = await push();
+        if (!success && localSaved) setMessage('Local changes were saved. Check the YouTube error above.');
+      } else setMessage('Changes applied to the local version.');
+    } catch (e) { setError(`${localSaved ? 'Some local changes were saved. ' : 'No changes were applied. '}${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
   };
-  const saveThumbnail = () => {
-    if (!job || !version) return;
-    setBusy(true);
-    setError('');
-    setRowNote(null);
-    postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version })
-      .then(() => {
-        setRowNote({ row: 'Thumbnail', text: "YouTube's thumbnail is saved in this version." });
-        onChanged?.();
-      }, (e: Error) => setRowNote({ row: 'Thumbnail', text: `Not saved: ${e.message}`, failed: true }))
-      .finally(() => setBusy(false));
-  };
-  const noteFor = (row: string) => (rowNote?.row === row ? <p className={rowNote.failed ? 'error small-text' : 'small-text picked-label'}>{rowNote.text}</p> : null);
 
   const canCompare = linked && !!data;
   const showCopyActions = !display || display === 'diff';
@@ -572,9 +571,9 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
           const diff = sync && local !== null && remote !== null ? metadataDiff(label, local, remote) : null;
           const waiting = staged.includes(label as RowKey);
           const note = LOCAL_ONLY_NOTE[label.toLowerCase()];
-          const state = waiting ? 'Waiting to Push' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
+          const state = waiting ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPart = field ? (
-            <FieldEditor doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} />
+            <FieldEditor doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} onEdited={() => setFromYoutube(items => items.filter(item => item !== label))} />
           ) : (
             <MissingField doc={doc} label={label} />
           );
@@ -591,6 +590,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
             <ComparisonRow key={label} label={label} collapsible={isLongComparisonField(label, local, remote)} status={state && <span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state === 'Same' ? '✓ Same' : state === 'Different' ? '≠ Different' : state}</span>}>
               <div className="lvy-row-head">
                 {field?.value && <CopyButton text={field.value} />}
+                {draft.changes.includes(label) && originalDoc.fields?.some(f => f.label.toLowerCase() === label.toLowerCase()) && <button className="small" disabled={busy} onClick={() => { if (originalDoc.text !== null) void doc.save(t => copyVersionFields(t, originalDoc.text!, [label])); }}>Undo Edit</button>}
                 {showCopyActions && sync && canCompare && local !== null && (
                   <button className="small" disabled={busy} onClick={() => stage(label)}>
                     {waiting ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
@@ -598,7 +598,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
                 )}
                 {showCopyActions && sync && canCompare && remote !== null && (
                   <button className="small" disabled={busy || out || doc.locked} onClick={() => void saveToFile(label)}>
-                    {reverse ? '→' : '←'} Save YouTube Value to File
+                    {fromYoutube.includes(label) ? 'Don’t Copy' : `${reverse ? '→' : '←'} Copy YouTube to ${versionName ?? 'Local'}`}
                   </button>
                 )}
               </div>
@@ -621,7 +621,6 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
               )}
               {diff?.reordered && shownView === 'diff' && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
               {note && shownView === 'local' && <p className="muted small-text">{note}</p>}
-              {noteFor(label)}
             </ComparisonRow>
           );
         })}
@@ -630,7 +629,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
       <div className="lvy-row">
         <div className="lvy-row-head">
           <strong>Thumbnail</strong>
-          {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Push</span>}
+          {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}
           {showCopyActions && canCompare && localThumb && (
             <button className="small" disabled={busy} onClick={() => stage('Thumbnail')}>
               {staged.includes('Thumbnail') ? 'Don’t Push' : `Use Local on YouTube ${reverse ? '←' : '→'}`}
@@ -638,7 +637,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
           )}
           {showCopyActions && canCompare && data?.video.thumbnail && version && (
             <button className="small" disabled={busy || out || doc.locked} onClick={saveThumbnail} title="Saves YouTube's copy into this version, if it has no thumbnail yet">
-              {reverse ? '→' : '←'} Save YouTube Value to File
+              {youtubeThumbnail ? 'Don’t Copy' : `${reverse ? '→' : '←'} Copy YouTube to ${versionName ?? 'Local'}`}
             </button>
           )}
         </div>
@@ -647,14 +646,13 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
           data ? data.video.thumbnail ? <img className="lvy-thumb" src={data.video.thumbnail} alt="YouTube thumbnail" /> : <p className="muted small-text">Not available.</p> : <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>,
           staged.includes('Thumbnail'),
         )}
-        {noteFor('Thumbnail')}
       </div>
 
       {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. */}
       <div className="lvy-row">
         <div className="lvy-row-head">
           <strong>Captions</strong>
-          {staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Push</span>}
+          {staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}
           {showCopyActions && canCompare && ytCaptions && subtitle && (
             <button className="small" disabled={busy} onClick={() => stage('Captions')} title="Sending captions costs 400 units to add a track, 450 to replace one">
               {staged.includes('Captions') ? 'Don’t Push' : 'Use Local on YouTube →'}
@@ -730,63 +728,37 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
               to see its visibility and playlists and push changes ({units(readVideoCost(quota))}).
             </p>
           )}
-          <div className={`push-summary${pending.length ? ' has-changes' : ''}`}>
-            {pending.length ? (
-              <>
-                <strong>Push Changes to YouTube will send:</strong>
-                <ul>
-                  {pending.map((p) => (
-                    <li key={p}>{p}</li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <span className="muted small-text">Nothing to push. Use Local on YouTube marks a field to send.</span>
-            )}
-          </div>
-          <button disabled={busy || out || !data || !pending.length || !link.status?.captionAccess} onClick={() => void push()}>
-            Push Changes to YouTube
-          </button>{' '}
-          <span className="muted small-text">{units(pushCost)}</span>
         </div>
       )}
-      {!linked && link.status?.connected && link.job?.status !== 'uploading' && <NewUpload piece={piece} doc={doc} covers={covers} link={link} longform={longform} localThumb={localThumb} subtitles={subtitles} />}
+      <div className={`push-summary${dirty ? ' has-changes' : ''}`}>
+        {dirty ? <><strong>Apply Changes Will:</strong><ul>
+          {draft.changes.filter(label => !fromYoutube.some(field => field.toLowerCase() === label.toLowerCase())).map(label => <li key={`edit-${label}`}>Save Edited {label} to {versionName ?? 'Local Version'}</li>)}
+          {fromYoutube.map(label => <li key={`pull-${label}`}>Copy {label} From YouTube to {versionName ?? 'Local Version'}{draft.changes.some(field => field.toLowerCase() === label.toLowerCase()) ? ' (replaces the edit)' : ''}</li>)}
+          {youtubeThumbnail && <li>Copy Thumbnail From YouTube to {versionName ?? 'Local Version'}</li>}
+          {pending.map(p => <li key={`push-${p}`}>Send to YouTube: {p}</li>)}
+        </ul></> : <span className="muted small-text">No Changes Selected.</span>}
+      </div>
+      <button disabled={busy || !dirty || (!!pending.length && (out || !data || !link.status?.captionAccess)) || (!!(draft.pending || fromYoutube.length || youtubeThumbnail) && !!originalDoc.locked)} onClick={() => void applyChanges()}>Apply Changes</button>{' '}
+      <button disabled={busy || !dirty} onClick={() => { draft.discard(); setFromYoutube([]); setYoutubeThumbnail(false); setStaged([]); localBaseline.current = null; if (data) { setPrivacy(data.video.privacy); setPlaylists(data.selected); } setMessage('Changes discarded.'); }}>Discard Changes</button>{pending.length > 0 && <span className="muted small-text"> {units(pushCost)}</span>}
+      {!linked && link.status?.connected && link.job?.status !== 'uploading' && (dirty ? <p className="muted small-text">Apply or discard your changes before uploading.</p> : <NewUpload piece={piece} doc={originalDoc} covers={covers} link={link} longform={longform} localThumb={localThumb} subtitles={subtitles} />)}
     </div>
   );
 }
 
 function WaitingBadge() {
-  return <span className="waiting-badge" title="Push Changes to YouTube, at the bottom, sends this">✓ Waiting to Push</span>;
+  return <span className="waiting-badge" title="Apply Changes, at the bottom, sends this">✓ Waiting to Apply</span>;
 }
 
-/** One local field, editable where it stands. It saves when you leave the box, like the app's other boxes. */
-export function FieldEditor({ doc, index, field }: { doc: LoadedDoc; index: number; field: Field }) {
+/** Editing changes the in-memory draft. Apply Changes writes it to the file. */
+export function FieldEditor({ doc, index, field, onEdited }: { doc: LoadedDoc; index: number; field: Field; onEdited?: () => void }) {
   const [draft, setDraft] = useState(field.value);
-  const [status, setStatus] = useState<'saving' | 'saved' | null>(null);
+  const focused = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setDraft(field.value), [field.value]);
-  const commit = () => {
-    const value = draft.trim();
-    if (value === field.value) return setDraft(value);
-    setStatus('saving');
-    setError(null);
-    doc.save((text) => setFieldValue(text, index, value)).then(
-      () => {
-        setDraft(value);
-        setStatus('saved');
-        setTimeout(() => setStatus(null), 1500);
-      },
-      (e: Error) => {
-        setStatus(null);
-        setError(e.message);
-      },
-    );
-  };
+  useEffect(() => { if (!focused.current) setDraft(field.value); }, [field.value]);
   return (
     <>
-      <textarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
-      {status && <span className="muted small-text">{status === 'saving' ? 'Saving…' : 'Saved ✓'}</span>}
-      {error && <p className="error small-text">Not saved: {error}</p>}
+      <textarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onFocus={() => { focused.current = true; }} onChange={(e) => { const value = e.target.value; setDraft(value); setError(null); onEdited?.(); void doc.save(text => setFieldValue(text, index, value)).catch((err: Error) => setError(err.message)); }} onBlur={() => { focused.current = false; setDraft(draft.trim()); }} />
+      {error && <p className="error small-text">Not staged: {error}</p>}
     </>
   );
 }

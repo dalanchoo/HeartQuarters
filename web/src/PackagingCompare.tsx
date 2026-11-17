@@ -1,15 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PackagingVersion, Piece } from './api';
 import { lockDocs, usePackagingDocs, type LoadedDoc } from './PackagingDoc';
 import { LocalVsYouTube, type YoutubeLink } from './YouTubeCard';
 import { VersionCompare } from './VersionCompare';
 import { comparisonSelection, YOUTUBE_SELECTION as YOUTUBE } from './comparisonSelection';
+import { setPendingPackaging } from './pendingPackaging';
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
-export function PackagingCompare({ piece, version, doc, locked, unlocked, link, onChanged, longform }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; link: YoutubeLink; onChanged?: () => void; longform?: string }) {
+export function PackagingCompare({ piece, version, doc, locked, unlocked, link, onChanged, longform, onDirtyChange }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
   const [left, setLeft] = useState(version.path);
   const [right, setRight] = useState(YOUTUBE);
+  const [dirty, setDirty] = useState(false);
+  const pendingId = useRef(Symbol('packaging'));
+  useEffect(() => { const id = pendingId.current; setPendingPackaging(id, dirty); return () => setPendingPackaging(id, false); }, [dirty]);
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
+  useEffect(() => { if (!dirty) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
+  const changeSelection = (side: 'left' | 'right', value: string) => {
+    if (value === (side === 'left' ? left : right)) return;
+    if (dirty && !window.confirm('You have unapplied changes. Discard them and change the comparison?')) return;
+    setDirty(false);
+    if (side === 'left') setLeft(value); else setRight(value);
+  };
   const selection = comparisonSelection(left, right, version.path);
   const { youtube: usesYoutube, localPath, display } = selection;
   const localVersion = versions.find(v => v.path === localPath) ?? version;
@@ -25,10 +37,10 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, link, 
 
   return <details className="yt-section" open><summary>View and Compare Packaging</summary>
     <div className="compare-columns">
-      <label>First Selection <select value={left} onChange={e => setLeft(e.target.value)}>{optionList}</select></label>
-      <label>Compare With <select value={right} onChange={e => setRight(e.target.value)}><option value="">None — View One</option>{optionList}</select></label>
+      <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{optionList}</select></label>
+      <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{optionList}</select></label>
     </div>
-    {usesYoutube || !right ? localDoc ? <LocalVsYouTube key={localVersion.path} piece={piece} doc={localDoc} covers={localVersion.covers} version={localVersion.path} versionName={localVersion.name} link={link} onChanged={onChanged} longform={longform} display={display} reverse={selection.reverse} /> : <p className="muted">Loading Version…</p> :
-      unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} />}
+    {usesYoutube || !right ? localDoc ? <LocalVsYouTube key={`${localVersion.path}|${left}|${right}`} piece={piece} doc={localDoc} covers={localVersion.covers} version={localVersion.path} versionName={localVersion.name} link={link} onChanged={onChanged} longform={longform} display={display} reverse={selection.reverse} onDirty={setDirty} /> : <p className="muted">Loading Version…</p> :
+      unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} />}
   </details>;
 }
