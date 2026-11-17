@@ -665,7 +665,7 @@ function PieceCard({
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
-        <PackagingCompare key={version.path} piece={piece} version={version} doc={youtubeDoc} locked={locked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
+        <PackagingCompare key={version.path} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}

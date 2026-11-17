@@ -1,5 +1,13 @@
 export const YOUTUBE_SELECTION = '__youtube__';
 
+/** Only the unlocked version may receive a copy, even if another version is current. */
+export function localCopyTarget(left: string, right: string, unlocked: string | null) {
+  if (!unlocked || left === right) return null;
+  if (left === unlocked && right) return { target: left, source: right };
+  if (right === unlocked && left) return { target: right, source: left };
+  return null;
+}
+
 /** Resolve which local version supplies the YouTube view and how the two sides are displayed. */
 export function comparisonSelection(left: string, right: string, current: string) {
   const youtube = left === YOUTUBE_SELECTION || right === YOUTUBE_SELECTION;

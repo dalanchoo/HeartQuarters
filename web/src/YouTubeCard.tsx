@@ -5,7 +5,8 @@ import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { VIDEO_LANGUAGES } from '../../server/youtube-language';
 import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-playlists';
-import { readAiLines, setAiLines, setFieldValue, type AiLines, type Field } from './packaging';
+import { readAiLines, setAiLines, setFieldValue, sortTags, type AiLines, type Field } from './packaging';
+import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { alteredContentValue, localBoolean, localValue, setLocalValue, SYNC_FIELDS, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { metadataDiff, type DiffPart } from './metadataDiff';
@@ -565,14 +566,15 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
           const index = known(label);
           const field = index >= 0 ? fields[index] : null;
           const sync = isSync(label);
-          const local = sync ? (() => { try { return localValue(text, label); } catch { return field?.value ?? null; } })() : field?.value ?? null;
+          const rawLocal = sync ? (() => { try { return localValue(text, label); } catch { return field?.value ?? null; } })() : field?.value ?? null;
+          const local = label.toLowerCase() === 'tags' && rawLocal !== null ? sortTags(rawLocal) : rawLocal;
           const remote = sync && online ? online[label] : null;
           const diff = sync && local !== null && remote !== null ? metadataDiff(label, local, remote) : null;
           const waiting = staged.includes(label as RowKey);
           const note = LOCAL_ONLY_NOTE[label.toLowerCase()];
           const state = waiting ? 'Waiting to Push' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPart = field ? (
-            <FieldEditor doc={doc} index={index} field={field} />
+            <FieldEditor doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} />
           ) : (
             <MissingField doc={doc} label={label} />
           );
@@ -586,10 +588,8 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
             <pre className="lvy-value">{shownView === 'diff' && diff ? <DiffText parts={diff.right} side="youtube" /> : remote || '(empty)'}</pre>
           );
           return (
-            <div className="lvy-row" key={label}>
+            <ComparisonRow key={label} label={label} collapsible={isLongComparisonField(label, local, remote)} status={state && <span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state === 'Same' ? '✓ Same' : state === 'Different' ? '≠ Different' : state}</span>}>
               <div className="lvy-row-head">
-                <strong>{label}</strong>
-                {state && <span className={`comparison-status ${waiting ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state}</span>}
                 {field?.value && <CopyButton text={field.value} />}
                 {showCopyActions && sync && canCompare && local !== null && (
                   <button className="small" disabled={busy} onClick={() => stage(label)}>
@@ -622,7 +622,7 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
               {diff?.reordered && shownView === 'diff' && <p className="muted small-text">The same tags are present; YouTube returned them in a different order.</p>}
               {note && shownView === 'local' && <p className="muted small-text">{note}</p>}
               {noteFor(label)}
-            </div>
+            </ComparisonRow>
           );
         })}
 

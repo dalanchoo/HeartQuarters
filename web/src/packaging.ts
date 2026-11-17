@@ -12,6 +12,19 @@ export interface Field {
   value: string;
 }
 
+/** Alphabetize comma-separated YouTube tags without changing their spelling or removing duplicates. */
+export function sortTags(value: string): string {
+  return value.split(',').map(tag => tag.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }) || a.localeCompare(b, 'en')).join(', ');
+}
+
+/** Sort tags when a YouTube metadata file is saved, leaving all other fields intact. */
+export function sortYoutubeTags(text: string): string {
+  const fields = parseFields(text);
+  if (!fields || fields.filter(f => f.label.toLowerCase() === 'tags').length !== 1) return text;
+  const index = fields.findIndex(f => f.label.toLowerCase() === 'tags');
+  return setFieldValue(text, index, sortTags(fields[index].value));
+}
+
 // John's platforms, most important first. Any other file comes after these, in the order it was found.
 const PLATFORMS = ['youtube', 'substack', 'instagram', 'tiktok', 'linkedin'];
 

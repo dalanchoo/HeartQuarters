@@ -8,6 +8,7 @@ import {
   readAiLines,
   setAiLines,
   setFieldValue,
+  sortYoutubeTags,
   type AiLines,
   type Field,
 } from './packaging';
@@ -56,7 +57,8 @@ export function usePackagingDocs(found: FileRef[], loads = 0): LoadedDoc[] {
       save: (change: (text: string) => string) => {
         const run = line[i].then(async () => {
           const was = latest[i];
-          const text = change(was);
+          const changed = change(was);
+          const text = /^youtube\.md$/i.test(file.name.split('/').pop() ?? '') ? sortYoutubeTags(changed) : changed;
           if (text === was) return;
           await postJson('/api/packaging/save', { path: file.path, text, was });
           latest[i] = text;

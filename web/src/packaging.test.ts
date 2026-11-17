@@ -1,6 +1,19 @@
 // Splitting YouTube.md and similar files into fields for the Copy buttons.
 import { describe, expect, it } from 'vitest';
-import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue } from './packaging';
+import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags } from './packaging';
+
+describe('alphabetical YouTube tags', () => {
+  it('sorts case insensitively while keeping spelling and duplicates', () => {
+    expect(sortTags('zebra, Apple, apple, Memory')).toBe('apple, Apple, Memory, zebra');
+  });
+  it('sorts tags when saving without changing other fields or line endings', () => {
+    expect(sortYoutubeTags('Title:\r\nTitle\r\n\r\nTags:\r\nzebra, Apple\r\n\r\nDescription:\r\nText\r\n')).toBe('Title:\r\nTitle\r\n\r\nTags:\r\nApple, zebra\r\n\r\nDescription:\r\nText\r\n');
+  });
+  it('does not rewrite ambiguous duplicate tags fields', () => {
+    const original = 'Tags:\nz, a\n\nTags:\nb, a\n';
+    expect(sortYoutubeTags(original)).toBe(original);
+  });
+});
 
 describe('thumbnail planning', () => {
   it('adds missing fields without changing existing metadata or duplicating fields', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comparisonSelection, YOUTUBE_SELECTION as yt } from './comparisonSelection';
+import { comparisonSelection, localCopyTarget, YOUTUBE_SELECTION as yt } from './comparisonSelection';
 
 describe('packaging comparison selections', () => {
   it('compares the chosen version with YouTube in either order', () => {
@@ -12,5 +12,17 @@ describe('packaging comparison selections', () => {
   });
   it('keeps two local versions out of the YouTube view', () => {
     expect(comparisonSelection('v1', 'v2', 'v2').youtube).toBe(false);
+  });
+});
+
+describe('local version copy target', () => {
+  it('copies into the unlocked version on either side, including an older version', () => {
+    expect(localCopyTarget('v5', 'v4', 'v4')).toEqual({ source: 'v5', target: 'v4' });
+    expect(localCopyTarget('v4', 'v5', 'v4')).toEqual({ source: 'v5', target: 'v4' });
+  });
+  it('does not select a locked or absent version as the target', () => {
+    expect(localCopyTarget('v5', 'v4', null)).toBeNull();
+    expect(localCopyTarget('v5', 'v4', 'v3')).toBeNull();
+    expect(localCopyTarget('v4', 'v4', 'v4')).toBeNull();
   });
 });

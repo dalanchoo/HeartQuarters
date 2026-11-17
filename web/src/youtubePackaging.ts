@@ -1,4 +1,4 @@
-import { parseFields, setFieldValue } from './packaging';
+import { parseFields, setFieldValue, sortTags } from './packaging';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 
 // Visibility and playlists aren't kept in the file (John, 2026-11-12): YouTube is their only home.
@@ -59,7 +59,7 @@ function setPlain(text: string, label: string, value: string): string {
 
 export function youtubeValues(video: YoutubeVideoSettings): Record<SyncField, string | null> {
   return {
-    Title: video.title, Description: video.description, Tags: video.tags.join(', '),
+    Title: video.title, Description: video.description, Tags: sortTags(video.tags.join(', ')),
     'Video language': video.language,
     'Made for kids': video.madeForKids === null ? null : video.madeForKids ? 'Yes' : 'No',
     'Altered content': video.synthetic === null ? null : video.synthetic ? 'Yes' : 'No',
