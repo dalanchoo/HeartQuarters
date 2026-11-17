@@ -664,8 +664,11 @@ function PieceCard({
       </div>
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
+      {version && youtubeDoc && <VersionCompare key={version.path} versions={piece.versions} version={version} doc={youtubeDoc} locked={locked} onChanged={onChanged} />}
       {youtubeDoc && piece.kind !== 'reel' ? (
-        <LocalVsYouTube key={youtubeDoc.file.path} piece={piece} doc={youtubeDoc} covers={version?.covers ?? []} version={version?.path} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
+        <details className="yt-section" open><summary>Compare Vs YouTube</summary>
+          <LocalVsYouTube key={youtubeDoc.file.path} piece={piece} doc={youtubeDoc} covers={version?.covers ?? []} version={version?.path} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} />
+        </details>
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
@@ -675,7 +678,6 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {version && youtubeDoc && <VersionCompare key={version.path} versions={piece.versions} version={version} doc={youtubeDoc} locked={locked} onChanged={onChanged} />}
       {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} doc={youtubeDoc} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
     </>

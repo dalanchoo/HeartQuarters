@@ -541,7 +541,6 @@ export function LocalVsYouTube({ piece, doc, covers, version, link, onChanged, l
   return (
     <div className="local-vs-youtube">
       <div className="lvy-head">
-        <h4>Local vs YouTube</h4>
         <div className="view-switch" role="group" aria-label="What to show">
           {(['local', 'youtube', 'diff'] as View[]).map((v) => (
             <button key={v} className={`small ${shownView === v ? 'active' : ''}`} disabled={!linked && v !== 'local'} onClick={() => chooseView(v)}>

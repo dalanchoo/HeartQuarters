@@ -2,24 +2,97 @@ import { useEffect, useState } from 'react';
 import { fileStamp, getText, postJson, thumbUrl, type PackagingVersion } from './api';
 import type { LoadedDoc } from './PackagingDoc';
 import { parseFields } from './packaging';
-import { copyVersionFields } from './versionFields';
+import { comparisonLabels, copyVersionFields } from './versionFields';
+
+const youtubeFile = (version?: PackagingVersion) => version?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name));
+const thumbnail = (version?: PackagingVersion) => version?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
+
+function useVersionText(path: string, version: PackagingVersion | undefined, currentPath: string, doc: LoadedDoc) {
+  const [loaded, setLoaded] = useState<{ path: string; text: string | null; error?: string }>({ path: '', text: null });
+  const file = youtubeFile(version);
+  useEffect(() => {
+    if (!path || path === currentPath || !file) return;
+    let active = true;
+    setLoaded({ path, text: null });
+    void getText('projects', file.path).then(
+      text => { if (active) setLoaded({ path, text }); },
+      e => { if (active) setLoaded({ path, text: null, error: e instanceof Error ? e.message : String(e) }); },
+    );
+    return () => { active = false; };
+  }, [path, currentPath, file?.path]);
+  if (!path) return { text: null, error: undefined };
+  if (path === currentPath) return { text: doc.text, error: doc.error };
+  return loaded.path === path ? loaded : { text: null, error: undefined };
+}
 
 export function VersionCompare({ versions, version, doc, locked, onChanged }: { versions: PackagingVersion[]; version: PackagingVersion; doc: LoadedDoc; locked: boolean; onChanged?: () => void }) {
-  const options = versions.filter(v => v.path !== version.path && v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
-  const [copyThumb, setCopyThumb] = useState(false); const [source, setSource] = useState(''); const [text, setText] = useState<string | null>(null); const [selected, setSelected] = useState<string[]>([]); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
-  useEffect(() => { let active = true; setText(null); setSelected([]); if (source) { const file = options.find(v => v.path === source)?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name)); if (file) void getText('projects', file.path).then(value => { if (active) { setText(value); setSelected((parseFields(value) ?? []).map(f => f.label)); } }, e => { if (active) setMessage(e.message); }); } return () => { active = false; }; }, [source, version.path]);
-  if (!options.length) return null;
-  const sourceThumb = options.find(v => v.path === source)?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
-  const currentThumb = version.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
-  const fields = text ? parseFields(text) ?? [] : []; const current = doc.fields ?? [];
+  const options = versions.filter(v => youtubeFile(v));
+  const [left, setLeft] = useState('');
+  const [right, setRight] = useState(version.path);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [copyThumb, setCopyThumb] = useState(false);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const leftVersion = options.find(v => v.path === left);
+  const rightVersion = options.find(v => v.path === right);
+  const leftData = useVersionText(left, leftVersion, version.path, doc);
+  const rightData = useVersionText(right, rightVersion, version.path, doc);
+  if (options.length < 2) return null;
+
+  const leftText = leftData.text;
+  const rightText = rightData.text;
+  const ready = leftText !== null && rightText !== null;
+  const leftFields = parseFields(leftText ?? '') ?? [];
+  const rightFields = parseFields(rightText ?? '') ?? [];
+  const labels = ready ? comparisonLabels(leftText, rightText) : [];
+  const leftThumb = thumbnail(leftVersion);
+  const rightThumb = thumbnail(rightVersion);
+  const targetIsLeft = left === version.path && right !== version.path;
+  const targetIsRight = right === version.path && left !== version.path;
+  const sourceVersion = targetIsLeft ? rightVersion : targetIsRight ? leftVersion : undefined;
+  const sourceText = targetIsLeft ? rightText : targetIsRight ? leftText : null;
+  const sourceFields = targetIsLeft ? rightFields : leftFields;
+  const sourceThumb = targetIsLeft ? rightThumb : leftThumb;
+  const targetThumb = thumbnail(version);
+  const canCopy = !!sourceVersion && sourceText !== null && !locked;
+  const sourceHas = (label: string) => sourceFields.some(f => f.label.toLowerCase() === label.toLowerCase());
+  const reset = () => { setSelected([]); setCopyThumb(false); setMessage(''); };
+  const optionList = options.map(v => <option key={v.path} value={v.path}>{v.name}{v.path === version.path ? ' (Current)' : ''}</option>);
+
   return <details className="yt-section"><summary>Compare Local Versions</summary>
-    <label>Copy From <select value={source} onChange={e => { setSource(e.target.value); setCopyThumb(false); setMessage(''); }}><option value="">Choose a Version…</option>{options.map(v => <option key={v.path} value={v.path}>{v.name}</option>)}</select></label>
-    {fields.map(field => <div className="version-field-compare" key={field.label}>
-      <label><input type="checkbox" checked={selected.includes(field.label)} onChange={e => setSelected(e.target.checked ? [...selected, field.label] : selected.filter(s => s !== field.label))} /> {field.label}</label>
-      <div className="compare-columns"><div><strong>{options.find(v => v.path === source)?.name}</strong><pre className="lvy-value">{field.value || '(empty)'}</pre></div><div><strong>{version.name}</strong><pre className="lvy-value">{current.find(f => f.label.toLowerCase() === field.label.toLowerCase())?.value || '(empty)'}</pre></div></div>
-    </div>)}
-    {sourceThumb && <div className="version-field-compare"><label><input type="checkbox" checked={copyThumb} onChange={e => setCopyThumb(e.target.checked)} /> Thumbnail</label><div className="compare-columns"><div><strong>{options.find(v => v.path === source)?.name}</strong><div><img className="lvy-thumb" src={thumbUrl('projects', sourceThumb.path, 320, fileStamp(sourceThumb))} alt="Source thumbnail" /></div></div><div><strong>{version.name}</strong><div>{currentThumb ? <img className="lvy-thumb" src={thumbUrl('projects', currentThumb.path, 320, fileStamp(currentThumb))} alt="Current thumbnail" /> : '(empty)'}</div></div></div></div>}
-    {text && <button disabled={locked || busy || (!selected.length && !copyThumb)} onClick={async () => { setBusy(true); setMessage(''); let copied = false; try { if (selected.length) { const sourceDoc = options.find(v => v.path === source)?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name)); if (!sourceDoc || (await getText('projects', sourceDoc.path)) !== text) throw new Error('The source version changed. Choose it again to reload before copying.'); await doc.save(t => copyVersionFields(t, text, selected)); copied = true; } if (copyThumb && sourceThumb) { await postJson('/api/packaging/copy-thumbnail', { piece: version.path.replace(/\/Packaging\/[^/]+$/i, ''), source, target: version.path, expected: currentThumb ? { size: currentThumb.size, modified: currentThumb.modified } : undefined, sourceExpected: { size: sourceThumb.size, modified: sourceThumb.modified } }); onChanged?.(); } setMessage(`Selected fields copied to ${version.name}.`); } catch (e) { setMessage(`${copied ? 'The selected text was saved, but the thumbnail was not: ' : ''}${e instanceof Error ? e.message : String(e)}`); } finally { setBusy(false); } }}>Copy Selected</button>}
-    {locked && <p className="muted small-text">Unlock {version.name} to copy into it.</p>}{message && <p role="status">{message}</p>}
+    <div className="compare-columns">
+      <label>Left Version <select value={left} onChange={e => { setLeft(e.target.value); reset(); }}><option value="">Choose a Version…</option>{optionList}</select></label>
+      <label>Right Version <select value={right} onChange={e => { setRight(e.target.value); reset(); }}><option value="">Choose a Version…</option>{optionList}</select></label>
+    </div>
+    {(leftData.error || rightData.error) && <p className="error">Could Not Read Version: {leftData.error || rightData.error}</p>}
+    {left && right && !ready && !leftData.error && !rightData.error && <p className="muted">Loading Versions…</p>}
+    {ready && labels.map(label => {
+      const leftValue = leftFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value;
+      const rightValue = rightFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value;
+      return <div className="version-field-compare" key={label}>
+        <label><input type="checkbox" disabled={!canCopy || !sourceHas(label)} checked={selected.includes(label)} onChange={e => setSelected(e.target.checked ? [...selected, label] : selected.filter(s => s !== label))} /> {label} <span className={`comparison-status ${leftValue === rightValue ? 'comparison-same' : 'comparison-different'}`}>{leftValue === rightValue ? 'Same' : 'Different'}</span></label>
+        <div className="compare-columns"><div><strong>{leftVersion?.name}</strong><pre className="lvy-value">{leftValue || '(empty)'}</pre></div><div><strong>{rightVersion?.name}</strong><pre className="lvy-value">{rightValue || '(empty)'}</pre></div></div>
+      </div>;
+    })}
+    {ready && (leftThumb || rightThumb) && <div className="version-field-compare"><label><input type="checkbox" disabled={!canCopy || !sourceThumb} checked={copyThumb} onChange={e => setCopyThumb(e.target.checked)} /> Thumbnail</label><div className="compare-columns">{[leftThumb, rightThumb].map((thumb, i) => <div key={i}><strong>{i === 0 ? leftVersion?.name : rightVersion?.name}</strong><div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${i === 0 ? leftVersion?.name : rightVersion?.name} thumbnail`} /> : '(empty)'}</div></div>)}</div></div>}
+    {ready && sourceVersion && <button disabled={!canCopy || busy || (!selected.length && !copyThumb)} onClick={async () => {
+      if (sourceText === null) return;
+      setBusy(true); setMessage(''); let copied = false;
+      try {
+        if (selected.length) {
+          const sourceDoc = youtubeFile(sourceVersion);
+          if (!sourceDoc || (await getText('projects', sourceDoc.path)) !== sourceText) throw new Error('The source version changed. Choose it again to reload before copying.');
+          await doc.save(t => copyVersionFields(t, sourceText, selected)); copied = true;
+        }
+        if (copyThumb && sourceThumb) {
+          await postJson('/api/packaging/copy-thumbnail', { piece: version.path.replace(/\/Packaging\/[^/]+$/i, ''), source: sourceVersion.path, target: version.path, expected: targetThumb ? { size: targetThumb.size, modified: targetThumb.modified } : undefined, sourceExpected: { size: sourceThumb.size, modified: sourceThumb.modified } });
+          onChanged?.();
+        }
+        setMessage(`Selected fields copied to ${version.name}.`);
+      } catch (e) { setMessage(`${copied ? 'The selected text was saved, but the thumbnail was not: ' : ''}${e instanceof Error ? e.message : String(e)}`); }
+      finally { setBusy(false); }
+    }}>Copy Selected to {version.name}</button>}
+    {ready && (!sourceVersion || locked) && <p className="muted small-text">{locked && sourceVersion ? `Unlock ${version.name} to copy into it.` : 'To copy, select the current version on one side and another version on the other.'}</p>}
+    {message && <p role="status">{message}</p>}
   </details>;
 }
