@@ -827,3 +827,6 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .lock-hint { margin: .3rem 0 .4rem; padding: .3rem .6rem; border-radius: 6px; background: #fff4d6; color: #6b4a00; font-size: .9rem; }
 /* Captions: the file menu and YouTube's track name take the same height, so both texts start level. */
 .caption-head { min-height: 2.1rem; display: flex; align-items: center; margin-bottom: .25rem; }
+/* The retention graph's box takes a pasted screenshot only once clicked, and shows that it's ready. */
+.retention { border: 1px dashed transparent; border-radius: 6px; padding: .3rem; cursor: pointer; }
+.retention:focus { outline: none; border-color: var(--accent); background: var(--accent-soft); }

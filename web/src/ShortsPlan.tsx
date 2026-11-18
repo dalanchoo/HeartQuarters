@@ -63,28 +63,22 @@ export function ShortsPlanCard({ video }: { video: string }) {
     return () => clearInterval(timer);
   }, [busy, video]);
 
-  // A screenshot pasted anywhere on the page is the retention graph. Text pastes carry on as normal. Not one that
-  // something else already took (a reference image pasted into a thumbnail's change box), and not while this page is
-  // hidden behind another tab.
+  // The retention graph is only a screenshot pasted into its own box, after clicking it. Pasting anywhere on the page
+  // used to count, and screenshots meant for other boxes (vidIQ's tags, 2026-11-15 and 16) replaced the real graph.
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => {
-      if (e.defaultPrevented || !root.current || root.current.offsetParent === null) return;
-      const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type === 'image/png');
-      const file = item?.getAsFile();
-      if (!file) return;
-      e.preventDefault();
-      const reader = new FileReader();
-      reader.onload = () => {
-        const png = String(reader.result).split(',')[1];
-        setError(null);
-        postJson('/api/shorts/retention', { video, png }).then(refresh, fail);
-      };
-      reader.readAsDataURL(file);
+  const pasteRetention = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const item = [...e.clipboardData.items].find((i) => i.type === 'image/png');
+    const file = item?.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    const reader = new FileReader();
+    reader.onload = () => {
+      const png = String(reader.result).split(',')[1];
+      setError(null);
+      postJson('/api/shorts/retention', { video, png }).then(refresh, fail);
     };
-    window.addEventListener('paste', onPaste);
-    return () => window.removeEventListener('paste', onPaste);
-  }, [video]);
+    reader.readAsDataURL(file);
+  };
 
   if (!state) return null;
 
@@ -161,7 +155,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
         )}
       </div>
 
-      <div className="retention small-text">
+      <div className="retention small-text" tabIndex={0} onPaste={pasteRetention} title="Click here, then paste a screenshot of the retention graph (Ctrl+V)">
         {retention ? (
           <>
             <a href={fileUrl('projects', retention.path)} target="_blank" rel="noreferrer">
@@ -169,7 +163,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
             </a>
             <div>
               <div>Retention graph. The AI looks at it the next time you click Propose.</div>
-              <div className="muted">Paste another screenshot to replace it.</div>
+              <div className="muted">To replace it, click this box, then paste another screenshot (Ctrl+V).</div>
               <button
                 className="small"
                 onClick={() => postJson('/api/shorts/retention/remove', { video }).then(refresh, fail)}
@@ -179,7 +173,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
             </div>
           </>
         ) : (
-          <span className="muted">Retention graph: copy a screenshot of it, then press Ctrl+V anywhere on this page.</span>
+          <span className="muted">Retention graph: copy a screenshot of it, click this box, then press Ctrl+V.</span>
         )}
       </div>
 
