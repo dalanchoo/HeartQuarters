@@ -3,14 +3,13 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
-import { CopyButton, type LoadedDoc } from './PackagingDoc';
-import { parseFields } from './packaging';
-import { copyVersionFields } from './versionFields';
-import { splitHashtags, wouldLoseChapters } from './youtubePackaging';
+import { CopyButton } from './PackagingDoc';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
+import { isCurrentChoice } from './draftPackaging';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
+import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
 import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { expressionShotSuggestions } from './expressionShotSuggestions';
@@ -22,12 +21,8 @@ import { expressionShotSuggestions } from './expressionShotSuggestions';
 // chosen, Make Thumbnail asks ChatGPT or Gemini for one (server/thumbnails.ts), and each draft has a box for changes.
 /** The packaging version selected on the card: where Use Thumbnail and Use Title put a draft. Locked when it's an old one. */
 export interface UseTarget { name: string; path: string; locked: boolean }
-function isCurrentChoice(choice: BriefChoice | null, picks: BriefPick[] | null): boolean {
-  const pick = choice && picks?.[choice.index];
-  return !!pick && JSON.stringify(pick) === JSON.stringify(choice?.pick);
-}
 
-export function DraftsSection({ piece, drafts, target, doc, research, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; doc?: LoadedDoc; research?: Research; onChanged?: () => void }) {
+export function DraftsSection({ piece, drafts, target, research, onChanged }: { piece: string; drafts: Drafts | null; target?: UseTarget; research?: Research; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
   const thumbs = useThumbJobs(piece, open, onChanged);
   const images = drafts?.conversations.reduce((n, c) => n + c.images.length, 0) ?? 0;
@@ -57,7 +52,6 @@ export function DraftsSection({ piece, drafts, target, doc, research, onChanged 
           {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
         </details>
       )}
-      {open && drafts?.choice && isCurrentChoice(drafts.choice, drafts.picks) && target && doc && <DraftPackagingCompare piece={piece} choice={drafts.choice} conversations={drafts.conversations} target={target} doc={doc} onChanged={onChanged} />}
       {drafts && (
         <>
           <div className="drafts-top">
@@ -68,7 +62,7 @@ export function DraftsSection({ piece, drafts, target, doc, research, onChanged 
           </div>
           <div className="drafts-grid">
             {[...drafts.conversations].reverse().map((c) => (
-              <Conversation key={c.path} piece={piece} target={target} conversation={c} allDrafts={drafts.conversations} job={thumbs.jobs.find((j) => j.conversation === c.path)} thumbs={thumbs} onChanged={onChanged} />
+              <Conversation key={c.path} piece={piece} target={target} conversation={c} chosenPhoto={drafts.choice?.photo ?? null} allDrafts={drafts.conversations} job={thumbs.jobs.find((j) => j.conversation === c.path)} thumbs={thumbs} onChanged={onChanged} />
             ))}
           </div>
         </>
@@ -110,34 +104,6 @@ function ShotListSuggestions({ piece, brief, picks }: { piece: string; brief: { 
     {!suggestions.length && !error && <p className="muted small-text">No labelled expression suggestions found.</p>}
     <button disabled={busy || !validSelected.length} onClick={() => void add()}>Add Selected to Shot List</button>
     {message && <p role="status">{message}</p>}{error && <p className="error" role="alert">{error}</p>}
-  </details>;
-}
-
-function DraftPackagingCompare({ piece, choice, conversations, target, doc, onChanged }: { piece: string; choice: BriefChoice; conversations: DraftConversation[]; target: UseTarget; doc: LoadedDoc; onChanged?: () => void }) {
-  const pick = choice.pick;
-  const descriptionParts = splitHashtags(pick.description ?? '');
-  const values = [{ label: 'Title', value: pick.title }, { label: 'Description', value: descriptionParts.description }, { label: 'Hashtags', value: descriptionParts.hashtags }, { label: 'Tags', value: pick.tags }, { label: 'Pinned Comment', value: pick.pinnedComment }].filter((f): f is { label: string; value: string } => !!f.value);
-  const source = values.map(f => `${f.label}:\n${f.value}`).join('\n\n') + '\n';
-  const available = conversations.filter(c => c.pick?.title === pick.title).flatMap(c => c.images.map(image => ({ path: image.path, label: `${c.name} · ${image.name}` })));
-  const fields = doc.text ? parseFields(doc.text) ?? [] : [];
-  const existingDescription = fields.find(f => f.label.toLowerCase() === 'description')?.value ?? '';
-  const chapterRisk = wouldLoseChapters(existingDescription, descriptionParts.description);
-  const defaultSelected = () => values.map(f => f.label).filter(label => !(label === 'Description' && chapterRisk));
-  const [image, setImage] = useState(''); const [thumbnail, setThumbnail] = useState(true); const [selected, setSelected] = useState<string[]>(defaultSelected); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  useEffect(() => { setSelected(defaultSelected()); setImage(''); }, [choice.index, pick.title, pick.description, pick.tags, pick.pinnedComment, target.path, chapterRisk]);
-  const selectedImage = image || available.at(-1)?.path || '';
-  return <details className="yt-section"><summary>Review and Apply Generated Packaging</summary>
-    <p className="muted small-text">Compare the selected draft with {target.name}. Chapters are part of the description; hashtags are combined with it when sent to YouTube. No changes are sent to YouTube here.</p>
-    {chapterRisk && <p role="alert">The generated description has no chapter list, but {target.name} has chapters. Description is unchecked to protect them. Selecting it will replace the entire description, including those chapters.</p>}
-    {values.map(field => <div className="version-field-compare" key={field.label}><label><input type="checkbox" checked={selected.includes(field.label)} onChange={e => setSelected(e.target.checked ? [...selected, field.label] : selected.filter(s => s !== field.label))} /> {field.label}</label><div className="compare-columns"><div><strong>Generated Draft</strong><pre className="lvy-value">{field.value}</pre></div><div><strong>{target.name}</strong><pre className="lvy-value">{fields.find(f => f.label.toLowerCase() === field.label.toLowerCase())?.value || '(empty)'}</pre></div></div></div>)}
-    {available.length > 0 && <div className="version-field-compare"><label><input type="checkbox" checked={thumbnail} onChange={e => setThumbnail(e.target.checked)} /> Thumbnail</label> <select value={selectedImage} onChange={e => setImage(e.target.value)}>{available.map(item => <option key={item.path} value={item.path}>{item.label}</option>)}</select><div><img className="lvy-thumb" src={thumbUrl('projects', selectedImage, 320)} alt="Selected generated thumbnail" /></div></div>}
-    {!pick.description && <p className="muted small-text">This older draft has no generated description, tags or pinned comment. Write a new brief to generate the full package.</p>}
-    <button disabled={busy || target.locked || (!selected.length && !(thumbnail && selectedImage))} onClick={async () => { setBusy(true); setMessage(''); let copied = false; try {
-      if (selected.length) { await doc.save(text => copyVersionFields(text, source, selected)); copied = true; }
-      if (thumbnail && selectedImage) await postJson('/api/packaging/use-draft', { piece, image: selectedImage, version: target.path, thumbnail: true, title: false });
-      setMessage(`Selected packaging applied to ${target.name}.`); onChanged?.();
-    } catch (e) { setMessage(`${copied ? 'The selected text was saved, but the thumbnail was not: ' : ''}${e instanceof Error ? e.message : String(e)}`); if (copied) onChanged?.(); } finally { setBusy(false); } }}>Apply Selected to {target.name}</button>
-    {target.locked && <p className="muted small-text">Unlock {target.name} to apply changes.</p>}{message && <p role="status">{message}</p>}
   </details>;
 }
 
@@ -258,6 +224,27 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
   }, []);
+  // Best Photos for This Pair: Claude ranks the photos once per pair (saved in Drafts), started here when there's none.
+  const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null } | null>(null);
+  const loadRanking = () => getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(setRanking, (e: Error) => setError(e.message));
+  useEffect(() => void loadRanking(), [piece, choice.pick.title]);
+  const ranked = ranking?.ranking && ranking.ranking.title === choice.pick.title ? ranking.ranking : null;
+  const rankingNow = ranking?.job?.state === 'working';
+  const rank = () => {
+    setError('');
+    postJson<RankingJob>('/api/brief/rank-photos', { piece }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job })), (e: Error) => setError(e.message));
+  };
+  const asked = useRef('');
+  useEffect(() => {
+    if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
+    asked.current = choice.pick.title;
+    rank();
+  }, [ranking, ranked, rankingNow]);
+  useEffect(() => {
+    if (!rankingNow) return;
+    const timer = setInterval(() => void loadRanking(), 3000);
+    return () => clearInterval(timer);
+  }, [rankingNow]);
   // The pair's own categories first, then any John adds from the whole library.
   const [added, setAdded] = useState<string[]>([]);
   const categories = [...categoriesIn(choice.pick.expression), ...added.filter((c) => !categoriesIn(choice.pick.expression).includes(c))];
@@ -266,7 +253,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     setError('');
     postJson('/api/brief/photo', { piece, photo }).then(() => onChanged?.(), (e: Error) => setError(e.message)).finally(() => setSaving(null));
   };
-  const tile = (p: { path: string; name: string; revision?: string }) => {
+  const tile = (p: { path: string; name: string; revision?: string }, place?: number, why?: string) => {
     const picked = choice.photo === p.path;
     const root = p.path.startsWith('project:') ? 'projects' : 'expressions';
     const photoPath = root === 'projects' ? p.path.slice(8) : p.path;
@@ -275,7 +262,9 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
         <button className="photo-choice" disabled={saving !== null} title={`Use ${p.name}`} onClick={() => pick(p.path)}>
           <img src={thumbUrl(root, photoPath, 320, p.revision)} alt={p.name} loading="lazy" />
         </button>
+        {place !== undefined && <div className="photo-rank">#{place}</div>}
         <div className="photo-path">{p.path.replace(/\.[^.]+$/, '')}</div>
+        {why && <div className="photo-why small-text">{why}</div>}
         <div className="photo-tile-foot">
           {picked ? <span className="picked-label">✓ Picked</span> : saving === p.path ? <span className="muted">Saving…</span> : null}
           <a href={fileUrl(root, photoPath, p.revision)} target="_blank" rel="noreferrer">
@@ -298,8 +287,36 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           <div className="photo-grid">{tile({ path: choice.photo, name: choice.photo.split('/').pop() ?? choice.photo })}</div>
         </div>
       )}
+      <div className="photo-group">
+        <p className="small-text">
+          <strong>Best Photos for This Pair</strong>{' '}
+          {ranked && <span className="muted">· Claude looked at {ranked.looked} photos from the suggested categories and your starred photos</span>}
+          {ranked && !rankingNow && (
+            <button className="small" onClick={rank} title="Claude looks at the photos again, including any you've added or starred since">
+              Rank Again
+            </button>
+          )}
+        </p>
+        {rankingNow && <p className="brief-working small-text">Claude is looking at {ranking?.job?.looked} photos to find the best five…</p>}
+        {ranking?.job?.state === 'failed' && !rankingNow && (
+          <p className="error small-text">
+            {ranking.job.error}{' '}
+            <button className="small" onClick={rank}>
+              Try Again
+            </button>
+          </p>
+        )}
+        {ranked && library && (
+          <div className="photo-grid">
+            {ranked.ranked.map((r, i) => {
+              const found = library.photos.find((p) => p.path === r.photo);
+              return found ? tile(found, i + 1, r.why) : null;
+            })}
+          </div>
+        )}
+      </div>
       {library && <details className="photo-group"><summary>Starred Photos ({library.photos.filter(p => stars.includes(p.path)).length})</summary>
-        <div className="photo-grid">{library.photos.filter(p => stars.includes(p.path)).map(tile)}</div>
+        <div className="photo-grid">{library.photos.filter(p => stars.includes(p.path)).map((p) => tile(p))}</div>
         {!stars.length && <p className="muted">Star photos in Expressions to find them here.</p>}
       </details>}
       {!library && !error && <p className="muted small-text">Loading the expressions library…</p>}
@@ -307,22 +324,24 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
       {library &&
         categories.map((c) => {
           const photos = photosIn(library.photos, c);
+          const mine = added.includes(c);
+          // Suggested categories start folded; one John adds opens, since he added it to look at it.
           return (
-            <div key={c} className="photo-group">
-              <p className="small-text">
-                <strong>{c}</strong> <span className="muted">· {photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
-                {added.includes(c) && (
-                  <button className="small" onClick={() => setAdded(added.filter((a) => a !== c))}>
+            <details key={c} className="photo-group photo-category" open={mine || undefined}>
+              <summary className="small-text">
+                <strong>{c.split('/').join(' > ')}</strong> <span className="muted">· {mine ? 'added by you' : 'suggested'} · {photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
+                {mine && (
+                  <button className="small" onClick={(e) => { e.preventDefault(); setAdded(added.filter((a) => a !== c)); }}>
                     Remove
                   </button>
                 )}
-              </p>
+              </summary>
               {photos.length ? (
-                <div className="photo-grid">{photos.map(tile)}</div>
+                <div className="photo-grid">{photos.map((p) => tile(p))}</div>
               ) : (
                 <p className="muted small-text">No photos in this category yet. Add another category below.</p>
               )}
-            </div>
+            </details>
           );
         })}
       {library && (
@@ -557,7 +576,10 @@ function readImages(files: File[]): Promise<Reference[]> {
   );
 }
 
-function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onChanged }: { piece: string; target?: UseTarget; conversation: DraftConversation; allDrafts: DraftConversation[]; job?: ThumbJob; thumbs: ThumbJobs; onChanged?: () => void }) {
+function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job, thumbs, onChanged }: { piece: string; target?: UseTarget; conversation: DraftConversation; chosenPhoto: string | null; allDrafts: DraftConversation[]; job?: ThumbJob; thumbs: ThumbJobs; onChanged?: () => void }) {
+  // A photo of John chosen since this conversation started can go with a change request, as its new identity reference.
+  const newPhoto = chosenPhoto && chosenPhoto !== conversation.photo ? chosenPhoto : null;
+  const [sendPhoto, setSendPhoto] = useState(false);
   const rounds = [...conversation.images].reverse(); // newest first
   const [shown, setShown] = useState<string | undefined>(undefined);
   const current = rounds.find((r) => r.path === shown) ?? rounds[0];
@@ -588,14 +610,17 @@ function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onC
       setRefs((r) => [...r, ...more].slice(0, 4));
     }, (e: Error) => setError(e.message));
   };
+  const withPhoto = !!newPhoto && sendPhoto;
   const ask = () => {
     setError('');
     const pasted = refs.flatMap((r) => (r.kind === 'pasted' ? [r.data] : []));
     const fromDrafts = refs.flatMap((r) => (r.kind === 'draft' ? [r.path] : []));
-    postJson('/api/thumbs/change', { piece, conversation: conversation.path, text: change, pasted, drafts: fromDrafts }).then(
+    const text = change.trim() || (withPhoto ? 'Use the newly chosen photo of John.' : '');
+    postJson('/api/thumbs/change', { piece, conversation: conversation.path, text, pasted, drafts: fromDrafts, photo: withPhoto }).then(
       () => {
         setChange('');
         setRefs([]);
+        setSendPhoto(false);
         setShown(undefined); // show the new image when it arrives
         thumbs.refresh();
       },
@@ -687,8 +712,17 @@ function Conversation({ piece, target, conversation, allDrafts, job, thumbs, onC
               ))}
             </div>
           )}
+          {newPhoto && (
+            <label className="new-photo-choice small-text">
+              <input type="checkbox" checked={sendPhoto} onChange={(e) => setSendPhoto(e.target.checked)} />
+              <span>
+                Use the Photo Chosen Now: <strong>{newPhoto.split('/').pop()}</strong>
+                {conversation.photo && <span className="muted"> (this conversation uses {conversation.photo.split('/').pop()})</span>}
+              </span>
+            </label>
+          )}
           <div className="claude-buttons">
-            <button className="small" disabled={!change.trim()} onClick={ask}>
+            <button className="small" disabled={!change.trim() && !withPhoto} onClick={ask}>
               Ask for Changes
             </button>
             {draftImages.length > 0 && refs.length < 4 && (

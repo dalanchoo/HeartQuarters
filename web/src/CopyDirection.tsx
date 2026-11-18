@@ -5,8 +5,9 @@ export type CopyDirection = 'left-to-right' | 'right-to-left';
 /** The same direction controls and pending-copy outline for local and YouTube comparisons. */
 export function CopyDirectionControls({ left, right, selected, canCopyRight, canCopyLeft, copyRight, copyLeft, disabled = false, showCopyRight = true, showCopyLeft = true }: { left: string; right: string; selected: CopyDirection | null; canCopyRight: boolean; canCopyLeft: boolean; copyRight: () => void; copyLeft: () => void; disabled?: boolean; showCopyRight?: boolean; showCopyLeft?: boolean }) {
   const name = useId();
-  return <fieldset className="copy-direction-controls">
-    <legend>Copy Direction</legend>
+  // Nothing to choose (both sides locked, or nothing different): no control at all, so it takes no room.
+  if (selected === null && !(showCopyRight && canCopyRight) && !(showCopyLeft && canCopyLeft)) return null;
+  return <fieldset className="copy-direction-controls" aria-label="Copy Direction">
     <label className="copy-direction-option"><input type="radio" name={name} checked={selected === null} disabled={disabled} onChange={() => { if (selected === 'left-to-right') copyRight(); else if (selected === 'right-to-left') copyLeft(); }} /> No Copy</label>
     {showCopyRight && <label className="copy-direction-option"><input type="radio" name={name} checked={selected === 'left-to-right'} disabled={disabled || !canCopyRight} onChange={copyRight} /> {left} → {right}</label>}
     {showCopyLeft && <label className="copy-direction-option"><input type="radio" name={name} checked={selected === 'right-to-left'} disabled={disabled || !canCopyLeft} onChange={copyLeft} /> {left} ← {right}</label>}

@@ -692,7 +692,7 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} doc={youtubeDoc} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
     </>
   );

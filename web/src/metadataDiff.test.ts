@@ -36,6 +36,15 @@ describe('metadata comparison', () => {
     expect(result.left.some(p => p.changed && p.text.includes('quiet'))).toBe(true);
     expect(result.right.some(p => p.changed && p.text.includes('sunny'))).toBe(true);
   });
+  it('highlights only a few words added to the top of a long description', () => {
+    const long = 'I tried ayahuasca hoping something would change. '.repeat(200);
+    const result = metadataDiff('Description', long, `XXXXXXX ${long}`);
+    expect(result.limited).toBe(false);
+    expect(result.right.filter(p => p.changed).map(p => p.text.trim())).toEqual(['XXXXXXX']);
+    expect(result.left.every(p => !p.changed)).toBe(true);
+    expect(result.right.map(p => p.text).join('')).toBe(`XXXXXXX ${long}`);
+    expect(result.left.map(p => p.text).join('')).toBe(long);
+  });
   it('bounds work for unusually large comparisons', () => {
     const result = metadataDiff('Description', 'one '.repeat(1000), 'two '.repeat(1000));
     expect(result.limited).toBe(true);

@@ -24,12 +24,21 @@ export function metadataDiff(field: string, left: string, right: string): Metada
   if (field.toLowerCase() === 'tags') return compareTags(left, right);
   if (left === right) return { left: plain(left), right: plain(right), same: true, reordered: false, limited: false };
   const tokenize = (text: string) => text.match(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]+/gu) ?? [];
-  const a = tokenize(left); const b = tokenize(right);
+  const allA = tokenize(left); const allB = tokenize(right);
+  // The identical start and end are left out of the word-by-word comparison, so a small edit to a long description
+  // (a few words added at the top) is compared quickly and only those words are highlighted.
+  let start = 0;
+  while (start < allA.length && start < allB.length && allA[start] === allB[start]) start++;
+  let end = 0;
+  while (end < allA.length - start && end < allB.length - start && allA[allA.length - 1 - end] === allB[allB.length - 1 - end]) end++;
+  const a = allA.slice(start, allA.length - end); const b = allB.slice(start, allB.length - end);
+  const head = allA.slice(0, start).join(''); const tail = allA.slice(allA.length - end).join('');
   if ((a.length + 1) * (b.length + 1) > 500_000) return { left: [{ text: left, changed: true }], right: [{ text: right, changed: true }], same: false, reordered: false, limited: true };
   const cols = b.length + 1; const table = new Uint16Array((a.length + 1) * cols);
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) table[i * cols + j] = a[i] === b[j] ? table[(i + 1) * cols + j + 1] + 1 : Math.max(table[(i + 1) * cols + j], table[i * cols + j + 1]);
   const leftParts: DiffPart[] = []; const rightParts: DiffPart[] = [];
-  const append = (parts: DiffPart[], text: string, changed: boolean) => { const last = parts.at(-1); if (last?.changed === changed) last.text += text; else parts.push({ text, changed }); };
+  const append = (parts: DiffPart[], text: string, changed: boolean) => { if (!text) return; const last = parts.at(-1); if (last?.changed === changed) last.text += text; else parts.push({ text, changed }); };
+  append(leftParts, head, false); append(rightParts, head, false);
   let i = 0; let j = 0;
   while (i < a.length && j < b.length) {
     if (a[i] === b[j]) { append(leftParts, a[i++], false); append(rightParts, b[j++], false); }
@@ -38,5 +47,6 @@ export function metadataDiff(field: string, left: string, right: string): Metada
   }
   while (i < a.length) append(leftParts, a[i++], true);
   while (j < b.length) append(rightParts, b[j++], true);
+  append(leftParts, tail, false); append(rightParts, tail, false);
   return { left: leftParts, right: rightParts, same: false, reordered: false, limited: false };
 }

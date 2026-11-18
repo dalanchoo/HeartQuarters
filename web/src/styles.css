@@ -373,7 +373,6 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .comparison-text-tabs { display: flex; align-items: end; gap: .2rem; min-height: 2rem; margin: .3rem 0; border-bottom: 1px solid #aab8cb; }
 .comparison-text-tabs [role='tab'] { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: transparent; box-shadow: none; padding: .25rem .65rem; margin: 0 0 -1px; color: #46566a; }
 .comparison-text-tabs [role='tab'][aria-selected='true'] { background: var(--panel); border-color: #aab8cb; border-bottom: 1px solid var(--panel); color: #123f80; font-weight: 700; }
-.edit-view-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .4rem; }
 .lvy-captions-section > summary + .lvy-row-head { margin-top: .6rem; }
 .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs)) > strong { display: block; }
 .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs)) > strong::after { content: ''; display: block; height: 2.6rem; }
@@ -785,3 +784,36 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .portrait-editor-image img { max-width: 100%; max-height: 65vh; width: auto; height: auto; }
 .portrait-editor-image svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .portrait-editor-preview { max-width: 100%; max-height: 55vh; }
+.new-photo-choice { display: flex; align-items: flex-start; gap: 0.4rem; margin: 0.35rem 0; }
+.new-photo-choice input { width: auto; margin-top: 0.15rem; }
+/* Pick the Photo: Claude's ranked photos with their reasons, and the categories folded below. */
+.photo-rank { font-weight: 700; color: var(--accent); margin-top: 0.25rem; }
+.photo-why { margin: 0.15rem 0 0.25rem; }
+.photo-category > summary { cursor: pointer; display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; padding: 0.2rem 0; }
+.photo-category > summary::before { content: "▸"; color: var(--muted); transition: transform 0.1s; }
+.photo-category[open] > summary::before { transform: rotate(90deg); }
+/* View and Compare Packaging: which draft image the Draft uses. */
+.draft-image-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 0; }
+.draft-image-choice p { flex-basis: 100%; margin: 0; }
+.draft-image-preview { height: 90px; width: auto; border-radius: 4px; border: 1px solid var(--line); }
+/* Compare rows: the copy-direction choice on the label's line, right-aligned and small. */
+.comparison-actions .copy-direction-option { padding: .1rem .45rem; font-size: .85rem; }
+/* Compare rows: the field name on the left, the copy choice centred between the two sides. */
+.lvy-row-head:has(.comparison-actions) { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .5rem; }
+.comparison-label { display: inline-flex; align-items: center; gap: .5rem; }
+.comparison-actions { display: inline-flex; justify-content: center; }
+.comparison-actions .copy-direction-controls { margin: 0; justify-content: center; gap: .3rem; }
+.compare-names { margin: .4rem 0 0; color: var(--muted); }
+.thumb-name { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-height: 2rem; margin-bottom: .2rem; }
+.draft-image-select { max-width: 100%; }
+/* A folding row's triangle sits outside the three-part grid, so its name and copy choice line up like an unfolding row's. */
+.comparison-row > summary.lvy-row-head:has(.comparison-actions) { position: relative; padding-left: 1rem; }
+.comparison-row > summary.lvy-row-head:has(.comparison-actions)::before { position: absolute; left: 0; top: 50%; translate: 0 -50%; }
+.comparison-row[open] > summary.lvy-row-head:has(.comparison-actions)::before { transform: translateY(0) rotate(90deg); }
+.comparison-row > div.lvy-row-head:has(.comparison-actions) { padding-left: 1rem; }
+/* The edit tabs (with Show Changes and Undo Edit on their line) are a fixed height, and the other side gets the same space, so both texts start level. */
+.comparison-text-tabs { height: 2rem; min-height: 0; box-sizing: border-box; }
+.edit-view-actions { margin-left: auto; display: inline-flex; gap: .3rem; align-self: center; }
+.edit-view-actions button { padding: .05rem .5rem; font-size: .8rem; }
+.compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs))::before { content: ""; display: block; height: 2.6rem; }
+@media (max-width: 700px) { .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs))::before { display: none; } }
