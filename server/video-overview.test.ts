@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeTree, removeTree } from './testing';
 import { makeVideoOverview, readLinkRecords } from './video-overview';
 import type { Video } from './projects';
+import { config } from './config';
 
 let tmp: string;
 beforeEach(() => { tmp = makeTree({ 'jobs/111.json': JSON.stringify({ piece: 'p/Shorts/s', status: 'done', videoId: '8rpVGGL5N10' }), 'jobs/222.json': 'broken' }); });
@@ -29,5 +30,17 @@ describe('video overview', () => {
   it('does not pick an arbitrary video when several links exist', () => {
     const result = makeVideoOverview(videos, { jobs: [{ piece: 'p/Longform', status: 'done', videoId: '8rpVGGL5N10' }], complete: true }, () => ({ state: 'linked', id: 'KIcY9kSF1QY' }));
     expect(result[0].link).toBe('linked'); expect(result[0].videoId).toBeUndefined();
+  });
+  it('includes saved titles from different versions and skips missing metadata', () => {
+    const old = config.videoProjectsDir; config.videoProjectsDir = tmp;
+    try {
+      fs.mkdirSync(path.join(tmp, 'piece/Packaging/V01'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'piece/Packaging/V01/YouTube.md'), 'Title:\nThat Might Be a Story\n\nDescription:\nWords\n');
+      const video: Video = { name: 'piece', path: 'piece', pieces: [{ name: 'short', path: 'piece', kind: 'short', exports: [], packagingVersion: null, drafts: null, versions: [
+        { name: 'V01', path: 'piece/Packaging/V01', covers: [], notes: null, docs: [{ name: 'YouTube.md', path: 'piece/Packaging/V01/YouTube.md', size: 1 }] },
+        { name: 'V02', path: 'piece/Packaging/V02', covers: [], notes: null, docs: [{ name: 'YouTube.md', path: 'piece/Packaging/V02/YouTube.md', size: 1 }] },
+      ] }] };
+      expect(makeVideoOverview([{ projectId: 'piece', video }], { jobs: [], complete: true }, () => ({ state: 'missing' }))[0].titles).toEqual(['That Might Be a Story']);
+    } finally { config.videoProjectsDir = old; }
   });
 });

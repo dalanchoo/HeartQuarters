@@ -3,11 +3,27 @@ import path from 'node:path';
 import { appDir, safeResolve } from './config.js';
 import { listProjectVideos, type Video } from './projects.js';
 import { youtubeVideoId } from './youtube-video.js';
+import { parseFields } from '../web/src/packaging.js';
 
 export type LinkState = 'linked' | 'missing' | 'unknown';
-export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; }
+export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; titles?: string[]; }
 type RecordInfo = { piece?: string; status?: string; videoId?: string };
 type SavedLink = { state: LinkState; id?: string };
+
+/** Saved YouTube titles from each packaging version, for finding videos by a published or earlier title. */
+function savedTitles(piece: Video['pieces'][number]): string[] {
+  const titles = new Set<string>();
+  for (const version of piece.versions) for (const doc of version.docs) {
+    if (!/^youtube.*\.md$/i.test(path.posix.basename(doc.name))) continue;
+    try {
+      const file = safeResolve('projects', doc.path);
+      if (fs.statSync(file).size > 2_000_000) continue;
+      const title = parseFields(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))?.find(field => field.label.toLowerCase() === 'title')?.value.trim();
+      if (title) titles.add(title);
+    } catch { /* A missing or unreadable version should not hide the project list. */ }
+  }
+  return [...titles];
+}
 
 /** Read upload records once, rather than once per project. An unreadable record is not proof of a missing link. */
 export function readLinkRecords(dir: string): { jobs: RecordInfo[]; complete: boolean } {
@@ -31,7 +47,7 @@ export function makeVideoOverview(videos: { projectId: string; video: Video }[],
     const saved = piece.kind === 'longform' ? savedUrl(projectId) : { state: 'missing' as LinkState };
     if (saved.id) ids.add(saved.id);
     const uncertain = jobs.some((job) => job.status === 'unknown' || job.status === 'uploading' || (job.status === 'done' && !job.videoId)) || !records.complete || saved.state === 'unknown';
-    return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (piece.versions.at(-1)?.covers.length ?? 0) > 0 };
+    return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (piece.versions.at(-1)?.covers.length ?? 0) > 0, titles: savedTitles(piece) };
   }));
 }
 

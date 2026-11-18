@@ -32,6 +32,7 @@ import type { CleanupStatus } from '../../server/cleanup-status';
 import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
+import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 
 type Filter = 'all' | 'missing-link' | 'review';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
@@ -99,6 +100,7 @@ export function ProjectsPage() {
   const [checks, setChecks] = useState<Record<string, YoutubeChecks>>({});
   const [cleanup, setCleanup] = useState<CleanupStatus['pieces']>({});
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
   const [focus, setFocus] = useState<string | null>(shortFocus);
   const [scan, setScan] = useState(''); const [scanning, setScanning] = useState(false);
   const scanEpoch = useRef(0);
@@ -213,6 +215,7 @@ export function ProjectsPage() {
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
         <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="missing-link">No Saved YouTube Link</option><option value="review">Needs Review</option></select></label>
+        <label className="status-filter">Find Video <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" /></label>
         <p className="status-legend">YT Linked / YT No Link refer to saved links. YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
@@ -222,7 +225,7 @@ export function ProjectsPage() {
         {error && <p className="error">{error}</p>}
         {!projects && !error && <p className="muted">Loading…</p>}
         {projects &&
-          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} />)}
+          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} search={search} />)}
       </aside>
       <section className="content">
         {note && note.showId === (selected ?? '') && <NoteBox note={note} onDismiss={() => setNote(null)} />}
@@ -286,11 +289,13 @@ function NodeLink({ node, selected }: { node: ProjectNode; selected: string | nu
 }
 
 /** One row in the sidebar; series and groups can be expanded to show what's inside. */
-function TreeItem({ node, selected, filter }: { node: ProjectNode; selected: string | null; filter: Filter }) {
+function TreeItem({ node, selected, filter, search }: { node: ProjectNode; selected: string | null; filter: Filter; search: string }) {
   const { items, checks, focus } = useContext(StatusContext);
   const relevant = items.filter((item) => item.projectId === node.id || item.projectId.startsWith(`${node.id}/`));
   if (filter !== 'all' && !relevant.some((item) => matchesFilter(item, checks, filter))) return null;
-  const shorts = node.kind !== 'short' ? items.filter((item) => item.projectId === node.id && item.kind === 'short' && matchesFilter(item, checks, filter)) : [];
+  const nodeMatches = matchesProjectSearch(node.id, node.title, search);
+  if (search.trim() && !nodeMatches && !relevant.some(item => matchesFilter(item, checks, filter) && matchesVideoSearch(item, search))) return null;
+  const shorts = node.kind !== 'short' ? items.filter((item) => item.projectId === node.id && item.kind === 'short' && matchesFilter(item, checks, filter) && (nodeMatches || matchesVideoSearch(item, search))) : [];
   if (node.children.length === 0 && shorts.length === 0) {
     return (
       <div className="tree-leaf">
@@ -300,13 +305,13 @@ function TreeItem({ node, selected, filter }: { node: ProjectNode; selected: str
   }
   const holdsSelection = !!selected && (selected === node.id || selected.startsWith(node.id + '/'));
   return (
-    <details className="tree-node" open={holdsSelection}>
+    <details className="tree-node" open={holdsSelection || !!search.trim()}>
       <summary>
         <NodeLink node={node} selected={selected} />
       </summary>
       <div className="tree-children">
         {ordered(node, node.children).map((c) => (
-          <TreeItem key={c.id} node={c} selected={selected} filter={filter} />
+          <TreeItem key={c.id} node={c} selected={selected} filter={filter} search={search} />
         ))}
         {shorts.map((short) => <a key={short.path} href={`${linkTo(node.id)}/${encodeURIComponent(short.path)}`} className={`project-link short-tree-link ${focus === short.path && selected === node.id ? 'active' : ''}`}><span className="title">{short.name}</span><StatusBadges item={short} checks={checks[short.path]} /></a>)}
       </div>
