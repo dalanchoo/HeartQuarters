@@ -437,6 +437,9 @@ function PieceGroup({
   );
 }
 
+/** Sent when a Short's card opens, so the other Shorts' cards close. */
+const SHORT_OPENED = 'hq-short-opened';
+
 /** "V05_Shock" -> "V05 · Shock" */
 function versionLabel(name: string): string {
   const [num, ...rest] = name.split('_');
@@ -601,6 +604,15 @@ function PieceCard({
   const loadedDocs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const docs = locked ? lockDocs(loadedDocs) : loadedDocs;
   const [open, setOpen] = useState(startOpen);
+  // One Short open at a time: opening one tells the others to close (they keep what's in them, only folded).
+  useEffect(() => {
+    if (piece.kind !== 'short') return;
+    const other = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== piece.path) setOpen(false);
+    };
+    window.addEventListener(SHORT_OPENED, other);
+    return () => window.removeEventListener(SHORT_OPENED, other);
+  }, [piece.path, piece.kind]);
   const { focus } = useContext(StatusContext);
   // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
   const link = useYoutubeLink(piece, longformProject, (plain || open) && piece.kind !== 'reel');
@@ -704,7 +716,16 @@ function PieceCard({
 
   if (plain) return <div className="card">{contents}</div>;
   return (
-    <details ref={card} className="card piece-card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details
+      ref={card}
+      className="card piece-card"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        if (now && piece.kind === 'short') window.dispatchEvent(new CustomEvent(SHORT_OPENED, { detail: piece.path }));
+      }}
+    >
       <summary>
         <span className="piece-name">{piece.name}</span>
         <span className="muted">{pieceSummary(piece)}</span>
