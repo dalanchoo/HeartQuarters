@@ -133,6 +133,26 @@ describe('using a draft in the selected version', () => {
     expect(grown).toEqual([]);
   });
 
+  it('refuses a Backups junction that points outside, without moving the old thumbnail there (code review #1)', async () => {
+    const outside = path.join(tmp, 'Outside');
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(v2(), 'Thumbnail', 'Backups'), 'junction');
+    await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: false }, fakeGrow, fakeMeasure)).rejects.toThrow(/outside|shortcut or junction/);
+    expect(fs.readdirSync(outside)).toEqual([]);
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.jpg'), 'utf8')).toBe('old thumb');
+    expect(grown).toEqual([]); // stopped before anything was made
+    expect(fs.existsSync(path.join(v2(), 'Thumbnail', 'Thumbnail.new.png'))).toBe(false);
+  });
+
+  it('refuses a YouTube.md that is a link to a file elsewhere', async () => {
+    const outside = path.join(tmp, 'outside-youtube.md');
+    fs.writeFileSync(outside, 'Title:\nNot this one\n');
+    fs.rmSync(path.join(pkg(LONGFORM), 'V01', 'YouTube.md'));
+    fs.symlinkSync(outside, path.join(pkg(LONGFORM), 'V01', 'YouTube.md'), 'file');
+    await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V01`, { thumbnail: false, title: true }, fakeGrow, fakeMeasure)).rejects.toThrow();
+    expect(fs.readFileSync(outside, 'utf8')).toBe('Title:\nNot this one\n');
+  });
+
   it('leaves the old thumbnail in place when enlarging fails', async () => {
     const broken: Enlarge = async () => {
       throw new Error('ffmpeg failed');

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { versionFolder } from './packaging-version.js';
+import { copyNewFile, makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, NOTES_FILE, readChoice, type BriefPick } from './projects.js';
 import { isShort, readConversation } from './thumbnails.js';
 import { AI_NAMES } from './ai.js';
@@ -84,10 +85,6 @@ function today(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Copies a file only if nothing by that name is there yet. */
-function copyIfNew(from: string, to: string) {
-  if (fs.existsSync(from) && !fs.existsSync(to)) fs.copyFileSync(from, to);
-}
 
 export interface UseParts { thumbnail: boolean; title: boolean }
 
@@ -115,39 +112,45 @@ export async function useDraft(piece: string, image: string, version: string, pa
   const notes: string[] = [];
 
   if (parts.thumbnail) {
-    const thumbDir = path.join(dir, 'Thumbnail');
-    const source = path.join(thumbDir, 'Source');
-    fs.mkdirSync(source, { recursive: true });
-    if (fs.lstatSync(thumbDir).isSymbolicLink() || fs.lstatSync(source).isSymbolicLink()) throw new Error('The Thumbnail folder must be a real folder, not a shortcut.');
+    // Every folder and file below is checked right before use: inside Video Projects, and no shortcut or junction on
+    // the way (safe-files.ts), so nothing can be moved or written somewhere else.
+    const thumbDir = makeFolder(path.join(dir, 'Thumbnail'));
+    const source = makeFolder(path.join(thumbDir, 'Source'));
     const [width, height] = isShort(piece) ? [2160, 3840] : [3840, 2160];
     // Made beside the old one first, so a failure leaves the version as it was.
-    const fresh = path.join(thumbDir, 'Thumbnail.new.png');
+    const fresh = writable(path.join(thumbDir, 'Thumbnail.new.png'));
+    // Every place this will write is checked before anything is made, so a bad one stops it with nothing changed.
+    const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
+    const backupsPath = writable(path.join(thumbDir, 'Backups'));
+    if (old) writable(path.join(thumbDir, old));
+    writable(path.join(thumbDir, 'Thumbnail.png'));
     const made = await measure(draft);
     try {
       await grow(draft, fresh, width, height);
+      if (old) {
+        const d = new Date();
+        const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
+        const backups = makeFolder(backupsPath);
+        moveFile(path.join(thumbDir, old), path.join(backups, kept));
+        notes.push(`The thumbnail before is kept as Thumbnail\\Backups\\${kept}.`);
+      }
+      moveFile(fresh, path.join(thumbDir, 'Thumbnail.png'));
     } catch (e) {
       fs.rmSync(fresh, { force: true });
       throw e;
     }
-    const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
-    if (old) {
-      const d = new Date();
-      const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
-      const backups = path.join(thumbDir, 'Backups');
-      fs.mkdirSync(backups, { recursive: true });
-      fs.renameSync(path.join(thumbDir, old), path.join(backups, kept));
-      notes.push(`The thumbnail before is kept as Thumbnail\\Backups\\${kept}.`);
-    }
-    fs.renameSync(fresh, path.join(thumbDir, 'Thumbnail.png'));
-    copyIfNew(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
+    copyNewFile(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
     if (photo) {
       const full = resolveExpressionPhoto(photo);
-      copyIfNew(full, path.join(source, `Photo - ${path.basename(full)}`));
+      copyNewFile(full, path.join(source, `Photo - ${path.basename(full)}`), photo.startsWith('project:') ? 'projects' : 'expressions');
     }
-    copyIfNew(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));
-    copyIfNew(path.join(conversation, 'Requests.md'), path.join(source, `Requests - ${conv}.md`));
-    const refs = path.join(conversation, 'References');
-    if (fs.existsSync(refs)) fs.cpSync(refs, path.join(source, `References - ${conv}`), { recursive: true, errorOnExist: false, force: false });
+    copyNewFile(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));
+    copyNewFile(path.join(conversation, 'Requests.md'), path.join(source, `Requests - ${conv}.md`));
+    const refs = readable(path.join(conversation, 'References'));
+    if (fs.existsSync(refs)) {
+      const kept = makeFolder(path.join(source, `References - ${conv}`));
+      for (const f of fs.readdirSync(refs)) if (fs.lstatSync(path.join(refs, f)).isFile()) copyNewFile(path.join(refs, f), path.join(kept, f));
+    }
     const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
     notes.unshift(
       `Thumbnail: draft ${conv}, round ${round}, by ${ai}${photo ? `, using the photo ${photo}` : ''}. ` +
@@ -157,8 +160,8 @@ export async function useDraft(piece: string, image: string, version: string, pa
 
   if (pick) {
     const ytName = fs.readdirSync(dir).find((f) => f.toLowerCase() === 'youtube.md') ?? 'YouTube.md';
-    const ytFile = path.join(dir, ytName);
-    let youtube = fs.existsSync(ytFile) ? fs.readFileSync(ytFile, 'utf8') : '# YouTube Info\n\nTitle:\n';
+    const ytFile = writable(path.join(dir, ytName));
+    let youtube = fs.existsSync(ytFile) ? readText(ytFile) : '# YouTube Info\n\nTitle:\n';
     if (parts.title) {
       const before = getField(youtube, 'Title');
       youtube = setField(youtube, 'Title', pick.title);
@@ -168,16 +171,16 @@ export async function useDraft(piece: string, image: string, version: string, pa
       youtube = setField(youtube, 'Thumbnail text', pick.thumbnailText.toUpperCase());
       youtube = setField(youtube, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
     }
-    fs.writeFileSync(ytFile, youtube.endsWith('\n') ? youtube : youtube + '\n');
+    writeFile(ytFile, youtube.endsWith('\n') ? youtube : youtube + '\n');
   }
 
   // Notes.md: what was used, added at the end.
   const notesName = fs.readdirSync(dir).find((f) => f.toLowerCase() === NOTES_FILE.toLowerCase()) ?? NOTES_FILE;
-  const notesFile = path.join(dir, notesName);
-  const before = fs.existsSync(notesFile) ? fs.readFileSync(notesFile, 'utf8') : '';
+  const notesFile = writable(path.join(dir, notesName));
+  const before = fs.existsSync(notesFile) ? readText(notesFile) : '';
   const eol = before.includes('\r\n') ? '\r\n' : '\n';
   const entry = [`${today()}: used from the drafts.`, ...notes].join(eol);
-  fs.writeFileSync(notesFile, before.trim() ? `${before.replace(/\s+$/, '')}${eol}${eol}${entry}${eol}` : `${entry}${eol}`);
+  writeFile(notesFile, before.trim() ? `${before.replace(/\s+$/, '')}${eol}${eol}${entry}${eol}` : `${entry}${eol}`);
 
   const what = parts.thumbnail && parts.title ? 'thumbnail and title' : parts.thumbnail ? 'thumbnail' : 'title';
   return { done: `${versionName} now uses this ${what}.` };
