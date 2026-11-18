@@ -12,6 +12,9 @@ import { fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } 
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 import { youtubeFetch } from './youtube-quota.js';
 
+/** The largest thumbnail YouTube takes from a computer (50 MB since September 2026), for uploads and pushes alike. */
+export const MAX_THUMBNAIL_BYTES = 50_000_000;
+
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
@@ -39,7 +42,7 @@ export function validateUpload(input: UploadInput) {
   let cover = '';
   if (input.cover) {
     cover = safeResolve('projects', input.cover);
-    if (!isInside(path.join(piece, 'Packaging'), cover) || !/\.(png|jpe?g)$/i.test(cover) || !fs.statSync(cover).isFile() || fs.statSync(cover).size > 2_000_000) throw new Error('Choose a PNG or JPEG cover under 2 MB from this project’s packaging.');
+    if (!isInside(path.join(piece, 'Packaging'), cover) || !/\.(png|jpe?g)$/i.test(cover) || !fs.statSync(cover).isFile() || fs.statSync(cover).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
   }
   if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 100 || typeof input.description !== 'string' || input.description.length > 5000) throw new Error('A title is required (up to 100 characters); descriptions can be up to 5,000 characters.');
   if (!Array.isArray(input.tags) || input.tags.some((t) => typeof t !== 'string') || input.tags.join(',').length > 500) throw new Error('Tags must be text, with at most 500 characters in total.');
@@ -152,7 +155,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   if (cover) {
     const folder = safeResolve('projects', path.join(piece, 'Packaging'));
     coverPath = safeResolve('projects', cover);
-    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > 50_000_000) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
+    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
   }
   const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
   const current = await videoPlaylists(piece, id);

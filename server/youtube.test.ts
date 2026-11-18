@@ -23,8 +23,15 @@ describe('YouTube uploads', () => {
   it('accepts only this piece’s export and packaging image', () => {
     expect(validateUpload(input).size).toBe(10);
     expect(() => validateUpload({ ...input, video: 'other.mp4' })).toThrow(/Exports/);
-    expect(() => validateUpload({ ...input, cover: 'other.mp4' })).toThrow(/cover/);
+    expect(() => validateUpload({ ...input, cover: 'other.mp4' })).toThrow(/thumbnail/);
     expect(() => validateUpload({ ...input, video: '../../outside.mp4' })).toThrow();
+  });
+  it('takes thumbnails up to 50 MB, as YouTube does now', () => {
+    const cover = path.join(tmp, 'Videos/001 - Test/Longform/Packaging/V01/cover.jpg');
+    fs.truncateSync(cover, 7_500_000); // like a full-size 3840 x 2160 thumbnail
+    expect(validateUpload(input).cover).toBe(cover);
+    fs.truncateSync(cover, 50_000_001);
+    expect(() => validateUpload(input)).toThrow(/under 50 MB/);
   });
   it('requires valid metadata and explicit audience settings', () => {
     expect(() => validateUpload({ ...input, title: '' })).toThrow(/title/);
