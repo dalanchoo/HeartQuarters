@@ -15,7 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { listDrafts, plainDraftName } from './create.js';
-import { relinkDraft, requireCapCutClosed, trashSlot } from './manage.js';
+import { writeFileSafely } from './files.js';
+import { requireCapCutClosed, trashSlot } from './manage.js';
 import { writable } from './safe-files.js';
 
 /** Inside a version's Thumbnail\Source: the list of files HeartQuarters added (Use Thumbnail writes it). */
@@ -125,21 +126,35 @@ export async function capcutLinksSlowly(video: string): Promise<CapCutLinks> {
 /** The HeartMind paths in one project file, remembered until the file changes (reading it is the slow part). */
 const linksInFile = new Map<string, { stamp: string; paths: string[] }>();
 
+/** The video's CapCut projects: those named after it or one of its Shorts, and any other that uses its files. */
+function videoDrafts(video: string): string[] {
+  const prefix = `${fwd(config.videoProjectsDir)}/${video}/`.toLowerCase();
+  const own = new Set([path.basename(video), ...shortNames(video)].map((n) => plainDraftName(n).toLowerCase()));
+  return listDrafts().filter((d) => {
+    try {
+      const meta = fs.readFileSync(path.join(config.capcutDraftsDir, d, 'draft_meta_info.json'), 'utf8');
+      return own.has(plainDraftName(d).toLowerCase()) || meta.toLowerCase().includes(prefix);
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** A project's text files that hold links (CapCut's .json and .tmp, and .bak copies). */
+function draftTextFiles(dir: string): string[] {
+  return fs
+    .readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile() && /\.(json|bak|tmp)$/i.test(e.name))
+    .map((e) => path.join(e.parentPath, e.name));
+}
+
 function* scanLinks(video: string): Generator<void, CapCutLinks> {
   const prefix = `${fwd(config.videoProjectsDir)}/${video}/`.toLowerCase();
   const heartMind = `${fwd(path.dirname(path.resolve(config.videoProjectsDir)))}/`.toLowerCase();
-  const own = new Set([path.basename(video), ...shortNames(video)].map((n) => plainDraftName(n).toLowerCase()));
   const used = new Set<string>();
   const missing: string[] = [];
-  for (const d of listDrafts()) {
+  for (const d of videoDrafts(video)) {
     const dir = path.join(config.capcutDraftsDir, d);
-    let meta = '';
-    try {
-      meta = fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8');
-    } catch {
-      continue;
-    }
-    if (!own.has(plainDraftName(d).toLowerCase()) && !meta.toLowerCase().includes(prefix)) continue;
     const seen = new Set<string>();
     for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
       if (!e.isFile() || !/\.(json|tmp)$/i.test(e.name)) continue;
@@ -297,30 +312,33 @@ export function runCleanup(piece: string, token: unknown): { removed: number; mo
   const projects = path.resolve(config.videoProjectsDir);
 
   if (plan.move.length) {
-    // The CapCut projects' text files as they were, before they're pointed at the moved files.
-    const prefix = `${fwd(projects)}/${video}/`.toLowerCase();
-    for (const d of listDrafts()) {
+    // Only the video's own projects can use its files. Their text files as they were go to Trash first.
+    const drafts = videoDrafts(video);
+    for (const d of drafts) {
       const dir = path.join(config.capcutDraftsDir, d);
-      try {
-        if (!fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8').toLowerCase().includes(prefix)) continue;
-      } catch {
-        continue;
-      }
-      for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
-        if (!e.isFile() || !/\.(json|bak|tmp)$/i.test(e.name)) continue;
-        const from = path.join(e.parentPath, e.name);
+      for (const from of draftTextFiles(dir)) {
         const to = path.join(slot, 'CapCut Drafts (before)', d, path.relative(dir, from));
         fs.mkdirSync(path.dirname(to), { recursive: true });
         fs.copyFileSync(from, to);
       }
     }
+    const relinks: [string, string][] = [];
     for (const item of plan.move) {
       const from = writable(path.join(projects, item.path));
       let to = writable(path.join(projects, item.to!));
       for (let n = 2; fs.existsSync(to); n++) to = writable(path.join(projects, item.to!.replace(/(\.[^./]+)?$/, ` (${n})$1`)));
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.renameSync(from, to);
-      for (const d of listDrafts()) relinkDraft(path.join(config.capcutDraftsDir, d), fwd(from), fwd(to));
+      relinks.push([fwd(from), fwd(to)]);
+    }
+    // Each project file is read once and gets every new path (a project is ~20 MB of text).
+    for (const d of drafts) {
+      for (const file of draftTextFiles(path.join(config.capcutDraftsDir, d))) {
+        if (fs.statSync(file).size > 200_000_000) continue;
+        const text = fs.readFileSync(file, 'utf8');
+        const after = relinks.reduce((t, [from, to]) => (t.includes(from) ? t.split(from).join(to) : t), text);
+        if (after !== text) writeFileSafely(file, after);
+      }
     }
   }
   for (const item of plan.remove) {
