@@ -119,8 +119,6 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
   return <div>
     {(leftData.error || rightData.error) && <p className="error">Could Not Read Version: {leftData.error || rightData.error}</p>}
     {left && !ready && !leftData.error && !rightData.error && <p className="muted">Loading Versions…</p>}
-    {/* Which side is which, once, instead of on every field. */}
-    {ready && right && <div className="compare-columns compare-names"><strong>{leftVersion?.name}</strong><strong>{rightVersion?.name}</strong></div>}
     {ready && labels.map(label => {
       const displayValue = (value: string | undefined) => value !== undefined && label.toLowerCase() === 'tags' ? sortTags(value) : value;
       const savedFields = parseFields(originalDoc.text ?? '') ?? [];

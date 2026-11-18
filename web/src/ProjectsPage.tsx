@@ -592,9 +592,9 @@ function PieceCard({
   const allowVersionChange = () => !compareDirty || window.confirm('You have unapplied packaging changes. Discard them and change versions?');
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const [compareChoices, setCompareChoices] = useState(() => ({ left: version?.path ?? '', right: YOUTUBE_SELECTION }));
-  const latest = piece.versions.at(-1)?.name;
-  // Every version is locked until John clicks its padlock, so nothing in it changes by accident. Unlocking lasts until
-  // the page is reloaded; a version he has just copied starts unlocked, since he made it to change it.
+  // One version at most is unlocked, and it's the selected one: unlocking a version with its switch in View and
+  // Compare Packaging selects it and locks every other. Unlocking lasts until the page is reloaded or another version
+  // is selected; a version he has just made starts unlocked, since he made it to change it.
   const [unlocked, setUnlocked] = useState<string | null>(null);
   const locked = !!version && unlocked !== version.path;
   const [docsLoads, setDocsLoads] = useState(0);
@@ -657,11 +657,8 @@ function PieceCard({
             <div className="versions">
               {piece.versions.map((v) => (
                 <div key={v.path} className="version-choice">
-                  <button type="button" className="small version-padlock" aria-label={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} aria-pressed={unlocked === v.path} title={`${unlocked === v.path ? 'Lock' : 'Unlock'} ${versionLabel(v.name)}`} onClick={() => { if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(unlocked === v.path ? null : v.path); }}>
-                    {unlocked === v.path ? '🔓' : '🔒'}
-                  </button>
-                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); }} title={v.name === latest ? 'Latest version' : undefined}>
-                    {versionLabel(v.name)}{v.name === latest && piece.versions.length > 1 && <span className="latest">latest</span>}
+                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(null); }}>
+                    {versionLabel(v.name)}
                   </button>
                 </div>
               ))}
@@ -682,7 +679,15 @@ function PieceCard({
 
       {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
-        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} />
+        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={(path) => {
+          const v = piece.versions.find(x => x.path === path);
+          if (!v) return;
+          if (compareDirty && !window.confirm(`You have unapplied changes to ${versionLabel(version.name)}. Discard them and ${unlocked === path ? 'lock it' : `unlock ${versionLabel(v.name)} instead`}?`)) return;
+          setCompareDirty(false);
+          if (unlocked === path) { setUnlocked(null); return; }
+          setVersionName(v.name);
+          setUnlocked(path);
+        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}

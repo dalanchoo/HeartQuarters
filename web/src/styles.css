@@ -817,3 +817,11 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .edit-view-actions button { padding: .05rem .5rem; font-size: .8rem; }
 .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs))::before { content: ""; display: block; height: 2.6rem; }
 @media (max-width: 700px) { .compare-columns:has(.comparison-text-tabs) > div:not(:has(.comparison-text-tabs))::before { display: none; } }
+/* The selected version's Lock/Unlock switch: red and closed while locked, green and open while unlocked. */
+.compare-name { display: flex; align-items: center; gap: .6rem; }
+.lock-switch { display: inline-flex; align-items: center; gap: .45rem; padding: .18rem .7rem .18rem .2rem; border: 0; border-radius: 999px; font-weight: 800; font-size: .8rem; letter-spacing: .03em; text-transform: uppercase; color: #fff; cursor: pointer; box-shadow: inset 0 1px 3px rgba(0,0,0,.25); }
+.lock-switch--locked { background: #e3263a; }
+.lock-switch--unlocked { background: #3fae2a; flex-direction: row-reverse; padding: .18rem .2rem .18rem .7rem; }
+.lock-switch-knob { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: #f3f4f7; color: #8a8f99; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.lock-switch:focus-visible { outline: 3px solid #123f80; outline-offset: 2px; }
+.lock-hint { margin: .3rem 0 .4rem; padding: .3rem .6rem; border-radius: 6px; background: #fff4d6; color: #6b4a00; font-size: .9rem; }

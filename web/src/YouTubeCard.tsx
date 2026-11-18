@@ -560,7 +560,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
       {/* Which side is which, once, instead of on every field. */}
-      {shownView === 'diff' && <div className={`compare-columns compare-names${reverse ? ' compare-reversed' : ''}`}><strong>{versionName ?? 'Local file'}</strong><strong>YouTube</strong></div>}
+      {shownView === 'diff' && !display && <div className={`compare-columns compare-names${reverse ? ' compare-reversed' : ''}`}><strong>{versionName ?? 'Local file'}</strong><strong>YouTube</strong></div>}
       <AiLineBoxes doc={busy ? { ...doc, locked: true } : doc} />
 
       {doc.text !== null &&

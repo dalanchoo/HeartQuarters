@@ -6,9 +6,10 @@ import { VersionCompare, type GeneratedDraft } from './VersionCompare';
 import { choiceOrder, comparisonSelection, DRAFT_SELECTION as DRAFT, orderedChoices, rightChoices, YOUTUBE_SELECTION as YOUTUBE, type ComparisonChoices } from './comparisonSelection';
 import { draftImages, draftText, isCurrentChoice } from './draftPackaging';
 import { setPendingPackaging } from './pendingPackaging';
+import { LockSwitch } from './LockSwitch';
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
-export function PackagingCompare({ piece, version, doc, locked, unlocked, link, onChanged, longform, onDirtyChange, choices, setChoices }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>> }) {
+export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>> }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
   // Draft: what Generate Packaging made for the chosen pair, with one of its images (the newest unless John picks another).
   const drafts = piece.drafts;
@@ -56,6 +57,22 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, link, 
       <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
       <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
     </div>
+    {/* Which side is which, once; every version's column has a Lock/Unlock switch. Unlocking one selects it and locks the others. */}
+    <div className={right ? 'compare-columns compare-names' : 'compare-names'}>
+      {(right ? [left, right] : [left]).map(side => {
+        const v = versions.find(x => x.path === side);
+        return <div key={side} className="compare-name">
+          <strong>{side === DRAFT ? 'Draft' : side === YOUTUBE ? 'YouTube' : v?.name ?? side}</strong>
+          {v && <LockSwitch locked={unlocked !== v.path} name={v.name} onToggle={() => onToggleLock(v.path)} />}
+        </div>;
+      })}
+    </div>
+    {(() => {
+      // When neither version on show is unlocked, say how to edit or copy.
+      const shown = (right ? [left, right] : [left]).map(side => versions.find(x => x.path === side)).filter((v): v is PackagingVersion => !!v);
+      if (!shown.length || shown.some(v => v.path === unlocked)) return null;
+      return <p className="lock-hint">Unlock {shown.map(v => v.name).join(' or ')} to edit it or copy into it.</p>;
+    })()}
     {usesDraft && <p className="muted small-text">The Draft can only be copied into an unlocked version. To send it to YouTube, copy it into a version first, then compare that version with YouTube.</p>}
     {usesDraft ? (
       unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}|${image?.path ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} generated={generated} />
