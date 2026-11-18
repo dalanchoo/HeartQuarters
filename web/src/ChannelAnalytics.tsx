@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { openInExplorer, postJson } from './api';
+import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 
 interface Result { file: string; channel: string; emptyReports: string[]; topVideoCount: number }
 export function ChannelAnalytics() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
   const download = async () => {
     setBusy(true); setError(''); setResult(null);
-    try { setResult(await postJson<Result>('/api/youtube/analytics/channel')); }
+    try { setResult(await postJson<Result>('/api/youtube/analytics/channel')); setRefresh(n => n + 1); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -23,5 +25,6 @@ export function ChannelAnalytics() {
       <p className="small-text">Top-video report: {result.topVideoCount} videos (maximum 200). This report may not include every video. Data may be delayed.</p>
       {result.emptyReports.length > 0 && <p>Empty reports: {result.emptyReports.join(', ')}.</p>}
     </div>}
+    <AnalyticsAnalysis piece="" refresh={refresh} />
   </details>;
 }

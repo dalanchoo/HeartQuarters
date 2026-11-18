@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis } from './analytics-analysis.js';
+import { config } from './config.js';
+import { makeTree, removeTree } from './testing.js';
+import type { AskAi } from './brief.js';
+
+let root: string; let previous: string;
+beforeEach(() => { root = makeTree({ 'Video/Longform/Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', periods: [] }), 'Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', reports: [] }) }); previous = config.videoProjectsDir; config.videoProjectsDir = root; });
+afterEach(() => { config.videoProjectsDir = previous; removeTree(root); });
+
+describe('analytics analysis', () => {
+  it('gives each AI only the same stats, then combines all three reviews and saves them alongside the snapshot', async () => {
+    const seen: string[][] = [];
+    const ask: AskAi = async (ai, _prompt, cwd) => { const files = fs.readdirSync(cwd).sort(); seen.push(files); return `${ai} review ${files.length}`; };
+    expect(analyticsSnapshots('Video/Longform')).toEqual(['2026-11-18']);
+    const { job, finished } = startAnalyticsAnalysis('Video/Longform', '2026-11-18', ask);
+    await finished;
+    expect(job.state).toBe('done');
+    expect(seen.slice(0, 3)).toEqual([['Stats.json'], ['Stats.json'], ['Stats.json']]);
+    expect(seen[3]).toEqual(['ChatGPT.md', 'Claude.md', 'Gemini.md', 'Stats.json']);
+    const result = analyticsAnalysis('Video/Longform', '2026-11-18')[0];
+    expect(result).toMatchObject({ claude: 'claude review 1\n', codex: 'codex review 1\n', gemini: 'gemini review 1\n', recommendations: 'claude review 4\n' });
+    expect(fs.readFileSync(path.join(root, 'Video/Longform/Analytics/2026-11-18/Stats.json'), 'utf8')).toContain('periods');
+  });
+  it('keeps successful reviews and does not synthesize when one AI fails', async () => {
+    const calls: string[] = [];
+    const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async ai => { calls.push(ai); if (ai === 'gemini') throw new Error('Unavailable'); return ai; });
+    await finished;
+    expect(calls).toHaveLength(3); expect(job.state).toBe('failed'); expect(job.models.gemini.error).toBe('Unavailable');
+    expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ claude: 'claude\n', codex: 'codex\n', gemini: null, recommendations: null });
+  });
+  it('rejects paths outside the snapshots', () => {
+    expect(() => startAnalyticsAnalysis('../outside', '2026-11-18')).toThrow();
+    expect(() => startAnalyticsAnalysis('', '../2026-11-18')).toThrow();
+  });
+});
