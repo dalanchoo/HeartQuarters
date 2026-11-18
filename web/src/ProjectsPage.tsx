@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   copyText,
+  formatSize,
   getJson,
   openInExplorer,
   postJson,
@@ -27,22 +28,40 @@ import { YOUTUBE_SELECTION } from './comparisonSelection';
 import { hasPendingPackaging } from './pendingPackaging';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
+import type { CleanupStatus } from '../../server/cleanup-status';
 import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 
 type Filter = 'all' | 'missing-link' | 'review';
-const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null }>({ items: [], checks: {}, focus: null });
+const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 function needsReview(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return item.link !== 'linked' || !item.localThumbnail || !!checks[item.path]?.issues.length || !!checks[item.path]?.unknown.length; }
 function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks>, filter: Filter): boolean {
   return filter === 'all' || (filter === 'missing-link' && item.link === 'missing') || (filter === 'review' && needsReview(item, checks));
 }
+/**
+ * Can Clean Up: Clean Up has files for this piece (for a longform, also Make Shorts' plan and graphs). Clean Up Blocked:
+ * a CapCut project of the video links to a file that isn't there, so nothing can be listed until it's fixed.
+ */
+function CleanupBadge({ item }: { item: VideoOverview }) {
+  const { cleanup } = useContext(StatusContext);
+  const parts: [string, NonNullable<CleanupStatus['pieces'][string]>][] = [];
+  const own = cleanup[item.path];
+  if (own) parts.push([item.kind === 'longform' ? 'Longform' : 'This Short', own]);
+  const plan = item.kind === 'longform' ? cleanup[`${item.projectId}/Shorts`] : undefined;
+  if (plan) parts.push(['Make Shorts', plan]);
+  const missing = Math.max(0, ...parts.map(([, p]) => p.missing));
+  if (missing) return <span className="status-pill status-review" title={`The CapCut projects have ${missing} missing ${missing === 1 ? 'link' : 'links'}. Fix ${missing === 1 ? 'it' : 'them'} in CapCut before cleaning up.`}>Clean Up Blocked</span>;
+  const withFiles = parts.filter(([, p]) => p.files > 0);
+  if (!withFiles.length) return null;
+  return <span className="status-pill status-clean" title={`Clean Up would move to Trash: ${withFiles.map(([name, p]) => `${name}: ${p.files} ${p.files === 1 ? 'file' : 'files'} (${formatSize(p.bytes)})`).join('; ')}`}>Can Clean Up</span>;
+}
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
   const text = item.link === 'linked' ? 'YT Linked' : item.link === 'missing' ? 'YT No Link' : 'YT Unknown';
   const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
-  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="The newest packaging version has no Thumbnail\Thumbnail.png or .jpg">No Local Thumbnail</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}</span>;
+  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="The newest packaging version has no Thumbnail\Thumbnail.png or .jpg">No Local Thumbnail</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -78,6 +97,7 @@ export function ProjectsPage() {
   const [overview, setOverview] = useState<VideoOverview[]>([]);
   const [overviewError, setOverviewError] = useState('');
   const [checks, setChecks] = useState<Record<string, YoutubeChecks>>({});
+  const [cleanup, setCleanup] = useState<CleanupStatus['pieces']>({});
   const [filter, setFilter] = useState<Filter>('all');
   const [focus, setFocus] = useState<string | null>(shortFocus);
   const [scan, setScan] = useState(''); const [scanning, setScanning] = useState(false);
@@ -114,6 +134,25 @@ export function ProjectsPage() {
     const checked = (event: Event) => { const { path, checks: values } = (event as CustomEvent<{ path: string; checks: YoutubeChecks }>).detail; setChecks((old) => ({ ...old, [path]: values })); };
     void load(); window.addEventListener('hq-video-status-changed', changed); window.addEventListener('hq-youtube-checked', checked);
     return () => { active = false; window.removeEventListener('hq-video-status-changed', changed); window.removeEventListener('hq-youtube-checked', checked); };
+  }, [reloads]);
+
+  // The Can Clean Up badges: the engine answers with its last check and works out a new one in the background, so
+  // ask again every few seconds while it's busy, and after a cleanup.
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      clearTimeout(timer);
+      getJson<CleanupStatus>('/api/cleanup/status').then((s) => {
+        if (!active) return;
+        setCleanup(s.pieces);
+        if (s.busy || s.checkedAt === null) timer = setTimeout(load, 3000);
+      }, () => undefined);
+    };
+    const again = () => { timer = setTimeout(load, 500); };
+    load();
+    window.addEventListener('hq-cleanup-done', again);
+    return () => { active = false; clearTimeout(timer); window.removeEventListener('hq-cleanup-done', again); };
   }, [reloads]);
 
   async function checkLinkedVideos() {
@@ -167,7 +206,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <StatusContext.Provider value={{ items: overview, checks, focus }}><div className="split">
+    <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><div className="split">
       <aside className="sidebar">
         <div className="sidebar-actions">
           <NewFolderButton kind="top" onCreated={onCreated} />

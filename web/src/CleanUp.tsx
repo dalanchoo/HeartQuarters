@@ -29,6 +29,7 @@ export function CleanUp({ piece, onDone, intro }: { piece: string; onDone?: () =
         setResult(`Done: ${r.removed} files (${formatSize(r.freed)}) are in HeartQuarters Trash, at ${r.trash}.${r.moved ? ` ${r.moved} moved into Intermediate, with CapCut pointed at them.` : ''}`);
         setPlan(null);
         onDone?.();
+        window.dispatchEvent(new Event('hq-cleanup-done')); // the Videos page's Can Clean Up badges check again
       }, (e: Error) => setError(e.message))
       .finally(() => setBusy(false));
   };

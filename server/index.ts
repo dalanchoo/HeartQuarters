@@ -27,6 +27,7 @@ import { approveExpression, assignExpressionCategory, candidateFile, expressionJ
 import { thumbnail } from './thumbs.js';
 import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
+import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
@@ -553,7 +554,15 @@ app.get('/api/cleanup', handle((req, res) => {
 
 // { piece, token }: carries out the list John approved; everything goes to HeartQuarters Trash.
 app.post('/api/cleanup', handle((req, res) => {
-  res.json(runCleanup(String(req.body?.piece ?? ''), req.body?.token));
+  const piece = String(req.body?.piece ?? '');
+  const done = runCleanup(piece, req.body?.token);
+  cleanupDone(piece);
+  res.json(done);
+}));
+
+// Which pieces Clean Up has something for (the Videos page's badges). Answers at once; checks again in the background.
+app.get('/api/cleanup/status', handle((_req, res) => {
+  res.json(cleanupStatus());
 }));
 
 // ?piece=: the saved photo ranking for the chosen pair, and whether Claude is ranking now. See photo-ranking.ts.

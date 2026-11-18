@@ -172,6 +172,7 @@ main { flex: 1; min-height: 0; }
 .status-linked { background: #e0f3e6; color: #21673d; }
 .status-missing, .status-review { background: #fff0d5; color: #865000; }
 .status-unknown { background: #e9edf1; color: #4b5968; }
+.status-clean { background: #e3ecfb; color: #234c8c; }
 .piece-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .status-explanation { color: var(--muted); font-size: 0.8rem; }
 .short-tree-link { padding-left: 0.45rem; font-size: 0.9rem; }

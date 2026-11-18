@@ -105,6 +105,27 @@ export interface CapCutLinks {
  * unused may be the ones it needs: Clean Up refuses until those are fixed (John, 2026-11-18).
  */
 export function capcutLinks(video: string): CapCutLinks {
+  const scan = scanLinks(video);
+  for (;;) {
+    const step = scan.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** The same, letting the engine answer other requests between project files (a video's projects are ~150 MB). */
+export async function capcutLinksSlowly(video: string): Promise<CapCutLinks> {
+  const scan = scanLinks(video);
+  for (;;) {
+    const step = scan.next();
+    if (step.done) return step.value;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+/** The HeartMind paths in one project file, remembered until the file changes (reading it is the slow part). */
+const linksInFile = new Map<string, { stamp: string; paths: string[] }>();
+
+function* scanLinks(video: string): Generator<void, CapCutLinks> {
   const prefix = `${fwd(config.videoProjectsDir)}/${video}/`.toLowerCase();
   const heartMind = `${fwd(path.dirname(path.resolve(config.videoProjectsDir)))}/`.toLowerCase();
   const own = new Set([path.basename(video), ...shortNames(video)].map((n) => plainDraftName(n).toLowerCase()));
@@ -123,17 +144,28 @@ export function capcutLinks(video: string): CapCutLinks {
     for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
       if (!e.isFile() || !/\.(json|tmp)$/i.test(e.name)) continue;
       const file = path.join(e.parentPath, e.name);
-      if (fs.statSync(file).size > 200_000_000) continue;
-      const text = fs.readFileSync(file, 'utf8');
+      const stat = fs.statSync(file);
+      if (stat.size > 200_000_000) continue;
+      const stamp = `${stat.size}:${stat.mtimeMs}:${heartMind}`;
+      let paths = linksInFile.get(file)?.stamp === stamp ? linksInFile.get(file)!.paths : null;
+      if (!paths) {
+        const found = new Set<string>();
+        for (const m of fs.readFileSync(file, 'utf8').matchAll(/"((?:[A-Za-z]:)?[^"]*?)"/g)) {
+          const original = m[1].replace(/\\\\/g, '/').replace(/\\/g, '/');
+          if (original.toLowerCase().startsWith(heartMind)) found.add(original);
+        }
+        paths = [...found];
+        linksInFile.set(file, { stamp, paths });
+        yield;
+      }
       // "template (1).json", "mini_draft (1).json": copies Google Drive made, which CapCut never reads. Their links still
       // count as used (keeping more is safe), but a stale link in them isn't a missing link in the project.
       const driveCopy = / \(\d+\)\.[a-z]+$/i.test(e.name);
-      for (const m of text.matchAll(/"((?:[A-Za-z]:)?[^"]*?)"/g)) {
-        const original = m[1].replace(/\\\\/g, '/').replace(/\\/g, '/');
+      for (const original of paths) {
         const value = original.toLowerCase();
         if (value.startsWith(prefix)) used.add(value);
         // A file (it has an extension) in the HeartMind folders that isn't there.
-        if (!driveCopy && value.startsWith(heartMind)&& /\.[a-z0-9]{2,5}$/i.test(value) && !seen.has(value)) {
+        if (!driveCopy && /\.[a-z0-9]{2,5}$/i.test(value) && !seen.has(value)) {
           seen.add(value);
           if (!fs.existsSync(original)) missing.push(`${d}: ${original}`);
         }
@@ -170,11 +202,11 @@ export function pieceOf(piece: string): { video: string; inVideo: string } {
 }
 
 /** The cleanup list for one piece: the longform, one Short, or Make Shorts' plan and retention graphs. Changes nothing. */
-export function cleanupPlan(piece: string, given?: Set<string>): CleanupPlan {
+export function cleanupPlan(piece: string, given?: Set<string> | CapCutLinks): CleanupPlan {
   const { video, inVideo } = pieceOf(piece);
   const pieceRoot = safeResolve('projects', `${video}/${inVideo}`);
   if (!fs.existsSync(pieceRoot) || !fs.statSync(pieceRoot).isDirectory()) throw new Error('That folder was not found.');
-  const links = given ? { used: given, missing: [] } : capcutLinks(video);
+  const links = given instanceof Set ? { used: given, missing: [] } : (given ?? capcutLinks(video));
   const used = links.used;
   if (links.missing.length) {
     return { piece: `${video}/${inVideo}`, remove: [], move: [], freed: 0, skipped: [], missing: links.missing, token: '' };
