@@ -405,14 +405,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
   if (!found) throw new Error('There is no transcript in Subtitles and no script (a file with "script" in its name) to make the brief from.');
   const source: BriefSource = { kind: found.kind, path: rel(found.full) };
 
-  const work = workFolder(piece);
-  fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
-  if (found.kind === 'transcript') copySourceTimings(dir, work);
-  const saved = saveResearchImages(path.join(dir, 'Packaging', DRAFTS_FOLDER), work, images, new Date());
-  const shots = saved.map((s) => s.file);
-  const notes = notesWithImages(rawNotes, saved);
-  if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
-
+  // The job is registered before anything waits, so a second click can't start another brief for this video meanwhile.
   const step = (ai: AiId, role: BriefStep['role']): BriefStep => ({ ai, name: AI_NAMES[ai], role, state: 'waiting' });
   const job: BriefJob = {
     piece,
@@ -421,7 +414,26 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     steps: [step('claude', 'writes'), step('codex', 'reviews'), step('gemini', 'reviews'), step('claude', 'picks')],
     startedAt: new Date().toISOString(),
   };
+  const before = jobs.get(piece);
   jobs.set(piece, job);
+
+  let work: string;
+  let shots: string[];
+  let notes: string;
+  try {
+    work = workFolder(piece);
+    fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
+    if (found.kind === 'transcript') copySourceTimings(dir, work);
+    const saved = saveResearchImages(path.join(dir, 'Packaging', DRAFTS_FOLDER), work, images, new Date());
+    shots = saved.map((s) => s.file);
+    notes = notesWithImages(rawNotes, saved);
+    if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
+  } catch (e) {
+    // Getting ready failed: the video is free again, showing whatever brief job it had before.
+    if (before) jobs.set(piece, before);
+    else jobs.delete(piece);
+    throw e;
+  }
 
   const finished = (async () => {
     const drafts = path.join(dir, 'Packaging', DRAFTS_FOLDER);

@@ -298,6 +298,20 @@ describe("an AI's error", () => {
   });
 });
 
+describe('one brief at a time for a video', () => {
+  it('refuses a second start made before the first has finished getting ready', async () => {
+    const first = startBrief(LONGFORM, '', fakeAi);
+    const second = startBrief(LONGFORM, '', fakeAi);
+    await expect(second).rejects.toThrow(/already being written/);
+    await (await first).finished;
+  });
+  it('frees the video again when getting ready fails', async () => {
+    await expect(startBrief(LONGFORM, '', fakeAi, { vidiq: ['not an image'] })).rejects.toThrow(/could not be read/);
+    const { finished } = await startBrief(LONGFORM, '', fakeAi);
+    await finished;
+  });
+});
+
 describe('screenshots pasted into the brief boxes', () => {
   const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]).toString('base64');
   const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9]).toString('base64');
