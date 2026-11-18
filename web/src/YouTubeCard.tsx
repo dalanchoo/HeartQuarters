@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { fileStamp, fileUrl, getJson, getText, postJson, type FileRef, type Piece } from './api';
 import { CopyButton, type LoadedDoc } from './PackagingDoc';
+import { compareCaptions } from './captionCompare';
 import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { VIDEO_LANGUAGES } from '../../server/youtube-language';
@@ -404,7 +405,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const [subtitles, setSubtitles] = useState<FileChoice[]>([]);
   const [subtitle, setSubtitle] = useState('');
   const [localCaptions, setLocalCaptions] = useState<string | null>(null);
-  const [ytCaptions, setYtCaptions] = useState<{ track: { language: string; kind: string; name: string } | null; text: string | null } | null>(null);
+  const [ytCaptions, setYtCaptions] = useState<{ track: { language: string; kind: string; name: string } | null; text: string | null; extra?: { name: string; language: string }[] } | null>(null);
   useEffect(() => {
     getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`).then((s) => {
       setSubtitles(s);
@@ -421,6 +422,18 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
     setError('');
     getJson<typeof ytCaptions>(`/api/youtube/captions?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`)
       .then(setYtCaptions, (e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  const captionsCompared = localCaptions !== null && ytCaptions?.text != null ? compareCaptions(localCaptions, ytCaptions.text) : null;
+  // Another caption track in HeartQuarters' language (the copy Studio's Edit Subtitles makes) can show instead of ours.
+  const removeExtraCaptions = () => {
+    if (!job || !ytCaptions?.extra?.length) return;
+    const n = ytCaptions.extra.length;
+    if (!window.confirm(`Delete the ${n === 1 ? 'other caption track' : `${n} other caption tracks`} in this language from YouTube? HeartQuarters' own track and YouTube's automatic one stay. This can't be undone.`)) return;
+    setBusy(true);
+    setError('');
+    postJson<{ removed: number }>('/api/youtube/captions/remove-extra', { piece: piece.path, id: job.id })
+      .then((r) => { setYtCaptions((c) => (c ? { ...c, extra: [] } : c)); setMessage(`Removed ${r.removed === 1 ? 'the extra caption track' : `${r.removed} extra caption tracks`} from YouTube.`); }, (e: Error) => setError(e.message))
       .finally(() => setBusy(false));
   };
 
@@ -639,9 +652,10 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         </CopyDirectionFrame>
       </div>
 
-      {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. */}
+      {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. Same means
+          the same words shown at the same times; copying is offered only when they differ. */}
       <details className="yt-section lvy-captions-section">
-        <summary>Captions {staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</summary>
+        <summary>Captions {captionsCompared && <span className={`comparison-status ${captionsCompared.same ? 'comparison-same' : 'comparison-different'}`}>{captionsCompared.same ? '✓ Same' : `≠ Different (${!captionsCompared.wordsSame && !captionsCompared.timingSame ? 'Words and Timing' : !captionsCompared.wordsSame ? 'Words' : 'Timing'})`}</span>}{staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</summary>
         <div className="lvy-row-head">
           {linked && !ytCaptions && (
             <button className="small" disabled={busy || out} onClick={downloadCaptions}>
@@ -651,19 +665,19 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           {linked && !ytCaptions && <span className="muted small-text">about 250 units</span>}
         </div>
         <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Captions'), false) : null}>
-        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), false), !!(canCompare && ytCaptions && subtitle && !busy && !copyValuesMatch('Captions', localCaptions?.replace(/\r\n/g, '\n'), ytCaptions.text?.replace(/\r\n/g, '\n'))), false, () => stage('Captions'), () => undefined, false)}
+        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), false), !!(canCompare && ytCaptions && subtitle && !busy && (!captionsCompared || !captionsCompared.same)), false, () => stage('Captions'), () => undefined, false)}
         {columns(
           subtitles.length ? (
             <>
-              <select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}>
+              <div className="caption-head"><select value={subtitle} onChange={(e) => setSubtitle(e.target.value)}>
                 <option value="">No captions file</option>
                 {subtitles.map((s) => (
                   <option key={s.path} value={s.path}>
                     {s.name}
                   </option>
                 ))}
-              </select>
-              {localCaptions !== null && <pre className="lvy-value lvy-captions">{captionWords(localCaptions)}</pre>}
+              </select></div>
+              {localCaptions !== null && <pre className="lvy-value lvy-captions">{captionsCompared && !captionsCompared.wordsSame ? <DiffText parts={captionsCompared.left} side="local" /> : captionWords(localCaptions)}</pre>}
             </>
           ) : (
             <p className="muted small-text">No captions file in Subtitles.</p>
@@ -671,10 +685,17 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           ytCaptions ? (
             ytCaptions.track ? (
               <>
-                <p className="small-text">
-                  {ytCaptions.track.language || 'Unknown language'}, {ytCaptions.track.kind.toLowerCase() === 'asr' ? 'made automatically by YouTube' : 'uploaded'}
-                </p>
-                {ytCaptions.text !== null && <pre className="lvy-value lvy-captions">{captionWords(ytCaptions.text)}</pre>}
+                <div className="caption-head small-text">
+                  {ytCaptions.track.language || 'Unknown language'}, {ytCaptions.track.kind.toLowerCase() === 'asr' ? 'made automatically by YouTube' : 'uploaded'}{ytCaptions.track.name ? ` ("${ytCaptions.track.name}")` : ''}
+                </div>
+                {!!ytCaptions.extra?.length && (
+                  <div className="lock-hint">
+                    YouTube also has {ytCaptions.extra.length === 1 ? 'another caption track' : `${ytCaptions.extra.length} other caption tracks`} in this language, probably the copy YouTube Studio makes when Edit Subtitles is saved. Viewers may see it instead of HeartQuarters&apos; captions, with long two-line blocks.{' '}
+                    <button className="small" disabled={busy} onClick={removeExtraCaptions}>Remove Extra Track</button>
+                  </div>
+                )}
+                {ytCaptions.text !== null && <pre className="lvy-value lvy-captions">{captionsCompared && !captionsCompared.wordsSame ? <DiffText parts={captionsCompared.right} side="youtube" /> : captionWords(ytCaptions.text)}</pre>}
+                {captionsCompared && captionsCompared.wordsSame && !captionsCompared.timingSame && <p className="muted small-text">Same words, but shown at different times, so the captions are broken up differently.</p>}
               </>
             ) : (
               <p className="muted small-text">YouTube has no captions for this video.</p>

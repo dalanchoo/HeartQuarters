@@ -825,3 +825,5 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .lock-switch-knob { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: #f3f4f7; color: #8a8f99; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
 .lock-switch:focus-visible { outline: 3px solid #123f80; outline-offset: 2px; }
 .lock-hint { margin: .3rem 0 .4rem; padding: .3rem .6rem; border-radius: 6px; background: #fff4d6; color: #6b4a00; font-size: .9rem; }
+/* Captions: the file menu and YouTube's track name take the same height, so both texts start level. */
+.caption-head { min-height: 2.1rem; display: flex; align-items: center; margin-bottom: .25rem; }
