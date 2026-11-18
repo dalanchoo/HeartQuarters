@@ -149,13 +149,23 @@ function stamp(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
+/**
+ * Renames `file` to "<name> - before <date time><ext>" beside it. Two in the same second get "(2)", "(3)"... so an
+ * earlier copy is never replaced. Returns the new path.
+ */
+export function keepBeside(file: string, now: Date): string {
+  const { dir, name, ext } = path.parse(file);
+  let kept = path.join(dir, `${name} - before ${stamp(now)}${ext}`);
+  for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} - before ${stamp(now)} (${n})${ext}`);
+  fs.renameSync(file, kept);
+  return kept;
+}
+
 /** Before proposing again: the current plan is renamed, never overwritten, so John's edits can't be lost. */
 export function keepOldPlan(video: string, now = new Date()): string | null {
   const file = planFile(video);
   if (!fs.existsSync(file)) return null;
-  const kept = path.join(path.dirname(file), `Shorts Plan - before ${stamp(now)}.json`);
-  fs.renameSync(file, kept);
-  return kept;
+  return keepBeside(file, now);
 }
 
 // ---- The words of a clip --------------------------------------------------------
@@ -240,7 +250,7 @@ export function retentionInfo(video: string): { path: string; version: number } 
 /** Takes the graph out of use. It's only renamed, so nothing is lost. */
 export function retireRetention(video: string, now = new Date()) {
   const file = retentionFile(video);
-  if (fs.existsSync(file)) fs.renameSync(file, path.join(path.dirname(file), `Retention Graph - before ${stamp(now)}.png`));
+  if (fs.existsSync(file)) keepBeside(file, now);
 }
 
 /** Saves a pasted screenshot (a PNG, sent as base64). An earlier graph is kept under another name. */

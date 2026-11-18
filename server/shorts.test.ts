@@ -517,6 +517,17 @@ describe('the plan file', () => {
     expect(keepOldPlan(VIDEO)).toBeNull();
   });
 
+  it('two plans kept in the same second both survive', () => {
+    const when = new Date(2026, 10, 8, 9, 5, 7);
+    savePlan(VIDEO, [ROW]);
+    keepOldPlan(VIDEO, when);
+    savePlan(VIDEO, [{ ...ROW, title: 'Second' }]);
+    const second = keepOldPlan(VIDEO, when)!;
+    expect(path.basename(second)).toBe('Shorts Plan - before 2026-11-08 090507 (2).json');
+    expect(JSON.parse(fs.readFileSync(second, 'utf8')).shorts[0].title).toBe('Second');
+    expect(JSON.parse(fs.readFileSync(path.join(path.dirname(second), 'Shorts Plan - before 2026-11-08 090507.json'), 'utf8')).shorts).toEqual([ROW]);
+  });
+
   it('stays inside the video projects folder', () => {
     expect(() => savePlan('../..', [ROW])).toThrow(/outside/);
     expect(() => readPlan('../..')).toThrow(/outside/);
@@ -602,6 +613,14 @@ describe('the retention graph', () => {
     expect(fs.readdirSync(shortsDir())).toHaveLength(2);
     retireRetention(VIDEO);
     expect(fs.readdirSync(shortsDir())).toHaveLength(2);
+  });
+
+  it('two graphs replaced in the same second are both kept', () => {
+    const when = new Date(2026, 0, 1, 1, 1, 1);
+    saveRetention(VIDEO, PNG, when);
+    saveRetention(VIDEO, PNG, when);
+    saveRetention(VIDEO, PNG, when);
+    expect(fs.readdirSync(shortsDir()).sort()).toEqual(['Retention Graph - before 2026-01-01 010101 (2).png', 'Retention Graph - before 2026-01-01 010101.png', 'Retention Graph.png']);
   });
 });
 
