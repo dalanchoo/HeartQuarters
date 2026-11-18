@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { openInExplorer, postJson } from './api';
 
 interface Result { file: string; missingRetention: string[]; emptyStatistics: string[] }
 
-export function VideoAnalytics({ piece, id }: { piece: string; id: string }) {
+export function VideoAnalytics({ piece, id, children }: { piece: string; id: string; children?: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
@@ -14,7 +14,7 @@ export function VideoAnalytics({ piece, id }: { piece: string; id: string }) {
     finally { setBusy(false); }
   };
   return <div className="video-analytics">
-    <button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button>
+    <div className="yt-linkbar-row">{children}<button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button></div>
     {busy && <span role="status"> Downloading statistics and retention from YouTube…</span>}
     {error && <p className="error" role="alert">{error}</p>}
     {result && <div role="status"><p>Stats saved to {result.file}. <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button></p>

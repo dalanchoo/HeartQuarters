@@ -239,18 +239,15 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
               {linked ? 'Change Linked Video' : 'Link Existing Video'}
             </button>
             <span className="muted small-text">{units(2)}</span>
-            {linked && (
-              <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job!.videoId })))}>
-                Open in YouTube Studio ↗
-              </button>
-            )}
-            {linked && (
-              <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
-                Reload from YouTube
-              </button>
-            )}
           </div>
-          {linked && job && <VideoAnalytics key={job.id} piece={piece.path} id={job.id} />}
+          {linked && job && <VideoAnalytics key={job.id} piece={piece.path} id={job.id}>
+            <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job.videoId })))}>
+              Open in YouTube Studio ↗
+            </button>
+            <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
+              Reload from YouTube
+            </button>
+          </VideoAnalytics>}
           {!status.captionAccess && (
             <p className="small-text">
               To save playlists and captions, reconnect and grant Google’s additional permission. {signIn}

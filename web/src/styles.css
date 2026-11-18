@@ -668,6 +668,7 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 /* The card's link to YouTube, on its status line. */
 .yt-linkbar { margin: 0.3rem 0 0.6rem; }
 .yt-linkbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.video-analytics > .yt-linkbar-row { margin-top: 0.4rem; }
 .yt-link-input { flex: 1 1 18rem; min-width: 12rem; }
 /* Local vs YouTube: every field of YouTube.md, with one switch for all of them. */
 .local-vs-youtube { margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
