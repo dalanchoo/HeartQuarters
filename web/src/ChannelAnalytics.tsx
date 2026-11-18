@@ -1,0 +1,27 @@
+import { useState } from 'react';
+import { openInExplorer, postJson } from './api';
+
+interface Result { file: string; channel: string; emptyReports: string[]; topVideoCount: number }
+export function ChannelAnalytics() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState('');
+  const download = async () => {
+    setBusy(true); setError(''); setResult(null);
+    try { setResult(await postJson<Result>('/api/youtube/analytics/channel')); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return <details className="sidebar-section">
+    <summary>Channel Analytics</summary>
+    <button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Channel Stats…' : 'Download Channel Stats'}</button>
+    <span className="muted small-text"> about 1 Data API unit + 6 Analytics units</span>
+    {busy && <p role="status">Downloading channel statistics…</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    {result && <div role="status"><p>Saved stats for {result.channel} to {result.file}.</p>
+      <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button>
+      <p className="small-text">Top-video report: {result.topVideoCount} videos (maximum 200). This report may not include every video. Data may be delayed.</p>
+      {result.emptyReports.length > 0 && <p>Empty reports: {result.emptyReports.join(', ')}.</p>}
+    </div>}
+  </details>;
+}

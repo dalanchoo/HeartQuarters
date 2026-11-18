@@ -64,6 +64,7 @@ import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
 import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
+import { downloadChannelAnalytics } from './channel-analytics.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -79,6 +80,9 @@ app.use(express.json());
 app.get('/api/youtube/status', handle((_req, res) => { res.json(youtubeStatus()); }));
 app.post('/api/youtube/analytics/video', (req, res) => {
   downloadVideoAnalytics(String(req.body?.piece ?? ''), String(req.body?.id ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/youtube/analytics/channel', (_req, res) => {
+  downloadChannelAnalytics().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 // How much of today's YouTube quota HeartQuarters has used (it counts its own requests).
 app.get('/api/youtube/quota', handle((_req, res) => { res.json(youtubeQuota()); }));

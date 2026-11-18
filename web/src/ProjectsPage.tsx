@@ -33,6 +33,7 @@ import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
+import { ChannelAnalytics } from './ChannelAnalytics';
 
 type Filter = 'all' | 'missing-link' | 'review';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
@@ -220,6 +221,7 @@ export function ProjectsPage() {
         <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
         <QuotaMeter />
+        <ChannelAnalytics />
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
         {error && <p className="error">{error}</p>}
