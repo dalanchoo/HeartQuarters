@@ -25,6 +25,7 @@ import { applyExpressionChange, previewExpressionChange } from './expression-man
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
+import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
@@ -529,7 +530,7 @@ app.post('/api/thumbs/make', handle((req, res) => {
 
 // { piece, conversation, text, pasted, drafts }: a change request, with any reference images (pasted, or drafts of this video), to the conversation that made that draft.
 app.post('/api/thumbs/change', handle((req, res) => {
-  res.json(changeThumbnail(String(req.body?.piece ?? ''), String(req.body?.conversation ?? ''), req.body?.text, undefined, { pasted: req.body?.pasted, drafts: req.body?.drafts }).job);
+  res.json(changeThumbnail(String(req.body?.piece ?? ''), String(req.body?.conversation ?? ''), req.body?.text, undefined, { pasted: req.body?.pasted, drafts: req.body?.drafts, photo: req.body?.photo }).job);
 }));
 
 // { piece, index }: John chose one of the top 3 pairs (saved as Drafts\Choice.json).
@@ -540,6 +541,17 @@ app.post('/api/brief/choose', handle((req, res) => {
 // { piece, photo }: the expressions-library photo for the chosen pair.
 app.post('/api/brief/photo', handle((req, res) => {
   res.json(chooseBriefPhoto(String(req.body?.piece ?? ''), req.body?.photo));
+}));
+
+// ?piece=: the saved photo ranking for the chosen pair, and whether Claude is ranking now. See photo-ranking.ts.
+app.get('/api/brief/ranking', handle((req, res) => {
+  const piece = String(req.query.piece ?? '');
+  res.json({ ranking: readRanking(piece), job: rankingJob(piece) });
+}));
+
+// { piece }: Claude looks at the pair's category photos and the starred ones, and ranks the best five.
+app.post('/api/brief/rank-photos', handle((req, res) => {
+  res.json(startRanking(String(req.body?.piece ?? '')).job);
 }));
 
 // { piece, notes }: only the last step, Claude picking the top 3 pairs, on the brief that's already there.
