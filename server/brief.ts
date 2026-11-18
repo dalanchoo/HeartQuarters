@@ -17,6 +17,7 @@ import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
+import { appendText, makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
 
 export interface BriefSource {
   kind: 'transcript' | 'script';
@@ -97,8 +98,9 @@ export function findSource(pieceDir: string): { kind: BriefSource['kind']; full:
 
 /** The source as plain text. */
 export async function readSource(full: string): Promise<string> {
+  readable(full); // the transcript or script really is inside Video Projects, even through a shortcut (code review #2)
   if (/\.docx$/i.test(full)) return (await mammoth.extractRawText({ path: full })).value;
-  const text = fs.readFileSync(full, 'utf8').replace(/^﻿/, '');
+  const text = readText(full).replace(/^﻿/, '');
   return /\.srt$/i.test(full) ? srtToText(text) : text;
 }
 
@@ -119,7 +121,7 @@ export function briefSource(piece: string): BriefSource | null {
 /** Provide timestamps only when there is one unambiguous timed subtitle file for this piece. */
 function copySourceTimings(pieceDir: string, work: string): void {
   const subs = path.join(pieceDir, 'Subtitles'); const files = filesIn(subs).filter(f => /\.(srt|vtt)$/i.test(f));
-  if (files.length === 1) fs.copyFileSync(path.join(subs, files[0]), path.join(work, `source-timings${path.extname(files[0]).toLowerCase()}`));
+  if (files.length === 1) fs.copyFileSync(readable(path.join(subs, files[0])), path.join(work, `source-timings${path.extname(files[0]).toLowerCase()}`));
 }
 
 // ---- What each AI is asked -----------------------------------------------------------------------------
@@ -259,7 +261,7 @@ function keepOld(drafts: string, fileName: string, when: Date): string | undefin
   const { name: base, ext } = path.parse(fileName);
   let name = `${base} - ${stamp(when)}${ext}`;
   for (let n = 2; fs.existsSync(path.join(drafts, name)); n++) name = `${base} - ${stamp(when)} (${n})${ext}`;
-  fs.renameSync(file, path.join(drafts, name));
+  moveFile(file, path.join(drafts, name));
   return name;
 }
 
@@ -318,7 +320,7 @@ async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boo
     const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes), work, shots));
     if (picks.some(p => !p.description || !p.tags || !p.pinnedComment)) throw new Error('The generated package is missing a description, tags or pinned comment. Try Pick Top 3 Again.');
     keepOld(drafts, PICKS_FILE, when);
-    fs.writeFileSync(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
+    writeFile(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
     step.state = 'done';
   } catch (e) {
     step.state = 'failed';
@@ -348,12 +350,12 @@ export function saveResearchImages(drafts: string, work: string, images: Researc
   const decoded = lists.map((l) => ({ box: l.box, images: l.list.map(decodeReference) })); // all checked before anything is written
   let record = path.join(drafts, 'Research', stamp(when));
   for (let n = 2; fs.existsSync(record); n++) record = path.join(drafts, 'Research', `${stamp(when)} (${n})`);
-  fs.mkdirSync(record, { recursive: true });
+  makeFolder(record);
   fs.mkdirSync(path.join(work, 'research'), { recursive: true });
   return decoded.flatMap(({ box, images: list }) =>
     list.map((img, i) => {
       const name = `${RESEARCH_BOXES[box]} ${i + 1}${img.ext}`;
-      fs.writeFileSync(path.join(record, name), img.data, { flag: 'wx' });
+      writeFile(path.join(record, name), img.data, { flag: 'wx' });
       const file = path.join(work, 'research', name);
       fs.writeFileSync(file, img.data);
       return { box, file };
@@ -421,6 +423,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
   let shots: string[];
   let notes: string;
   try {
+    writable(path.join(dir, 'Packaging', DRAFTS_FOLDER, BRIEF_FILE));
     work = workFolder(piece);
     fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
     if (found.kind === 'transcript') copySourceTimings(dir, work);
@@ -445,9 +448,9 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     try {
       writer.state = 'working';
       const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10)), work, shots), /^# Brief:/m, 'Claude');
-      fs.mkdirSync(drafts, { recursive: true });
+      makeFolder(drafts);
       job.kept = keepOld(drafts, BRIEF_FILE, when);
-      fs.writeFileSync(brief, text + '\n');
+      writeFile(brief, text + '\n');
       fs.writeFileSync(path.join(work, 'brief.md'), text + '\n');
       writer.state = 'done';
     } catch (e) {
@@ -462,7 +465,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
       r.state = 'working';
       try {
         const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece), work, shots), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
-        fs.appendFileSync(brief, `\n${review}\n`);
+        appendText(brief, `\n${review}\n`);
         fs.appendFileSync(path.join(work, 'brief.md'), `\n${review}\n`);
         r.state = 'done';
       } catch (e) {
@@ -470,7 +473,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
         r.error = e instanceof Error ? e.message : String(e);
       }
     }
-    fs.writeFileSync(brief, noteWhoTookPart(fs.readFileSync(brief, 'utf8'), job.steps));
+    writeFile(brief, noteWhoTookPart(readText(brief), job.steps));
     await runPicks(picker, ask, work, !!notes.trim(), drafts, when, shots);
     job.status = 'done';
   })().catch((e) => {
@@ -489,7 +492,7 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
   if (!fs.existsSync(brief)) throw new Error('There is no Brief.md to pick from yet. Write the brief first.');
   const found = findSource(dir);
   const work = workFolder(piece);
-  fs.copyFileSync(brief, path.join(work, 'brief.md'));
+  fs.copyFileSync(readable(brief), path.join(work, 'brief.md'));
   if (found) fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
   if (found?.kind === 'transcript') copySourceTimings(dir, work);
   const saved = saveResearchImages(drafts, work, images, new Date());
@@ -521,7 +524,7 @@ export function chooseBriefPick(piece: string, index: unknown): BriefChoice {
   if (!picks) throw new Error('There are no top 3 picks to choose from yet.');
   if (typeof index !== 'number' || !Number.isInteger(index) || !picks[index]) throw new Error('That pick is not one of the top 3.');
   const choice: BriefChoice = { pick: picks[index], index, photo: null };
-  fs.writeFileSync(path.join(drafts, CHOICE_FILE), JSON.stringify(choice, null, 2) + '\n');
+  writeFile(path.join(drafts, CHOICE_FILE), JSON.stringify(choice, null, 2) + '\n');
   return choice;
 }
 
@@ -534,6 +537,6 @@ export function chooseBriefPhoto(piece: string, photo: unknown): BriefChoice {
   const full = safeResolve('expressions', rel);
   if (!IMAGE_RE.test(rel) || !fs.existsSync(full) || !fs.statSync(full).isFile()) throw new Error("That photo isn't in the expressions library.");
   choice.photo = rel.replace(/\\/g, '/');
-  fs.writeFileSync(path.join(drafts, CHOICE_FILE), JSON.stringify(choice, null, 2) + '\n');
+  writeFile(path.join(drafts, CHOICE_FILE), JSON.stringify(choice, null, 2) + '\n');
   return choice;
 }

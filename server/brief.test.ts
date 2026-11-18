@@ -298,6 +298,38 @@ describe("an AI's error", () => {
   });
 });
 
+describe('shortcuts and junctions (code review #2)', () => {
+  const outside = () => {
+    const dir = fs.mkdtempSync(path.join(path.dirname(tmp), 'hq-outside-'));
+    fs.writeFileSync(path.join(dir, 'secret-captions.srt'), '1\n00:00:00,000 --> 00:00:01,000\nNot this video\n');
+    return dir;
+  };
+  it("won't send a transcript from a Subtitles junction that points outside to the AIs", async () => {
+    const away = outside();
+    try {
+      fs.rmSync(path.join(tmp, LONGFORM, 'Subtitles'), { recursive: true });
+      fs.symlinkSync(away, path.join(tmp, LONGFORM, 'Subtitles'), 'junction');
+      let asked = false;
+      await expect(startBrief(LONGFORM, '', async () => { asked = true; return ''; })).rejects.toThrow(/outside/);
+      expect(asked).toBe(false);
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true });
+    }
+  });
+  it("won't write a brief through a Drafts junction, and stops before the AIs start", async () => {
+    const away = outside();
+    try {
+      fs.symlinkSync(away, draftsDir(), 'junction');
+      let asked = false;
+      await expect(startBrief(LONGFORM, '', async () => { asked = true; return ''; })).rejects.toThrow(/outside|shortcut or junction/);
+      expect(asked).toBe(false);
+      expect(fs.readdirSync(away)).toEqual(['secret-captions.srt']);
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('one brief at a time for a video', () => {
   it('refuses a second start made before the first has finished getting ready', async () => {
     const first = startBrief(LONGFORM, '', fakeAi);
