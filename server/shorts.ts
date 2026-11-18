@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { readable, readText } from './safe-files.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
 import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
 import { prepareMetadataVersion } from './metadata-version.js';
@@ -195,17 +196,25 @@ export function readTranscript(video: string): { file: string; words: TimedWord[
     }
     for (const name of names) {
       if (!name.endsWith('.words.json') || /^take\b/i.test(name)) continue;
-      const full = path.join(longform, dir, name);
+      let full: string;
+      try {
+        // Only files that really are inside Video Projects, even through a shortcut or junction (code review #3).
+        full = readable(path.join(longform, dir, name));
+      } catch {
+        continue;
+      }
       found.push({ name, full, time: fs.statSync(full).mtimeMs, rank: dirs.indexOf(dir) });
     }
   }
   const finished = (name: string) => (/(-captions| - (edit|final))\.words\.json$/i.test(name) ? 1 : 0);
   found.sort((a, b) => finished(b.name) - finished(a.name) || a.rank - b.rank || b.time - a.time);
   if (!found[0]) return null;
-  const raw = JSON.parse(fs.readFileSync(found[0].full, 'utf8').replace(/^﻿/, '')) as {
-    words?: TimedWord[];
-    segments?: { words?: TimedWord[] }[];
-  };
+  let raw: { words?: TimedWord[]; segments?: { words?: TimedWord[] }[] };
+  try {
+    raw = JSON.parse(readText(found[0].full).replace(/^﻿/, ''));
+  } catch (e) {
+    throw new Error(`The transcript ${found[0].name} couldn't be read: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const all = raw.segments ? raw.segments.flatMap((s) => s.words ?? []) : (raw.words ?? []);
   return {
     file: found[0].name,

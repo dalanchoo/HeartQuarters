@@ -557,6 +557,24 @@ describe('the transcript of a clip', () => {
     expect(found.words).toEqual([{ start: 1, end: 2, word: 'finished' }]);
   });
 
+  it('never reads a transcript through a Subtitles junction that points outside (code review #3)', () => {
+    const away = path.join(tmp, 'Outside');
+    fs.mkdirSync(away);
+    fs.writeFileSync(path.join(away, '001-captions.words.json'), JSON.stringify(words('secret')));
+    fs.mkdirSync(path.join(tmp, 'Videos', VIDEO, 'Longform'), { recursive: true });
+    fs.symlinkSync(away, path.join(tmp, 'Videos', VIDEO, 'Longform', 'Subtitles'), 'junction');
+    expect(readTranscript(VIDEO)).toBeNull();
+    write('Claude/transcript', 'Video.words.json', words('ours'));
+    expect(readTranscript(VIDEO)!.words[0].word).toBe('ours');
+  });
+
+  it('says plainly when the transcript is not valid', () => {
+    const full = path.join(tmp, 'Videos', VIDEO, 'Longform', 'Subtitles');
+    fs.mkdirSync(full, { recursive: true });
+    fs.writeFileSync(path.join(full, '001-captions.words.json'), '{ not json');
+    expect(() => readTranscript(VIDEO)).toThrow(/001-captions\.words\.json couldn't be read/);
+  });
+
   it("prefers the final video's transcript in Subtitles over older places", () => {
     write('Intermediate/Transcript', 'Video - edit.words.json', words('older place'));
     write('Claude/transcript', 'Video - final.words.json', words('work in progress'));
