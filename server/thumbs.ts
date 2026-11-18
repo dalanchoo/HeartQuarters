@@ -23,6 +23,24 @@ async function limited<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * After FFmpeg: moves the finished preview into place, or cleans up and explains. Any file error (a full disk, a locked
+ * file) is thrown here, so the caller can turn it into a refused preview instead of an error that stops HeartQuarters.
+ */
+export function finishPreview(code: number | null, tmp: string, out: string, err: string): string {
+  if (code === 0 && fs.existsSync(tmp)) {
+    try {
+      fs.renameSync(tmp, out);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      throw new Error(`Couldn't save the preview: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    return out;
+  }
+  fs.rmSync(tmp, { force: true });
+  throw new Error(`Couldn't make a preview: ${err.trim() || `ffmpeg exit ${code}`}`);
+}
+
 function runFfmpeg(source: string, out: string, width: number): Promise<string> {
   const tmp = `${out}.${process.pid}.tmp.jpg`;
   return new Promise((resolve, reject) => {
@@ -34,13 +52,12 @@ function runFfmpeg(source: string, out: string, width: number): Promise<string> 
     let err = '';
     child.stderr.on('data', (b: Buffer) => (err += b.toString()));
     child.on('error', reject);
+    // Inside a callback, an uncaught error would stop the whole server, so every failure becomes a rejection.
     child.on('close', (code) => {
-      if (code === 0 && fs.existsSync(tmp)) {
-        fs.renameSync(tmp, out);
-        resolve(out);
-      } else {
-        fs.rmSync(tmp, { force: true });
-        reject(new Error(`Couldn't make a preview: ${err.trim() || `ffmpeg exit ${code}`}`));
+      try {
+        resolve(finishPreview(code, tmp, out, err));
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)));
       }
     });
   });
