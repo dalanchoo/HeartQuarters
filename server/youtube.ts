@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appDir, isInside, safeResolve } from './config.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
-import { readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.js';
+import { deleteCaptionTrack, extraCaptionTracks, HQ_TRACK_NAME, readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
 import { addYoutubePlaylist, checkPlaylistIds, listYoutubePlaylists, playlistVideoItems, removePlaylistVideoItem } from './youtube-playlists.js';
 import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVideoId, type YoutubeVideoSettings, readYoutubeVideos } from './youtube-video.js';
@@ -134,14 +134,27 @@ export async function existingYoutubeSettings(piece: string, id: string, withCap
  * The captions YouTube has for a linked video, as text (about 250 units: 50 to find the track, 200 to download it).
  * The uploaded track is preferred; YouTube's automatic one is used only when there's no other.
  */
-export async function downloadYoutubeCaptions(piece: string, id: string): Promise<{ track: { language: string; kind: string; name: string } | null; text: string | null }> {
+export async function downloadYoutubeCaptions(piece: string, id: string): Promise<{ track: { language: string; kind: string; name: string } | null; text: string | null; extra: { name: string; language: string }[] }> {
   const job = completedUpload(piece, id); const token = await youtubeAccessToken();
   const tracks = await youtubeCaptionTracks(token, job.videoId!);
-  const track = tracks.find((t) => t.kind.toLowerCase() !== 'asr') ?? tracks[0];
-  if (!track) return { track: null, text: null };
+  // HeartQuarters' own track first; any other copy in its language is reported, so it can be removed.
+  const track = tracks.find((t) => t.name === HQ_TRACK_NAME && t.kind.toLowerCase() !== 'asr') ?? tracks.find((t) => t.kind.toLowerCase() !== 'asr') ?? tracks[0];
+  const extra = extraCaptionTracks(tracks).map((t) => ({ name: t.name, language: t.language }));
+  if (!track) return { track: null, text: null, extra };
   const res = await youtubeFetch(`https://www.googleapis.com/youtube/v3/captions/${encodeURIComponent(track.id)}?tfmt=srt`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`YouTube didn't send the captions (${res.status}). Captions YouTube made automatically may not be downloadable.`);
-  return { track: { language: track.language, kind: track.kind, name: track.name }, text: await res.text() };
+  return { track: { language: track.language, kind: track.kind, name: track.name }, text: await res.text(), extra };
+}
+
+/**
+ * Deletes the other caption tracks in the language of HeartQuarters' own track (see extraCaptionTracks), after
+ * listing them again, so only those are touched. 50 units to list, 50 per track deleted. Returns how many went.
+ */
+export async function removeExtraCaptions(piece: string, id: string): Promise<{ removed: number }> {
+  const job = completedUpload(piece, id); const token = await youtubeAccessToken();
+  const extra = extraCaptionTracks(await youtubeCaptionTracks(token, job.videoId!));
+  for (const t of extra) await deleteCaptionTrack(token, t.id);
+  return { removed: extra.length };
 }
 
 export async function syncYoutubeSettings(piece: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings, before: unknown, after: unknown, subtitle: unknown, cover: unknown) {
