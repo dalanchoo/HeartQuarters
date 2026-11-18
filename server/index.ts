@@ -26,6 +26,7 @@ import { readExpressionReferences, saveExpressionReferences } from './expression
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
 import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
+import { cleanupPlan, runCleanup } from './cleanup.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
@@ -543,6 +544,16 @@ app.post('/api/brief/choose', handle((req, res) => {
 // { piece, photo }: the expressions-library photo for the chosen pair.
 app.post('/api/brief/photo', handle((req, res) => {
   res.json(chooseBriefPhoto(String(req.body?.piece ?? ''), req.body?.photo));
+}));
+
+// ?piece=: Clean Up's list for a finished longform or Short (reads the CapCut projects; changes nothing). See cleanup.ts.
+app.get('/api/cleanup', handle((req, res) => {
+  res.json(cleanupPlan(String(req.query.piece ?? '')));
+}));
+
+// { piece, token }: carries out the list John approved; everything goes to HeartQuarters Trash.
+app.post('/api/cleanup', handle((req, res) => {
+  res.json(runCleanup(String(req.body?.piece ?? ''), req.body?.token));
 }));
 
 // ?piece=: the saved photo ranking for the chosen pair, and whether Claude is ranking now. See photo-ranking.ts.

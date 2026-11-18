@@ -136,7 +136,7 @@ function checkDrafts(chosen: unknown, offered: string[]): string[] {
   return list;
 }
 
-function requireCapCutClosed() {
+export function requireCapCutClosed() {
   if (system.isCapCutRunning()) {
     throw new Error('Close CapCut first, then try again. (If CapCut is open, it can save its old copy of a draft and wipe out the change.) Nothing was changed.');
   }
@@ -152,7 +152,7 @@ function parentPage(segments: string[]): string {
 const forwardSlashes = (p: string) => p.split(path.sep).join('/');
 
 /** Updates one draft's text files. Throws if any of them can't be read or written. */
-function relinkDraft(dir: string, from: string, to: string) {
+export function relinkDraft(dir: string, from: string, to: string) {
   for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!e.isFile() || !/\.(json|bak|tmp)$/i.test(e.name)) continue;
     const file = path.join(e.parentPath, e.name);
@@ -258,7 +258,7 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
 }
 
 /** A new, unused folder inside the trash for one delete: "2026-11-06 2315 - 023 - Test". */
-function trashSlot(name: string): string {
+export function trashSlot(name: string): string {
   const now = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;

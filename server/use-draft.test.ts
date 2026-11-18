@@ -93,6 +93,8 @@ describe('using a draft in the selected version', () => {
     expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Backups', replaced), 'utf8')).toBe('old thumb');
     expect(source.some((f) => f.startsWith('Replaced'))).toBe(false);
     expect(source).toEqual(expect.arrayContaining(['Brief.md', 'Draft - ChatGPT 01 round 05.png', 'Photo - Relief_008.jpg', 'References - ChatGPT 01', 'Requests - ChatGPT 01.md']));
+    // Its list of what it added, for Clean Up: only its own files.
+    expect(JSON.parse(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Source', '.heartquarters-added.json'), 'utf8'))).toEqual(['Brief.md', 'Draft - ChatGPT 01 round 05.png', 'Photo - Relief_008.jpg', 'References - ChatGPT 01', 'Requests - ChatGPT 01.md']);
     const youtube = fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8');
     expect(youtube).toContain('Title:\nFour People Pointed the Same Way\n');
     expect(youtube).toContain('The newest description.'); // the rest is untouched

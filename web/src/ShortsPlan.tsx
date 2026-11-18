@@ -17,6 +17,7 @@ import {
   type TimedWord,
 } from './api';
 import { ClaudeChat } from './ClaudeChat';
+import { CleanUp } from './CleanUp';
 import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
 
@@ -242,6 +243,11 @@ export function ShortsPlanCard({ video }: { video: string }) {
           )}
         </>
       )}
+      <CleanUp
+        piece={`${video}/Shorts`}
+        onDone={refresh}
+        intro="When you've made all the Shorts you want from this video: the Shorts Plan (with its earlier copies) and the retention graphs go to HeartQuarters Trash, and Unmade Shorts, Made Shorts and Near Misses go with them. The Shorts themselves stay."
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   type ProjectNode,
 } from './api';
 import { ManageButtons } from './ManageFolder';
+import { CleanUp } from './CleanUp';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
@@ -711,6 +712,7 @@ function PieceCard({
       )}
       {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
+      {piece.kind !== 'reel' && <CleanUp piece={piece.path} onDone={onChanged} />}
     </>
   );
 

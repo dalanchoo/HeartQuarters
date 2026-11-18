@@ -12,6 +12,7 @@ import { safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { versionFolder } from './packaging-version.js';
 import { copyNewFile, makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
+import { madeByHeartQuarters, SOURCE_MANIFEST } from './cleanup.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, NOTES_FILE, readChoice, type BriefPick } from './projects.js';
 import { isShort, readConversation } from './thumbnails.js';
 import { AI_NAMES } from './ai.js';
@@ -168,6 +169,17 @@ export async function useDraft(piece: string, image: string, version: string, pa
           const keptRefs = folder(path.join(source, `References - ${conv}`));
           for (const f of fs.readdirSync(refs)) if (fs.lstatSync(path.join(refs, f)).isFile()) copy(path.join(refs, f), path.join(keptRefs, f));
         }
+        // HeartQuarters' list of what it put in Source, so Clean Up removes only those and never John's own files.
+        const manifest = path.join(source, SOURCE_MANIFEST);
+        let listed: string[] = [];
+        try {
+          const old = JSON.parse(readText(manifest)) as unknown;
+          if (Array.isArray(old)) listed = old.filter((x): x is string => typeof x === 'string');
+        } catch {
+          /* none yet */
+        }
+        const ours = fs.readdirSync(source).filter((name) => madeByHeartQuarters(name) && name !== SOURCE_MANIFEST);
+        write(writable(manifest), JSON.stringify([...new Set([...listed, ...ours])].sort(), null, 2) + '\n');
       };
       const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
       notes.push(
