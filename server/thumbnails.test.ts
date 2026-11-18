@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { changeThumbnail, firstRequest, geminiImageArgs, isShort, nextConversationName, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
+import { changeThumbnail, firstRequest, geminiImageArgs, isShort, lastReply, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -18,6 +18,7 @@ beforeEach(() => {
     [`Projects/${LONGFORM}/Packaging/Drafts/Brief.md`]: '# Brief',
     'Projects/022 - Other/Longform/Packaging/Drafts/Gemini 01/01.png': 'png',
     'Expressions/Positive/Relief/Relief_008.jpg': 'photo',
+    'Expressions/Empathy/Compassion/Compassion_005.jpg': 'new photo',
   });
   saved.projects = config.videoProjectsDir;
   saved.expressions = config.expressionsDir;
@@ -177,6 +178,48 @@ describe('change requests', () => {
     expect(() => changeThumbnail(LONGFORM, `${LONGFORM}/Packaging/Drafts/ChatGPT 01`, 'x', fakeMake)).toThrow(/still working/);
     release();
     await finished;
+  });
+});
+
+describe('a change with the photo chosen since', () => {
+  it('sends that photo as the new identity reference, and it becomes the conversation photo', async () => {
+    choose();
+    await startThumbnail(LONGFORM, 'codex', fakeMake).finished;
+    choose('Empathy/Compassion/Compassion_005.jpg');
+    const conversation = `${LONGFORM}/Packaging/Drafts/ChatGPT 01`;
+    await changeThumbnail(LONGFORM, conversation, 'Regenerate with the newly selected image', fakeMake, { photo: true }).finished;
+    const newPhoto = path.join(tmp, 'Expressions', 'Empathy', 'Compassion', 'Compassion_005.jpg');
+    expect(calls[1]).toMatchObject({ session: 'session-codex', out: '02.png', photo: newPhoto });
+    expect(calls[1].prompt).toContain(`saved at: ${newPhoto}). From now on it is THE IDENTITY REFERENCE`);
+    expect(calls[1].prompt).not.toContain('especially his face and likeness');
+    const folder = path.join(drafts(), 'ChatGPT 01');
+    expect(fs.readFileSync(path.join(folder, 'Requests.md'), 'utf8')).toContain('New photo: Empathy/Compassion/Compassion_005.jpg');
+    expect(JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')).photo).toBe('Empathy/Compassion/Compassion_005.jpg');
+  });
+  it("is refused when no photo is chosen, and doesn't change the conversation's photo when not asked", async () => {
+    choose();
+    await startThumbnail(LONGFORM, 'codex', fakeMake).finished;
+    const conversation = `${LONGFORM}/Packaging/Drafts/ChatGPT 01`;
+    choose(null);
+    expect(() => changeThumbnail(LONGFORM, conversation, 'x', fakeMake, { photo: true })).toThrow(/No photo is chosen/);
+    choose('Empathy/Compassion/Compassion_005.jpg');
+    await changeThumbnail(LONGFORM, conversation, 'bigger text', fakeMake).finished;
+    expect(calls[1].photo).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(path.join(drafts(), 'ChatGPT 01', 'Conversation.json'), 'utf8')).photo).toBe('Positive/Relief/Relief_008.jpg');
+  });
+});
+
+describe('when an AI makes no image', () => {
+  it("says what the AI said, such as a question it asked", () => {
+    const codex = [
+      '{"type":"thread.started","thread_id":"t1"}',
+      '{"type":"item.completed","item":{"type":"agent_message","text":"I will check the folder first."}}',
+      '{"type":"item.completed","item":{"type":"agent_message","text":"I need the newly selected photo. Please attach it."}}',
+    ].join('\n');
+    expect(lastReply(codex)).toBe('I need the newly selected photo. Please attach it.');
+    expect(noImageError('ChatGPT', codex).message).toBe(`ChatGPT didn't make an image. It said: "I need the newly selected photo. Please attach it."`);
+    expect(lastReply('{"type":"message","role":"assistant","content":[{"type":"text","text":"No can do."}]}')).toBe('No can do.');
+    expect(noImageError('Gemini', 'not json').message).toBe("Gemini finished but didn't make an image.");
   });
 });
 

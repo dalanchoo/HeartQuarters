@@ -51,6 +51,8 @@ export interface DraftConversation {
   requests: FileRef | null;
   /** The title and thumbnail text these images were made for (from Conversation.json), if known. */
   pick: BriefPick | null;
+  /** The photo of John it uses now (from Conversation.json), relative to the expressions library, if known. */
+  photo: string | null;
 }
 
 /** One of the brief's top title and thumbnail pairs (Picks.json, written by Write Brief's last step). */
@@ -286,6 +288,16 @@ function readConversationPick(folder: string): BriefPick | null {
   }
 }
 
+/** The photo a draft conversation uses now, from its Conversation.json; null if there's none. */
+function readConversationPhoto(folder: string): string | null {
+  try {
+    const photo = (JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')) as { photo?: unknown }).photo;
+    return typeof photo === 'string' && photo ? photo : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Packaging\Drafts: Brief.md, and one folder per AI conversation with its images and Requests.md. */
 function readDrafts(packagingRoot: string): Drafts | null {
   const name = subfolders(packagingRoot).find((f) => f.toLowerCase() === DRAFTS_FOLDER.toLowerCase());
@@ -300,6 +312,7 @@ function readDrafts(packagingRoot: string): Drafts | null {
       images: filesIn(cDir, IMAGE_EXTS).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
       requests: named(filesIn(cDir, DOC_EXTS), 'requests.md'),
       pick: readConversationPick(cDir),
+      photo: readConversationPhoto(cDir),
     };
   });
   return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), picks: readPicks(path.join(dir, PICKS_FILE)), choice: readChoice(path.join(dir, CHOICE_FILE)), conversations };

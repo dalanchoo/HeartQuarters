@@ -35,10 +35,14 @@ export interface ImageAnswer {
  */
 export type MakeImage = (ai: ImageAi, prompt: string, cwd: string, out: string, opts: { session?: string; photo?: string; refs?: string[] }) => Promise<ImageAnswer>;
 
-/** Reference images for a change request: pasted or dropped ones (base64), and drafts of this video (paths). */
+/**
+ * Reference images for a change request: pasted or dropped ones (base64), and drafts of this video (paths). `photo`:
+ * also send the photo of John chosen now (Choice.json), as the new identity reference.
+ */
 export interface ChangeRefs {
   pasted?: unknown;
   drafts?: unknown;
+  photo?: unknown;
 }
 
 /** Conversation.json: which AI, its conversation id, the photo, and the pair it was made for (drafts made before the pair was saved here have none). */
@@ -114,16 +118,24 @@ export function firstRequest(choice: BriefChoice, short: boolean, out: string): 
   ].join('\n\n');
 }
 
-export function changeRequest(text: string, out: string, refs: string[] = []): string {
+export function changeRequest(text: string, out: string, refs: string[] = [], newPhoto?: string): string {
   return [
     `Change request from John for the thumbnail you made last in this conversation: ${text.trim()}`,
+    ...(newPhoto
+      ? [
+          `John chose a new photo of himself for it (attached, and saved at: ${newPhoto}). From now on it is THE IDENTITY REFERENCE: ` +
+            "take his face and expression from this photo, keeping his exact likeness (grey hair, goatee, face shape, skin texture, age; don't beautify, smooth or make him younger). Keep the text, layout and background unless he asks otherwise.",
+        ]
+      : []),
     ...(refs.length
       ? [
           `John added ${refs.length === 1 ? 'a reference image' : `${refs.length} reference images`} to show what he means (attached, and saved at: ${refs.join('; ')}). ` +
             "Use it only as a reference for what he describes, such as how an object looks; it doesn't replace his face or the thumbnail's text.",
         ]
       : []),
-    "Keep everything else the same, especially his face and likeness, unless he asks otherwise. Use your image tool to edit the image (not code).",
+    newPhoto
+      ? 'Keep everything else the same unless he asks otherwise. Use your image tool to make the image (not code).'
+      : "Keep everything else the same, especially his face and likeness, unless he asks otherwise. Use your image tool to edit the image (not code).",
     `Save the result at the size the tool makes, without enlarging it with code, in the current folder as ${out}, and reply with its full path.`,
   ].join('\n\n');
 }
@@ -174,6 +186,38 @@ export function sessionFrom(output: string, key: 'thread_id' | 'conversation_id'
   return '';
 }
 
+/**
+ * The AI's last words in its JSON lines (Codex's agent messages, Antigravity's assistant messages), so that when it
+ * makes no image John sees why, such as a question it asked. Empty when there are none.
+ */
+export function lastReply(output: string): string {
+  let last = '';
+  const text = (v: unknown): string =>
+    typeof v === 'string' ? v : Array.isArray(v) ? v.map((c) => (typeof c === 'string' ? c : typeof (c as { text?: unknown })?.text === 'string' ? (c as { text: string }).text : '')).join('') : '';
+  for (const line of output.split(/\r?\n/)) {
+    let event: Record<string, any>;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!event || typeof event !== 'object') continue;
+    const said =
+      (event.item?.type === 'agent_message' && text(event.item.text)) ||
+      (event.msg?.type === 'agent_message' && text(event.msg.message)) ||
+      text(event.last_agent_message) ||
+      ((event.role === 'assistant' || event.type === 'assistant') && (text(event.content) || text(event.text) || text(event.message?.content)));
+    if (said && said.trim()) last = said.trim();
+  }
+  return last;
+}
+
+/** The error when an AI finished without an image: what it said, if anything. */
+export function noImageError(name: string, output: string): Error {
+  const said = lastReply(output);
+  return new Error(said ? `${name} didn't make an image. It said: "${said.length > 600 ? `${said.slice(0, 600)}…` : said}"` : `${name} finished but didn't make an image.`);
+}
+
 /** Tell Gemini about each image and allow it to read each image's folder. */
 export function geminiImageArgs(prompt: string, cwd: string, opts: { session?: string; photo?: string; refs?: string[] }): string[] {
   const { session, photo, refs = [] } = opts;
@@ -195,7 +239,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
     const id = session || sessionFrom(output, 'thread_id');
     // If it didn't save where asked, the image tool keeps its own copy.
     const image = fs.existsSync(saved) ? saved : newestImage(path.join(os.homedir(), '.codex', 'generated_images', id), started);
-    if (!image) throw new Error("ChatGPT finished but didn't make an image.");
+    if (!image) throw noImageError('ChatGPT', output);
     return { image, session: id };
   }
   const args = geminiImageArgs(prompt, cwd, { session, photo, refs });
@@ -203,7 +247,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
   const id = session || sessionFrom(output, 'conversation_id');
   // Antigravity can't save outside its own folder in a sandbox, so the image is taken from there.
   const image = fs.existsSync(saved) ? saved : id ? newestImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain', id), started) : null;
-  if (!image) throw new Error("Gemini finished but didn't make an image.");
+  if (!image) throw noImageError('Gemini', output);
   return { image, session: id };
 };
 
@@ -344,15 +388,26 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
     throw new Error("This draft wasn't made by Make Thumbnail, so there's no conversation to continue. Make a new one.");
   }
   if (!info.session) throw new Error('The AI gave no conversation to continue. Make a new one.');
+  // The photo of John chosen now, when he asked for it to be sent: it becomes the conversation's photo.
+  let newPhoto: { name: string; full: string } | null = null;
+  if (refs.photo === true) {
+    const chosen = readChoice(path.join(drafts, CHOICE_FILE))?.photo;
+    if (!chosen) throw new Error('No photo is chosen for the pair. Pick one first.');
+    const full = resolveExpressionPhoto(chosen);
+    if (!fs.existsSync(full)) throw new Error(`The photo ${chosen} isn't in the expressions library any more.`);
+    newPhoto = { name: chosen, full };
+  }
   const out = nextImageName(folder);
   const number = out.replace(/\.png$/, '');
   const saved = saveReferences(drafts, folder, number, refs);
-  const prompt = changeRequest(request, out, saved);
+  const prompt = changeRequest(request, out, saved, newPhoto?.full);
   return runJob(folder, info.ai, async () => {
     const work = workFolder(path.basename(folder));
-    const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved });
+    const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
     fs.copyFileSync(answer.image, path.join(folder, out));
     const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
-    fs.appendFileSync(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${refNote}\n`);
+    const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
+    fs.appendFileSync(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
+    if (newPhoto) fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
   });
 }
