@@ -176,6 +176,12 @@ describe('cleaning up a video', () => {
     expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
   });
 
+  it("ignores old paths in CapCut's proxy list, draft_agency_config.json", () => {
+    const gone = fwd(V('Longform', 'Video', 'Raw', 'take.mkv'));
+    fs.writeFileSync(path.join(tmp, 'Drafts', '022 - V', 'draft_agency_config.json'), JSON.stringify({ marterials: [{ source_path: gone }] }));
+    expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
+  });
+
   it("checks a Short's own project too, even when its links all point somewhere else", () => {
     const draft = path.join(tmp, 'Drafts', '022_S01 - A');
     fs.mkdirSync(draft, { recursive: true });

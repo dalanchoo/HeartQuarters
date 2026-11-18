@@ -175,7 +175,9 @@ function* scanLinks(video: string): Generator<void, CapCutLinks> {
       }
       // "template (1).json", "mini_draft (1).json": copies Google Drive made, which CapCut never reads. Their links still
       // count as used (keeping more is safe), but a stale link in them isn't a missing link in the project.
-      const driveCopy = / \(\d+\)\.[a-z]+$/i.test(e.name);
+      // draft_agency_config.json only remembers which clips CapCut once made proxies for; it isn't checked when the
+      // project opens, so old paths in it aren't broken links (005B, 2026-11-18).
+      const driveCopy = / \(\d+\)\.[a-z]+$/i.test(e.name) || e.name.toLowerCase() === 'draft_agency_config.json';
       for (const original of paths) {
         const value = original.toLowerCase();
         if (value.startsWith(prefix)) used.add(value);
