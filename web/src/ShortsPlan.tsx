@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
+
 import {
   fileUrl,
   getJson,
@@ -18,6 +19,9 @@ import {
 import { ClaudeChat } from './ClaudeChat';
 import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
+
+/** Sent when a short in the plan opens, so the others close. */
+const PLAN_SHORT_OPENED = 'hq-plan-short-opened';
 
 type Transcript = { file: string; words: TimedWord[] } | null;
 
@@ -283,6 +287,15 @@ function ShortCard({
 }) {
   // The insides, the video above all, exist only while the card is open.
   const [open, setOpen] = useState(false);
+  // One short open at a time across Unmade Shorts, Made Shorts and Near Misses: opening one closes the others.
+  const card = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const other = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== short.id && card.current?.open) card.current.open = false;
+    };
+    window.addEventListener(PLAN_SHORT_OPENED, other);
+    return () => window.removeEventListener(PLAN_SHORT_OPENED, other);
+  }, [short.id]);
   // Where the handles are during a drag. Saved to the plan only when the mouse lets go.
   const [dragged, setDragged] = useState<Clip | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -308,7 +321,15 @@ function ShortCard({
         : null;
 
   return (
-    <details className="short-card" onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details
+      ref={card}
+      className="short-card"
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        if (now) window.dispatchEvent(new CustomEvent(PLAN_SHORT_OPENED, { detail: short.id }));
+      }}
+    >
       <summary>
         <span className="muted">{short.id}</span>
         <span className="short-card-title">{short.title}</span>
