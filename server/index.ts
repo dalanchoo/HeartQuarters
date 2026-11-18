@@ -63,6 +63,7 @@ import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
 import { youtubeQuota } from './youtube-quota.js';
+import { downloadVideoAnalytics } from './analytics.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -76,6 +77,9 @@ app.use(express.json());
 // YouTube sign-in and uploads. The callback is a Google browser redirect; its
 // one-use state and PKCE verifier are checked before accepting the response.
 app.get('/api/youtube/status', handle((_req, res) => { res.json(youtubeStatus()); }));
+app.post('/api/youtube/analytics/video', (req, res) => {
+  downloadVideoAnalytics(String(req.body?.piece ?? ''), String(req.body?.id ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
 // How much of today's YouTube quota HeartQuarters has used (it counts its own requests).
 app.get('/api/youtube/quota', handle((_req, res) => { res.json(youtubeQuota()); }));
 app.post('/api/youtube/configure', handle((req, res) => { configureYoutube(req.body?.clientId, req.body?.clientSecret); res.json({ ok: true }); }));

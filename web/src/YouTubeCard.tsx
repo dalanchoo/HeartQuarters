@@ -16,6 +16,7 @@ import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
+import { VideoAnalytics } from './VideoAnalytics';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
 import { canSelectIncomingCopy } from './stagedPackaging';
 
@@ -249,6 +250,7 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
               </button>
             )}
           </div>
+          {linked && job && <VideoAnalytics key={job.id} piece={piece.path} id={job.id} />}
           {!status.captionAccess && (
             <p className="small-text">
               To save playlists and captions, reconnect and grant Google’s additional permission. {signIn}

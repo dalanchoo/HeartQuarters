@@ -3,6 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
+import { youtubeAccessToken } from './youtube-auth.js';
+import { uploadsFor } from './youtube.js';
+import { readYoutubeVideo } from './youtube-video.js';
 
 export interface AnalyticsPeriod { name: string; start: string; end: string; complete: boolean }
 export interface AnalyticsReport { columns?: unknown[]; rows?: unknown[][] }
@@ -78,4 +81,18 @@ export function saveVideoAnalytics(piece: string, snapshot: AnalyticsSnapshot): 
     fs.writeFileSync(file, JSON.stringify(snapshot, null, 2) + '\n', { flag: 'wx' });
     return path.join(relative, name, 'Stats.json').split(path.sep).join('/');
   }
+}
+
+/** Download only the YouTube video explicitly linked to this project. */
+export async function downloadVideoAnalytics(piece: string, id: string) {
+  const job = uploadsFor(piece).find(item => item.id === id && item.status === 'done' && item.videoId);
+  if (!job?.videoId) throw new Error('Link this video to YouTube first.');
+  const token = await youtubeAccessToken();
+  const { resource } = await readYoutubeVideo(token, job.videoId);
+  const publishedAt = resource.snippet?.publishedAt;
+  if (typeof publishedAt !== 'string' || !Number.isFinite(Date.parse(publishedAt))) throw new Error('YouTube did not provide a publication date for this video.');
+  const snapshot = await collectVideoAnalytics(job.videoId, publishedAt, token);
+  const file = saveVideoAnalytics(piece, snapshot);
+  const missing = snapshot.periods.filter(p => !p.retention || !p.retention.rows?.length).map(p => p.period.name);
+  return { file, missingRetention: missing, emptyStatistics: snapshot.periods.filter(p => !p.statistics.rows?.length).map(p => p.period.name) };
 }
