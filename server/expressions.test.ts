@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config';
-import { buildExpressionIndex, parseTags } from './expressions';
+import { buildExpressionIndex, isExpressionPhoto, parseTags } from './expressions';
 import { makeTree, removeTree } from './testing';
 
 describe('parseTags', () => {
@@ -87,5 +87,37 @@ describe('buildExpressionIndex', () => {
       totalCount: 2,
     });
     expect(cats.get('')?.totalCount).toBe(3);
+  });
+});
+
+describe('looking up one photo without scanning the library (code review #8)', () => {
+  let tmp: string;
+  let old: string;
+  beforeAll(() => {
+    tmp = makeTree({
+      'Lib/Positive/Joy/Joy_001.jpg': 'x',
+      'Lib/Positive/Joy/_Joy.png': 'reference picture',
+      'Lib/Positive/Joy/notes.txt': 'not a photo',
+      'Lib/_Archive/Old/Old_001.jpg': 'x',
+      'Lib/Top.jpg': 'not in a category',
+    });
+    old = config.expressionsDir;
+    config.expressionsDir = path.join(tmp, 'Lib');
+  });
+  afterAll(() => {
+    config.expressionsDir = old;
+    removeTree(tmp);
+  });
+  it('agrees with the library list on which files are photos', () => {
+    const listed = new Set(buildExpressionIndex().photos.map((p) => p.path));
+    for (const p of ['Positive/Joy/Joy_001.jpg', 'Positive/Joy/_Joy.png', 'Positive/Joy/notes.txt', '_Archive/Old/Old_001.jpg', 'Top.jpg', 'Positive/Joy/Missing.jpg']) {
+      expect(isExpressionPhoto(p)).toBe(listed.has(p));
+    }
+    expect(isExpressionPhoto('Positive/Joy/Joy_001.jpg')).toBe(true);
+  });
+  it('refuses paths outside the library', () => {
+    expect(isExpressionPhoto('../outside.jpg')).toBe(false);
+    expect(isExpressionPhoto('Positive/../../x.jpg')).toBe(false);
+    expect(isExpressionPhoto('')).toBe(false);
   });
 });

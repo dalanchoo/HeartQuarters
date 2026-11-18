@@ -113,6 +113,24 @@ export function findExpressionPhoto(index: ExpressionIndex, photoPath: string): 
   return photo && photos.filter(item => item.name.toLowerCase() === photo.name.toLowerCase()).length === 1 ? photo : undefined;
 }
 
+/**
+ * Whether one photo is in the library, looked up directly instead of scanning the whole library (code review #8):
+ * the same rules as the library list (an image in a category folder, no folder or file starting with "_"), and the
+ * inbox's own rules for a photo in the inbox.
+ */
+export function isExpressionPhoto(photoPath: string): boolean {
+  if (typeof photoPath !== 'string' || !photoPath) return false;
+  if (photoPath.startsWith(`${EXPRESSION_INBOX}/`)) return !!findExpressionPhoto({ rootDir: '', categories: [], photos: [] }, photoPath);
+  const parts = photoPath.split('/');
+  if (parts.length < 2 || parts.some((p) => !p || p === '.' || p === '..' || p.startsWith('_'))) return false;
+  if (!IMAGE_EXTS.has(path.extname(photoPath).toLowerCase())) return false;
+  try {
+    return fs.statSync(safeResolve('expressions', photoPath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 export function buildExpressionIndex(): ExpressionIndex {
   const root = config.expressionsDir;
   requireFolder(root, 'Expressions');

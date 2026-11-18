@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags } from './expressions.js';
+import { clearExpressionIndex, expressionIndex, isExpressionPhoto, parseTags } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
 /** Confirm an existing suggestion without changing its score or any other tags. */
 export function confirmExpressionTag(photoPath: string, name: string, confidence: unknown): void {
-  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
+  const photo = isExpressionPhoto(photoPath);
   if (!photo || !name || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or tag is not available.');
   const sidecarPath = photoPath.slice(0, -path.extname(photoPath).length) + '.txt';
   const sidecar = safeResolve('expressions', sidecarPath);
@@ -26,7 +26,7 @@ export function confirmExpressionTag(photoPath: string, name: string, confidence
 
 /** Record that an attribute does not apply; keep its score and model details. */
 export function disconfirmExpressionTag(photoPath: string, name: string, confidence: unknown, confirmed: unknown, disconfirmed: unknown): void {
-  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
+  const photo = isExpressionPhoto(photoPath);
   if (!photo || !name || typeof confirmed !== 'boolean' || typeof disconfirmed !== 'boolean' || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or tag is not available.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file.');
@@ -42,7 +42,7 @@ export function disconfirmExpressionTag(photoPath: string, name: string, confide
 
 /** Remove exactly the tag the user reviewed; reject if it has changed. */
 export function removeExpressionTag(photoPath: string, name: string, confidence: unknown, confirmed: unknown): void {
-  const photo = findExpressionPhoto(buildExpressionIndex(), photoPath);
+  const photo = isExpressionPhoto(photoPath);
   if (!photo || !name || typeof confirmed !== 'boolean' || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or tag is not available.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file, not a shortcut.');
@@ -56,8 +56,9 @@ export function removeExpressionTag(photoPath: string, name: string, confidence:
 
 /** Add a confirmed attribute from the appropriate existing vocabulary. */
 export function addExpressionTag(photoPath: string, name: string, group: unknown = 'expression'): void {
-  const index = buildExpressionIndex();
-  const photo = findExpressionPhoto(index, photoPath);
+  // The category names come from the library list kept for up to 30 seconds; the photo is looked up directly.
+  const index = expressionIndex();
+  const photo = isExpressionPhoto(photoPath);
   const parents = new Set(index.categories.map(c => c.parent));
   const category = index.categories.find(c => c.path && !parents.has(c.path) && c.name.toLowerCase() === name.trim().toLowerCase());
   const vocabulary = group === 'framing' ? FRAMING_TAGS : group === 'pose' ? POSE_TAGS : group === 'morphology' ? MORPHOLOGY_TAGS : null;
