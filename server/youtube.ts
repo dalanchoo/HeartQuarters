@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appDir, isInside, safeResolve } from './config.js';
+import { writeFileSafely } from './files.js';
 import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { deleteCaptionTrack, extraCaptionTracks, HQ_TRACK_NAME, readSubtitle, sendSubtitle, uploadSubtitle } from './youtube-captions.js';
 import { setVideoLanguage, videoLanguage } from './youtube-language.js';
@@ -33,6 +34,44 @@ export function uploadsFor(piece: string): UploadJob[] {
     } catch { return []; }
   }).reverse();
 }
+/** A piece (or file) path inside a folder: the folder itself or anything under it. */
+const inFolder = (p: string | undefined, folder: string) => !!p && (p === folder || p.startsWith(`${folder}/`));
+
+/** Whether an upload of something inside this folder is running now (a rename must wait for it). */
+export function uploadingInside(folder: string): boolean {
+  return [...jobs.values()].some((j) => j.status === 'uploading' && inFolder(j.piece, folder));
+}
+
+/**
+ * After a folder is renamed: the upload records of everything inside it point at the new path, so its videos and
+ * Shorts keep their YouTube link (John, 2026-11-18). Returns how many records changed.
+ */
+export function moveUploadRecords(oldFolder: string, newFolder: string): number {
+  const moved = (p: string | undefined) => (p && inFolder(p, oldFolder) ? newFolder + p.slice(oldFolder.length) : p);
+  const fix = (j: UploadJob) => {
+    j.piece = moved(j.piece)!;
+    j.video = moved(j.video)!;
+    if (j.subtitleFile) j.subtitleFile = moved(j.subtitleFile);
+  };
+  for (const job of jobs.values()) if (inFolder(job.piece, oldFolder)) fix(job);
+  if (!fs.existsSync(jobsDir())) return 0;
+  let changed = 0;
+  for (const f of fs.readdirSync(jobsDir()).filter((name) => /^[\da-f-]+\.json$/i.test(name))) {
+    const file = path.join(jobsDir(), f);
+    let job: UploadJob;
+    try {
+      job = JSON.parse(fs.readFileSync(file, 'utf8')) as UploadJob;
+    } catch {
+      continue; // an unreadable record is left as it is
+    }
+    if (!inFolder(job.piece, oldFolder)) continue;
+    fix(job);
+    writeFileSafely(file, JSON.stringify(job, null, 2));
+    changed++;
+  }
+  return changed;
+}
+
 export function validateUpload(input: UploadInput) {
   if (!input || typeof input.piece !== 'string' || !input.piece || typeof input.video !== 'string' || typeof input.cover !== 'string') throw new Error('Choose a video and packaging.');
   const piece = safeResolve('projects', input.piece);

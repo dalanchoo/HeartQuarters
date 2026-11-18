@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { writeFileSafely } from './files.js';
+import { moveUploadRecords, uploadingInside } from './youtube.js';
 import { STANDALONE_GROUP, checkDraftName, checkFolderName, listDrafts, plainDraftName } from './create.js';
 
 const PROJECT_RE = /^\d+\s*[-–]/; // "022 - ..."
@@ -210,8 +211,8 @@ export interface ManageResult {
 
 /**
  * Renames a video folder. Ticked drafts named after it get the new name too
- * (keeping CapCut's "(2)" etc.), and links inside every draft that uses files
- * from the folder are updated.
+ * (without CapCut's "(2)", unless that name is taken), and links inside every
+ * draft that uses files from the folder are updated.
  */
 export function renameFolder(id: string, rawNewName: string, drafts: unknown): ManageResult {
   const segments = checkManageable(id);
@@ -229,6 +230,7 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
   }
   const chosen = checkDrafts(drafts, draftsFor([oldName]));
   requireCapCutClosed();
+  if (uploadingInside(id)) throw new Error('A YouTube upload from this folder is still running. Wait for it to finish, then rename. Nothing was changed.');
 
   const from = safeResolve('projects', id);
   const to = safeResolve('projects', newId);
@@ -237,7 +239,9 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
 
   const notes: string[] = [`Renamed the folder to "${newName}".`];
   for (const d of chosen) {
-    const renamed = newName + d.slice(plainDraftName(d).length); // keeps "(2)"
+    // Exactly the new name, without CapCut's "(2)" (John, 2026-11-18); the number stays only if that name is taken.
+    const taken = (name: string) => fs.existsSync(path.join(config.capcutDraftsDir, name));
+    const renamed = taken(newName) ? newName + d.slice(plainDraftName(d).length) : newName;
     try {
       renameDraft(d, renamed);
       notes.push(`Renamed the CapCut draft "${d}" to "${renamed}".`);
@@ -252,6 +256,13 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
       `Couldn't check or update the links in ${failed.length === 1 ? 'this CapCut draft' : 'these CapCut drafts'}, so ` +
         `${failed.length === 1 ? 'it' : 'they'} may still point at the old name: ${failed.join(', ')}.`,
     );
+  }
+  // HeartQuarters' upload records name the folder, and give its videos their YouTube link.
+  try {
+    const records = moveUploadRecords(segments.join('/'), newId);
+    if (records) notes.push(`Updated ${records} YouTube upload record${records === 1 ? '' : 's'}, so the YouTube link${records === 1 ? ' stays' : 's stay'}.`);
+  } catch (e) {
+    notes.push(`Couldn't update the YouTube upload records, so the YouTube link may show as missing: ${e instanceof Error ? e.message : e}`);
   }
   const isPiece = segments.length >= 3 && segments[0] !== STANDALONE_GROUP;
   return { showId: isPiece ? parentPage(segments) : newId, message: notes.join(' ') };

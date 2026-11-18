@@ -9,6 +9,7 @@ import { makeTree, removeTree } from './testing';
 let tmp: string;
 let saved: { videos: string; drafts: string; trash: string };
 let capcutOpen = false;
+let savedJobs: string | undefined;
 const realCheck = system.isCapCutRunning;
 
 const projects = () => path.join(tmp, 'Video Projects');
@@ -55,9 +56,14 @@ beforeEach(() => {
   config.trashDir = path.join(tmp, 'Trash');
   capcutOpen = false;
   system.isCapCutRunning = () => capcutOpen;
+  // Upload records in a fake folder: the names here match real videos, so the real records must never be touched.
+  savedJobs = process.env.HQ_YOUTUBE_JOBS_DIR;
+  process.env.HQ_YOUTUBE_JOBS_DIR = path.join(tmp, 'jobs');
 });
 
 afterEach(() => {
+  if (savedJobs === undefined) delete process.env.HQ_YOUTUBE_JOBS_DIR;
+  else process.env.HQ_YOUTUBE_JOBS_DIR = savedJobs;
   config.videoProjectsDir = saved.videos;
   config.capcutDraftsDir = saved.drafts;
   config.trashDir = saved.trash;
@@ -145,15 +151,16 @@ describe('manageInfo', () => {
 });
 
 describe('renameFolder', () => {
-  it('renames the folder and its draft, keeps "(2)", and fixes links in every draft that uses its files', () => {
+  it('renames the folder and its draft (dropping "(2)"), and fixes links in every draft that uses its files', () => {
     const r = renameFolder('022 - Worth Telling Them', '022 - Worth Saying', ['022 - Worth Telling Them(2)']);
     expect(r.showId).toBe('022 - Worth Saying');
     expect(fs.existsSync(p('022 - Worth Saying', 'Longform', 'Raw', 'a.mp4'))).toBe(true);
     expect(fs.existsSync(p('022 - Worth Telling Them'))).toBe(false);
 
-    const renamed = path.join(drafts(), '022 - Worth Saying(2)');
+    const renamed = path.join(drafts(), '022 - Worth Saying');
+    expect(fs.existsSync(path.join(drafts(), '022 - Worth Saying(2)'))).toBe(false);
     const m = JSON.parse(read(path.join(renamed, 'draft_meta_info.json')));
-    expect(m.draft_name).toBe('022 - Worth Saying(2)');
+    expect(m.draft_name).toBe('022 - Worth Saying');
     expect(m.draft_fold_path).toBe(renamed.split(path.sep).join('/'));
     const newMedia = `${vp()}/022 - Worth Saying/Longform/Raw/a.mp4`;
     expect(m.draft_materials[0].value[0].file_Path).toBe(newMedia);
@@ -175,6 +182,12 @@ describe('renameFolder', () => {
     expect(fs.readdirSync(path.join(drafts(), '022_S01 - One')).filter((n) => n.endsWith('.hq-tmp'))).toEqual([]);
   });
 
+  it('keeps the "(2)" only when a draft already has the new name', () => {
+    fs.mkdirSync(path.join(drafts(), '022 - Worth Saying'));
+    renameFolder('022 - Worth Telling Them', '022 - Worth Saying', ['022 - Worth Telling Them(2)']);
+    expect(fs.existsSync(path.join(drafts(), '022 - Worth Saying(2)', 'draft_meta_info.json'))).toBe(true);
+  });
+
   it('leaves drafts alone if they are not ticked (but still fixes links)', () => {
     renameFolder('022 - Worth Telling Them', '022 - Worth Saying', []);
     expect(fs.existsSync(path.join(drafts(), '022 - Worth Telling Them(2)'))).toBe(true);
@@ -185,6 +198,26 @@ describe('renameFolder', () => {
     expect(r.showId).toBe('022 - Worth Telling Them');
     expect(fs.existsSync(p('022 - Worth Telling Them', 'Shorts', '022_S01 - First', 'Exports', 's.mp4'))).toBe(true);
     expect(fs.existsSync(path.join(drafts(), '022_S01 - First'))).toBe(true);
+  });
+
+  it("keeps a renamed short's, and a renamed video's, YouTube upload records pointing at them", () => {
+    const jobs = path.join(tmp, 'jobs');
+    fs.mkdirSync(jobs);
+    const short = '022 - Worth Telling Them/Shorts/022_S01 - One';
+    const write = (id: string, piece: string) => fs.writeFileSync(path.join(jobs, `${id}.json`), JSON.stringify({ id, piece, video: `${piece}/Exports/s.mp4`, status: 'done', videoId: 'abc', sent: 0, total: 0, subtitleFile: `${piece}/Subtitles/s.srt` }));
+    write('aaaaaaaa-0000-0000-0000-000000000001', short);
+    write('aaaaaaaa-0000-0000-0000-000000000002', '015 - NVC/015A - Part One/Longform');
+    write('aaaaaaaa-0000-0000-0000-000000000003', '022 - Worth Telling Them/Shorts/022_S01 - One More'); // a different short
+    const read = (n: number) => JSON.parse(fs.readFileSync(path.join(jobs, `aaaaaaaa-0000-0000-0000-00000000000${n}.json`), 'utf8'));
+
+    const r = renameFolder(short, '022_S01 - First', []);
+    expect(r.message).toMatch(/Updated 1 YouTube upload record/);
+    expect(read(1)).toMatchObject({ piece: '022 - Worth Telling Them/Shorts/022_S01 - First', video: '022 - Worth Telling Them/Shorts/022_S01 - First/Exports/s.mp4', subtitleFile: '022 - Worth Telling Them/Shorts/022_S01 - First/Subtitles/s.srt', videoId: 'abc' });
+    expect(read(3).piece).toBe('022 - Worth Telling Them/Shorts/022_S01 - One More');
+
+    renameFolder('022 - Worth Telling Them', '022 - Worth Saying', []);
+    expect(read(1).piece).toBe('022 - Worth Saying/Shorts/022_S01 - First');
+    expect(read(2).piece).toBe('015 - NVC/015A - Part One/Longform');
   });
 
   it('refuses while CapCut is open, changing nothing', () => {
