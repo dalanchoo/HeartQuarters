@@ -111,76 +111,123 @@ export async function useDraft(piece: string, image: string, version: string, pa
   const conv = path.basename(conversation);
   const notes: string[] = [];
 
-  if (parts.thumbnail) {
-    // Every folder and file below is checked right before use: inside Video Projects, and no shortcut or junction on
-    // the way (safe-files.ts), so nothing can be moved or written somewhere else.
-    const thumbDir = makeFolder(path.join(dir, 'Thumbnail'));
-    const source = makeFolder(path.join(thumbDir, 'Source'));
-    const [width, height] = isShort(piece) ? [2160, 3840] : [3840, 2160];
-    // Made beside the old one first, so a failure leaves the version as it was.
-    const fresh = writable(path.join(thumbDir, 'Thumbnail.new.png'));
-    // Every place this will write is checked before anything is made, so a bad one stops it with nothing changed.
-    const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
-    const backupsPath = writable(path.join(thumbDir, 'Backups'));
-    if (old) writable(path.join(thumbDir, old));
-    writable(path.join(thumbDir, 'Thumbnail.png'));
-    const made = await measure(draft);
-    try {
-      await grow(draft, fresh, width, height);
-      if (old) {
-        const d = new Date();
-        const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
-        const backups = makeFolder(backupsPath);
-        moveFile(path.join(thumbDir, old), path.join(backups, kept));
-        notes.push(`The thumbnail before is kept as Thumbnail\\Backups\\${kept}.`);
-      }
-      moveFile(fresh, path.join(thumbDir, 'Thumbnail.png'));
-    } catch (e) {
-      fs.rmSync(fresh, { force: true });
-      throw e;
-    }
-    copyNewFile(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
-    if (photo) {
-      const full = resolveExpressionPhoto(photo);
-      copyNewFile(full, path.join(source, `Photo - ${path.basename(full)}`), photo.startsWith('project:') ? 'projects' : 'expressions');
-    }
-    copyNewFile(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));
-    copyNewFile(path.join(conversation, 'Requests.md'), path.join(source, `Requests - ${conv}.md`));
-    const refs = readable(path.join(conversation, 'References'));
-    if (fs.existsSync(refs)) {
-      const kept = makeFolder(path.join(source, `References - ${conv}`));
-      for (const f of fs.readdirSync(refs)) if (fs.lstatSync(path.join(refs, f)).isFile()) copyNewFile(path.join(refs, f), path.join(kept, f));
-    }
-    const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
-    notes.unshift(
-      `Thumbnail: draft ${conv}, round ${round}, by ${ai}${photo ? `, using the photo ${photo}` : ''}. ` +
-        (made ? `Made at ${made.width} x ${made.height}, enlarged to ${width} x ${height}.` : `Enlarged to ${width} x ${height}.`),
-    );
-  }
+  // Every change is recorded with how to undo it. If a later step fails (Drive offline, a locked file), the finished
+  // steps are undone in reverse, so the version is as it was (code review #4). Every path goes through safe-files.ts.
+  const undo: { what: string; run: () => void }[] = [];
+  const folder = (full: string) => {
+    const existed = fs.existsSync(full);
+    const made = makeFolder(full);
+    if (!existed) undo.push({ what: `the folder ${path.basename(full)}`, run: () => fs.rmdirSync(made) });
+    return made;
+  };
+  const copy = (from: string, to: string, root?: 'projects' | 'expressions') => {
+    const target = writable(to);
+    if (fs.existsSync(target)) return;
+    copyNewFile(from, to, root);
+    if (fs.existsSync(target)) undo.push({ what: path.basename(to), run: () => fs.rmSync(target, { force: true }) });
+  };
+  const write = (file: string, text: string) => {
+    const was = fs.existsSync(file) ? readText(file) : null;
+    writeFile(file, text);
+    undo.push({ what: path.basename(file), run: () => (was === null ? fs.rmSync(writable(file), { force: true }) : writeFile(file, was)) });
+  };
+  const move = (from: string, to: string) => {
+    moveFile(from, to);
+    undo.push({ what: path.basename(from), run: () => moveFile(to, from) });
+  };
+  let fresh: string | null = null;
 
-  if (pick) {
-    const ytName = fs.readdirSync(dir).find((f) => f.toLowerCase() === 'youtube.md') ?? 'YouTube.md';
-    const ytFile = writable(path.join(dir, ytName));
-    let youtube = fs.existsSync(ytFile) ? readText(ytFile) : '# YouTube Info\n\nTitle:\n';
-    if (parts.title) {
-      const before = getField(youtube, 'Title');
-      youtube = setField(youtube, 'Title', pick.title);
-      notes.push(before && before !== pick.title ? `Title: "${pick.title}" (it was "${before}").` : `Title: "${pick.title}".`);
-    }
+  try {
+    // 1. Getting ready: every place it will write checked, the new image made beside the old one, the new texts worked out.
+    let swap: { thumbDir: string; old?: string; backups: string; kept: string } | null = null;
+    let sources: (() => void) | null = null;
     if (parts.thumbnail) {
-      youtube = setField(youtube, 'Thumbnail text', pick.thumbnailText.toUpperCase());
-      youtube = setField(youtube, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
+      const thumbDir = folder(path.join(dir, 'Thumbnail'));
+      const source = folder(path.join(thumbDir, 'Source'));
+      const [width, height] = isShort(piece) ? [2160, 3840] : [3840, 2160];
+      const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
+      const backups = writable(path.join(thumbDir, 'Backups'));
+      if (old) writable(path.join(thumbDir, old));
+      writable(path.join(thumbDir, 'Thumbnail.png'));
+      const d = new Date();
+      const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
+      fresh = writable(path.join(thumbDir, 'Thumbnail.new.png'));
+      const made = await measure(draft);
+      await grow(draft, fresh, width, height);
+      swap = { thumbDir, old, backups, kept };
+      sources = () => {
+        copy(draft, path.join(source, `Draft - ${conv} round ${round}${path.extname(draft).toLowerCase()}`));
+        if (photo) {
+          const full = resolveExpressionPhoto(photo);
+          copy(full, path.join(source, `Photo - ${path.basename(full)}`), photo.startsWith('project:') ? 'projects' : 'expressions');
+        }
+        copy(path.join(drafts, 'Brief.md'), path.join(source, 'Brief.md'));
+        copy(path.join(conversation, 'Requests.md'), path.join(source, `Requests - ${conv}.md`));
+        const refs = readable(path.join(conversation, 'References'));
+        if (fs.existsSync(refs)) {
+          const keptRefs = folder(path.join(source, `References - ${conv}`));
+          for (const f of fs.readdirSync(refs)) if (fs.lstatSync(path.join(refs, f)).isFile()) copy(path.join(refs, f), path.join(keptRefs, f));
+        }
+      };
+      const ai = info ? AI_NAMES[info.ai] : conv.replace(/ \d+$/, '');
+      notes.push(
+        `Thumbnail: draft ${conv}, round ${round}, by ${ai}${photo ? `, using the photo ${photo}` : ''}. ` +
+          (made ? `Made at ${made.width} x ${made.height}, enlarged to ${width} x ${height}.` : `Enlarged to ${width} x ${height}.`),
+      );
+      if (old) notes.push(`The thumbnail before is kept as Thumbnail\\Backups\\${kept}.`);
     }
-    writeFile(ytFile, youtube.endsWith('\n') ? youtube : youtube + '\n');
-  }
 
-  // Notes.md: what was used, added at the end.
-  const notesName = fs.readdirSync(dir).find((f) => f.toLowerCase() === NOTES_FILE.toLowerCase()) ?? NOTES_FILE;
-  const notesFile = writable(path.join(dir, notesName));
-  const before = fs.existsSync(notesFile) ? readText(notesFile) : '';
-  const eol = before.includes('\r\n') ? '\r\n' : '\n';
-  const entry = [`${today()}: used from the drafts.`, ...notes].join(eol);
-  writeFile(notesFile, before.trim() ? `${before.replace(/\s+$/, '')}${eol}${eol}${entry}${eol}` : `${entry}${eol}`);
+    let youtube: { file: string; text: string } | null = null;
+    if (pick) {
+      const ytName = fs.readdirSync(dir).find((f) => f.toLowerCase() === 'youtube.md') ?? 'YouTube.md';
+      const ytFile = writable(path.join(dir, ytName));
+      let text = fs.existsSync(ytFile) ? readText(ytFile) : '# YouTube Info\n\nTitle:\n';
+      if (parts.title) {
+        const before = getField(text, 'Title');
+        text = setField(text, 'Title', pick.title);
+        notes.push(before && before !== pick.title ? `Title: "${pick.title}" (it was "${before}").` : `Title: "${pick.title}".`);
+      }
+      if (parts.thumbnail) {
+        text = setField(text, 'Thumbnail text', pick.thumbnailText.toUpperCase());
+        text = setField(text, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
+      }
+      youtube = { file: ytFile, text: text.endsWith('\n') ? text : text + '\n' };
+    }
+
+    // Notes.md: what was used, added at the end.
+    const notesName = fs.readdirSync(dir).find((f) => f.toLowerCase() === NOTES_FILE.toLowerCase()) ?? NOTES_FILE;
+    const notesFile = writable(path.join(dir, notesName));
+    const notesBefore = fs.existsSync(notesFile) ? readText(notesFile) : '';
+    const eol = notesBefore.includes('\r\n') ? '\r\n' : '\n';
+    const entry = [`${today()}: used from the drafts.`, ...notes].join(eol);
+    const notesText = notesBefore.trim() ? `${notesBefore.replace(/\s+$/, '')}${eol}${eol}${entry}${eol}` : `${entry}${eol}`;
+
+    // 2. The changes, each one undoable: the sources, YouTube.md, the thumbnail swap, then Notes.md.
+    sources?.();
+    if (youtube) write(youtube.file, youtube.text);
+    if (swap) {
+      if (swap.old) move(path.join(swap.thumbDir, swap.old), path.join(folder(swap.backups), swap.kept));
+      // The new image goes in last; undoing it removes it (the old one comes back from Backups after).
+      const installed = path.join(swap.thumbDir, 'Thumbnail.png');
+      moveFile(fresh!, installed);
+      fresh = null;
+      undo.push({ what: 'the new Thumbnail.png', run: () => fs.rmSync(writable(installed), { force: true }) });
+    }
+    write(notesFile, notesText);
+  } catch (e) {
+    if (fresh) fs.rmSync(fresh, { force: true });
+    const stuck: string[] = [];
+    for (const step of undo.reverse()) {
+      try {
+        step.run();
+      } catch {
+        stuck.push(step.what);
+      }
+    }
+    const why = e instanceof Error ? e.message : String(e);
+    if (!undo.length) throw e;
+    throw new Error(stuck.length ? `${why} Some changes couldn't be put back: ${stuck.join(', ')}. Check ${versionName}.` : `${why} Nothing was changed: what was done so far was put back.`);
+  }
 
   const what = parts.thumbnail && parts.title ? 'thumbnail and title' : parts.thumbnail ? 'thumbnail' : 'title';
   return { done: `${versionName} now uses this ${what}.` };

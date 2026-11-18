@@ -158,7 +158,37 @@ describe('using a draft in the selected version', () => {
       throw new Error('ffmpeg failed');
     };
     await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: true }, broken, fakeMeasure)).rejects.toThrow(/ffmpeg failed/);
-    expect(fs.readdirSync(path.join(v2(), 'Thumbnail')).sort()).toEqual(['Source', 'Thumbnail.jpg']);
+    // The Source folder it had just made is removed again: the version is exactly as it was.
+    expect(fs.readdirSync(path.join(v2(), 'Thumbnail')).sort()).toEqual(['Thumbnail.jpg']);
     expect(fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8')).toContain('Newer title');
+  });
+
+  it('puts everything back when the last step fails (code review #4)', async () => {
+    const before = {
+      youtube: fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8'),
+      notes: fs.readFileSync(path.join(v2(), 'Notes.md'), 'utf8'),
+    };
+    // Notes.md is written last; a read-only one makes that step fail after everything else is done.
+    fs.chmodSync(path.join(v2(), 'Notes.md'), 0o444);
+    try {
+      await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: true }, fakeGrow, fakeMeasure)).rejects.toThrow(/Nothing was changed: what was done so far was put back/);
+    } finally {
+      fs.chmodSync(path.join(v2(), 'Notes.md'), 0o666);
+    }
+    expect(fs.readdirSync(path.join(v2(), 'Thumbnail')).sort()).toEqual(['Thumbnail.jpg']);
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.jpg'), 'utf8')).toBe('old thumb');
+    expect(fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8')).toBe(before.youtube);
+    expect(fs.readFileSync(path.join(v2(), 'Notes.md'), 'utf8')).toBe(before.notes);
+  });
+
+  it('puts the thumbnail back when installing the new one fails', async () => {
+    const before = fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8');
+    // A folder where the new Thumbnail.png would go makes the swap fail after the old one has moved to Backups.
+    fs.mkdirSync(path.join(v2(), 'Thumbnail', 'Thumbnail.png'));
+    await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: true }, fakeGrow, fakeMeasure)).rejects.toThrow(/Nothing was changed/);
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.jpg'), 'utf8')).toBe('old thumb');
+    expect(fs.existsSync(path.join(v2(), 'Thumbnail', 'Backups'))).toBe(false);
+    expect(fs.existsSync(path.join(v2(), 'Thumbnail', 'Thumbnail.new.png'))).toBe(false);
+    expect(fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8')).toBe(before);
   });
 });
