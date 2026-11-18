@@ -605,7 +605,8 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .version-notes textarea { width: 100%; box-sizing: border-box; margin-top: 0.3rem; }
 
 /* Thumbnail & Title Drafts: the brief, and one box per AI conversation. */
-.drafts { margin: 0.8rem 0; }
+/* Generate Packaging: boxed like View and Compare Packaging and Clean Up beside it. */
+.drafts { border: 1px solid var(--line); border-radius: 8px; margin: 0.65rem 0; padding: 0.6rem 0.8rem; }
 .drafts > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.45rem; }
 .drafts > summary::before { content: '▸'; color: var(--muted); transition: transform 0.1s; }
 .drafts[open] > summary::before { transform: rotate(90deg); }
