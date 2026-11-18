@@ -14,7 +14,7 @@ export function VideoAnalytics({ piece, id, children }: { piece: string; id: str
     finally { setBusy(false); }
   };
   return <div className="video-analytics">
-    <div className="yt-linkbar-row">{children}<button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button></div>
+    <div className="yt-linkbar-row">{children}<button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button><span className="muted small-text">about 1 Data API unit + 8 Analytics units</span></div>
     {busy && <span role="status"> Downloading statistics and retention from YouTube…</span>}
     {error && <p className="error" role="alert">{error}</p>}
     {result && <div role="status"><p>Stats saved to {result.file}. <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button></p>

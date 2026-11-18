@@ -6,6 +6,7 @@ import { safeResolve } from './config.js';
 import { youtubeAccessToken } from './youtube-auth.js';
 import { uploadsFor } from './youtube.js';
 import { readYoutubeVideo } from './youtube-video.js';
+import { recordAnalyticsUse } from './youtube-quota.js';
 
 export interface AnalyticsPeriod { name: string; start: string; end: string; complete: boolean }
 export interface AnalyticsReport { columns?: unknown[]; rows?: unknown[][] }
@@ -42,6 +43,7 @@ async function report(fetcher: Fetch, token: string, videoId: string, period: An
   const params = new URLSearchParams({ ids: 'channel==MINE', startDate: period.start, endDate: period.end, filters: `video==${videoId}`,
     metrics: retention ? 'audienceWatchRatio' : 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained,subscribersLost' });
   if (retention) params.set('dimensions', 'elapsedVideoTimeRatio');
+  recordAnalyticsUse(); // Count attempts, including requests YouTube rejects.
   const response = await fetcher(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`YouTube Analytics request failed (${response.status}). Check that the YouTube Analytics API is enabled and YouTube is connected.`);
   const data = await response.json() as { columnHeaders?: unknown[]; rows?: unknown[][] };

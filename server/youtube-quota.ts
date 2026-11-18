@@ -16,6 +16,8 @@ interface QuotaDay {
   day: string;
   used: number;
   uploads: number;
+  /** Analytics requests attempted by HeartQuarters on this Pacific calendar day. */
+  analyticsUsed?: number;
   /** YouTube said the quota is used up. */
   exhausted: boolean;
   /** How many playlists the channel had last time they were listed, for cost estimates. */
@@ -78,6 +80,13 @@ export function recordYoutubeUse(units: number, upload = false) {
   save(q);
 }
 
+/** Analytics has its own quota; keep it separate from the YouTube Data API count. */
+export function recordAnalyticsUse() {
+  const q = load();
+  q.analyticsUsed = (q.analyticsUsed ?? 0) + 1;
+  save(q);
+}
+
 export function rememberPlaylistCount(count: number) {
   const q = load();
   q.playlists = count;
@@ -111,6 +120,7 @@ export interface YoutubeQuota {
   used: number;
   limit: number;
   uploads: number;
+  analyticsUsed: number;
   uploadLimit: number;
   exhausted: boolean;
   minutesUntilReset: number;
@@ -120,7 +130,7 @@ export interface YoutubeQuota {
 
 export function youtubeQuota(): YoutubeQuota {
   const q = load();
-  return { used: q.used, limit: DAILY_UNITS, uploads: q.uploads, uploadLimit: DAILY_UPLOADS, exhausted: q.exhausted, minutesUntilReset: minutesUntilReset(), playlists: q.playlists ?? null };
+  return { used: q.used, limit: DAILY_UNITS, uploads: q.uploads, analyticsUsed: q.analyticsUsed ?? 0, uploadLimit: DAILY_UPLOADS, exhausted: q.exhausted, minutesUntilReset: minutesUntilReset(), playlists: q.playlists ?? null };
 }
 
 /** Tests only: start from an empty count. */

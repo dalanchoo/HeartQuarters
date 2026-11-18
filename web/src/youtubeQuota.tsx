@@ -44,6 +44,7 @@ export function QuotaMeter() {
         : <>YouTube quota today: {n(quota.used)} of {n(quota.limit)} units used.</>}
       {' '}More at midnight Pacific (in {untilReset(quota.minutesUntilReset)}).
       {quota.uploads > 0 && <> Uploads today: {quota.uploads} of {quota.uploadLimit}.</>}
+      {' '}Analytics requests attempted today: {n(quota.analyticsUsed ?? 0)} (counting started with this update; HeartQuarters only).
     </p>
   );
 }

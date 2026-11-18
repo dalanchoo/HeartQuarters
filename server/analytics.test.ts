@@ -4,9 +4,10 @@ import path from 'node:path';
 import { analyticsPeriods, collectVideoAnalytics, pacificDate, saveVideoAnalytics } from './analytics.js';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
+import { resetQuotaForTests, youtubeQuota } from './youtube-quota.js';
 
 let root: string; let old: string;
-beforeEach(() => { root = makeTree({ '023 – John\'s Video/Longform/': '' }); old = config.videoProjectsDir; config.videoProjectsDir = root; });
+beforeEach(() => { resetQuotaForTests(); root = makeTree({ '023 – John\'s Video/Longform/': '' }); old = config.videoProjectsDir; config.videoProjectsDir = root; });
 afterEach(() => { config.videoProjectsDir = old; removeTree(root); });
 
 describe('video analytics', () => {
@@ -24,10 +25,15 @@ describe('video analytics', () => {
     expect(snapshot.periods[0].statistics.rows).toEqual([[12]]);
     expect(snapshot.periods[0].retention).toBeNull();
     expect(snapshot.periods[0].retentionError).toContain('400');
+    expect(youtubeQuota()).toMatchObject({ used: 0, analyticsUsed: 8 });
     const one = saveVideoAnalytics("023 – John's Video/Longform", snapshot);
     const two = saveVideoAnalytics("023 – John's Video/Longform", snapshot);
     expect(one).not.toBe(two);
     expect(JSON.parse(fs.readFileSync(path.join(root, one), 'utf8'))).toEqual(snapshot);
+  });
+  it('counts a failed Analytics request without changing the Data API quota', async () => {
+    await expect(collectVideoAnalytics('abcdefghijk', '2026-01-01T12:00:00Z', 'test', new Date('2026-02-05T20:00:00Z'), async () => new Response('', { status: 403 }))).rejects.toThrow('403');
+    expect(youtubeQuota()).toMatchObject({ used: 0, analyticsUsed: 1 });
   });
   it('rejects paths outside the project root and bad video IDs', async () => {
     await expect(collectVideoAnalytics('../escape', '2026-01-02T02:00:00Z', 'test')).rejects.toThrow('Invalid YouTube video ID');
