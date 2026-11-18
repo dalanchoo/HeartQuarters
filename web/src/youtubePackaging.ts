@@ -96,3 +96,17 @@ export function localBoolean(value: string): boolean {
   if (/^no$/i.test(value.trim())) return false;
   throw new Error('Use Yes or No in the local field.');
 }
+
+/**
+ * The first of the video's tags that appears word for word (ignoring capitals) in the description's first 200
+ * characters, or null when none does. vidIQ scores a description 50 instead of 100 without one (John's videos,
+ * 2026-10 and 2026-11-17).
+ */
+export function tagInOpening(description: string, tags: string): string | null {
+  const opening = description.slice(0, 200).toLowerCase();
+  const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const tag of tags.split(',').map((t) => t.trim()).filter(Boolean)) {
+    if (new RegExp(`(^|[^\\p{L}\\p{N}])${escape(tag.toLowerCase())}($|[^\\p{L}\\p{N}])`, 'u').test(opening)) return tag;
+  }
+  return null;
+}

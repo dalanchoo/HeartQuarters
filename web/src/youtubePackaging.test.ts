@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, youtubeValues, wouldLoseChapters } from './youtubePackaging';
+import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, tagInOpening, youtubeValues, wouldLoseChapters } from './youtubePackaging';
 
 describe('chapter safety', () => {
   const chapters = 'About the video\n\nCHAPTERS\n0:00 First\n1:08 Second\n1:02:03 Third';
@@ -75,5 +75,19 @@ describe('local YouTube metadata', () => {
   });
   it('refuses ambiguous duplicate fields', () => {
     expect(() => setLocalValue('Title:\nA\n\nTitle:\nB\n', 'Title', 'C')).toThrow(/more than one/);
+  });
+});
+
+describe("a tag in the description's first 200 characters (vidIQ's check)", () => {
+  const TAGS = 'Autobiographical Memory, Awkward Social Moments, Memory Condition, SDAM, Heart Mind Fusion';
+  it("finds none in 022_S07's opening, where the first tag comes after 200 characters", () => {
+    const s07 = "Sometimes I meet somebody who knows me, but I don't remember who they are. I'm sure this happens to everybody, and I believe it happens to me more often.\n\nWhen it does, I tell them I have a memory condition.";
+    expect(tagInOpening(s07, TAGS)).toBeNull();
+  });
+  it('finds a tag word for word, ignoring capitals, but not inside another word', () => {
+    expect(tagInOpening('With my memory condition, I forget people.', TAGS)).toBe('Memory Condition');
+    expect(tagInOpening('SDAM means I forget.', TAGS)).toBe('SDAM');
+    expect(tagInOpening('SDAMish feelings', 'SDAM')).toBeNull();
+    expect(tagInOpening('Anything', '')).toBeNull();
   });
 });
