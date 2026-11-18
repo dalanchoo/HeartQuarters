@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis } from './analytics-analysis.js';
+import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
 import type { AskAi } from './brief.js';
@@ -20,8 +20,10 @@ describe('analytics analysis', () => {
     expect(job.state).toBe('done');
     expect(seen.slice(0, 3)).toEqual([['Stats.json'], ['Stats.json'], ['Stats.json']]);
     expect(seen[3]).toEqual(['ChatGPT.md', 'Claude.md', 'Gemini.md', 'Stats.json']);
+    expect(seen[4]).toEqual(['ChatGPT.md', 'Claude.md', 'Gemini.md', 'Recommendations.md', 'Stats.json']);
     const result = analyticsAnalysis('Video/Longform', '2026-11-18')[0];
-    expect(result).toMatchObject({ claude: 'claude review 1\n', codex: 'codex review 1\n', gemini: 'gemini review 1\n', recommendations: 'claude review 4\n' });
+    expect(result).toMatchObject({ claude: 'claude review 1\n', codex: 'codex review 1\n', gemini: 'gemini review 1\n', recommendations: 'claude review 4\n', summary: 'claude review 5\n' });
+    expect(() => startAnalyticsSummary('Video/Longform', '2026-11-18', job.id, ask)).toThrow('already has a summary');
     expect(fs.readFileSync(path.join(root, 'Video/Longform/Analytics/2026-11-18/Stats.json'), 'utf8')).toContain('periods');
   });
   it('keeps successful reviews and does not synthesize when one AI fails', async () => {
@@ -30,6 +32,9 @@ describe('analytics analysis', () => {
     await finished;
     expect(calls).toHaveLength(3); expect(job.state).toBe('failed'); expect(job.models.gemini.error).toBe('Unavailable');
     expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ claude: 'claude\n', codex: 'codex\n', gemini: null, recommendations: null });
+    const { finished: summary } = startAnalyticsSummary('', '2026-11-18', job.id, async () => 'A short summary');
+    await summary;
+    expect(analyticsAnalysis('', '2026-11-18')[0].summary).toBe('A short summary\n');
   });
   it('rejects paths outside the snapshots', () => {
     expect(() => startAnalyticsAnalysis('../outside', '2026-11-18')).toThrow();

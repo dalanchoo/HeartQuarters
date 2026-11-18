@@ -65,7 +65,7 @@ import { videoOverview } from './video-overview.js';
 import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
 import { downloadChannelAnalytics } from './channel-analytics.js';
-import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis } from './analytics-analysis.js';
+import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -88,6 +88,7 @@ app.post('/api/youtube/analytics/channel', (_req, res) => {
 app.get('/api/youtube/analytics/snapshots', handle((req, res) => { res.json(analyticsSnapshots(String(req.query.piece ?? ''))); }));
 app.get('/api/youtube/analytics/analysis', handle((req, res) => { res.json(analyticsAnalysis(String(req.query.piece ?? ''), String(req.query.snapshot ?? ''))); }));
 app.post('/api/youtube/analytics/analyze', handle((req, res) => { res.json(startAnalyticsAnalysis(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? '')).job); }));
+app.post('/api/youtube/analytics/summarize', handle((req, res) => { res.json(startAnalyticsSummary(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? ''), String(req.body?.id ?? '')).step); }));
 // How much of today's YouTube quota HeartQuarters has used (it counts its own requests).
 app.get('/api/youtube/quota', handle((_req, res) => { res.json(youtubeQuota()); }));
 app.post('/api/youtube/configure', handle((req, res) => { configureYoutube(req.body?.clientId, req.body?.clientSecret); res.json({ ok: true }); }));
