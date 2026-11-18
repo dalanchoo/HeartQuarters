@@ -15,6 +15,10 @@ Instructions for any AI (or person) changing this code.
 7. New logic comes with tests (`*.test.ts` next to the code, using fake folders
    from `server/testing.ts`, never the real Drive). Security checks
    (`safeResolve`, `server/security.ts`) must stay covered.
+   A path built inside a checked folder (for example a file inside a version)
+   is checked again right before it's used: `readable`/`readText` to read,
+   `writable`, `writeFile`, `makeFolder`, `moveFile`, `copyNewFile` to change
+   anything (`server/safe-files.ts`). They refuse shortcuts and junctions.
 8. Every request that *does* something (POST etc.) goes through `postJson` in
    `web/src/api.ts`, which adds the `X-HeartQuarters` header the server requires.
    Files from Drive are served sandboxed; HTML from documents is cleaned with
