@@ -105,13 +105,19 @@ function realPath(p: string): string | null {
   }
 }
 
-/** Real location of `p`; if it doesn't exist yet, of its nearest existing parent folder. */
+/** Real location of `p`; if it doesn't exist yet, of its nearest existing parent folder. Returns null on dangling/unreadable links. */
 function realPathOfNearest(p: string): string | null {
   const rest: string[] = [];
   let current = p;
   for (;;) {
     const real = realPath(current);
     if (real) return path.join(real, ...rest.reverse());
+    try {
+      fs.lstatSync(current);
+      return null; // exists (e.g. a dangling symlink/junction) but cannot be resolved safely
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return null;
+    }
     const parent = path.dirname(current);
     if (parent === current) return null;
     rest.push(path.basename(current));
@@ -134,6 +140,6 @@ export function safeResolve(root: RootId, relPath: string): string {
   // Check where the path really ends up after following any links.
   const realBase = realPath(base);
   const realFull = realPathOfNearest(full);
-  if (realBase && realFull && !isInside(realBase, realFull)) throw outside;
+  if (realBase && (!realFull || !isInside(realBase, realFull))) throw outside;
   return full;
 }

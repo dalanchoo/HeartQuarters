@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { writable } from './safe-files.js';
 
 export function versionFolder(piece: string, source: string): string {
   if (!piece || !source) throw new Error('Choose a packaging version.');
   const parent = safeResolve('projects', path.join(piece, 'Packaging'));
-  const from = safeResolve('projects', source);
+  const from = writable(safeResolve('projects', source));
   if (path.dirname(from).toLowerCase() !== parent.toLowerCase() || !/^(?:V\d+.*|Legacy)$/i.test(path.basename(from))) throw new Error('Choose a version in this video’s Packaging folder.');
   const stat = fs.lstatSync(from);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('The version must be a real folder.');
@@ -15,6 +16,7 @@ export function versionFolder(piece: string, source: string): string {
 /** Move a version to a unique recoverable folder in HeartQuarters Trash. */
 export function trashPackagingVersion(piece: string, source: string): { trashPath: string } {
   const from = versionFolder(piece, source);
+  if (!config.trashDir) throw new Error('No trash folder is set in config.json. Nothing was changed.');
   fs.mkdirSync(config.trashDir, { recursive: true });
   const holder = fs.mkdtempSync(path.join(config.trashDir, 'Packaging-'));
   const to = path.join(holder, path.basename(from));
@@ -32,12 +34,12 @@ export function nextVersionName(piece: string): string {
 /** Create the first packaging version when no version exists. */
 export function createFirstPackagingVersion(piece: string): { name: string; path: string } {
   if (!piece) throw new Error('Choose a video.');
-  const pieceDir = safeResolve('projects', piece);
+  const pieceDir = writable(safeResolve('projects', piece));
   if (!fs.statSync(pieceDir, { throwIfNoEntry: false })?.isDirectory()) throw new Error('The video folder is not available.');
-  const parent = safeResolve('projects', path.join(piece, 'Packaging'));
+  const parent = writable(safeResolve('projects', path.join(piece, 'Packaging')));
   fs.mkdirSync(parent, { recursive: true });
   if (fs.lstatSync(parent).isSymbolicLink() || fs.readdirSync(parent).some(n => /^(?:V\d+|Legacy)/i.test(n))) throw new Error('A packaging version already exists or the folder is a shortcut.');
-  const folder = safeResolve('projects', path.join(piece, 'Packaging', 'V01')); fs.mkdirSync(folder);
+  const folder = writable(safeResolve('projects', path.join(piece, 'Packaging', 'V01'))); fs.mkdirSync(folder);
   fs.writeFileSync(path.join(folder, 'YouTube.md'), '# YouTube Info\n\nTitle:\n\nDescription:\n\nTags:\n\nPinned Comment:\n', { flag: 'wx' });
   return { name: 'V01', path: path.relative(safeResolve('projects', ''), folder).split(path.sep).join('/') };
 }
@@ -63,9 +65,9 @@ export async function copyPackagingVersion(piece: string, source: string): Promi
   if (!piece || !source) throw new Error('Choose a packaging version to copy.');
   const name = nextVersionName(piece);
   const parent = safeResolve('projects', path.join(piece, 'Packaging'));
-  const from = safeResolve('projects', source);
+  const from = writable(safeResolve('projects', source));
   if (path.dirname(from).toLowerCase() !== parent.toLowerCase() || !/^(?:V\d+|Legacy)/i.test(path.basename(from))) throw new Error('Choose a version in this video’s Packaging folder.');
-  const to = safeResolve('projects', path.join(piece, 'Packaging', name));
+  const to = writable(safeResolve('projects', path.join(piece, 'Packaging', name)));
   if (!(await fs.promises.lstat(from)).isDirectory()) throw new Error('The source version is not a folder.');
   // Never follow a shortcut out of the source tree, including nested shortcuts.
   const inspect = async (dir: string): Promise<void> => {

@@ -12,6 +12,7 @@ import { AI_NAMES, aiCommand, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
+import { appendText, makeFolder, writable, writeFile } from './safe-files.js';
 
 export type ImageAi = Extract<AiId, 'codex' | 'gemini'>;
 
@@ -320,10 +321,9 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
   const photo = resolveExpressionPhoto(choice.photo);
   if (!fs.existsSync(photo)) throw new Error(`The photo ${choice.photo} isn't in the expressions library any more.`);
   const name = nextConversationName(drafts, ai);
-  const folder = path.join(drafts, name);
-  fs.mkdirSync(folder, { recursive: true }); // made now, so a second click gets the next number
+  const folder = makeFolder(path.join(drafts, name)); // made now, so a second click gets the next number
   const prompt = firstRequest(choice, isShort(piece), '01.png');
-  fs.writeFileSync(
+  writeFile(
     path.join(folder, REQUESTS_FILE),
     `# ${name}\n\nPair: ${choice.pick.thumbnailText} / ${choice.pick.title}\n\nPhoto: ${choice.photo}\n\n## 01\n\n${prompt}\n`,
   );
@@ -331,9 +331,9 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
     const work = workFolder(name);
     try {
       const answer = await make(ai, prompt, work, '01.png', { photo });
-      fs.copyFileSync(answer.image, path.join(folder, '01.png'), fs.constants.COPYFILE_EXCL);
+      fs.copyFileSync(answer.image, writable(path.join(folder, '01.png')), fs.constants.COPYFILE_EXCL);
       const info: ConversationInfo = { ai, session: answer.session, photo: choice.photo!, pick: choice.pick };
-      fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
+      writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }
@@ -368,14 +368,13 @@ export function saveReferences(drafts: string, folder: string, forImage: string,
     sources.push({ data: fs.readFileSync(full), ext: path.extname(full).toLowerCase() });
   }
   if (!sources.length) return [];
-  const dir = path.join(folder, REFERENCES_FOLDER);
-  fs.mkdirSync(dir, { recursive: true });
+  const dir = makeFolder(path.join(folder, REFERENCES_FOLDER));
   let n = 0;
   return sources.map((r) => {
     let file: string;
     do file = path.join(dir, `${forImage} - ${++n}${r.ext}`);
     while (fs.existsSync(file)); // a retry after a failed request keeps the earlier references
-    fs.writeFileSync(file, r.data, { flag: 'wx' }); // never over an earlier reference
+    writeFile(file, r.data, { flag: 'wx' }); // never over an earlier reference
     return file;
   });
 }
@@ -413,11 +412,11 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
     const work = workFolder(path.basename(folder));
     try {
       const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
-      fs.copyFileSync(answer.image, path.join(folder, out), fs.constants.COPYFILE_EXCL);
+      fs.copyFileSync(answer.image, writable(path.join(folder, out)), fs.constants.COPYFILE_EXCL);
       const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
       const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
-      fs.appendFileSync(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
-      if (newPhoto) fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+      appendText(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
+      if (newPhoto) writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }

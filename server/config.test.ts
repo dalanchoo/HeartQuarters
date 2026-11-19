@@ -60,6 +60,13 @@ describe('safeResolve', () => {
     expect(() => safeResolve('projects', 'Sneaky/not-there-yet.txt')).toThrow(/outside/);
   });
 
+  it('blocks a dangling junction that points to a non-existent folder outside', () => {
+    const dangling = path.join(allowed, 'Dangling');
+    fs.symlinkSync(path.join(tmp, 'NeverCreated'), dangling, 'junction');
+    expect(() => safeResolve('projects', 'Dangling/new.txt')).toThrow(/outside/);
+    expect(() => safeResolve('projects', 'Dangling')).toThrow(/outside/);
+  });
+
   it('ignores upper/lower case differences, like Windows', () => {
     expect(() => safeResolve('projects', 'PROJECT/file.txt')).not.toThrow();
   });

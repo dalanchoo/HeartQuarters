@@ -119,13 +119,14 @@ export function findExpressionPhoto(index: ExpressionIndex, photoPath: string): 
  * inbox's own rules for a photo in the inbox.
  */
 export function isExpressionPhoto(photoPath: string): boolean {
-  if (typeof photoPath !== 'string' || !photoPath) return false;
+  if (typeof photoPath !== 'string' || !photoPath || photoPath.includes('\\')) return false;
   if (photoPath.startsWith(`${EXPRESSION_INBOX}/`)) return !!findExpressionPhoto({ rootDir: '', categories: [], photos: [] }, photoPath);
   const parts = photoPath.split('/');
   if (parts.length < 2 || parts.some((p) => !p || p === '.' || p === '..' || p.startsWith('_'))) return false;
   if (!IMAGE_EXTS.has(path.extname(photoPath).toLowerCase())) return false;
   try {
-    return fs.statSync(safeResolve('expressions', photoPath)).isFile();
+    const stat = fs.lstatSync(safeResolve('expressions', photoPath));
+    return stat.isFile() && !stat.isSymbolicLink();
   } catch {
     return false;
   }

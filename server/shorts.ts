@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
-import { readable, readText } from './safe-files.js';
+import { makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
 import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
 import { prepareMetadataVersion } from './metadata-version.js';
@@ -116,8 +116,8 @@ export function readPlan(video: string): ShortsPlan | null {
 
 function writePlan(video: string, plan: ShortsPlan) {
   const file = planFile(video);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSafely(file, JSON.stringify(plan, null, 1));
+  makeFolder(path.dirname(file));
+  writeFile(file, JSON.stringify(plan, null, 1));
 }
 
 /**
@@ -158,7 +158,7 @@ export function keepBeside(file: string, now: Date): string {
   const { dir, name, ext } = path.parse(file);
   let kept = path.join(dir, `${name} - before ${stamp(now)}${ext}`);
   for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} - before ${stamp(now)} (${n})${ext}`);
-  fs.renameSync(file, kept);
+  moveFile(file, kept);
   return kept;
 }
 
@@ -268,8 +268,8 @@ export function saveRetention(video: string, base64: unknown, now = new Date()) 
   const bytes = Buffer.from(String(base64 ?? ''), 'base64');
   if (!bytes.subarray(0, PNG_START.length).equals(PNG_START)) throw new Error("That picture isn't a PNG.");
   retireRetention(video, now);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, bytes);
+  makeFolder(path.dirname(file));
+  writeFile(file, bytes);
 }
 
 // ---- Making a short --------------------------------------------------------------
@@ -296,7 +296,7 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
     const made = await createVideoFolder('short', video, name, source);
     if (!made.capcut.created) {
       // Only ever removes the template copy that createVideoFolder just made: it refuses a folder that already exists.
-      fs.rmSync(safeResolve('projects', made.path), { recursive: true, force: true });
+      fs.rmSync(writable(safeResolve('projects', made.path)), { recursive: true, force: true });
       throw new Error(made.capcut.message);
     }
     // Read again: the copy can take minutes, and John may have edited the list meanwhile.
@@ -520,8 +520,8 @@ export function saveLongformUrl(video: string, value: unknown) {
     throw new Error("That isn't a YouTube address. It should start with https://www.youtube.com/ or https://youtu.be/.");
   }
   const file = longformUrlFile(video);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, url);
+  makeFolder(path.dirname(file));
+  writeFile(file, url);
 }
 
 // ---- What the page shows ---------------------------------------------------------

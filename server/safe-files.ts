@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isInside, rootDir, safeResolve, type RootId } from './config.js';
+import { writeFileSafely } from './files.js';
 
 /** `full` (an absolute path) checked to lie inside `root`, after following any links. Throws if it doesn't. */
 export function readable(full: string, root: RootId = 'projects'): string {
@@ -30,8 +31,9 @@ export function writable(full: string, root: RootId = 'projects'): string {
     let stat: fs.Stats;
     try {
       stat = fs.lstatSync(at);
-    } catch {
-      break; // the rest doesn't exist yet
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') break; // the rest doesn't exist yet
+      throw e;
     }
     if (stat.isSymbolicLink()) throw new Error(`"${path.relative(base, at)}" is a shortcut or junction, so HeartQuarters won't change anything through it.`);
   }
@@ -42,22 +44,27 @@ export function readText(full: string, root: RootId = 'projects'): string {
   return fs.readFileSync(readable(full, root), 'utf8');
 }
 
-export function writeFile(full: string, data: string | Uint8Array, options?: fs.WriteFileOptions): void {
-  fs.writeFileSync(writable(full), data, options);
+export function writeFile(full: string, data: string | Uint8Array, options?: fs.WriteFileOptions, root: RootId = 'projects'): void {
+  const target = writable(full, root);
+  if (typeof data === 'string' && !options) {
+    writeFileSafely(target, data);
+    return;
+  }
+  fs.writeFileSync(target, data, options);
 }
 
-export function appendText(full: string, data: string): void {
-  fs.appendFileSync(writable(full), data);
+export function appendText(full: string, data: string, root: RootId = 'projects'): void {
+  fs.appendFileSync(writable(full, root), data);
 }
 
 /** Creates a folder (and any missing parents), then checks again that it's a real folder. */
-export function makeFolder(full: string): string {
-  fs.mkdirSync(writable(full), { recursive: true });
-  return writable(full);
+export function makeFolder(full: string, root: RootId = 'projects'): string {
+  fs.mkdirSync(writable(full, root), { recursive: true });
+  return writable(full, root);
 }
 
-export function moveFile(from: string, to: string): void {
-  fs.renameSync(writable(from), writable(to));
+export function moveFile(from: string, to: string, root: RootId = 'projects'): void {
+  fs.renameSync(writable(from, root), writable(to, root));
 }
 
 /** Copies a file from any allowed folder (`fromRoot`) into the Video Projects folder, never over an existing file. */

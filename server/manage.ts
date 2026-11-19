@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { writeFileSafely } from './files.js';
+import { writable } from './safe-files.js';
 import { moveUploadRecords, uploadingInside } from './youtube.js';
 import { STANDALONE_GROUP, checkDraftName, checkFolderName, listDrafts, plainDraftName } from './create.js';
 
@@ -248,8 +249,8 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
   requireCapCutClosed();
   if (uploadingInside(id)) throw new Error('A YouTube upload from this folder is still running. Wait for it to finish, then rename. Nothing was changed.');
 
-  const from = safeResolve('projects', id);
-  const to = safeResolve('projects', newId);
+  const from = writable(safeResolve('projects', id));
+  const to = writable(safeResolve('projects', newId));
   if (fs.existsSync(to) && from.toLowerCase() !== to.toLowerCase()) throw new Error(`"${newName}" already exists. Nothing was changed.`);
   fs.renameSync(from, to);
 
@@ -316,7 +317,7 @@ export function trashDraft(name: string): string {
 export function deleteFolder(id: string, drafts: unknown): ManageResult {
   const segments = checkManageable(id);
   const name = segments.at(-1)!;
-  const dir = safeResolve('projects', id);
+  const dir = writable(safeResolve('projects', id));
   const chosen = checkDrafts(drafts, draftsFor(videoNames(dir)));
   if (chosen.length) requireCapCutClosed();
   if (uploadingInside(id)) throw new Error('A YouTube upload from this folder is still running. Wait for it to finish, then delete. Nothing was changed.');

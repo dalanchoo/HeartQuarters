@@ -115,9 +115,11 @@ describe('looking up one photo without scanning the library (code review #8)', (
     }
     expect(isExpressionPhoto('Positive/Joy/Joy_001.jpg')).toBe(true);
   });
-  it('refuses paths outside the library', () => {
+  it('refuses paths outside the library and backslash bypasses to _-prefixed files', () => {
     expect(isExpressionPhoto('../outside.jpg')).toBe(false);
     expect(isExpressionPhoto('Positive/../../x.jpg')).toBe(false);
+    expect(isExpressionPhoto('Positive/Joy\\_Joy.png')).toBe(false);
+    expect(isExpressionPhoto('Positive\\Joy\\Joy_001.jpg')).toBe(false);
     expect(isExpressionPhoto('')).toBe(false);
   });
 });
