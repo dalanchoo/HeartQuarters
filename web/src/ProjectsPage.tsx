@@ -485,8 +485,10 @@ function PieceGroup({
   );
 }
 
-/** Sent when a Short's card opens, so the other Shorts' cards close. */
+/** Sent when a Short's card opens, so the other Shorts' cards and the Longform section close. */
 const SHORT_OPENED = 'hq-short-opened';
+/** Sent when the Longform section opens, so all Shorts and the Shorts group close. */
+const LONGFORM_OPENED = 'hq-longform-opened';
 
 /** "V05_Shock" -> "V05 · Shock" */
 function versionLabel(name: string): string {
@@ -590,17 +592,46 @@ function Section({
   detail?: ReactNode;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(() => rememberedOpen(name));
   const { focus } = useContext(StatusContext);
-  useEffect(() => { if (name === 'shorts' && focus) setOpen(true); }, [name, focus]);
+  const [open, setOpen] = useState(() => (name === 'longform' && focus ? false : rememberedOpen(name)));
+  useEffect(() => {
+    if (name === 'shorts' && focus) {
+      setOpen(true);
+      rememberOpen(name, true);
+    }
+    if (name === 'longform' && focus) {
+      setOpen(false);
+      rememberOpen(name, false);
+    }
+  }, [name, focus]);
+  useEffect(() => {
+    if (name === 'longform') {
+      const close = () => {
+        setOpen(false);
+        rememberOpen(name, false);
+      };
+      window.addEventListener(SHORT_OPENED, close);
+      return () => window.removeEventListener(SHORT_OPENED, close);
+    }
+    if (name === 'shorts') {
+      const close = () => {
+        setOpen(false);
+        rememberOpen(name, false);
+      };
+      window.addEventListener(LONGFORM_OPENED, close);
+      return () => window.removeEventListener(LONGFORM_OPENED, close);
+    }
+  }, [name]);
   return (
     <details
       className="page-section"
       open={open}
       onToggle={(e) => {
         const now = e.currentTarget.open;
+        if (now === open) return;
         setOpen(now);
         rememberOpen(name, now);
+        if (now && name === 'longform') window.dispatchEvent(new Event(LONGFORM_OPENED));
       }}
     >
       <summary>
@@ -654,21 +685,32 @@ function PieceCard({
   const loadedDocs = usePackagingDocs(version?.docs ?? [], docsLoads);
   const docs = locked ? lockDocs(loadedDocs) : loadedDocs;
   const [open, setOpen] = useState(startOpen);
-  // One Short open at a time: opening one tells the others to close (they keep what's in them, only folded).
+  // One Short open at a time: opening one tells the others (and the Longform) to close; opening Longform closes every Short.
   useEffect(() => {
     if (piece.kind !== 'short') return;
     const other = (e: Event) => {
       if ((e as CustomEvent<string>).detail !== piece.path) setOpen(false);
     };
+    const close = () => setOpen(false);
     window.addEventListener(SHORT_OPENED, other);
-    return () => window.removeEventListener(SHORT_OPENED, other);
+    window.addEventListener(LONGFORM_OPENED, close);
+    return () => {
+      window.removeEventListener(SHORT_OPENED, other);
+      window.removeEventListener(LONGFORM_OPENED, close);
+    };
   }, [piece.path, piece.kind]);
   const { focus } = useContext(StatusContext);
   // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
   const link = useYoutubeLink(piece, longformProject, (plain || open) && piece.kind !== 'reel');
   const youtubeDoc = docs.find((d) => version?.docs.some(file => file.path === d.file.path) && /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const card = useRef<HTMLDetailsElement>(null);
-  useEffect(() => { if (focus === piece.path) { setOpen(true); card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, [focus, piece.path]);
+  useEffect(() => {
+    if (focus === piece.path) {
+      setOpen(true);
+      if (piece.kind === 'short') window.dispatchEvent(new CustomEvent(SHORT_OPENED, { detail: piece.path }));
+      card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }, [focus, piece.path, piece.kind]);
 
   // For the question John pastes into vidIQ and Ask Studio: the title and what it's about, from YouTube.md.
   const videoId = link.job?.status === 'done' ? link.job.videoId : undefined;
@@ -690,56 +732,68 @@ function PieceCard({
     setDocsLoads((n) => n + 1);
     onChanged?.();
   };
-  // Every card has the same layout, top to bottom: the AI box, then the thumbnail beside YouTube's fields, the
-  // description, YouTube's upload and settings, and last the other platforms.
+  // Every card has 8 collapsible sections, top to bottom:
+  // 1. YouTube Studio, 2. Versions (open by default), 3. Generate Video, 4. Generate Packaging,
+  // 5. View and Compare Packaging, 6. Analysis, 7. Other Platforms, 8. Clean Up.
   const contents = (
     <>
       {piece.kind !== 'reel' && (
-        <PieceAI
-          video={video}
-          piece={piece.kind === 'longform' ? 'Longform' : piece.name}
-          draft={draft ?? piece.name}
-          canEdit={piece.kind === 'longform'}
-          onFinished={reloadDocs}
-        />
+        <details className="yt-section">
+          <summary>YouTube Studio</summary>
+          <PieceStatus path={piece.path} details />
+          <YouTubeLinkBar piece={piece} link={link} />
+        </details>
       )}
-      {piece.kind !== 'reel' && <PieceStatus path={piece.path} details />}
-      {piece.kind !== 'reel' && <YouTubeLinkBar piece={piece} link={link} />}
 
-      {/* Two columns: the video on the left; its versions, notes and folder buttons on the right. */}
-      <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
-        <div className="piece-media">
-          <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
-        </div>
+      <details className="yt-section" open>
+        <summary>Versions</summary>
+        {/* Two columns: the video on the left; its versions, notes and folder buttons on the right. */}
+        <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
+          <div className="piece-media">
+            <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
+          </div>
 
-        <div className="piece-docs">
-          {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
-          {!version && <div><p className="muted">No packaging yet.</p><button onClick={() => { void postJson<{ name: string; path: string }>('/api/packaging/first-version', { piece: piece.path }).then(result => { setVersionName(result.name); setUnlocked(result.path); onChanged?.(); }, e => window.alert(e instanceof Error ? e.message : String(e))); }}>Create V01</button></div>}
-          {version && (
-            <div className="versions">
-              {piece.versions.map((v) => (
-                <div key={v.path} className="version-choice">
-                  <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(null); }}>
-                    {versionLabel(v.name)}
-                  </button>
-                </div>
-              ))}
-              <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
-              <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
-              <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
+          <div className="piece-docs">
+            {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
+            {!version && <div><p className="muted">No packaging yet.</p><button onClick={() => { void postJson<{ name: string; path: string }>('/api/packaging/first-version', { piece: piece.path }).then(result => { setVersionName(result.name); setUnlocked(result.path); onChanged?.(); }, e => window.alert(e instanceof Error ? e.message : String(e))); }}>Create V01</button></div>}
+            {version && (
+              <div className="versions">
+                {piece.versions.map((v) => (
+                  <div key={v.path} className="version-choice">
+                    <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(null); }}>
+                      {versionLabel(v.name)}
+                    </button>
+                  </div>
+                ))}
+                <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
+                <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
+              </div>
+            )}
+            {version && <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />}
+
+            <div className="versions piece-actions">
+              {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
+              <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open {piece.kind === 'short' ? 'Short' : 'Video'} Folder</button>
+              {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
             </div>
-          )}
-          {version && <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />}
-
-          <div className="versions piece-actions">
-            {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-            <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open {piece.kind === 'short' ? 'Short' : 'Video'} Folder</button>
-            {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
           </div>
         </div>
-      </div>
+      </details>
 
-      {/* 1. Generate Packaging, 2. View and Compare Packaging, 3. Analysis, 4. Clean Up. */}
+      {piece.kind !== 'reel' && (
+        <details className="yt-section">
+          <summary>Generate Video</summary>
+          <PieceAI
+            video={video}
+            piece={piece.kind === 'longform' ? 'Longform' : piece.name}
+            draft={draft ?? piece.name}
+            canEdit={piece.kind === 'longform'}
+            onFinished={reloadDocs}
+          />
+        </details>
+      )}
+
       {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
         <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={(path) => {
@@ -752,16 +806,17 @@ function PieceCard({
           setUnlocked(path);
         }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} draftImage={draftImage} setDraftImage={setDraftImage} />
       ) : (
-        <>
+        <details className="yt-section">
+          <summary>View and Compare Packaging</summary>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
           {docs.slice(0, 1).map((d) => (
             <PackagingDocShort key={d.file.path} doc={d} />
           ))}
           <PackagingDocsWide docs={docs} />
-        </>
+        </details>
       )}
-      <PackagingOtherPlatforms docs={docs} />
       {piece.kind !== 'reel' && <AnalyticsAnalysis key={`analysis-${piece.path}`} piece={piece.path} jobId={link.status?.connected && link.job?.status === 'done' ? link.job.id : undefined} />}
+      <PackagingOtherPlatforms docs={docs} />
       {piece.kind !== 'reel' && <CleanUp piece={piece.path} onDone={onChanged} />}
     </>
   );
@@ -774,6 +829,7 @@ function PieceCard({
       open={open}
       onToggle={(e) => {
         const now = e.currentTarget.open;
+        if (now === open) return;
         setOpen(now);
         if (now && piece.kind === 'short') window.dispatchEvent(new CustomEvent(SHORT_OPENED, { detail: piece.path }));
       }}

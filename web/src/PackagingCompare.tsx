@@ -53,7 +53,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const leftOptions = order.filter(value => rightChoices(value, order).length > 0 || value === YOUTUBE);
   const usesDraft = left === DRAFT || right === DRAFT;
 
-  return <details className="yt-section" open><summary>View and Compare Packaging</summary>
+  return <details className="yt-section"><summary>View and Compare Packaging</summary>
     <div className="compare-columns">
       <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
       <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>

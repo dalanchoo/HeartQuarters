@@ -265,8 +265,8 @@ export function PackagingOtherPlatforms({ docs }: { docs: LoadedDoc[] }) {
   const shown = others.filter((d) => !isClosed(d) && (d.error || d.text !== null));
   if (others.length === 0) return null;
   return (
-    <div className="piece-wide other-platforms">
-      <h4>Other platforms</h4>
+    <details className="yt-section other-platforms">
+      <summary>Other Platforms</summary>
       {shown.map((d) => (
         <PackagingDocWhole key={d.file.path} doc={d} />
       ))}
@@ -280,7 +280,7 @@ export function PackagingOtherPlatforms({ docs }: { docs: LoadedDoc[] }) {
           ))}
         </div>
       )}
-    </div>
+    </details>
   );
 }
 
