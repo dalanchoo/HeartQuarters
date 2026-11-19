@@ -34,47 +34,52 @@ export function AiPicker() {
   const [error, setError] = useState<string | null>(null);
   if (!overview) return null;
   const activeOption = overview.options.find((o) => o.id === overview.chosen);
+  const aiTip =
+    error ??
+    (overview.chosen === 'gemini'
+      ? "Gemini (can't build CapCut projects) — which AI does the jobs that buttons in this app start"
+      : 'Which AI does the jobs that buttons in this app start');
   return (
-    <>
-    <label className="ai-picker small-text" title={error ?? 'Which AI does the jobs that buttons in this app start'}>
-      AI
-      <select
-        value={overview.chosen}
-        onChange={(e) => {
-          setError(null);
-          choose(e.target.value as AiId).catch((err: Error) => setError(err.message));
-        }}
-      >
-        {overview.options.map((o) => (
-          <option key={o.id} value={o.id} disabled={!o.available}>
-            {o.name}
-            {!o.available ? ' (not installed)' : o.id === 'gemini' ? " (can't build CapCut projects)" : ''}
-          </option>
-        ))}
-      </select>
-    </label>
-    {activeOption && (
-      <label className="ai-picker small-text" title={`Which model ${activeOption.name} uses (remembered for ${activeOption.name})`}>
-        Model
+    <div className="ai-controls">
+      <label className="ai-picker small-text" title={aiTip}>
+        AI
         <select
-          value={activeOption.model}
+          value={overview.chosen}
           onChange={(e) => {
             setError(null);
-            chooseModel(activeOption.id, e.target.value).catch((err: Error) => setError(err.message));
+            choose(e.target.value as AiId).catch((err: Error) => setError(err.message));
           }}
         >
-          <option value="">{activeOption.defaultLabel}</option>
-          {activeOption.models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
+          {overview.options.map((o) => (
+            <option key={o.id} value={o.id} disabled={!o.available}>
+              {o.name}
+              {!o.available ? ' (not installed)' : ''}
             </option>
           ))}
         </select>
-        {error && <span className="error">{error}</span>}
       </label>
-    )}
-    <SignIns overview={overview} />
-    </>
+      {activeOption && (
+        <label className="ai-picker small-text" title={`Which model ${activeOption.name} uses (remembered for ${activeOption.name})`}>
+          Model
+          <select
+            value={activeOption.model}
+            onChange={(e) => {
+              setError(null);
+              chooseModel(activeOption.id, e.target.value).catch((err: Error) => setError(err.message));
+            }}
+          >
+            <option value="">{activeOption.defaultLabel}</option>
+            {activeOption.models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          {error && <span className="error">{error}</span>}
+        </label>
+      )}
+      <SignIns overview={overview} />
+    </div>
   );
 }
 
@@ -129,21 +134,23 @@ function SignIns({ overview }: { overview: AiOverview }) {
   if (!signIns) return checking ? <span className="muted">Checking sign-ins…</span> : null;
   return (
     <span className="ai-signins">
-      {signIns.map((s) => {
-        const opt = overview.options.find((o) => o.id === s.id);
-        const modelLabel = opt?.model ? (opt.models.find((m) => m.id === opt.model)?.label ?? opt.model) : (opt?.defaultLabel ?? 'Default');
-        return (
-          <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={`${s.detail} · Model: ${modelLabel}`}>
-            <span className="ai-signin-dot" aria-hidden="true" />
-            {s.name}
-            {s.state !== 'in' && (
-              <button type="button" className="small" onClick={() => signIn(s)} title={s.state === 'out' ? 'Not signed in' : `Couldn't tell: ${s.detail}`}>
-                Sign In
-              </button>
-            )}
-          </span>
-        );
-      })}
+      <span className="ai-signin-list">
+        {signIns.map((s) => {
+          const opt = overview.options.find((o) => o.id === s.id);
+          const modelLabel = opt?.model ? (opt.models.find((m) => m.id === opt.model)?.label ?? opt.model) : (opt?.defaultLabel ?? 'Default');
+          return (
+            <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={`${s.detail} · Model: ${modelLabel}`}>
+              <span className="ai-signin-dot" aria-hidden="true" />
+              {s.name}
+              {s.state !== 'in' && (
+                <button type="button" className="small" onClick={() => signIn(s)} title={s.state === 'out' ? 'Not signed in' : `Couldn't tell: ${s.detail}`}>
+                  Sign In
+                </button>
+              )}
+            </span>
+          );
+        })}
+      </span>
       <button type="button" className="small ai-signin-check" disabled={checking} onClick={check} title="Check the sign-ins again">
         {checking ? '…' : '↻'}
       </button>

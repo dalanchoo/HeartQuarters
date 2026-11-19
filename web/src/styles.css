@@ -130,22 +130,24 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 
 /* Layout */
 .app { display: flex; flex-direction: column; height: 100vh; }
-.topbar { display: flex; align-items: center; gap: 2rem; padding: 0 1.25rem; height: 52px;
+.topbar { display: flex; align-items: center; gap: 0.9rem; padding: 0.25rem 0.9rem; min-height: 54px;
           background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.brand { font-weight: 700; color: var(--accent); font-size: 1.1rem; display: flex; align-items: center; gap: 0.55rem; }
-.brand img { width: 34px; height: 34px; }
-.topbar nav { display: flex; gap: 0.25rem; }
-.ai-picker { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; color: var(--muted); white-space: nowrap; }
-.ai-signins { display: flex; align-items: center; gap: 0.6rem; margin-left: 0.75rem; font-size: 0.85rem; color: var(--muted); white-space: nowrap; position: relative; }
-.ai-signin { display: inline-flex; align-items: center; gap: 0.3rem; }
-.ai-signin-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #9aa0a6; }
+.brand { font-weight: 700; color: var(--accent); font-size: 1.05rem; display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+.brand img { width: 32px; height: 32px; }
+.topbar nav { display: flex; align-items: center; gap: 0.1rem; }
+.ai-controls { display: flex; align-items: center; gap: 0.55rem; margin-left: auto; }
+.ai-picker { display: flex; align-items: center; gap: 0.3rem; color: var(--muted); white-space: nowrap; }
+.ai-signins { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; position: relative; }
+.ai-signin-list { display: flex; flex-direction: column; gap: 0.05rem; line-height: 1.15; }
+.ai-signin { display: inline-flex; align-items: center; gap: 0.25rem; }
+.ai-signin-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #9aa0a6; flex-shrink: 0; }
 .ai-signin--in .ai-signin-dot { background: #2e9d4f; }
 .ai-signin--out .ai-signin-dot { background: #d93025; }
 .ai-signin--out { color: #b3261e; font-weight: 600; }
 .ai-signin--unknown .ai-signin-dot { background: #e0a800; }
-.ai-signin-check { padding: 0.1rem 0.45rem; }
+.ai-signin-check { padding: 0.1rem 0.4rem; }
 .ai-signin-message { position: absolute; top: 100%; right: 0; margin-top: 0.35rem; z-index: 20; max-width: 26rem; white-space: normal; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-.topbar nav a { padding: 0.4rem 0.9rem; border-radius: 6px; color: var(--text); text-decoration: none; }
+.topbar nav a { padding: 0.35rem 0.48rem; border-radius: 6px; color: var(--text); text-decoration: none; white-space: nowrap; }
 .topbar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 main { flex: 1; min-height: 0; }
 
