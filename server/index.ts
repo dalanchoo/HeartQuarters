@@ -16,14 +16,14 @@ import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from '.
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
-import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, fileInboxPhoto, importInboxPhoto, inboxNormalizationJob, normalizeInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
+import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
 import { markExpressionAi } from './mark-expression-ai.js';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
-import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
+import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
 import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
@@ -31,7 +31,7 @@ import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
-import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
+import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
@@ -40,7 +40,6 @@ import {
   hasRetention,
   keepOldPlan,
   makeShort,
-  metadataRun,
   readTranscript,
   readLongformUrl,
   regenerateShort,
@@ -48,7 +47,6 @@ import {
   savePlan,
   saveRetention,
   shortsOverview,
-  saveLongformUrl,
   clearPiece,
   generatePiece,
   notePiece,
@@ -58,7 +56,7 @@ import {
 } from './shorts.js';
 import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
-import { acknowledgeUpload, addPlaylists, addSubtitle, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, saveVideoPlaylists, startUpload, syncYoutubeSettings, uploadsFor, videoPlaylists, youtubeChannel, youtubePlaylists, type UploadInput, downloadYoutubeCaptions, removeExtraCaptions } from './youtube.js';
+import { acknowledgeUpload, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, startUpload, syncYoutubeSettings, uploadsFor, youtubeChannel, youtubePlaylists, type UploadInput, downloadYoutubeCaptions, removeExtraCaptions } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
 import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
@@ -108,8 +106,6 @@ app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel)
 // ?ids=a,b,c (up to 50): video details for the review tags, without captions.
 app.get('/api/youtube/check-videos', (req, res) => { checkYoutubeVideos(req.query.ids).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.get('/api/youtube/video-playlists', (req, res) => { videoPlaylists(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.post('/api/youtube/video-playlists', (req, res) => { saveVideoPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.before, req.body?.after).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-settings', (req, res) => { existingYoutubeSettings(String(req.query.piece ?? ''), String(req.query.id ?? ''), req.query.captions !== '0').then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 // ?piece=&id=: the captions on YouTube as text, only when John asks (about 250 units).
 app.get('/api/youtube/captions', (req, res) => { downloadYoutubeCaptions(String(req.query.piece ?? ''), String(req.query.id ?? '')).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
@@ -127,12 +123,6 @@ app.get('/api/youtube/related', handle((req, res) => {
   res.json({ url });
 }));
 app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
-app.post('/api/youtube/playlists', (req, res) => { addPlaylists(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), req.body?.playlists).then(() => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
-app.post('/api/youtube/subtitles', (req, res) => {
-  addSubtitle(String(req.body?.piece ?? ''), String(req.body?.id ?? ''), String(req.body?.subtitle ?? ''), req.body?.language).then(
-    () => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
-  );
-});
 app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
 app.post('/api/youtube/studio', (req, res) => {
   try {
@@ -270,9 +260,6 @@ app.post('/api/expressions/inbox/photopea-copy', handle((req, res) => {
 }));
 app.post('/api/expressions/inbox/copy-thumbnail', handle((req, res) => { res.json(copyThumbnailToInbox(String(req.body?.piece ?? ''), String(req.body?.image ?? ''))); }));
 app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashInboxPhoto(String(req.body?.photo ?? ''))); }));
-app.post('/api/expressions/inbox/file', handle((req, res) => { res.json(fileInboxPhoto(String(req.body?.photo ?? ''), String(req.body?.category ?? ''))); }));
-app.post('/api/expressions/inbox/prepare', handle((req, res) => { res.json(normalizeInboxPhoto(String(req.body?.photo ?? ''), req.body?.ai)); }));
-app.get('/api/expressions/inbox/prepare', handle((req, res) => { res.json(inboxNormalizationJob(String(req.query.id ?? ''))); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
@@ -290,7 +277,6 @@ app.get('/api/expression-references', handle((_req, res) => { res.json(readExpre
 app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
 app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options, req.body?.ai, undefined, req.body?.prompt).job); }));
 app.get('/api/expression-generation/prompt', handle((req, res) => { res.json({ prompt: previewExpressionPrompt(String(req.query.category ?? ''), { framing: String(req.query.framing ?? ''), angle: String(req.query.angle ?? ''), gaze: String(req.query.gaze ?? '') }) }); }));
-app.get('/api/expression-generation/job', handle((req, res) => { res.json(expressionJob(String(req.query.id ?? ''))); }));
 app.get('/api/expression-generation/jobs', handle((req, res) => { res.json(expressionJobs(req.query.category === undefined ? undefined : String(req.query.category))); }));
 app.get('/api/expression-generation/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(candidateFile(String(req.query.id ?? ''))); }));
 app.post('/api/expression-generation/assign-category', handle((req, res) => { res.json(assignExpressionCategory(String(req.body?.id ?? ''), String(req.body?.category ?? ''))); }));
@@ -368,24 +354,6 @@ app.get('/api/ai/sign-ins', (_req, res) => {
 // { id }: opens that AI's sign-in in its own window.
 app.post('/api/ai/sign-in', handle((req, res) => {
   res.json(openSignIn(req.body?.id));
-}));
-
-// ---- Edit with Claude (see claude.ts) --------------------------------------
-
-app.get('/api/claude', handle((req, res) => {
-  res.json(getRun(String(req.query.video ?? '')));
-}));
-
-app.post('/api/claude/start', handle((req, res) => {
-  res.json(startEdit(String(req.body?.video ?? '')));
-}));
-
-app.post('/api/claude/note', handle((req, res) => {
-  res.json(sendNote(String(req.body?.video ?? ''), String(req.body?.text ?? '')));
-}));
-
-app.post('/api/claude/stop', handle((req, res) => {
-  res.json(stopRun(String(req.body?.video ?? '')));
 }));
 
 // ---- Packaging files (see metadata.ts) --------------------------------------
@@ -493,9 +461,6 @@ app.post('/api/conversations/forget', handle((_req, res) => {
   forgetIdleRuns();
   res.json({ ok: true });
 }));
-
-// { video, piece }
-app.post('/api/piece-ai/metadata', (_req, res) => { res.status(410).json({ error: 'Write YouTube Metadata has moved to Generate Packaging. Clone a version to create a new one.' }); });
 
 app.post('/api/piece-ai/stop', handle((req, res) => {
   res.json(stopPiece(String(req.body?.video ?? ''), String(req.body?.piece ?? '')));
@@ -608,20 +573,6 @@ app.post('/api/brief/picks', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
-
-// { video, url }
-app.post('/api/shorts/longform-url', handle((req, res) => {
-  saveLongformUrl(String(req.body?.video ?? ''), req.body?.url);
-  res.json({ ok: true });
-}));
-
-// ?video=&short=: that short's conversation, or null.
-app.get('/api/shorts/metadata', handle((req, res) => {
-  res.json(metadataRun(String(req.query.video ?? ''), String(req.query.short ?? '')));
-}));
-
-// { video, short }: the AI writes that short's YouTube metadata, in its conversation.
-app.post('/api/shorts/metadata', (_req, res) => { res.status(410).json({ error: 'Write YouTube Metadata has moved to Generate Packaging. Clone a version to create a new one.' }); });
 
 // Moves the old short to the trash, then makes it again: the same wait as above.
 app.post('/api/shorts/regenerate', async (req, res) => {

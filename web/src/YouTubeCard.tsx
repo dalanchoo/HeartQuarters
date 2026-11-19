@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { fileStamp, fileUrl, getJson, getText, postJson, type FileRef, type Piece } from './api';
-import { CopyButton, type LoadedDoc } from './PackagingDoc';
+import { AiLineBoxes, CopyButton, type LoadedDoc } from './PackagingDoc';
 import { compareCaptions } from './captionCompare';
 import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { SHORTS_PLAYLIST, VIDEO_LANGUAGES, type YoutubePlaylist } from '../../server/youtube-constants';
-import { readAiLines, setAiLines, setFieldValue, sortTags, undoFieldEdit, type AiLines, type Field } from './packaging';
+import { setFieldValue, sortTags, undoFieldEdit, type Field } from './packaging';
 import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
@@ -815,35 +815,6 @@ function MissingField({ doc, label }: { doc: LoadedDoc; label: string }) {
       </button>
       {error && <span className="error"> {error}</span>}
     </p>
-  );
-}
-
-/** Two checkboxes that put the AI-generated lines into the description, or take them out. The file is the record. */
-function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const has = doc.text === null ? null : readAiLines(doc.text);
-  if (!has) return null;
-  const change = (want: AiLines) => {
-    setSaving(true);
-    setError(null);
-    doc
-      .save((text) => setAiLines(text, want))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setSaving(false));
-  };
-  return (
-    <div className="ai-lines small-text">
-      <label>
-        <input type="checkbox" checked={has.music} disabled={saving || doc.locked} onChange={(e) => change({ ...has, music: e.target.checked })} />
-        The music is AI-generated
-      </label>
-      <label>
-        <input type="checkbox" checked={has.visuals} disabled={saving || doc.locked} onChange={(e) => change({ ...has, visuals: e.target.checked })} />
-        Some B-roll is AI-generated
-      </label>
-      {error && <p className="error">{error}</p>}
-    </div>
   );
 }
 

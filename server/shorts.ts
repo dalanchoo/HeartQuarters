@@ -7,11 +7,9 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
 import { chosenAi, requireCapCutAi } from './ai.js';
-import { askInConversation, forgetRun, getRun, longformMetadataPrompt, metadataPrompt, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
-import { prepareMetadataVersion } from './metadata-version.js';
+import { askInConversation, forgetRun, getRun, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
 import { uploadsFor } from './youtube.js';
 import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, findDraft, numberOf } from './create.js';
-import { writeFileSafely } from './files.js';
 import { deleteFolder, system, trashDraft } from './manage.js';
 
 export interface PlannedShort {
@@ -402,20 +400,6 @@ export function notePiece(video: string, piece: string, text: unknown): ClaudeRu
   return askInConversation(video, job, draft, pieceNotePrompt(videoDir, job, draft, note), note);
 }
 
-/**
- * "Write YouTube metadata", the same button on every card. Any AI can do this one, since it only writes a text file
- * in the video's folder.
- */
-export function writePieceMetadata(video: string, piece: string, version = ''): ClaudeRun {
-  const { job, draft } = pieceJob(video, piece);
-  // A clean conversation every time: metadata doesn't need what came before, and a long history costs tokens.
-  forgetRun(video, job);
-  const piecePath = path.posix.join(video.replace(/\\/g, '/'), job === 'edit' ? 'Longform' : `Shorts/${piece}`);
-  const target = version ? prepareMetadataVersion(piecePath, version) : '';
-  const message = job === 'edit' ? longformMetadataPrompt(target) : metadataPrompt(piece, readLongformUrl(video), target);
-  return askInConversation(video, job, draft, message);
-}
-
 // ---- Generate and Regenerate, the same button on every card -----------------------
 
 export interface PieceState {
@@ -501,17 +485,6 @@ export function clearPiece(video: string, piece: string) {
 
 export function stopPiece(video: string, piece: string): ClaudeRun | null {
   return stopRun(video, pieceJob(video, piece).job);
-}
-
-/** Kept for the old page's calls: a short's conversation and its metadata. */
-export function metadataRun(video: string, short: string): ClaudeRun | null {
-  shortId(short);
-  return pieceRun(video, short);
-}
-
-export function writeShortMetadata(video: string, short: string): ClaudeRun {
-  shortId(short);
-  return writePieceMetadata(video, short);
 }
 
 // A small file beside the plan, so it lives in Drive with the video. Every short's metadata links to this.

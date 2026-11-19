@@ -139,7 +139,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
 }
 
 /** Two checkboxes that put the AI-generated lines into a YouTube description, or take them out. The file is the record. */
-function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
+export function AiLineBoxes({ doc }: { doc: LoadedDoc }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const has = doc.text === null || !/(^|\/)youtube\b/i.test(doc.file.name) ? null : readAiLines(doc.text);

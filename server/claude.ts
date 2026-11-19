@@ -446,30 +446,6 @@ export function sendNote(video: string, text: string, job: ClaudeJob = 'edit', a
   return run;
 }
 
-/** The message that asks for a short's YouTube metadata. An export isn't needed: the words and the project are enough. */
-export function metadataPrompt(shortName: string, longformUrl: string | null, version = ''): string {
-  return [
-    `Write the YouTube metadata for the short "${shortName}", following the shorts-from-longform skill's "Packaging" section. YouTube only.`,
-    version ? `Write YouTube metadata only to "Shorts/${shortName}/Packaging/${version.replace(/\\/g, '/').split('/').at(-1)}/YouTube.md". HeartQuarters already chose and prepared this version; do not create another version.` : `Fill in Shorts\\${shortName}\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
-    "Use the short's words from its Subtitles folder or the word-by-word transcript: John may not have exported it yet, and you don't need the export.",
-    longformUrl
-      ? `The longform's YouTube URL is ${longformUrl}.`
-      : "The longform's YouTube URL isn't known: leave a clearly marked placeholder, and tell John to link the longform's YouTube video in its \"YouTube Upload & Settings\" and click the button again.",
-    "Read the short's CapCut project to see which music and B-roll it really uses, and go by the episode's notes on where they came from.",
-    "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
-  ].join(' ');
-}
-
-/** The message that asks for the longform's YouTube metadata. */
-export function longformMetadataPrompt(version = ''): string {
-  return [
-    `Write the YouTube metadata for this video's longform, following the longform-edit skill's packaging rules. YouTube only.`,
-    version ? `Write YouTube metadata only to "Longform/Packaging/${version.replace(/\\/g, '/').split('/').at(-1)}/YouTube.md". HeartQuarters already chose and prepared this version; do not create another version.` : `Fill in Longform\\Packaging\\V01\\YouTube.md, or the next version if that one already has real content (a title, description or tags; the Video language and Made for kids settings come with the template and don't count).`,
-    "Use the final video's words: the transcript in Longform\\Subtitles, or the export if there isn't one.",
-    "Change nothing else, and don't touch its CapCut project. Tell John in a few lines what you wrote, and anything you couldn't confirm.",
-  ].join(' ');
-}
-
 /** The first message of a conversation John starts with a note of his own, about one piece of a video. */
 export function pieceNotePrompt(videoDir: string, job: ClaudeJob, draft: string, note: string): string {
   const what =

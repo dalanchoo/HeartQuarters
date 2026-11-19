@@ -12,7 +12,6 @@ import {
   keepOldPlan,
   latestExport,
   makeShort,
-  metadataRun,
   readPlan,
   readTranscript,
   readLongformUrl,
@@ -23,12 +22,10 @@ import {
   saveLongformUrl,
   saveRetention,
   shortsOverview,
-  writeShortMetadata,
   generatePiece,
   notePiece,
   pieceState,
   pieceJob,
-  writePieceMetadata,
 } from './shorts';
 import { makeTree, removeTree } from './testing';
 
@@ -185,25 +182,6 @@ describe("a card's AI box, the same for the longform and each short", () => {
     await expect(generatePiece(NUMBERED, NAME, true)).rejects.toThrow(/isn't in the shorts plan/);
   });
 
-  it("writes the longform's metadata in the longform's own conversation", async () => {
-    writePieceMetadata(NUMBERED, 'Longform');
-    const run = await settle('edit');
-    expect(run.prompt).toMatch(/longform-edit.*Longform\\Packaging\\V01\\YouTube\.md/s);
-  });
-
-  it('prepares the new metadata version with the selected thumbnail and directs the AI to that version', async () => {
-    const piece = `${NUMBERED}/Longform`; const version = `${piece}/Packaging/V04`;
-    const folder = path.join(tmp, 'Videos', version); fs.mkdirSync(path.join(folder, 'Thumbnail'), { recursive: true });
-    fs.writeFileSync(path.join(folder, 'YouTube.md'), 'Title:\nPrevious Title\n');
-    fs.writeFileSync(path.join(folder, 'Thumbnail/Thumbnail.png'), 'thumbnail');
-    writePieceMetadata(NUMBERED, 'Longform', version);
-    const run = await settle('edit');
-    expect(run.prompt).toContain('Longform/Packaging/V05/YouTube.md');
-    expect(run.prompt).toContain('do not create another version');
-    expect(fs.readFileSync(path.join(tmp, 'Videos', piece, 'Packaging/V05/Thumbnail/Thumbnail.png'), 'utf8')).toBe('thumbnail');
-    expect(fs.readFileSync(path.join(folder, 'YouTube.md'), 'utf8')).toContain('Previous Title');
-  });
-
   it("takes the longform's URL from its linked YouTube video first, then the older saved file", () => {
     saveLongformUrl(NUMBERED, 'https://youtu.be/from-file');
     expect(readLongformUrl(NUMBERED)).toBe('https://youtu.be/from-file');
@@ -232,7 +210,7 @@ describe('checking a short after each turn', () => {
 
   it("shows the problems it finds, whatever the AI said, and isn't finished until it has", async () => {
     setUp("console.log('Note: ignore me'); console.log('PROBLEM: The voice is silent.'); console.log('PROBLEM: No captions.'); process.exit(1);");
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'Check this');
     const run = await settle();
     expect(run.status).toBe('idle');
     const said = run.messages.at(-1)!;
@@ -244,7 +222,7 @@ describe('checking a short after each turn', () => {
 
   it('says the settings are fine when they are, without claiming more', async () => {
     setUp("console.log('No problems found.');");
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'Check this');
     const said = (await settle()).messages.at(-1)!;
     expect(said.from).toBe('app');
     expect(said.text).toMatch(/no problems in its settings.*how it looks or sounds/);
@@ -252,14 +230,14 @@ describe('checking a short after each turn', () => {
 
   it('says so if the checker itself fails', async () => {
     setUp("process.exit(3);");
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'Check this');
     expect((await settle()).messages.at(-1)!.text).toMatch(/couldn't check/);
   });
 
   it("counts a missing .srt for YouTube as a problem", async () => {
     setUp("console.log('No problems found.');");
     fs.rmSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME, 'Subtitles'), { recursive: true });
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'Check this');
     const said = (await settle()).messages.at(-1)!;
     expect(said.text).toMatch(/found 1 problem\(s\)/);
     expect(said.text).toMatch(/no \.srt in the short's Subtitles folder.*--subtitles/);
@@ -267,7 +245,7 @@ describe('checking a short after each turn', () => {
 
   it('adds nothing when there is no checker', async () => {
     fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
-    writeShortMetadata(NUMBERED, NAME);
+    notePiece(NUMBERED, NAME, 'Check this');
     expect((await settle()).messages.some((m) => m.from === 'app')).toBe(false);
   });
 });
@@ -297,87 +275,16 @@ describe("a short's first message", () => {
   });
 });
 
-describe('writing a short\'s metadata', () => {
-  const settle = async () => {
-    for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')?.status === 'running'; i++) {
-      await new Promise((res) => setTimeout(res, 50));
-    }
-  };
-  const makeFolder = () => fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
-  const forget = () => forgetRun(NUMBERED, 'short-S01');
-
-  it('goes by the folder, so a short needs no row in the plan, and it does not need the export', async () => {
-    makeFolder();
-    expect(metadataRun(NUMBERED, NAME)).toBeNull();
-    writeShortMetadata(NUMBERED, NAME);
-    await settle();
-    const told = metadataRun(NUMBERED, NAME)?.prompt ?? '';
-    expect(told).toContain(`Shorts\\${NAME}\\Packaging\\V01\\YouTube.md`);
-    expect(told).toMatch(/you don't need the export/);
-    expect(told).toMatch(/YouTube only/);
-  });
-
-  it('starts a clean conversation every time, dropping the one before', async () => {
-    makeFolder();
-    notePiece(NUMBERED, NAME, 'An earlier note');
-    await settle();
-    writeShortMetadata(NUMBERED, NAME);
-    await settle();
-    writeShortMetadata(NUMBERED, NAME);
-    await settle();
-    const john = getRun(NUMBERED, 'short-S01')!.messages.filter((m) => m.from === 'john');
-    expect(john).toHaveLength(1);
-    expect(john[0].text).toMatch(/Write the YouTube metadata/);
-  });
-
-  it("tells the AI the longform's URL once it's saved, and asks for a placeholder until then", async () => {
-    makeFolder();
-    writeShortMetadata(NUMBERED, NAME);
-    await settle();
-    expect(getRun(NUMBERED, 'short-S01')?.prompt).toMatch(/URL isn't known: leave a clearly marked placeholder/);
-    forget();
-
-    const url = 'https://www.youtube.com/watch?v=abc123';
-    saveLongformUrl(NUMBERED, url);
-    expect(readLongformUrl(NUMBERED)).toBe(url);
-    expect(shortsOverview(NUMBERED).longformUrl).toBe(url);
-    writeShortMetadata(NUMBERED, NAME);
-    await settle();
-    expect(getRun(NUMBERED, 'short-S01')?.prompt).toContain(`The longform's YouTube URL is ${url}.`);
-  });
-
+describe("the longform's YouTube URL", () => {
   it('saves only a YouTube address, and an empty box clears it', () => {
     expect(() => saveLongformUrl(NUMBERED, 'https://evil.example/x')).toThrow(/isn't a YouTube address/);
     expect(() => saveLongformUrl(NUMBERED, 'javascript:alert(1)')).toThrow();
     expect(readLongformUrl(NUMBERED)).toBeNull();
     saveLongformUrl(NUMBERED, ' https://youtu.be/abc ');
     expect(readLongformUrl(NUMBERED)).toBe('https://youtu.be/abc');
+    expect(shortsOverview(NUMBERED).longformUrl).toBe('https://youtu.be/abc');
     saveLongformUrl(NUMBERED, '');
     expect(readLongformUrl(NUMBERED)).toBeNull();
-  });
-
-  it("refuses a folder that isn't there, or a name that isn't a short's, including one reaching outside", () => {
-    expect(() => writeShortMetadata(NUMBERED, NAME)).toThrow(/no short called/);
-    expect(() => writeShortMetadata(NUMBERED, 'Not a short')).toThrow(/isn't named like/);
-    expect(() => writeShortMetadata(NUMBERED, '../../x_S01 - y')).toThrow(/isn't named like/);
-    expect(() => metadataRun(NUMBERED, '..\\x_S01 - y')).toThrow(/isn't named like/);
-  });
-
-  it('is open to Gemini, which only has to write a text file', () => {
-    const file = process.env.HQ_AI_FILE;
-    process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
-    chooseAi('gemini');
-    const command = config.geminiCommand;
-    config.geminiCommand = config.claudeCommand;
-    try {
-      makeFolder();
-      expect(() => writeShortMetadata(NUMBERED, NAME)).not.toThrow();
-      expect(getRun(NUMBERED, 'short-S01')?.ai).toBe('gemini');
-      stopRun(NUMBERED, 'short-S01');
-    } finally {
-      process.env.HQ_AI_FILE = file;
-      config.geminiCommand = command;
-    }
   });
 });
 
