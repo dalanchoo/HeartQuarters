@@ -14,6 +14,7 @@ import {
 import { ManageButtons } from './ManageFolder';
 import { CleanUp } from './CleanUp';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
+import { ScriptSection } from './ScriptSection';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
@@ -732,9 +733,9 @@ function PieceCard({
     setDocsLoads((n) => n + 1);
     onChanged?.();
   };
-  // Every card has 8 collapsible sections, top to bottom:
-  // 1. YouTube Studio, 2. Versions (open by default), 3. Generate Video, 4. Generate Packaging,
-  // 5. View and Compare Packaging, 6. Analysis, 7. Other Platforms, 8. Clean Up.
+  // Every card has 9 collapsible sections, top to bottom:
+  // 1. YouTube Studio, 2. Script, 3. Versions (open by default), 4. Generate Video, 5. Generate Packaging,
+  // 6. View and Compare Packaging, 7. Analysis, 8. Other Platforms, 9. Clean Up.
   const contents = (
     <>
       {piece.kind !== 'reel' && (
@@ -744,6 +745,7 @@ function PieceCard({
           <YouTubeLinkBar piece={piece} link={link} />
         </details>
       )}
+      {piece.kind !== 'reel' && <ScriptSection key={`script-${piece.path}`} piece={piece.path} onSaved={reloadDocs} />}
 
       <details className="yt-section" open>
         <summary>Versions</summary>

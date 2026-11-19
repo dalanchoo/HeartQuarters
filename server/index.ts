@@ -64,6 +64,7 @@ import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
 import { downloadChannelAnalytics } from './channel-analytics.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
+import { readScript, saveScript } from './script.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -147,6 +148,12 @@ app.get('/api/projects', handle((_req, res) => {
   res.json(listProjects());
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
+app.get('/api/script', (req, res) => {
+  readScript(String(req.query.piece ?? '')).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
+app.post('/api/script', (req, res) => {
+  saveScript(String(req.body?.piece ?? ''), String(req.body?.text ?? '')).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected, req.body?.sourceExpected)); }));
 app.post('/api/packaging/import-thumbnail', handle((req, res) => { res.json(savePackagingThumbnail(String(req.body?.piece ?? ''), String(req.body?.version ?? ''), decodeThumbnail(req.body?.data))); }));
