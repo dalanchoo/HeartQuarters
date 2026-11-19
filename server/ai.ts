@@ -1,5 +1,6 @@
 // Which AI does the jobs the buttons start: Claude (Claude Code), ChatGPT (OpenAI's Codex) or Gemini (Google's
 // Antigravity CLI, "agy"). John picks at the top of the app. A conversation stays with the AI it's with until John sends a note after picking the other one; see claude.ts.
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -209,4 +210,61 @@ export function geminiReader(): (line: string) => AiEvent {
     }
     return {};
   };
+}
+
+/** Kills a child process and, on Windows, its child tree (MCP servers, Codex sandbox helpers). */
+export function killProcessTree(child: ChildProcess) {
+  const fallback = () => { try { child.kill(); } catch { /* already gone */ } };
+  if (process.platform === 'win32' && child.pid) {
+    const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
+    killer.on('error', fallback);
+    killer.on('close', (code) => { if (code !== 0) fallback(); });
+    return;
+  }
+  fallback();
+}
+
+export interface ProcessResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  startError?: string;
+}
+
+/** Runs an AI subprocess with timeout, Windows process-tree cleanup, and a post-exit settle if a grandchild keeps stdio open. */
+export function runAiProcess(
+  cmd: string,
+  args: string[],
+  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; windowsHide?: boolean; mergeOutput?: boolean },
+): Promise<ProcessResult> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: opts.windowsHide ?? true });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
+    const done = (result: ProcessResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (exitTimer) clearTimeout(exitTimer);
+      resolve(result);
+    };
+    child.stdout.setEncoding('utf8').on('data', (c: string) => { stdout += c; });
+    child.stderr.setEncoding('utf8').on('data', (c: string) => {
+      if (opts.mergeOutput) stdout += c;
+      else stderr = (stderr + c).slice(-2000);
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killProcessTree(child);
+    }, opts.timeoutMs);
+    child.on('error', (e) => done({ code: null, stdout, stderr, timedOut, startError: e.message }));
+    child.on('exit', (code) => {
+      exitTimer = setTimeout(() => done({ code, stdout, stderr, timedOut }), 1500);
+    });
+    child.on('close', (code) => done({ code, stdout, stderr, timedOut }));
+  });
 }

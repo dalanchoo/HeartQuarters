@@ -1,10 +1,10 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { AI_NAMES, aiCommand, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, type ExpressionCategory } from './expressions.js';
@@ -131,15 +131,10 @@ export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
     : ai === 'claude' ? ['-p', prompt, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
     : ['-p', prompt, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
-  const out = await new Promise<string>((resolve, reject) => {
-    const child = spawn(cmd, [...prefix, ...args], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = ''; let stderr = ''; let timedOut = false;
-    child.stdout.setEncoding('utf8').on('data', (value: string) => { stdout += value; });
-    child.stderr.setEncoding('utf8').on('data', (value: string) => { stderr = (stderr + value).slice(-2000); });
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, 20 * 60 * 1000);
-    child.on('error', error => { clearTimeout(timer); reject(new Error(`Could not start the AI: ${error.message}`)); });
-    child.on('close', code => { clearTimeout(timer); if (code === 0) resolve(stdout); else reject(new Error(timedOut ? 'The assessment timed out.' : stderr.trim().slice(-600) || `The AI stopped (exit code ${code}).`)); });
-  });
+  const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000 });
+  if (res.startError) throw new Error(`Could not start the AI: ${res.startError}`);
+  if (res.code !== 0) throw new Error(res.timedOut ? 'The assessment timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);
+  const out = res.stdout;
   if (ai === 'codex') return fs.readFileSync(output, 'utf8');
   if (ai === 'claude') { const result = JSON.parse(out) as { is_error?: boolean; result?: string }; if (result.is_error || !result.result) throw new Error(result.result || 'Claude could not assess the image.'); return result.result; }
   return out;

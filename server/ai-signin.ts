@@ -2,7 +2,7 @@
 // program, not the AI itself. Signing in opens the AI's program in its own window, where John finishes in the browser.
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { AI_NAMES, aiCommand, isAiId, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, isAiId, runAiProcess, type AiId } from './ai.js';
 
 export type SignInState = 'in' | 'out' | 'unknown';
 export interface SignIn { id: AiId; name: string; state: SignInState; detail: string }
@@ -47,22 +47,10 @@ function lastLines(text: string): string {
 }
 
 /** Runs a program and collects what it prints, stopping it after 30 seconds. */
-export const runProgram: Runner = (cmd, args) =>
-  new Promise((resolve) => {
-    let out = '';
-    const child = spawn(cmd, args, { cwd: os.homedir(), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    const timer = setTimeout(() => child.kill(), 30_000);
-    child.stdout.setEncoding('utf8').on('data', (c: string) => (out += c));
-    child.stderr.setEncoding('utf8').on('data', (c: string) => (out += c));
-    child.on('error', (e) => {
-      clearTimeout(timer);
-      resolve({ code: null, out: `Couldn't start it: ${e.message}` });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code, out });
-    });
-  });
+export const runProgram: Runner = async (cmd, args) => {
+  const res = await runAiProcess(cmd, args, { cwd: os.homedir(), timeoutMs: 30_000, mergeOutput: true });
+  return res.startError ? { code: null, out: `Couldn't start it: ${res.startError}` } : { code: res.code, out: res.stdout };
+};
 
 /** All three AIs, checked at the same time. */
 export async function aiSignIns(run: Runner = runProgram): Promise<SignIn[]> {

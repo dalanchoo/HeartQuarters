@@ -4,11 +4,10 @@
 // 02.png...), what was asked (Requests.md), and the conversation's id (Conversation.json), so John's change requests
 // ("make the text bigger") go to the same conversation, which still has the photo and the earlier image.
 // The AI makes the image in a work folder of the app's own; HeartQuarters copies it into Drafts. Nothing is overwritten.
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AI_NAMES, aiCommand, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
@@ -143,21 +142,12 @@ export function changeRequest(text: string, out: string, refs: string[] = [], ne
 
 // ---- Running the AIs --------------------------------------------------------------------------------------
 
-function run(cmd: string, args: string[], cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    let err = '';
-    child.stdout.setEncoding('utf8').on('data', (c: string) => (out += c));
-    child.stderr.setEncoding('utf8').on('data', (c: string) => (err = (err + c).slice(-2000)));
-    const timer = setTimeout(() => child.kill(), ONE_RUN_MS);
-    child.on('error', (e) => reject(new Error(`Couldn't start it: ${e.message}`)));
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out);
-      else reject(new Error(err.trim().split('\n').slice(-3).join(' ') || `It stopped (exit code ${code}).`));
-    });
-  });
+async function run(cmd: string, args: string[], cwd: string): Promise<string> {
+  const res = await runAiProcess(cmd, args, { cwd, timeoutMs: ONE_RUN_MS });
+  if (res.startError) throw new Error(`Couldn't start it: ${res.startError}`);
+  if (res.code === 0) return res.stdout;
+  if (res.timedOut) throw new Error('It timed out before finishing.');
+  throw new Error(res.stderr.trim().split('\n').slice(-3).join(' ') || `It stopped (exit code ${res.code}).`);
 }
 
 /** The newest image in a folder made after `since` (so an old image is never taken for a new one), or null. */

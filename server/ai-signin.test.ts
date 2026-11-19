@@ -1,5 +1,6 @@
 // Whether each AI is signed in, and opening its sign-in. Fake programs only: no real AI runs.
 import { describe, expect, it, vi } from 'vitest';
+import { runAiProcess } from './ai';
 import { aiSignIns, openSignIn, readSignIn, type Runner } from './ai-signin';
 
 describe('reading each AI sign-in check', () => {
@@ -39,5 +40,20 @@ describe('opening a sign-in', () => {
     expect(open.mock.calls[1][1].at(-1)).toBe('login');
     expect(() => openSignIn('calc.exe', open)).toThrow(/Unknown AI/);
     expect(open).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('runAiProcess', () => {
+  it('captures stdout, handles missing executables, and kills timed-out processes', async () => {
+    const ok = await runAiProcess(process.execPath, ['-e', 'console.log("hello")'], { cwd: process.cwd(), timeoutMs: 5000 });
+    expect(ok).toMatchObject({ code: 0, timedOut: false });
+    expect(ok.stdout.trim()).toBe('hello');
+
+    const missing = await runAiProcess('definitely-not-a-real-binary-hq', [], { cwd: process.cwd(), timeoutMs: 5000 });
+    expect(missing.code).toBeNull();
+    expect(missing.startError).toBeTruthy();
+
+    const slow = await runAiProcess(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { cwd: process.cwd(), timeoutMs: 150 });
+    expect(slow.timedOut).toBe(true);
   });
 });

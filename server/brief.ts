@@ -7,13 +7,12 @@
 // They run in turn whatever AI is picked at the top of the app. The AIs only answer: HeartQuarters writes
 // Packaging\Drafts\Brief.md from their answers, so no AI edits John's files. An existing Brief.md is kept, renamed
 // with its date and time. Jobs live only in the engine's memory, like conversations.
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
-import { AI_NAMES, aiCommand, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
@@ -209,21 +208,12 @@ export function errorInAnswer(out: string): string {
   return reason;
 }
 
-function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env: env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    let err = '';
-    child.stdout.setEncoding('utf8').on('data', (c: string) => (out += c));
-    child.stderr.setEncoding('utf8').on('data', (c: string) => (err = (err + c).slice(-2000)));
-    const timer = setTimeout(() => child.kill(), ONE_RUN_MS);
-    child.on('error', (e) => reject(new Error(`Couldn't start it: ${e.message}`)));
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out);
-      else reject(new Error(err.trim().split('\n').slice(-3).join(' ') || errorInAnswer(out) || `It stopped (exit code ${code}).`));
-    });
-  });
+async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
+  const res = await runAiProcess(cmd, args, { cwd, env, timeoutMs: ONE_RUN_MS });
+  if (res.startError) throw new Error(`Couldn't start it: ${res.startError}`);
+  if (res.code === 0) return res.stdout;
+  if (res.timedOut) throw new Error('It timed out before finishing.');
+  throw new Error(res.stderr.trim().split('\n').slice(-3).join(' ') || errorInAnswer(res.stdout) || `It stopped (exit code ${res.code}).`);
 }
 
 /** The real AIs, read-only: none of them may change a file. */
