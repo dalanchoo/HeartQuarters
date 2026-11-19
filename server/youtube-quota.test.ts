@@ -38,6 +38,12 @@ describe('YouTube quota', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('does not lock out Data API reads when YouTube reports uploadLimitExceeded', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response('{"error":{"errors":[{"reason":"uploadLimitExceeded"}]}}', { status: 403 })));
+    await expect(youtubeFetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable', { method: 'POST' })).rejects.toThrow(/daily upload limit/i);
+    expect(youtubeQuota().exhausted).toBe(false);
+  });
+
   it('uses the Pacific-time day, which starts again at midnight there', () => {
     const lateEvening = new Date('2026-11-13T07:30:00Z'); // 11:30 PM Pacific on November 12
     expect(pacificDay(lateEvening)).toBe('2026-11-12');

@@ -28,6 +28,9 @@ describe('YouTube sign-in', () => {
     expect(youtubeStatus().reportingAccess).toBe(true);
     expect(String(mock.mock.calls[0][1].body)).toContain('code_verifier=');
     expect(await youtubeAccessToken()).toBe('access');
+    // Cached in memory: a second call does not hit Google again before expiry.
+    expect(await youtubeAccessToken()).toBe('access');
+    expect(mock).toHaveBeenCalledTimes(2);
     await expect(finishYoutubeAuth(url.searchParams.get('state')!, 'code')).rejects.toThrow(/match/);
   });
   it('rejects missing configuration and bad client IDs', () => {

@@ -23,16 +23,19 @@ const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data
 function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
 export function uploadsFor(piece: string): UploadJob[] {
   if (!fs.existsSync(jobsDir())) return [];
-  return fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
+  const entries = fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8')) as UploadJob;
+      const file = path.join(jobsDir(), f);
+      const j = JSON.parse(fs.readFileSync(file, 'utf8')) as UploadJob;
       if (j.piece !== piece) return [];
-      const live = jobs.get(j.id); if (live) return [live];
+      const mtime = fs.statSync(file).mtimeMs;
+      const live = jobs.get(j.id); if (live) return [{ job: live, mtime }];
       if (j.status === 'uploading') { j.status = j.videoId ? 'done' : 'unknown'; if (j.videoId) j.warning = 'The upload completed, but the remaining steps may have been interrupted. Check YouTube Studio.'; }
       if (j.subtitleStatus === 'uploading') { j.subtitleStatus = 'error'; j.subtitleError = 'HeartQuarters restarted while sending subtitles'; }
-      return [j];
+      return [{ job: j, mtime }];
     } catch { return []; }
-  }).reverse();
+  });
+  return entries.sort((a, b) => b.mtime - a.mtime).map((e) => e.job);
 }
 /** A piece (or file) path inside a folder: the folder itself or anything under it. */
 const inFolder = (p: string | undefined, folder: string) => !!p && (p === folder || p.startsWith(`${folder}/`));
@@ -161,7 +164,8 @@ export async function downloadYoutubeThumbnail(piece: string, id: string, versio
 /** A linked video's settings and playlists. Captions cost 50 units more, so they're read only when asked for. */
 export async function existingYoutubeSettings(piece: string, id: string, withCaptions = true) {
   const job = completedUpload(piece, id); const token = await youtubeAccessToken();
-  const [video, playlists] = await Promise.all([readYoutubeVideo(token, job.videoId!), videoPlaylists(piece, id)]);
+  const [video, snapshot] = await Promise.all([readYoutubeVideo(token, job.videoId!), playlistSnapshot(token, job.videoId!)]);
+  const playlists = { playlists: snapshot.playlists, selected: snapshot.playlists.filter((p) => snapshot.entries.get(p.id)!.length > 0).map((p) => p.id) };
   video.settings.thumbnail = await firstWorkingThumbnail(video.settings.thumbnails ?? []);
   let captions: Awaited<ReturnType<typeof youtubeCaptionTracks>> | null = null;
   let captionError: string | null = null;
@@ -210,15 +214,21 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
     if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
   }
   const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
-  const current = await videoPlaylists(piece, id);
-  const available = new Set(current.playlists.map((p) => p.id));
-  if ([...oldIds, ...newIds].some((p) => !available.has(p))) throw new Error('Your playlist list changed. Reload the YouTube settings before saving.');
-  if (current.playlists.some((p) => oldIds.includes(p.id) !== newIds.includes(p.id) && current.selected.includes(p.id) !== oldIds.includes(p.id))) throw new Error('A playlist changed in Studio. Reload the YouTube settings before saving.');
+  const playlistsChanged = oldIds.length !== newIds.length || oldIds.some((p) => !newIds.includes(p));
   const token = await youtubeAccessToken();
+  let snapshot: Awaited<ReturnType<typeof playlistSnapshot>> | null = null;
+  if (playlistsChanged) {
+    snapshot = await playlistSnapshot(token, job.videoId!);
+    const available = new Set(snapshot.playlists.map((p) => p.id));
+    if ([...oldIds, ...newIds].some((p) => !available.has(p))) throw new Error('Your playlist list changed. Reload the YouTube settings before saving.');
+    if (snapshot.playlists.some((p) => oldIds.includes(p.id) !== newIds.includes(p.id) && (snapshot!.entries.get(p.id)!.length > 0) !== oldIds.includes(p.id))) throw new Error('A playlist changed in Studio. Reload the YouTube settings before saving.');
+  }
   await updateYoutubeVideo(token, job.videoId!, baseline, desired);
   const errors: string[] = [];
-  try { const result = await saveVideoPlaylists(piece, id, oldIds, newIds); errors.push(...result.errors); }
-  catch (e) { errors.push(`Playlists: ${e instanceof Error ? e.message : String(e)}`); }
+  if (snapshot) {
+    try { const result = await applyPlaylistChanges(token, job.videoId!, snapshot, oldIds, newIds); errors.push(...result.errors); }
+    catch (e) { errors.push(`Playlists: ${e instanceof Error ? e.message : String(e)}`); }
+  }
   if (coverPath) {
     try {
       if (isShortPiece(piece) && await youtubeProcessingStatus(token, job.videoId!) !== 'succeeded') throw new Error('YouTube is still processing this Short. Choose the thumbnail again after processing finishes.');
@@ -239,6 +249,31 @@ export async function videoPlaylists(piece: string, id: string) {
   return { playlists: snapshot.playlists, selected: snapshot.playlists.filter((p) => snapshot.entries.get(p.id)!.length > 0).map((p) => p.id) };
 }
 
+async function applyPlaylistChanges(token: string, videoId: string, snapshot: Awaited<ReturnType<typeof playlistSnapshot>>, oldIds: string[], newIds: string[]) {
+  const changed = snapshot.playlists.filter((p) => oldIds.includes(p.id) !== newIds.includes(p.id));
+  const errors: string[] = [];
+  const applied: typeof changed = [];
+  for (const playlist of changed) {
+    try {
+      if (newIds.includes(playlist.id)) await addYoutubePlaylist(token, playlist.id, videoId);
+      else for (const entry of snapshot.entries.get(playlist.id)!) await removePlaylistVideoItem(token, entry);
+      applied.push(playlist);
+    } catch (e) { errors.push(`${playlist.title}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  // YouTube's playlist reads can briefly lag behind a successful change.
+  let pending = applied;
+  for (let attempt = 0; pending.length && attempt < 4; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
+    const checks = await Promise.all(pending.map(async (p) => {
+      try { return (await playlistVideoItems(token, p.id, videoId)).length > 0 === newIds.includes(p.id); }
+      catch { return false; }
+    }));
+    pending = pending.filter((_p, i) => !checks[i]);
+  }
+  for (const playlist of pending) errors.push(`${playlist.title}: YouTube has not confirmed the change yet; reload the playlists shortly`);
+  return { errors };
+}
+
 /** Apply only the boxes the user changed, after checking for changes made in Studio. */
 export async function saveVideoPlaylists(piece: string, id: string, before: unknown, after: unknown) {
   if (before === undefined || after === undefined) throw new Error('Load the video’s current playlists first.');
@@ -251,27 +286,7 @@ export async function saveVideoPlaylists(piece: string, id: string, before: unkn
   if ([...oldIds, ...newIds].some((id) => !allowed.has(id))) throw new Error('Your playlist list changed. Reload it and try again.');
   const changed = snapshot.playlists.filter((p) => oldIds.includes(p.id) !== newIds.includes(p.id));
   if (changed.some((p) => (snapshot.entries.get(p.id)!.length > 0) !== oldIds.includes(p.id))) throw new Error('A selected playlist changed in YouTube Studio. Reload the playlists and try again.');
-  const errors: string[] = [];
-  const applied: typeof changed = [];
-  for (const playlist of changed) {
-    try {
-      if (newIds.includes(playlist.id)) await addYoutubePlaylist(token, playlist.id, job.videoId!);
-      else for (const entry of snapshot.entries.get(playlist.id)!) await removePlaylistVideoItem(token, entry);
-      applied.push(playlist);
-    } catch (e) { errors.push(`${playlist.title}: ${e instanceof Error ? e.message : String(e)}`); }
-  }
-  // YouTube's playlist reads can briefly lag behind a successful change.
-  let pending = applied;
-  for (let attempt = 0; pending.length && attempt < 4; attempt++) {
-    if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
-    const checks = await Promise.all(pending.map(async (p) => {
-      try { return (await playlistVideoItems(token, p.id, job.videoId!)).length > 0 === newIds.includes(p.id); }
-      catch { return false; }
-    }));
-    pending = pending.filter((_p, i) => !checks[i]);
-  }
-  for (const playlist of pending) errors.push(`${playlist.title}: YouTube has not confirmed the change yet; reload the playlists shortly`);
-  return { errors };
+  return applyPlaylistChanges(token, job.videoId!, snapshot, oldIds, newIds);
 }
 
 async function putInPlaylists(job: UploadJob, token: string, ids: string[]) {
@@ -339,6 +354,10 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
     }
   } finally { await handle.close(); }
   if (!job.videoId) throw new Error('YouTube did not confirm the completed upload.');
+  // Long uploads (> 60 min) outlive the first OAuth access token; refresh if expired before follow-up steps.
+  if (input.playlistIds?.length || files.cover || input.subtitle) {
+    try { token = await youtubeAccessToken(); } catch { /* keep the original token and let the step report any 401 */ }
+  }
   if (input.playlistIds?.length) {
     try { await putInPlaylists(job, token, checkPlaylistIds(input.playlistIds)); }
     catch (e) { job.playlistResults = input.playlistIds.map((id) => ({ id, status: 'error', error: e instanceof Error ? e.message : String(e) })); record(job); }

@@ -22,10 +22,16 @@ describe('saving the combined YouTube form', () => {
     mocks.read.mockResolvedValue({ resource: { snippet: { channelId: 'other' } } });
     await expect(linkYoutubeVideo('piece', 'https://youtu.be/Another_123')).rejects.toThrow(/not on the connected/);
   });
-  it('saves video settings and only the changed playlist selections', async () => {
-    mocks.items.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce(['item']);
+  it('saves video settings and only the changed playlist selections (reading playlists once)', async () => {
+    mocks.items.mockResolvedValueOnce([]).mockResolvedValueOnce(['item']);
     expect(await syncYoutubeSettings('piece', 'abc-123', settings, { ...settings, title: 'New' }, [], ['p'], '', '')).toEqual({ errors: [] });
     expect(mocks.update).toHaveBeenCalledOnce(); expect(mocks.add).toHaveBeenCalledWith('token', 'p', 'youtube-id');
+    expect(mocks.list).toHaveBeenCalledOnce();
+  });
+  it('skips playlist API calls completely when playlists did not change', async () => {
+    expect(await syncYoutubeSettings('piece', 'abc-123', settings, { ...settings, title: 'New' }, ['p'], ['p'], '', '')).toEqual({ errors: [] });
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(mocks.list).not.toHaveBeenCalled();
   });
   it('stops before changing metadata if a selected playlist changed in Studio', async () => {
     mocks.items.mockResolvedValueOnce([]);

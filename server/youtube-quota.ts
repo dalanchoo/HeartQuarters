@@ -110,7 +110,8 @@ export async function youtubeFetch(url: string, init: RequestInit = {}): Promise
   recordYoutubeUse(youtubeCost(url, method), isUploadStart);
   if (res.status === 403) {
     const body = await res.clone().text().catch(() => '');
-    if (/quotaExceeded|dailyLimitExceeded|uploadLimitExceeded/.test(body)) {
+    if (/uploadLimitExceeded/.test(body)) throw new Error('YouTube’s daily upload limit was reached. Try uploading again tomorrow.');
+    if (/quotaExceeded|dailyLimitExceeded/.test(body)) {
       const q = load();
       q.exhausted = true;
       save(q);
