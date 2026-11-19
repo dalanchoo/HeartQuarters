@@ -110,3 +110,11 @@ export function tagInOpening(description: string, tags: string): string | null {
   }
   return null;
 }
+
+/**
+ * Whether to warn that vidIQ's check fails: there are a description and tags, but no tag in the description's
+ * first 200 characters. Without tags there's nothing to check yet, such as an empty template (John, 2026-11-18).
+ */
+export function missingTagInOpening(description: string | null | undefined, tags: string | null | undefined): boolean {
+  return !!description?.trim() && !!tags?.split(',').some((t) => t.trim()) && !tagInOpening(description, tags);
+}

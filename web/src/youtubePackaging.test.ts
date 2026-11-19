@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, splitHashtags, SYNC_FIELDS, tagInOpening, youtubeValues, wouldLoseChapters } from './youtubePackaging';
+import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, missingTagInOpening, splitHashtags, SYNC_FIELDS, tagInOpening, youtubeValues, wouldLoseChapters } from './youtubePackaging';
 
 describe('chapter safety', () => {
   const chapters = 'About the video\n\nCHAPTERS\n0:00 First\n1:08 Second\n1:02:03 Third';
@@ -89,5 +89,11 @@ describe("a tag in the description's first 200 characters (vidIQ's check)", () =
     expect(tagInOpening('SDAM means I forget.', TAGS)).toBe('SDAM');
     expect(tagInOpening('SDAMish feelings', 'SDAM')).toBeNull();
     expect(tagInOpening('Anything', '')).toBeNull();
+  });
+  it('warns only when there are a description and tags, and no tag opens the description', () => {
+    expect(missingTagInOpening('#tags', '')).toBe(false); // an empty template: nothing to check yet
+    expect(missingTagInOpening('', TAGS)).toBe(false);
+    expect(missingTagInOpening('I had a good childhood.', 'Good Childhood, SDAM')).toBe(false);
+    expect(missingTagInOpening('Sometimes I meet somebody.', TAGS)).toBe(true);
   });
 });
