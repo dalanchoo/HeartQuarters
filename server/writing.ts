@@ -61,9 +61,10 @@ function toRef(full: string, base: string): FileRef {
   };
 }
 
-function describe(section: string, folder: string): WritingSummary {
+function describe(section: string, folder: string, existingFiles?: string[]): WritingSummary {
   const m = DATED_RE.exec(folder);
-  const drafts = allFiles(path.join(config.writingDir, section, folder)).filter((f) =>
+  const files = existingFiles ?? allFiles(path.join(config.writingDir, section, folder));
+  const drafts = files.filter((f) =>
     ['.docx', '.gdoc'].includes(path.extname(f).toLowerCase()),
   );
   return {
@@ -102,15 +103,15 @@ export function listWriting(): { section: string; pieces: WritingSummary[] }[] {
 export function readWriting(id: string): WritingDetail {
   const [section, ...rest] = id.split('/');
   const folder = rest.join('/');
-  if (!SECTIONS.includes(section) || !folder || folder.includes('/')) {
+  if (!SECTIONS.includes(section) || !folder || folder.includes('/') || folder.includes('\\') || folder === '.' || folder === '..') {
     throw new Error('Not a writing folder.');
   }
   const dir = safeResolve('writing', id);
-  if (!fs.existsSync(dir)) throw new Error('Writing folder not found.');
+  if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Writing folder not found.');
 
   const files = allFiles(dir);
   const ext = (f: string) => path.extname(f).toLowerCase();
-  const inMetadata = (f: string) => path.relative(dir, f).toLowerCase().startsWith('substack metadata');
+  const inMetadata = (f: string) => path.relative(dir, f).split(path.sep)[0].toLowerCase() === 'substack metadata';
   const byName = (a: FileRef, b: FileRef) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
   const googleDocs = files
@@ -118,7 +119,7 @@ export function readWriting(id: string): WritingDetail {
     .flatMap((f) => {
       try {
         const { doc_id } = JSON.parse(fs.readFileSync(f, 'utf8'));
-        if (!doc_id) return [];
+        if (typeof doc_id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(doc_id)) return [];
         return [{
           name: path.basename(f, '.gdoc'),
           url: `https://docs.google.com/document/d/${doc_id}/edit`,
@@ -129,7 +130,7 @@ export function readWriting(id: string): WritingDetail {
     });
 
   return {
-    ...describe(section, folder),
+    ...describe(section, folder, files),
     drafts: files.filter((f) => ext(f) === '.docx').map((f) => toRef(f, dir)).sort(byName),
     googleDocs,
     previews: files.filter((f) => IMAGE_EXTS.has(ext(f)) && inMetadata(f)).map((f) => toRef(f, dir)).sort(byName),

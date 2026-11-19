@@ -17,7 +17,7 @@ import { youtubeFetch } from './youtube-quota.js';
 export const MAX_THUMBNAIL_BYTES = 50_000_000;
 
 export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
-export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
+export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; createdAt?: string; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
 function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
@@ -29,13 +29,14 @@ export function uploadsFor(piece: string): UploadJob[] {
       const j = JSON.parse(fs.readFileSync(file, 'utf8')) as UploadJob;
       if (j.piece !== piece) return [];
       const mtime = fs.statSync(file).mtimeMs;
-      const live = jobs.get(j.id); if (live) return [{ job: live, mtime }];
+      const order = j.createdAt ? Date.parse(j.createdAt) || mtime : mtime;
+      const live = jobs.get(j.id); if (live) return [{ job: live, order }];
       if (j.status === 'uploading') { j.status = j.videoId ? 'done' : 'unknown'; if (j.videoId) j.warning = 'The upload completed, but the remaining steps may have been interrupted. Check YouTube Studio.'; }
       if (j.subtitleStatus === 'uploading') { j.subtitleStatus = 'error'; j.subtitleError = 'HeartQuarters restarted while sending subtitles'; }
-      return [{ job: j, mtime }];
+      return [{ job: j, order }];
     } catch { return []; }
   });
-  return entries.sort((a, b) => b.mtime - a.mtime).map((e) => e.job);
+  return entries.sort((a, b) => b.order - a.order).map((e) => e.job);
 }
 /** A piece (or file) path inside a folder: the folder itself or anything under it. */
 const inFolder = (p: string | undefined, folder: string) => !!p && (p === folder || p.startsWith(`${folder}/`));
@@ -68,6 +69,7 @@ export function moveUploadRecords(oldFolder: string, newFolder: string): number 
       continue; // an unreadable record is left as it is
     }
     if (!inFolder(job.piece, oldFolder)) continue;
+    if (!job.createdAt) job.createdAt = new Date(fs.statSync(file).mtimeMs).toISOString();
     fix(job);
     writeFileSafely(file, JSON.stringify(job, null, 2));
     changed++;
@@ -111,7 +113,7 @@ export function startUpload(input: UploadInput): UploadJob {
   if (input.subtitle && !youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant caption permission before uploading subtitles.');
   if (input.playlistIds?.length && !youtubeStatus().captionAccess) throw new Error('Reconnect YouTube and grant playlist permission first.');
   if (uploadsFor(input.piece).some((j) => j.video === input.video && (j.status === 'uploading' || j.status === 'unknown'))) throw new Error('An upload of this file is still running or its result is unknown. Check YouTube Studio before trying again.');
-  const job: UploadJob = { id: randomUUID(), piece: input.piece, video: input.video, status: 'uploading', sent: 0, total: files.size };
+  const job: UploadJob = { id: randomUUID(), piece: input.piece, video: input.video, status: 'uploading', sent: 0, total: files.size, createdAt: new Date().toISOString() };
   record(job); jobs.set(job.id, job);
   void upload(job, input, files).catch((e: unknown) => { job.status = job.videoId ? 'done' : 'unknown'; job.error = e instanceof Error ? e.message : String(e); record(job); });
   return job;
@@ -136,7 +138,7 @@ export async function linkYoutubeVideo(piece: string, value: unknown): Promise<U
   if (existing) return existing;
   const [video, channel] = await Promise.all([readYoutubeVideo(await youtubeAccessToken(), videoId), youtubeChannel()]);
   if (video.resource.snippet?.channelId !== channel.id) throw new Error('That video is not on the connected YouTube channel.');
-  const job: UploadJob = { id: randomUUID(), piece, video: '', status: 'done', videoId, sent: 0, total: 0 };
+  const job: UploadJob = { id: randomUUID(), piece, video: '', status: 'done', videoId, sent: 0, total: 0, createdAt: new Date().toISOString() };
   record(job); jobs.set(job.id, job); return job;
 }
 

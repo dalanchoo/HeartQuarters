@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { acknowledgeUpload, addPlaylists, addSubtitle, saveVideoPlaylists, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
+import { acknowledgeUpload, addPlaylists, addSubtitle, moveUploadRecords, removeExtraCaptions, saveVideoPlaylists, startUpload, uploadsFor, validateUpload, type UploadInput } from './youtube';
 
 vi.mock('./youtube-auth', () => ({ youtubeAccessToken: vi.fn(async () => 'fake-token'), youtubeStatus: vi.fn(() => ({ captionAccess: true })) }));
 vi.mock('./youtube-language', () => ({ videoLanguage: (language?: string) => language ?? 'en-US', setVideoLanguage: vi.fn(async () => {}) }));
@@ -204,5 +204,36 @@ describe('YouTube uploads', () => {
     for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
     expect(await saveVideoPlaylists(input.piece, job.id, ['one'], [])).toEqual({ errors: [] });
     expect(mock).toHaveBeenCalledTimes(8);
+  });
+  it('orders uploads newest-first by modified time and updates records on folder rename', () => {
+    const dir = process.env.HQ_YOUTUBE_JOBS_DIR!;
+    fs.mkdirSync(dir, { recursive: true });
+    const older = path.join(dir, 'ffffffff-0000-0000-0000-000000000001.json');
+    const newer = path.join(dir, '00000000-0000-0000-0000-000000000002.json');
+    fs.writeFileSync(older, JSON.stringify({ id: 'ffffffff-0000-0000-0000-000000000001', piece: input.piece, video: input.video, status: 'done', videoId: 'old-id', sent: 1, total: 1 }));
+    fs.writeFileSync(newer, JSON.stringify({ id: '00000000-0000-0000-0000-000000000002', piece: input.piece, video: input.video, status: 'done', videoId: 'new-id', sent: 1, total: 1 }));
+    fs.utimesSync(older, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
+    fs.utimesSync(newer, new Date('2026-11-18T00:00:00Z'), new Date('2026-11-18T00:00:00Z'));
+    expect(uploadsFor(input.piece).map((j) => j.videoId)).toEqual(['new-id', 'old-id']);
+    expect(moveUploadRecords('001 - Test', '001 - Renamed')).toBe(2);
+    expect(uploadsFor('001 - Renamed/Longform').map((j) => j.videoId)).toEqual(['new-id', 'old-id']);
+  });
+  it('deletes only extra caption tracks in the same language as HeartQuarters track', async () => {
+    const dir = process.env.HQ_YOUTUBE_JOBS_DIR!;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '11111111-0000-0000-0000-000000000001.json'), JSON.stringify({ id: '11111111-0000-0000-0000-000000000001', piece: input.piece, video: input.video, status: 'done', videoId: 'vid-cap', sent: 1, total: 1 }));
+    const mock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        items: [
+          { id: 'hq', snippet: { language: 'en-US', trackKind: 'standard', name: 'HeartQuarters subtitles' } },
+          { id: 'dup', snippet: { language: 'en-US', trackKind: 'standard', name: 'Old' } },
+          { id: 'other-lang', snippet: { language: 'fr', trackKind: 'standard', name: 'French' } },
+        ],
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', mock);
+    expect(await removeExtraCaptions(input.piece, '11111111-0000-0000-0000-000000000001')).toEqual({ removed: 1 });
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(String(mock.mock.calls[1][0])).toContain('id=dup');
   });
 });

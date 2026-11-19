@@ -17,8 +17,17 @@ export interface Job {
 }
 
 const MAX_OUTPUT = 200_000; // characters kept per job
+const MAX_JOBS = 20;
 const jobs = new Map<string, Job>();
 let nextId = 1;
+
+function pruneJobs() {
+  if (jobs.size <= MAX_JOBS) return;
+  for (const [id, j] of jobs) {
+    if (jobs.size <= MAX_JOBS) break;
+    if (j.status !== 'running') jobs.delete(id);
+  }
+}
 
 export function listTools() {
   return config.tools.map((tool) => ({
@@ -49,6 +58,7 @@ export function runTool(toolId: string): Job {
     finishedAt: null,
   };
   jobs.set(job.id, job);
+  pruneJobs();
 
   const append = (text: string) => {
     job.output = (job.output + text).slice(-MAX_OUTPUT);
@@ -58,6 +68,7 @@ export function runTool(toolId: string): Job {
     job.status = status;
     job.exitCode = code;
     job.finishedAt = new Date().toISOString();
+    pruneJobs();
   };
 
   // Run from the tools folder so scripts can import each other
@@ -67,8 +78,8 @@ export function runTool(toolId: string): Job {
     env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
     windowsHide: true,
   });
-  child.stdout.on('data', (b: Buffer) => append(b.toString('utf8')));
-  child.stderr.on('data', (b: Buffer) => append(b.toString('utf8')));
+  child.stdout.setEncoding('utf8').on('data', (s: string) => append(s));
+  child.stderr.setEncoding('utf8').on('data', (s: string) => append(s));
   child.on('error', (e) => {
     append(`\n[Could not start Python: ${e.message}]\n`);
     finish('failed', null);
