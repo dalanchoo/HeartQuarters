@@ -653,6 +653,12 @@ app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Unknown API route.' });
 });
 
+app.use('/api', (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500;
+  const message = status === 413 ? 'That upload is too large.' : err instanceof Error ? err.message : String(err);
+  res.status(status).json({ error: message });
+});
+
 // ---- Screens (built by `npm run build`) -----------------------------------
 
 // The screens are rebuilt in the background while the app runs (npm start),

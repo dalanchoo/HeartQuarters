@@ -1,4 +1,4 @@
-import { useEffect, useState, type ClipboardEvent, type ReactNode } from 'react';
+import { Component, useEffect, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { AiPicker } from './AiPicker';
 import { postJson } from './api';
 
@@ -36,9 +36,31 @@ type TabId = (typeof TABS)[number]['id'];
 
 // The current tab is kept in the address so refreshing keeps you where you were.
 function tabFromHash(): TabId {
-  const name = decodeURIComponent(location.hash.slice(1).split('/')[0]);
+  let name = '';
+  try {
+    name = decodeURIComponent(location.hash.slice(1).split('/')[0]);
+  } catch {
+    return 'Videos';
+  }
   if (name === 'Projects') return 'Videos'; // old bookmarks
   return TABS.find((t) => t.id === name)?.id ?? 'Videos';
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="error-box" style={{ margin: '1rem' }}>
+        <h2>Something Went Wrong</h2>
+        <p>{this.state.error.message}</p>
+        <button type="button" onClick={() => this.setState({ error: null })}>Try Again</button>
+      </div>
+    );
+  }
 }
 
 // Each tab remembers where it was (John, 2026-11-14): its last address (e.g. #Videos/005 - ...), so its button goes
@@ -103,12 +125,14 @@ export function App() {
         <AiPicker />
       </header>
       <main>
-        {page('Videos', <ProjectsPage />)}
-        {page('Substack', <SubstackPage />)}
-        {page('Expressions', <ExpressionsPage />)}
-        {page('Guides', <GuidesPage />)}
-        {page('Skills', <SkillsPage />)}
-        {page('Tools', <ToolsPage />)}
+        <ErrorBoundary>
+          {page('Videos', <ProjectsPage />)}
+          {page('Substack', <SubstackPage />)}
+          {page('Expressions', <ExpressionsPage />)}
+          {page('Guides', <GuidesPage />)}
+          {page('Skills', <SkillsPage />)}
+          {page('Tools', <ToolsPage />)}
+        </ErrorBoundary>
       </main>
     </div>
   );

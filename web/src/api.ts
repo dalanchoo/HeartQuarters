@@ -36,11 +36,21 @@ function afterYoutube(url: string) {
   if (url.startsWith('/api/youtube/') && !url.startsWith('/api/youtube/quota')) window.dispatchEvent(new Event('hq-youtube-used'));
 }
 
+async function parseJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  try {
+    return (text ? JSON.parse(text) : {}) as Record<string, unknown>;
+  } catch {
+    if (!res.ok) throw new Error(res.statusText || `Server error (${res.status})`);
+    throw new Error('The server sent an unreadable reply. Refresh and try again.');
+  }
+}
+
 export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   afterYoutube(url);
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error ?? res.statusText);
+  const body = await parseJson(res);
+  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : res.statusText || `Request failed (${res.status})`);
   return body as T;
 }
 
@@ -52,14 +62,17 @@ export async function postJson<T>(url: string, data: unknown = {}): Promise<T> {
     body: JSON.stringify(data),
   });
   afterYoutube(url);
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error ?? res.statusText);
+  const body = await parseJson(res);
+  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : res.statusText || `Request failed (${res.status})`);
   return body as T;
 }
 
 export async function getText(root: RootId, path: string): Promise<string> {
   const res = await fetch(`/api/text?root=${root}&path=${encodeURIComponent(path)}`);
-  if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+  if (!res.ok) {
+    const body = await parseJson(res);
+    throw new Error(typeof body.error === 'string' ? body.error : res.statusText || `Request failed (${res.status})`);
+  }
   return res.text();
 }
 

@@ -1,9 +1,6 @@
 import { youtubeFetch } from './youtube-quota.js';
-export const VIDEO_LANGUAGES = [
-  { value: 'en-US', label: 'English (United States)' },
-  { value: 'en-GB', label: 'English (United Kingdom)' },
-  { value: 'en', label: 'English' },
-] as const;
+import { VIDEO_LANGUAGES } from './youtube-constants.js';
+export { VIDEO_LANGUAGES };
 
 export function videoLanguage(value: unknown): string {
   if (value === undefined) return 'en-US';

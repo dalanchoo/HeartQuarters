@@ -1,6 +1,6 @@
 import { rememberPlaylistCount, youtubeFetch } from './youtube-quota.js';
-export const SHORTS_PLAYLIST = 'PLRugoq-5oewtiiVZSSnHvjxENllCrjCmr';
-export interface YoutubePlaylist { id: string; title: string }
+import { SHORTS_PLAYLIST, type YoutubePlaylist } from './youtube-constants.js';
+export { SHORTS_PLAYLIST, type YoutubePlaylist };
 
 export function checkPlaylistIds(value: unknown): string[] {
   if (value === undefined) return [];

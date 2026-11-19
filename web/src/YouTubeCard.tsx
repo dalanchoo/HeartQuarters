@@ -4,8 +4,7 @@ import { CopyButton, type LoadedDoc } from './PackagingDoc';
 import { compareCaptions } from './captionCompare';
 import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
-import { VIDEO_LANGUAGES } from '../../server/youtube-language';
-import { SHORTS_PLAYLIST, type YoutubePlaylist } from '../../server/youtube-playlists';
+import { SHORTS_PLAYLIST, VIDEO_LANGUAGES, type YoutubePlaylist } from '../../server/youtube-constants';
 import { readAiLines, setAiLines, setFieldValue, sortTags, undoFieldEdit, type AiLines, type Field } from './packaging';
 import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
@@ -444,8 +443,15 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   ].filter((l, i, all) => all.findIndex((x) => x.toLowerCase() === l.toLowerCase()) === i);
 
   // What Push Changes will send.
+  const safeLocalValue = (k: SyncField) => {
+    try {
+      return localValue(text, k) ?? '';
+    } catch {
+      return '';
+    }
+  };
   const pending = [
-    ...staged.map((k) => (k === 'Thumbnail' ? `Thumbnail: ${localThumb?.name ?? ''}` : k === 'Captions' ? `Captions: ${subtitle.split('/').pop()}` : k === 'Description' || k === 'Tags' ? `${k}: the local file's` : `${k}: "${localValue(text, k) ?? ''}"`)),
+    ...staged.map((k) => (k === 'Thumbnail' ? `Thumbnail: ${localThumb?.name ?? ''}` : k === 'Captions' ? `Captions: ${subtitle.split('/').pop()}` : k === 'Description' || k === 'Tags' ? `${k}: the local file's` : `${k}: "${safeLocalValue(k)}"`)),
     ...(data && privacy !== data.video.privacy ? [`Visibility: ${data.video.privacy} → ${privacy}`] : []),
     ...(data ? data.playlists.filter((p) => playlists.includes(p.id) !== data.selected.includes(p.id)).map((p) => `Playlist: ${playlists.includes(p.id) ? 'add to' : 'take out of'} ${p.title}`) : []),
   ];
