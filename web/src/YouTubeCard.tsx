@@ -15,7 +15,8 @@ import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
-import { AiWritingChecker } from './AiWritingChecker';
+import { AiHighlightedText, AiWritingChecker, renderTextWithAiTells } from './AiWritingChecker';
+import { findAiTellSpans } from './aiWritingCheck';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
 import { canSelectIncomingCopy } from './stagedPackaging';
 
@@ -601,7 +602,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const edited = draft.changes.some(name => name.toLowerCase() === label.toLowerCase());
           const direction = youtubeCopyDirection(reverse, waiting, pulling);
           const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
-          const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : local : '(empty)'}</pre>;
+          const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : <AiHighlightedText text={local} /> : '(empty)'}</pre>;
           const localPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} /></> :
             <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} savedValue={label.toLowerCase() === 'tags' ? sortTags(savedField?.value ?? '') : savedField?.value ?? ''} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} />
           ) : (
@@ -616,7 +617,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           ) : remote === null ? (
             <p className="muted small-text">(YouTube doesn't report this)</p>
           ) : (
-            <pre className="lvy-value">{shownView === 'diff' && diff ? <DiffText parts={diff.right} side="youtube" /> : remote || '(empty)'}</pre>
+            <pre className="lvy-value">{shownView === 'diff' && diff ? <DiffText parts={diff.right} side="youtube" /> : remote ? <AiHighlightedText text={remote} /> : '(empty)'}</pre>
           );
           return (
             <ComparisonRow key={label} label={label} collapsible={isLongComparisonField(label, local, remote)} actions={showCopyActions && sync && shownView === 'diff' ? directionControls(direction, !!(canCompare && rawLocal !== null && !sameValues && !busy), !!(canCompare && remote !== null && !sameValues && !busy && !out && !doc.locked && canSelectIncomingCopy(edited, pulling)), () => stage(label), () => saveToFile(label)) : null} status={<>{label === 'Description' && missingTagInOpening(local, (() => { try { return localValue(originalDoc.text ?? '', 'Tags') ?? ''; } catch { return ''; } })()) && <span className="comparison-status comparison-different" title="vidIQ scores a description 50 instead of 100 when none of the tags appears word for word in its first 200 characters.">⚠ {versionName ?? 'Local'}: No Tag in First 200 Characters</span>}{state && <span className={`comparison-status ${direction ? 'comparison-waiting' : state === 'Same' ? 'comparison-same' : state === 'Different' ? 'comparison-different' : ''}`}>{state === 'Same' ? '✓ Same' : state === 'Different' ? '≠ Different' : state}</span>}</>}>
@@ -823,13 +824,20 @@ function MissingField({ doc, label }: { doc: LoadedDoc; label: string }) {
 }
 
 export function DiffText({ parts, side }: { parts: DiffPart[]; side: 'local' | 'youtube' }) {
+  const full = parts.map((p) => p.text).join('');
+  const spans = findAiTellSpans(full);
+  let pos = 0;
   return (
     <>
-      {parts.map((part, i) => (
-        <span key={i} className={part.changed ? `diff-${side}` : undefined}>
-          {part.text}
-        </span>
-      ))}
+      {parts.map((part, i) => {
+        const start = pos;
+        pos += part.text.length;
+        return (
+          <span key={i} className={part.changed ? `diff-${side}` : undefined}>
+            {spans.length ? renderTextWithAiTells(part.text, spans, start) : part.text}
+          </span>
+        );
+      })}
     </>
   );
 }

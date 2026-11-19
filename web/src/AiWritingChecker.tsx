@@ -1,9 +1,46 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { postJson } from './api';
-import { findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
+import { findAiTellSpans, findAiWritingTells, isProseFieldLabel, type AiTellSpan } from './aiWritingCheck';
 import type { AiWritingReview } from '../../server/ai-writing';
+
+/**
+ * Renders `text` (which starts at `offset` within the full string) with `<span className="ai-tell-mark">`
+ * around any character range covered by `spans`, including hover tooltips explaining why it was flagged.
+ */
+export function renderTextWithAiTells(text: string, spans = findAiTellSpans(text), offset = 0): ReactNode {
+  if (!text || spans.length === 0) return text;
+  const start = offset;
+  const end = offset + text.length;
+  const overlapping = spans.filter((s) => s.end > start && s.start < end);
+  if (overlapping.length === 0) return text;
+
+  const points = new Set<number>([start, end]);
+  for (const s of overlapping) {
+    if (s.start > start && s.start < end) points.add(s.start);
+    if (s.end > start && s.end < end) points.add(s.end);
+  }
+  const sorted = [...points].sort((a, b) => a - b);
+
+  return sorted.slice(0, -1).map((a, i) => {
+    const b = sorted[i + 1];
+    const slice = text.slice(a - start, b - start);
+    const active = overlapping.filter((s) => s.start <= a && s.end >= b);
+    if (active.length === 0) return slice;
+    const reasons = [...new Set(active.map((s) => s.reason))];
+    const tooltip = `⚠ AI Tell: ${reasons.join(' • ')}`;
+    return (
+      <span key={a} className="ai-tell-mark" title={tooltip} data-ai-tell={tooltip}>
+        {slice}
+      </span>
+    );
+  });
+}
+
+export function AiHighlightedText({ text }: { text: string }) {
+  return <>{renderTextWithAiTells(text)}</>;
+}
 
 export function AiWritingChecker({ text, label }: { text: string; label: string }) {
   const [busy, setBusy] = useState(false);
@@ -53,7 +90,10 @@ export function AiWritingChecker({ text, label }: { text: string; label: string 
         <ul className="ai-writing-tells small-text">
           {tells.map((t, i) => (
             <li key={i}>
-              <code>“{t.match}”</code> — <span className="muted">{t.reason}</span>
+              <span className="ai-tell-mark" title={`⚠ AI Tell: ${t.reason}`} data-ai-tell={`⚠ AI Tell: ${t.reason}`}>
+                “{t.match}”
+              </span>{' '}
+              — <span className="muted">{t.reason}</span>
             </li>
           ))}
         </ul>

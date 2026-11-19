@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
+import { findAiTellSpans, findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
 
 describe('findAiWritingTells', () => {
   it('returns empty for plain, natural first-person writing with varied sentence length', () => {
@@ -10,11 +10,12 @@ describe('findAiWritingTells', () => {
 
   it('flags formulaic contrasts, AI clichés, em-dashes, moralizing closers, and hype words', () => {
     const sample =
-      "It's not about memory — it's about connection. Let's delve into this transformative journey. Because ultimately, healing is a reminder that we are human. This changed everything!";
+      "It's not about memory — it's about connection. It's not that it was hard; it was easy. Let's delve into this transformative journey. Because ultimately, healing is a reminder that we are human. This changed everything!";
     const tells = findAiWritingTells(sample);
     expect(tells.map((t) => t.match.toLowerCase())).toEqual(
       expect.arrayContaining([
         "not about memory — it's about",
+        "it's not that it was hard; it was",
         '—',
         'delve',
         'transformative',
@@ -35,6 +36,25 @@ describe('findAiWritingTells', () => {
     ].join(' ');
     const tells = findAiWritingTells(flat);
     expect(tells.some((t) => t.reason.includes('low burstiness'))).toBe(true);
+  });
+
+  it('returns exact character spans for inline highlighting while ignoring URLs and hashtags', () => {
+    const sample = 'Read https://example.com/delve — then delve into the story #transformative';
+    const spans = findAiTellSpans(sample);
+    expect(spans).toEqual([
+      {
+        start: sample.indexOf('—'),
+        end: sample.indexOf('—') + 1,
+        match: '—',
+        reason: 'Em-dash (—) is a frequent AI punctuation tell',
+      },
+      {
+        start: sample.lastIndexOf('delve'),
+        end: sample.lastIndexOf('delve') + 5,
+        match: 'delve',
+        reason: 'Common AI cliché or filler phrase',
+      },
+    ]);
   });
 
   it('checks prose fields like Title, Description, and Pinned Comment, and skips Tags and settings', () => {

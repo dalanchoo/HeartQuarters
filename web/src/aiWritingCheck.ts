@@ -7,10 +7,21 @@ export interface AiWritingTell {
   reason: string;
 }
 
+export interface AiTellSpan {
+  start: number;
+  end: number;
+  match: string;
+  reason: string;
+}
+
 const RULES: { re: RegExp; reason: string }[] = [
   {
     re: /\b(?:it['’]s|is|was|isn['’]t|wasn['’]t|not)\s+(?:just|merely|simply|only)\b[^.!?\n]{1,60}\b(?:it['’]s|it\s+is|it\s+was|but\s+rather)\b/gi,
     reason: 'Formulaic AI contrast ("not just X, it’s Y")',
+  },
+  {
+    re: /\b(?:it['’]s|it\s+is|it\s+was|this\s+is|this\s+was)\s+not\s+(?:that\s+)?[^.!?\n]{1,50}(?:[,;—]|\s+but)\s*(?:it['’]s|it\s+is|it\s+was)\b/gi,
+    reason: 'Formulaic AI contrast ("It’s not X; it’s Y")',
   },
   {
     re: /\bnot\s+about\b[^.!?\n]{1,60}\bit['’]s\s+about\b/gi,
@@ -65,9 +76,63 @@ export function isProseFieldLabel(label: string): boolean {
   );
 }
 
+/** Masks URLs and hashtags with same-length spaces so regex character offsets match `text` 1-to-1. */
+function maskUrlsAndHashtags(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/g, (m) => ' '.repeat(m.length))
+    .replace(/(^|\s)(#[\p{L}\p{N}_]+)/gu, (_m, pre: string, tag: string) => pre + ' '.repeat(tag.length));
+}
+
+/** Finds exact character spans of AI writing tells in `text` for inline highlighting and tooltips. */
+export function findAiTellSpans(text: string): AiTellSpan[] {
+  if (!text || !text.trim()) return [];
+  const masked = maskUrlsAndHashtags(text);
+  const spans: AiTellSpan[] = [];
+
+  const dashRe = /—/g;
+  let dm: RegExpExecArray | null;
+  while ((dm = dashRe.exec(masked)) !== null) {
+    spans.push({
+      start: dm.index,
+      end: dm.index + dm[0].length,
+      match: '—',
+      reason: 'Em-dash (—) is a frequent AI punctuation tell',
+    });
+  }
+
+  for (const rule of RULES) {
+    rule.re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = rule.re.exec(masked)) !== null) {
+      let start = m.index;
+      let raw = m[0];
+      // Trim leading sentence punctuation/whitespace captured by patterns like /(?:^|[.!?]\s+)No .../
+      const lead = /^[.!?\s]+/.exec(raw);
+      if (lead) {
+        start += lead[0].length;
+        raw = raw.slice(lead[0].length);
+      }
+      const trail = /\s+$/.exec(raw);
+      if (trail) {
+        raw = raw.slice(0, -trail[0].length);
+      }
+      if (raw) {
+        spans.push({
+          start,
+          end: start + raw.length,
+          match: text.slice(start, start + raw.length),
+          reason: rule.reason,
+        });
+      }
+    }
+  }
+
+  return spans.sort((a, b) => a.start - b.start || b.end - a.end);
+}
+
 /** Detects flat, overly uniform sentence length across 5+ consecutive sentences (low burstiness). */
-function checkSentenceBurstiness(cleaned: string): AiWritingTell | null {
-  const sentences = cleaned
+function checkSentenceBurstiness(masked: string): AiWritingTell | null {
+  const sentences = masked
     .split(/[.!?]+(?:\s+|$)/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
@@ -97,14 +162,11 @@ function checkSentenceBurstiness(cleaned: string): AiWritingTell | null {
 /** Finds common AI writing tells and statistical rhythm patterns in `text`, ignoring URLs and hashtag lines. */
 export function findAiWritingTells(text: string): AiWritingTell[] {
   if (!text || !text.trim()) return [];
-  const cleaned = text
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/(?:^|\s)#[\p{L}\p{N}_]+/gu, ' ');
-
+  const masked = maskUrlsAndHashtags(text);
   const found: AiWritingTell[] = [];
   const seen = new Set<string>();
 
-  const emDashes = (cleaned.match(/—/g) ?? []).length;
+  const emDashes = (masked.match(/—/g) ?? []).length;
   if (emDashes > 0) {
     found.push({
       match: emDashes === 1 ? '—' : `${emDashes} em-dashes (—)`,
@@ -112,20 +174,16 @@ export function findAiWritingTells(text: string): AiWritingTell[] {
     });
   }
 
-  for (const rule of RULES) {
-    rule.re.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = rule.re.exec(cleaned)) !== null) {
-      const match = m[0].trim();
-      const key = `${match.toLowerCase()}|${rule.reason}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        found.push({ match, reason: rule.reason });
-      }
+  for (const span of findAiTellSpans(text)) {
+    if (span.match === '—') continue;
+    const key = `${span.match.toLowerCase()}|${span.reason}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      found.push({ match: span.match, reason: span.reason });
     }
   }
 
-  const rhythm = checkSentenceBurstiness(cleaned);
+  const rhythm = checkSentenceBurstiness(masked);
   if (rhythm) found.push(rhythm);
 
   return found;
