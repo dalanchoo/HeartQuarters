@@ -170,6 +170,25 @@ describe('change requests', () => {
     expect(() => changeThumbnail(LONGFORM, '../outside', 'x', fakeMake)).toThrow();
   });
 
+  it('numbers past gaps so deleting 01.png never overwrites 02.png, and removes the temp work folder', async () => {
+    choose();
+    let seenWork = '';
+    const trackingMake: MakeImage = async (ai, prompt, work, out, opts) => {
+      seenWork = work;
+      return fakeMake(ai, prompt, work, out, opts);
+    };
+    await startThumbnail(LONGFORM, 'codex', trackingMake).finished;
+    expect(fs.existsSync(seenWork)).toBe(false);
+    const conversation = `${LONGFORM}/Packaging/Drafts/ChatGPT 01`;
+    const folder = path.join(drafts(), 'ChatGPT 01');
+    fs.renameSync(path.join(folder, '01.png'), path.join(folder, '02.png'));
+    const keep = fs.readFileSync(path.join(folder, '02.png'));
+    await changeThumbnail(LONGFORM, conversation, 'bigger text', trackingMake).finished;
+    expect(fs.existsSync(seenWork)).toBe(false);
+    expect(fs.readFileSync(path.join(folder, '02.png'))).toEqual(keep);
+    expect(fs.existsSync(path.join(folder, '03.png'))).toBe(true);
+  });
+
   it('refuses a second request while the AI is still working on that draft', async () => {
     choose();
     let release!: () => void;

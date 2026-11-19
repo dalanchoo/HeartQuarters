@@ -6,6 +6,7 @@
 //   YouTube.md                the pair's title, and/or its thumbnail text and idea
 //   Notes.md                  a line saying what was used, and what the title was before
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
@@ -146,13 +147,21 @@ export async function useDraft(piece: string, image: string, version: string, pa
       const thumbDir = folder(path.join(dir, 'Thumbnail'));
       const source = folder(path.join(thumbDir, 'Source'));
       const [width, height] = isShort(piece) ? [2160, 3840] : [3840, 2160];
-      const old = fs.readdirSync(thumbDir).find((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f));
+      const oldNames = fs.readdirSync(thumbDir).filter((f) => /^Thumbnail\.(png|jpe?g)$/i.test(f) && fs.lstatSync(path.join(thumbDir, f)).isFile());
+      if (oldNames.length > 1) throw new Error('This version has more than one Thumbnail file. Remove the extra one before replacing it.');
+      const old = oldNames[0];
       const backups = writable(path.join(thumbDir, 'Backups'));
       if (old) writable(path.join(thumbDir, old));
       writable(path.join(thumbDir, 'Thumbnail.png'));
       const d = new Date();
-      const kept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
-      fresh = writable(path.join(thumbDir, 'Thumbnail.new.png'));
+      const baseKept = `Replaced ${today(d)} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())} - ${old}`;
+      let kept = baseKept;
+      if (old) {
+        const ext = path.extname(old);
+        const stem = baseKept.slice(0, baseKept.length - ext.length);
+        for (let n = 2; fs.existsSync(path.join(backups, kept)); n++) kept = `${stem} (${n})${ext}`;
+      }
+      fresh = writable(path.join(thumbDir, `Thumbnail.new-${crypto.randomUUID()}.png`));
       const made = await measure(draft);
       await grow(draft, fresh, width, height);
       swap = { thumbDir, old, backups, kept };

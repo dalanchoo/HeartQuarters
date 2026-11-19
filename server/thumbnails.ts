@@ -277,8 +277,12 @@ export function nextConversationName(drafts: string, ai: ImageAi): string {
 }
 
 function nextImageName(folder: string): string {
-  const n = fs.readdirSync(folder).filter((f) => /^\d+\.(png|jpe?g|webp)$/i.test(f)).length;
-  return `${String(n + 1).padStart(2, '0')}.png`;
+  const numbers = fs
+    .readdirSync(folder)
+    .map((f) => f.match(/^(\d+)\.(png|jpe?g|webp)$/i))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map((m) => Number(m[1]));
+  return `${String(Math.max(0, ...numbers) + 1).padStart(2, '0')}.png`;
 }
 
 function workFolder(name: string): string {
@@ -325,10 +329,14 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
   );
   return runJob(folder, ai, async () => {
     const work = workFolder(name);
-    const answer = await make(ai, prompt, work, '01.png', { photo });
-    fs.copyFileSync(answer.image, path.join(folder, '01.png'));
-    const info: ConversationInfo = { ai, session: answer.session, photo: choice.photo!, pick: choice.pick };
-    fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
+    try {
+      const answer = await make(ai, prompt, work, '01.png', { photo });
+      fs.copyFileSync(answer.image, path.join(folder, '01.png'), fs.constants.COPYFILE_EXCL);
+      const info: ConversationInfo = { ai, session: answer.session, photo: choice.photo!, pick: choice.pick };
+      fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
+    } finally {
+      try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
+    }
   });
 }
 
@@ -403,11 +411,15 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
   const prompt = changeRequest(request, out, saved, newPhoto?.full);
   return runJob(folder, info.ai, async () => {
     const work = workFolder(path.basename(folder));
-    const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
-    fs.copyFileSync(answer.image, path.join(folder, out));
-    const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
-    const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
-    fs.appendFileSync(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
-    if (newPhoto) fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+    try {
+      const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
+      fs.copyFileSync(answer.image, path.join(folder, out), fs.constants.COPYFILE_EXCL);
+      const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
+      const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
+      fs.appendFileSync(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
+      if (newPhoto) fs.writeFileSync(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+    } finally {
+      try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
+    }
   });
 }

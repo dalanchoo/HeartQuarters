@@ -183,6 +183,13 @@ describe('using a draft in the selected version', () => {
     expect(fs.readFileSync(path.join(v2(), 'Notes.md'), 'utf8')).toBe(before.notes);
   });
 
+  it('refuses when both Thumbnail.jpg and Thumbnail.png exist so neither is silently lost', async () => {
+    fs.writeFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.png'), 'keep png');
+    await expect(useDraft(LONGFORM, draft, `${LONGFORM}/Packaging/V02`, { thumbnail: true, title: false }, fakeGrow, fakeMeasure)).rejects.toThrow(/more than one Thumbnail file/i);
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.jpg'), 'utf8')).toBe('old thumb');
+    expect(fs.readFileSync(path.join(v2(), 'Thumbnail', 'Thumbnail.png'), 'utf8')).toBe('keep png');
+  });
+
   it('puts the thumbnail back when installing the new one fails', async () => {
     const before = fs.readFileSync(path.join(v2(), 'YouTube.md'), 'utf8');
     // A folder where the new Thumbnail.png would go makes the swap fail after the old one has moved to Backups.
