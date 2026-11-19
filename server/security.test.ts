@@ -3,11 +3,18 @@ import type { Request, Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { guard, isLocalHost, isLocalOrigin } from './security';
 
-function run(req: { method: string; headers: Record<string, string> }) {
-  const res = { statusCode: 200, status(code: number) { this.statusCode = code; return this; }, send: vi.fn(), json: vi.fn() };
+function run(req: { method: string; path?: string; headers: Record<string, string> }) {
+  const headers: Record<string, string> = {};
+  const res = {
+    statusCode: 200,
+    status(code: number) { this.statusCode = code; return this; },
+    set(k: string, v: string) { headers[k.toLowerCase()] = v; return this; },
+    send: vi.fn(),
+    json: vi.fn(),
+  };
   const next = vi.fn();
   guard(req as unknown as Request, res as unknown as Response, next);
-  return { allowed: next.mock.calls.length === 1, status: res.statusCode };
+  return { allowed: next.mock.calls.length === 1, status: res.statusCode, headers };
 }
 
 describe('isLocalHost', () => {
@@ -50,15 +57,26 @@ describe('guard', () => {
 
   it('blocks a tool run from another website', () => {
     const r = run({ method: 'POST', headers: { ...host, origin: 'https://evil.example.com', 'x-heartquarters': '1' } });
-    expect(r).toEqual({ allowed: false, status: 403 });
+    expect({ allowed: r.allowed, status: r.status }).toEqual({ allowed: false, status: 403 });
   });
 
   it('blocks a tool run without the HeartQuarters header (e.g. a hidden form)', () => {
     const r = run({ method: 'POST', headers: { ...host, origin: 'http://127.0.0.1:4321' } });
-    expect(r).toEqual({ allowed: false, status: 403 });
+    expect({ allowed: r.allowed, status: r.status }).toEqual({ allowed: false, status: 403 });
+  });
+
+  it('blocks cross-site GET requests to /api/* except the OAuth callback', () => {
+    const blocked = run({ method: 'GET', path: '/api/youtube/captions', headers: { ...host, 'sec-fetch-site': 'cross-site' } });
+    expect({ allowed: blocked.allowed, status: blocked.status }).toEqual({ allowed: false, status: 403 });
+    expect(blocked.headers['cross-origin-resource-policy']).toBe('same-origin');
+    const sameSite = run({ method: 'GET', path: '/api/youtube/captions', headers: { ...host, 'sec-fetch-site': 'same-origin' } });
+    expect(sameSite.allowed).toBe(true);
+    const callback = run({ method: 'GET', path: '/api/youtube/callback', headers: { ...host, 'sec-fetch-site': 'cross-site' } });
+    expect(callback.allowed).toBe(true);
   });
 
   it('blocks requests addressed to another name', () => {
-    expect(run({ method: 'GET', headers: { host: 'evil.example.com' } })).toEqual({ allowed: false, status: 403 });
+    const r = run({ method: 'GET', headers: { host: 'evil.example.com' } });
+    expect({ allowed: r.allowed, status: r.status }).toEqual({ allowed: false, status: 403 });
   });
 });

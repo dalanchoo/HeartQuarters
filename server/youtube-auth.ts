@@ -17,6 +17,7 @@ let pending: { state: string; verifier: string; redirect: string; expires: numbe
 export function youtubeStatus() { const s = load(); return { configured: !!s, connected: !!s?.refreshToken, captionAccess: !!s?.refreshToken && s.captionAccess === true, reportingAccess: !!s?.refreshToken && s.reportingAccess === true }; }
 export function configureYoutube(clientId: unknown, clientSecret: unknown) {
   if (typeof clientId !== 'string' || !clientId.trim().endsWith('.apps.googleusercontent.com') || typeof clientSecret !== 'string' || !clientSecret.trim()) throw new Error('Enter the desktop OAuth client ID and client secret from Google Cloud.');
+  pending = null;
   save({ clientId: clientId.trim(), clientSecret: clientSecret.trim() });
 }
 export function disconnectYoutube() { pending = null; credential('delete'); }
@@ -30,14 +31,29 @@ export function authorizationUrl(port: number): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
 }
 async function tokenRequest(params: Record<string, string>) {
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) });
-  const data = await r.json() as { access_token?: string; refresh_token?: string; scope?: string; error?: string };
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(30_000),
+  });
+  let data: { access_token?: string; refresh_token?: string; scope?: string; error?: string; expires_in?: number } = {};
+  try {
+    data = await r.json() as typeof data;
+  } catch { /* non-JSON proxy or outage response */ }
   if (!r.ok || !data.access_token) throw new Error(`Google sign-in failed (${data.error ?? r.status}).`);
   return data;
 }
 export async function finishYoutubeAuth(state: string, code: string) {
-  const p = pending; pending = null;
-  if (!p || Date.now() > p.expires || !state || Buffer.byteLength(state) !== Buffer.byteLength(p.state) || !timingSafeEqual(Buffer.from(state), Buffer.from(p.state)) || !code) throw new Error('The sign-in request expired or did not match. Please try again.');
+  const p = pending;
+  if (!p || Date.now() > p.expires) {
+    pending = null;
+    throw new Error('The sign-in request expired or did not match. Please try again.');
+  }
+  if (!state || Buffer.byteLength(state) !== Buffer.byteLength(p.state) || !timingSafeEqual(Buffer.from(state), Buffer.from(p.state)) || !code) {
+    throw new Error('The sign-in request expired or did not match. Please try again.');
+  }
+  pending = null;
   const s = load(); if (!s) throw new Error('YouTube setup was removed.');
   const result = await tokenRequest({ client_id: s.clientId, client_secret: s.clientSecret, code, code_verifier: p.verifier, redirect_uri: p.redirect, grant_type: 'authorization_code' });
   if (!result.refresh_token) throw new Error('Google did not return a refresh token. Please reconnect.');

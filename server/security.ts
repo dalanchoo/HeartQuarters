@@ -33,6 +33,14 @@ export function guard(req: Request, res: Response, next: NextFunction) {
     res.status(403).send('HeartQuarters only answers requests addressed to this PC.');
     return;
   }
+  const urlPath = req.path ?? '';
+  if (urlPath.startsWith('/api/')) {
+    res.set('Cross-Origin-Resource-Policy', 'same-origin');
+    if (urlPath !== '/api/youtube/callback' && req.headers['sec-fetch-site'] === 'cross-site') {
+      res.status(403).json({ error: 'Blocked: this request did not come from HeartQuarters.' });
+      return;
+    }
+  }
   const isAction = req.method !== 'GET' && req.method !== 'HEAD';
   if (isAction && (!isLocalOrigin(req.headers.origin) || req.headers[ACTION_HEADER] !== '1')) {
     res.status(403).json({ error: 'Blocked: this request did not come from HeartQuarters.' });

@@ -19,16 +19,16 @@ describe('YouTube sign-in', () => {
     expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:4321/api/youtube/callback');
     await expect(finishYoutubeAuth('wrong', 'code')).rejects.toThrow(/match/);
     expect(youtubeStatus().connected).toBe(false);
-    const next = new URL(authorizationUrl(4321));
+    // A mismatched state from another tab must not cancel the real sign-in still in progress.
     const mock = vi.fn().mockImplementation(async () => Response.json({ access_token: 'access', refresh_token: 'refresh', scope: 'https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/yt-analytics.readonly' }));
     vi.stubGlobal('fetch', mock);
-    await finishYoutubeAuth(next.searchParams.get('state')!, 'code');
+    await finishYoutubeAuth(url.searchParams.get('state')!, 'code');
     expect(youtubeStatus().connected).toBe(true);
     expect(youtubeStatus().captionAccess).toBe(true);
     expect(youtubeStatus().reportingAccess).toBe(true);
     expect(String(mock.mock.calls[0][1].body)).toContain('code_verifier=');
     expect(await youtubeAccessToken()).toBe('access');
-    await expect(finishYoutubeAuth(next.searchParams.get('state')!, 'code')).rejects.toThrow(/match/);
+    await expect(finishYoutubeAuth(url.searchParams.get('state')!, 'code')).rejects.toThrow(/match/);
   });
   it('rejects missing configuration and bad client IDs', () => {
     expect(() => authorizationUrl(4321)).toThrow(/Set up/);
