@@ -280,6 +280,9 @@ export function ExpressionsPage() {
       {viewedPhoto && (
         <Lightbox
           photo={viewedPhoto}
+          starred={references.includes(viewedPhoto.path)}
+          starDisabled={!referenceReady || referenceBusy}
+          onToggleStar={() => void setReference(viewedPhoto.path, !references.includes(viewedPhoto.path))}
           onTagAction={changeTag}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }}
@@ -288,7 +291,20 @@ export function ExpressionsPage() {
           onNext={viewedIndex < 0 ? undefined : () => setOpen(shown[(viewedIndex + 1) % shown.length].path)}
         />
       )}
-      {preview && <Lightbox key={preview.imageUrl ?? preview.photo.path} photo={preview.photo} imageUrl={preview.imageUrl} onTagAction={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? changeTag : undefined} onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])} onAssessmentDone={() => { if (preview.photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }} onClose={() => setPreview(null)} />}
+      {preview && (
+        <Lightbox
+          key={preview.imageUrl ?? preview.photo.path}
+          photo={preview.photo}
+          imageUrl={preview.imageUrl}
+          starred={!preview.imageUrl && preview.photo.category !== '_Inbox' ? references.includes(preview.photo.path) : undefined}
+          starDisabled={!referenceReady || referenceBusy}
+          onToggleStar={!preview.imageUrl && preview.photo.category !== '_Inbox' ? () => void setReference(preview.photo.path, !references.includes(preview.photo.path)) : undefined}
+          onTagAction={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? changeTag : undefined}
+          onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
+          onAssessmentDone={() => { if (preview.photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }
@@ -388,8 +404,8 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone }: {
-  photo: ExpressionPhoto; imageUrl?: string; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
+function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone }: {
+  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
@@ -507,8 +523,31 @@ function Lightbox({ photo, imageUrl, onClose, onPrev, onNext, onTagAction, onAss
         <div className={`lb-info${detailsExpanded ? '' : ' is-collapsed'}`}>
           <div className="lb-details">
           <div className="lb-title">
-            <div className="lb-title-name"><strong>{photo.name}</strong>
-            <span className="muted">{photo.category.split('/').join(' › ')}</span></div>
+            <div className="lb-title-name">
+              {onToggleStar && (
+                <button
+                  type="button"
+                  className={`lb-star${starred ? ' is-starred' : ''}`}
+                  disabled={starDisabled}
+                  aria-pressed={!!starred}
+                  aria-label={starred ? 'Remove from Favorites' : 'Add to Favorites'}
+                  title={starred ? 'Remove from Favorites' : 'Add to Favorites'}
+                  onClick={onToggleStar}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                    <path
+                      d="M12 2.5l2.93 5.94 6.56.95-4.74 4.62 1.12 6.53L12 17.45l-5.87 3.09 1.12-6.53L2.51 9.39l6.56-.95L12 2.5z"
+                      fill={starred ? '#facc15' : 'none'}
+                      stroke={starred ? '#b45309' : 'currentColor'}
+                      strokeWidth="1.8"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
+              <strong>{photo.name}</strong>
+              <span className="muted">{photo.category.split('/').join(' › ')}</span>
+            </div>
             {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
             <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>
