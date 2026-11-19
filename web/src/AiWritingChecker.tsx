@@ -31,7 +31,7 @@ export function renderTextWithAiTells(text: string, spans = findAiTellSpans(text
     const reasons = [...new Set(active.map((s) => s.reason))];
     const tooltip = `⚠ AI Tell: ${reasons.join(' • ')}`;
     return (
-      <span key={a} className="ai-tell-mark" title={tooltip} data-ai-tell={tooltip}>
+      <span key={a} className="ai-tell-mark" data-ai-tell={tooltip}>
         {slice}
       </span>
     );
@@ -90,10 +90,7 @@ export function AiWritingChecker({ text, label }: { text: string; label: string 
         <ul className="ai-writing-tells small-text">
           {tells.map((t, i) => (
             <li key={i}>
-              <span className="ai-tell-mark" title={`⚠ AI Tell: ${t.reason}`} data-ai-tell={`⚠ AI Tell: ${t.reason}`}>
-                “{t.match}”
-              </span>{' '}
-              — <span className="muted">{t.reason}</span>
+              <code>“{t.match}”</code> — <span className="muted">{t.reason}</span>
             </li>
           ))}
         </ul>
