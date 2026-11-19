@@ -3,3 +3,6 @@ dist/
 data/
 config.json
 *.log
+.agents/
+.claude/
+skills-lock.json
