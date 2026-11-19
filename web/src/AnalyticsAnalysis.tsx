@@ -12,7 +12,6 @@ export function AnalyticsAnalysis({ piece, refresh }: { piece: string; refresh: 
   const [runs, setRuns] = useState<Run[]>([]);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
-  const [ctr, setCtr] = useState(''); const [impressions, setImpressions] = useState(''); const [reachPeriod, setReachPeriod] = useState('');
   useEffect(() => { let active = true; getJson<string[]>(`/api/youtube/analytics/snapshots?piece=${encodeURIComponent(piece)}`).then(list => { if (active) { setSnapshots(list); setSelected(current => list.includes(current) ? current : list[0] ?? ''); } }, (e: Error) => { if (active) setError(e.message); }); return () => { active = false; }; }, [piece, refresh]);
   useEffect(() => {
     if (!selected) { setRuns([]); return; }
@@ -20,12 +19,11 @@ export function AnalyticsAnalysis({ piece, refresh }: { piece: string; refresh: 
     const load = () => { void getJson<Run[]>(`/api/youtube/analytics/analysis?piece=${encodeURIComponent(piece)}&snapshot=${encodeURIComponent(selected)}`).then(items => { if (!active) return; setRuns(items); if (items.some(item => item.job?.state === 'working' || item.summaryJob?.state === 'working')) timer = setTimeout(load, 3000); }, (e: Error) => { if (active) setError(e.message); }); };
     load(); return () => { active = false; clearTimeout(timer); };
   }, [piece, selected, starting]);
-  const start = async () => { setStarting(true); setError(''); try { const reach = ctr.trim() ? { ctr: Number(ctr), impressions: impressions.trim() ? Number(impressions) : null, period: reachPeriod } : undefined; await postJson('/api/youtube/analytics/analyze', { piece, snapshot: selected, reach }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
+  const start = async () => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/analyze', { piece, snapshot: selected }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
   const summarize = async (id: string) => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/summarize', { piece, snapshot: selected, id }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
   const running = runs.some(run => run.job?.state === 'working');
   return <details className="yt-section"><summary>Analyze Saved Stats</summary>
     {!snapshots.length ? <p>Download stats first.</p> : <><label>Snapshot <select value={selected} onChange={e => setSelected(e.target.value)}>{snapshots.map(name => <option key={name}>{name}</option>)}</select></label>{' '}
-      {!!piece && <details className="yt-section"><summary>Add Impressions CTR From YouTube Studio (Optional)</summary><p className="small-text">Use this only if automatic reach reports aren’t available or don’t cover the period you need. Copy the values and their date range from this video’s Reach analytics in YouTube Studio.</p><label>Impressions CTR (%) <input type="number" min="0" max="100" step="any" value={ctr} onChange={e => setCtr(e.target.value)} /></label>{' '}<label>Impressions <input type="number" min="0" step="1" value={impressions} onChange={e => setImpressions(e.target.value)} /></label>{' '}<label>Period <input value={reachPeriod} onChange={e => setReachPeriod(e.target.value)} placeholder="e.g. Lifetime" /></label></details>}
       <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>Analyze With All Three AIs</button>
       <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p></>}
     {error && <p className="error" role="alert">{error}</p>}
