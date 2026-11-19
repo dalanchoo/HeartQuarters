@@ -152,7 +152,10 @@ app.get('/api/script', (req, res) => {
   readScript(String(req.query.piece ?? '')).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/script', (req, res) => {
-  saveScript(String(req.body?.piece ?? ''), String(req.body?.text ?? '')).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+  saveScript(String(req.body?.piece ?? ''), {
+    html: req.body?.html !== undefined ? String(req.body.html) : undefined,
+    text: req.body?.text !== undefined ? String(req.body.text) : undefined,
+  }).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected, req.body?.sourceExpected)); }));

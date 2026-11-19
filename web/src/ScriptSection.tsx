@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import DOMPurify from 'dompurify';
 import { getJson, postJson } from './api';
 import { CopyButton } from './PackagingDoc';
 import type { ScriptFile } from '../../server/script';
@@ -6,11 +7,20 @@ import type { ScriptFile } from '../../server/script';
 export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () => void }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<ScriptFile | null>(null);
-  const [text, setText] = useState('');
+  const [html, setHtml] = useState('');
+  const [plain, setPlain] = useState('');
+  const [blockTag, setBlockTag] = useState('P');
   const [busy, setBusy] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [error, setError] = useState('');
-  const boxRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  const loadIntoEditor = (rawHtml: string, rawText: string) => {
+    const clean = DOMPurify.sanitize(rawHtml);
+    setHtml(clean);
+    setPlain(rawText);
+    if (editorRef.current) editorRef.current.innerHTML = clean;
+  };
 
   useEffect(() => {
     if (!open || file) return;
@@ -19,8 +29,13 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     getJson<ScriptFile>(`/api/script?piece=${encodeURIComponent(piece)}`).then(
       (res) => {
         if (!active) return;
-        setFile(res);
-        setText(res.text);
+        const clean = DOMPurify.sanitize(res.html);
+        setFile({ ...res, html: clean });
+        setHtml(clean);
+        setPlain(res.text);
+        requestAnimationFrame(() => {
+          if (editorRef.current) editorRef.current.innerHTML = clean;
+        });
       },
       (e: Error) => {
         if (active) setError(e.message);
@@ -31,7 +46,39 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     };
   }, [open, piece, file]);
 
-  const dirty = file !== null && text !== file.text;
+  const syncFromDom = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    setHtml(DOMPurify.sanitize(el.innerHTML));
+    setPlain(el.innerText);
+  };
+
+  const updateCurrentBlockTag = () => {
+    const sel = window.getSelection();
+    let node: Node | null = sel?.anchorNode ?? null;
+    while (node && node !== editorRef.current) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = (node as HTMLElement).tagName;
+        if (tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'BLOCKQUOTE' || tag === 'P') {
+          setBlockTag(tag);
+          return;
+        }
+      }
+      node = node.parentNode;
+    }
+    setBlockTag('P');
+  };
+
+  const runCmd = (command: string, value?: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    document.execCommand(command, false, value);
+    syncFromDom();
+    updateCurrentBlockTag();
+  };
+
+  const dirty = file !== null && html !== file.html;
 
   const save = async () => {
     if (!file || busy) return;
@@ -39,9 +86,12 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     setError('');
     setSavedNotice(false);
     try {
-      const updated = await postJson<ScriptFile>('/api/script', { piece, text });
-      setFile(updated);
-      setText(updated.text);
+      const currentHtml = editorRef.current ? DOMPurify.sanitize(editorRef.current.innerHTML) : html;
+      const updated = await postJson<ScriptFile>('/api/script', { piece, html: currentHtml });
+      const clean = DOMPurify.sanitize(updated.html);
+      setFile({ ...updated, html: clean });
+      setHtml(clean);
+      setPlain(updated.text);
       setSavedNotice(true);
       setTimeout(() => setSavedNotice(false), 2000);
       onSaved?.();
@@ -52,58 +102,19 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     }
   };
 
-  const toggleBullet = () => {
-    const el = boxRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-    const nextNl = text.indexOf('\n', end);
-    const lineEnd = nextNl === -1 ? text.length : nextNl;
-    const block = text.slice(lineStart, lineEnd);
-    const lines = block.split('\n');
-    const allBulleted = lines.every((l) => /^\s*[-*•]\s+/.test(l));
-    const replaced = lines
-      .map((l) => (allBulleted ? l.replace(/^\s*[-*•]\s+/, '') : `- ${l}`))
-      .join('\n');
-    const next = text.slice(0, lineStart) + replaced + text.slice(lineEnd);
-    setText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(lineStart, lineStart + replaced.length);
-    });
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       if (dirty) void save();
       return;
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-      const el = e.currentTarget;
-      const pos = el.selectionStart;
-      if (pos !== el.selectionEnd) return;
-      const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-      const currentLine = text.slice(lineStart, pos);
-      const emptyBullet = /^(\s*[-*•]\s+)$/.exec(currentLine);
-      if (emptyBullet) {
-        e.preventDefault();
-        const next = text.slice(0, lineStart) + text.slice(pos);
-        setText(next);
-        requestAnimationFrame(() => el.setSelectionRange(lineStart, lineStart));
-        return;
-      }
-      const bullet = /^(\s*[-*•]\s+)/.exec(currentLine);
-      if (bullet) {
-        e.preventDefault();
-        const insert = `\n${bullet[1]}`;
-        const next = text.slice(0, pos) + insert + text.slice(pos);
-        setText(next);
-        requestAnimationFrame(() => el.setSelectionRange(pos + insert.length, pos + insert.length));
-      }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      runCmd(e.shiftKey ? 'outdent' : 'indent');
     }
   };
+
+  const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
   return (
     <details className="yt-section" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
@@ -112,37 +123,105 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
       {!file && !error && <p className="muted small-text">Loading script…</p>}
       {file && (
         <div className="script-editor">
-          <div className="yt-linkbar-row" style={{ marginTop: '0.5rem', marginBottom: '0.4rem' }}>
-            <button type="button" className="small" onClick={toggleBullet} title="Add or remove bullet points on the selected lines">
-              • Bullet List
-            </button>
-            <button type="button" className="small" disabled={!dirty || busy} onClick={() => void save()}>
-              {busy ? 'Saving…' : 'Save Script'}
-            </button>
-            {dirty && (
-              <button type="button" className="small" disabled={busy} onClick={() => setText(file.text)}>
-                Discard Changes
+          <div className="script-toolbar-row">
+            <div className="script-toolbar" role="toolbar" aria-label="Script Formatting">
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('undo')} title="Undo (Ctrl+Z)">
+                ↶
               </button>
-            )}
-            {text.trim() && <CopyButton text={text} label="Copy Script" />}
-            <span className="muted small-text">
-              {file.name}
-              {!file.exists && ' (will be created on save)'}
-              {savedNotice && ' · Saved ✓'}
-            </span>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('redo')} title="Redo (Ctrl+Y)">
+                ↷
+              </button>
+              <span className="script-divider" aria-hidden="true" />
+              <select
+                className="script-heading-select"
+                aria-label="Text Style"
+                value={blockTag}
+                onChange={(e) => {
+                  const tag = e.target.value;
+                  setBlockTag(tag);
+                  runCmd('formatBlock', `<${tag.toLowerCase()}>`);
+                }}
+              >
+                <option value="P">Normal Text</option>
+                <option value="H1">Heading 1</option>
+                <option value="H2">Heading 2</option>
+                <option value="H3">Heading 3</option>
+                <option value="BLOCKQUOTE">Quote</option>
+              </select>
+              <span className="script-divider" aria-hidden="true" />
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('bold')} title="Bold (Ctrl+B)">
+                <strong>B</strong>
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('italic')} title="Italic (Ctrl+I)">
+                <em>I</em>
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('underline')} title="Underline (Ctrl+U)">
+                <u>U</u>
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('strikeThrough')} title="Strikethrough">
+                <s>S</s>
+              </button>
+              <span className="script-divider" aria-hidden="true" />
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertOrderedList')} title="Numbered List">
+                1.☰
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertUnorderedList')} title="Bulleted List">
+                •☰
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('outdent')} title="Indent Less (Shift+Tab)">
+                ⇤
+              </button>
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('indent')} title="Indent More (Tab)">
+                ⇥
+              </button>
+              <button
+                type="button"
+                className="script-tool"
+                onMouseDown={keepFocus}
+                onClick={() => runCmd('formatBlock', blockTag === 'BLOCKQUOTE' ? '<p>' : '<blockquote>')}
+                title="Quote"
+              >
+                ❝
+              </button>
+              <span className="script-divider" aria-hidden="true" />
+              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('removeFormat')} title="Clear Formatting">
+                Tₓ
+              </button>
+            </div>
+
+            <div className="script-actions">
+              <button type="button" className="small" disabled={!dirty || busy} onClick={() => void save()}>
+                {busy ? 'Saving…' : 'Save Script'}
+              </button>
+              {dirty && (
+                <button type="button" className="small" disabled={busy} onClick={() => loadIntoEditor(file.html, file.text)}>
+                  Discard Changes
+                </button>
+              )}
+              {plain.trim() && <CopyButton text={plain} label="Copy Script" />}
+              <span className="muted small-text">
+                {file.name}
+                {!file.exists && ' (will be created on save)'}
+                {savedNotice && ' · Saved ✓'}
+              </span>
+            </div>
           </div>
-          <textarea
-            ref={boxRef}
-            className="script-textarea"
-            rows={14}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
+
+          {/* Cleaned with DOMPurify before display. */}
+          <div
+            ref={editorRef}
+            className="script-rich-editor"
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Script Editor"
+            data-placeholder="Write your script here…"
+            onInput={syncFromDom}
+            onKeyUp={updateCurrentBlockTag}
+            onMouseUp={updateCurrentBlockTag}
             onKeyDown={onKeyDown}
-            placeholder="Write freeform text or bullet points (start a line with - for a bullet)…"
           />
-          <p className="muted small-text" style={{ margin: '0.3rem 0 0' }}>
-            Start a line with <code>- </code> for a bullet point (Enter continues the list; Enter on an empty bullet ends it). Saves directly to the Word (.docx) file for Google Drive.
-          </p>
         </div>
       )}
     </details>
