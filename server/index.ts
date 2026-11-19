@@ -18,6 +18,7 @@ import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
+import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
 import { markExpressionAi } from './mark-expression-ai.js';
@@ -277,6 +278,14 @@ app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashIn
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
+app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
+app.post('/api/expressions/videos/open', handle((_req, res) => { ensureGeneratedVideosDir(); res.json({ ok: true }); }));
+app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {
+  res.json(saveGeneratedVideo(req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+}));
+app.post('/api/expressions/videos/rename', handle((req, res) => { res.json(renameGeneratedVideo(req.body?.name, req.body?.newName)); }));
+app.post('/api/expressions/videos/trash', handle((req, res) => { res.json(trashGeneratedVideo(req.body?.name)); }));
+app.get('/api/expressions/videos/file', handle((req, res) => { sandboxHeaders(res); res.sendFile(generatedVideoFile(req.query.name)); }));
 app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''))); }));
 app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmentJob(String(req.query.id ?? ''))); }));
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));

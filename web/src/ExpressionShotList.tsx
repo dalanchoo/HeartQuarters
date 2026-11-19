@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { CopyButton } from './PackagingDoc';
+import { ExpressionVideos } from './ExpressionVideos';
 import {
   buildPromptsFromGaps,
   buildPromptsFromShotList,
@@ -123,5 +124,6 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
 
     {!shots && !error && <p className="muted">Loading Shot List…</p>}
     {shots && <>{group('To Photograph', remaining, true)}{group('Photographed', photographed, false)}</>}
+    <ExpressionVideos active={active} />
   </section>;
 }
