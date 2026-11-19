@@ -36,13 +36,19 @@ export function ShortsPlanCard({ video }: { video: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const fail = (e: Error) => setError(e.message);
-  const refresh = () =>
-    getJson<ShortsOverview>(`/api/shorts?video=${encodeURIComponent(video)}`).then((s) => {
-      setState(s);
+  const saveSeq = useRef(0);
+  const inFlightSaves = useRef(0);
+  const saveQueue = useRef(Promise.resolve());
+  const refresh = () => {
+    const seq = saveSeq.current;
+    return getJson<ShortsOverview>(`/api/shorts?video=${encodeURIComponent(video)}`).then((s) => {
+      setState((prev) => (prev && (saveSeq.current !== seq || inFlightSaves.current > 0) ? { ...s, plan: prev.plan } : s));
       return s;
     }, fail);
+  };
 
   useEffect(() => {
+    saveSeq.current++;
     setState(null);
     setTranscript(null);
     setDraft('');
@@ -99,11 +105,20 @@ export function ShortsPlanCard({ video }: { video: string }) {
   };
   const save = (shorts: PlannedShort[], rejected: PlannedShort[]) => {
     setError(null);
-    setState({ ...state, plan: { shorts, rejected } });
-    postJson('/api/shorts/plan', { video, shorts, rejected }).catch((e) => {
-      fail(e);
-      refresh();
-    });
+    const seq = ++saveSeq.current;
+    inFlightSaves.current++;
+    setState((prev) => (prev ? { ...prev, plan: { shorts, rejected } } : prev));
+    saveQueue.current = saveQueue.current
+      .then(async () => {
+        await postJson('/api/shorts/plan', { video, shorts, rejected });
+      })
+      .catch(async (e) => {
+        fail(e);
+        if (saveSeq.current === seq) await refresh();
+      })
+      .finally(() => {
+        inFlightSaves.current--;
+      });
   };
   const make = (s: PlannedShort, how: 'make' | 'regenerate' = 'make') => {
     setError(null);

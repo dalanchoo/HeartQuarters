@@ -806,6 +806,17 @@ describe('Make this short', () => {
       forgetRun(NUMBERED, 'short-S02');
     });
 
+    it('recovers when the Drive folder is already gone and only the CapCut draft remains', async () => {
+      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await settled();
+      fs.rmSync(folder(), { recursive: true, force: true });
+      fs.writeFileSync(path.join(draft(), 'leftover.txt'), 'old');
+      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      await settled();
+      expect(fs.existsSync(path.join(draft(), 'leftover.txt'))).toBe(false);
+      expect(fs.existsSync(path.join(folder(), 'Exports'))).toBe(true);
+    });
+
     it('refuses, changing nothing, in every case it cannot finish', async () => {
       await expect(regenerateShort(NUMBERED, 'S09', NUMBERED)).rejects.toThrow(/no S09/);
       await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/hasn't been made/);

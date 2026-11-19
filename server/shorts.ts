@@ -280,6 +280,22 @@ const making = new Set<string>();
  * "Make this short": the short's folder from the template, the longform's CapCut project copied under the short's name,
  * then Claude cuts that copy down and turns it portrait. Each row is made once; after that John talks to Claude.
  */
+async function makeShortLocked(video: string, id: string, source: string, plan: ShortsPlan, row: PlannedShort): Promise<ClaudeRun> {
+  const name = `${numberOf(video)}_${id} - ${row.title}`;
+  const made = await createVideoFolder('short', video, name, source);
+  if (!made.capcut.created) {
+    // Only ever removes the template copy that createVideoFolder just made: it refuses a folder that already exists.
+    fs.rmSync(writable(safeResolve('projects', made.path)), { recursive: true, force: true });
+    throw new Error(made.capcut.message);
+  }
+  // Read again: the copy can take minutes, and John may have edited the list meanwhile.
+  const now = readPlan(video) ?? plan;
+  const mark = (s: PlannedShort) => (s.id === id ? { ...s, made: name } : s);
+  writePlan(video, { shorts: now.shorts.map(mark), rejected: now.rejected.map(mark) });
+  const notes = [row.visuals, row.why].filter(Boolean).join(' ');
+  return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source, notes });
+}
+
 export async function makeShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
   requireCapCutAi(chosenAi());
   const plan = readPlan(video);
@@ -288,23 +304,11 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
   if (row.made) throw new Error(`${id} has already been made: "${row.made}".`);
   if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
   const source = checkDraftName(sourceDraft);
-  const name = `${numberOf(video)}_${id} - ${row.title}`;
   const key = `${video}#${id}`;
   if (making.has(key)) throw new Error(`${id} is already being made.`);
   making.add(key);
   try {
-    const made = await createVideoFolder('short', video, name, source);
-    if (!made.capcut.created) {
-      // Only ever removes the template copy that createVideoFolder just made: it refuses a folder that already exists.
-      fs.rmSync(writable(safeResolve('projects', made.path)), { recursive: true, force: true });
-      throw new Error(made.capcut.message);
-    }
-    // Read again: the copy can take minutes, and John may have edited the list meanwhile.
-    const now = readPlan(video) ?? plan;
-    const mark = (s: PlannedShort) => (s.id === id ? { ...s, made: name } : s);
-    writePlan(video, { shorts: now.shorts.map(mark), rejected: now.rejected.map(mark) });
-    const notes = [row.visuals, row.why].filter(Boolean).join(' ');
-    return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source, notes });
+    return await makeShortLocked(video, id, source, plan, row);
   } finally {
     making.delete(key);
   }
@@ -327,19 +331,29 @@ export async function regenerateShort(video: string, id: string, sourceDraft: st
   const source = checkDraftName(sourceDraft);
   if (source === old) throw new Error("A short can't be remade from its own CapCut project. Choose the longform's.");
   if (!fs.existsSync(path.join(config.capcutDraftsDir, source))) throw new Error(`There's no CapCut draft called "${source}".`);
-
-  const oldDraft = findDraft(old) ?? old;
-  const draftDir = path.join(config.capcutDraftsDir, oldDraft);
-  const hadDraft = fs.existsSync(draftDir);
-  if (fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', old)))) {
-    deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [oldDraft] : []);
+  const key = `${video}#${id}`;
+  if (making.has(key)) throw new Error(`${id} is already being made.`);
+  making.add(key);
+  try {
+    const oldDraft = findDraft(old) ?? old;
+    const draftDir = path.join(config.capcutDraftsDir, oldDraft);
+    const hadDraft = fs.existsSync(draftDir);
+    if (fs.existsSync(safeResolve('projects', path.join(video, 'Shorts', old)))) {
+      deleteFolder(`${video}/Shorts/${old}`, hadDraft ? [oldDraft] : []);
+    } else if (hadDraft) {
+      trashDraft(oldDraft);
+    }
+    if (fs.existsSync(draftDir)) {
+      throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Regenerate again.`);
+    }
+    const unmark = ({ made: _made, ...rest }: PlannedShort): PlannedShort => (rest.id === id ? rest : { ...rest, made: _made });
+    const nextPlan: ShortsPlan = { shorts: plan.shorts.map(unmark), rejected: plan.rejected.map(unmark) };
+    writePlan(video, nextPlan);
+    const nextRow = [...nextPlan.shorts, ...nextPlan.rejected].find((s) => s.id === id)!;
+    return await makeShortLocked(video, id, source, nextPlan, nextRow);
+  } finally {
+    making.delete(key);
   }
-  if (fs.existsSync(draftDir)) {
-    throw new Error(`The CapCut project "${old}" couldn't be moved to the trash. Its folder has been; close whatever is using the project, then click Make This Short.`);
-  }
-  const unmark = ({ made: _made, ...rest }: PlannedShort): PlannedShort => (rest.id === id ? rest : { ...rest, made: _made });
-  writePlan(video, { shorts: plan.shorts.map(unmark), rejected: plan.rejected.map(unmark) });
-  return makeShort(video, id, source);
 }
 
 /** A short's number from its folder's name: "022_S01 - Title" is S01. Its conversation is named after that. */
@@ -461,17 +475,24 @@ export async function generatePiece(video: string, piece: string, regenerate: un
   }
   requireCapCutAi(chosenAi());
   if (getRun(video, 'edit')?.status === 'running') throw new Error('The AI is still working on this longform. Stop it first.');
-  if (hasFirstCut(draft)) {
-    if (!confirmed) throw new Error('This longform already has a first cut. Confirm to regenerate it.');
-    if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
-    forgetRun(video, 'edit');
-    const slot = trashDraft(draft);
-    const made = await createCapCutDraft(draft, 'longform');
-    if (!made.created) throw new Error(`The old CapCut project is in ${slot}, but a new one couldn't be made: ${made.message}`);
-  } else {
-    forgetRun(video, 'edit');
+  const editKey = `${video}#edit`;
+  if (making.has(editKey)) throw new Error('This longform is already being set up.');
+  making.add(editKey);
+  try {
+    if (hasFirstCut(draft)) {
+      if (!confirmed) throw new Error('This longform already has a first cut. Confirm to regenerate it.');
+      if (system.isCapCutRunning()) throw new Error('Close CapCut first, then try again. Nothing was changed.');
+      forgetRun(video, 'edit');
+      const slot = trashDraft(draft);
+      const made = await createCapCutDraft(draft, 'longform');
+      if (!made.created) throw new Error(`The old CapCut project is in ${slot}, but a new one couldn't be made: ${made.message}`);
+    } else {
+      forgetRun(video, 'edit');
+    }
+    return startEdit(video);
+  } finally {
+    making.delete(editKey);
   }
-  return startEdit(video);
 }
 
 export function clearPiece(video: string, piece: string) {
