@@ -80,7 +80,7 @@ function gazeInstruction(gaze: VideoGazeDirection): string {
 export function buildVideoPrompts(
   targets: ExpressionTarget[],
   gaze: VideoGazeDirection,
-  perClip = 4,
+  perClip = 3,
 ): GeneratedVideoPrompt[] {
   if (targets.length === 0) return [];
   const size = Math.max(1, Math.min(8, Math.round(perClip)));
@@ -95,19 +95,20 @@ export function buildVideoPrompts(
     const lines = batch.map((item, i) =>
       item.detail ? `${i + 1}. ${item.label} — ${item.detail}` : `${i + 1}. ${item.label}`,
     );
-    const clipSeconds = batch.length <= 4 ? '8-second' : `${batch.length * 2}-second`;
+    const estSeconds = Math.max(6, Math.round(batch.length * (gaze === 'both' ? 4 : 2.5)));
+    const holdText = gaze === 'both' ? 'about 1 to 1.5 seconds on each side' : 'about 1.5 seconds';
     const prompt = [
       'Using the attached reference photo of the man, preserve his exact facial identity, grey hair, goatee, age, skin texture, and clothing completely consistently throughout the entire video.',
       'Framing & Background: Medium close-up from the chest and shoulders up, standing in front of a clean, solid matte neutral medium-grey studio backdrop with sharp, uncluttered separation around his hair and shoulders so he is easy to cut out for YouTube thumbnails.',
       'Lighting: Perfect, soft, even studio key lighting on his face with gentle fill light and a subtle rim light separating him from the neutral background. Crisp focus, high detail, no harsh shadows, and no motion blur.',
       `Gaze Direction: ${gazeInstruction(gaze)}`,
-      `Action & Timing: Static locked-off camera with no camera movement. Over this ${clipSeconds} clip, he smoothly transitions through the following ${batch.length} distinct facial ${batch.length === 1 ? 'expression' : 'expressions'} in order, pausing and holding each expression completely still for 1.5 to 2 seconds so crisp individual still frames can be captured:`,
+      `Action & Timing: Static locked-off camera with no camera movement. Over roughly ${estSeconds} seconds, he smoothly transitions through the following ${batch.length} distinct facial ${batch.length === 1 ? 'expression' : 'expressions'} in order, pausing and holding each expression still for ${holdText} with unhurried transitions so crisp individual still frames can be captured:`,
       lines.join('\n'),
       'Style: Natural, authentic, grounded human expressions — no exaggerated cartoon faces, no speaking or lip movement unless part of the expression.',
     ].join('\n\n');
 
     return {
-      title: `Clip ${index + 1} (${gazeLabel} · ${batch.length} ${batch.length === 1 ? 'expression' : 'expressions'})`,
+      title: `Clip ${index + 1} (${gazeLabel} · ${batch.length} ${batch.length === 1 ? 'expression' : 'expressions'} · ~${estSeconds}s)`,
       expressions: batch.map((b) => b.label),
       prompt,
     };
@@ -117,7 +118,7 @@ export function buildVideoPrompts(
 export function buildPromptsFromShotList(
   shots: ExpressionShot[],
   gaze: VideoGazeDirection,
-  perClip = 4,
+  perClip = 3,
 ): GeneratedVideoPrompt[] {
   const remaining = shots.filter((s) => !s.done).map(formatShotExpression);
   return buildVideoPrompts(remaining, gaze, perClip);
@@ -126,7 +127,7 @@ export function buildPromptsFromShotList(
 export function buildPromptsFromGaps(
   gaps: LibraryGap[],
   gaze: VideoGazeDirection,
-  perClip = 4,
+  perClip = 3,
   maxExistingPhotos = 2,
 ): GeneratedVideoPrompt[] {
   const needed = gaps.filter((g) => g.count <= maxExistingPhotos).map(formatGapExpression);

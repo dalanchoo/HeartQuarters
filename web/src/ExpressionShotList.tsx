@@ -16,7 +16,7 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
   const [busy, setBusy] = useState('');
   const [promptMode, setPromptMode] = useState<VideoPromptMode>('shot-list');
   const [gaze, setGaze] = useState<VideoGazeDirection>('right');
-  const [perClip, setPerClip] = useState(4);
+  const [perClip, setPerClip] = useState(3);
   const [maxPhotos, setMaxPhotos] = useState(2);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
     <details className="yt-section video-prompt-builder" open>
       <summary>AI Video Prompts (Seed With Reference Photo)</summary>
       <p className="muted small-text">
-        Google Veo in Gemini generates up to 8 seconds per clip (up to 15 seconds on newer Gemini video models). Putting 4 expressions per clip gives ~2 seconds per pose so you can pause in a video player and save clean, unblurred stills on a neutral grey studio background.
+        Google Veo in Gemini generates up to 8 seconds per clip (up to 15 seconds on newer Gemini video models). Using 3 expressions per 8s clip (or 2 when turning both directions) leaves room for smooth head turns and a ~1.5s still hold on each pose.
       </p>
       <div className="video-prompt-controls">
         <label>
@@ -83,10 +83,10 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
         <label>
           Expressions per Clip{' '}
           <select value={perClip} onChange={e => setPerClip(Number(e.target.value))}>
-            <option value={3}>3 (~6s clip)</option>
-            <option value={4}>4 (~8s Veo clip)</option>
-            <option value={5}>5 (~10–12s clip)</option>
-            <option value={6}>6 (~12–15s clip)</option>
+            <option value={2}>2 (8s clip w/ both turns)</option>
+            <option value={3}>3 (8s Veo clip)</option>
+            <option value={4}>4 (~10–12s clip)</option>
+            <option value={5}>5 (~12–15s clip)</option>
           </select>
         </label>
         {promptMode === 'library-gaps' && (
