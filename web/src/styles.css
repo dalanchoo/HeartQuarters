@@ -186,8 +186,8 @@ main { flex: 1; min-height: 0; }
 /* Cards */
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
         padding: 0.6rem 0.85rem; margin-bottom: 0.6rem; }
-.card summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; }
-.card summary::marker { color: var(--muted); }
+.card > summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; }
+.card > summary::marker { color: var(--muted); }
 /* A summary laid out with flex loses its arrow, so it gets one drawn here. */
 .card > summary::before { content: '▸'; color: var(--muted); align-self: center; transition: transform 0.1s; }
 .card[open] > summary::before { transform: rotate(90deg); }
@@ -345,8 +345,9 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .new-version[open] { flex-basis: 100%; padding: 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
 .new-version input { font: inherit; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
 .yt-section { border: 1px solid var(--line); border-radius: 8px; margin: 0.65rem 0; padding: 0.6rem 0.8rem; }
-.yt-section > summary { cursor: pointer; font-weight: 600; }
-.yt-section > summary::before, .compare-field > summary::before { content: '▸'; display: inline-block; color: var(--muted); margin-right: 0.4rem; }
+.yt-section > summary, .drafts > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.45rem; }
+.yt-section > summary::before, .drafts > summary::before { margin-right: 0; }
+.yt-section > summary::before, .compare-field > summary::before { content: '▸'; display: inline-block; color: var(--muted); }
 .yt-section[open] > summary::before, .compare-field[open] > summary::before { transform: rotate(90deg); }
 .yt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; margin-top: 0.5rem; }
 .yt-grid > * { min-width: 0; }
