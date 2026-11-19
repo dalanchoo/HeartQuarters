@@ -206,7 +206,7 @@ function relinkDrafts(oldId: string, newId: string): { updated: number; failed: 
   return { updated, failed };
 }
 
-/** Renames a draft folder and updates its own name and path inside draft_meta_info.json. */
+/** Renames a draft folder and updates its own name and path inside draft_meta_info.json and any internal subdraft files. */
 function renameDraft(oldDraft: string, newDraft: string) {
   const from = path.join(config.capcutDraftsDir, oldDraft);
   const to = path.join(config.capcutDraftsDir, newDraft);
@@ -218,6 +218,7 @@ function renameDraft(oldDraft: string, newDraft: string) {
     .replace(/("draft_name"\s*:\s*)"(?:[^"\\]|\\.)*"/, (_m, h: string) => h + JSON.stringify(newDraft))
     .replace(/("draft_fold_path"\s*:\s*)"(?:[^"\\]|\\.)*"/, (_m, h: string) => h + JSON.stringify(forwardSlashes(to)));
   writeFileSafely(metaFile, meta);
+  relinkDraft(to, `${forwardSlashes(from)}/`, `${forwardSlashes(to)}/`);
 }
 
 export interface ManageResult {

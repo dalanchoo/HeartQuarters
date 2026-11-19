@@ -149,6 +149,24 @@ function draftTextFiles(dir: string): string[] {
     .map((e) => path.join(e.parentPath, e.name));
 }
 
+/**
+ * Whether a path mentioned inside CapCut draft `dir` exists: either at `original` as written, or if it points into a
+ * CapCut Drafts folder under an older draft name (for example ".../CapCut Drafts/021 - Working/subdraft/..."), at the
+ * same relative path inside `dir` itself (where CapCut actually loads its subdrafts from).
+ */
+function capcutLinkExists(dir: string, original: string): boolean {
+  if (fs.existsSync(original)) return true;
+  const draftsRoot = config.capcutDraftsDir ? `${fwd(path.resolve(config.capcutDraftsDir))}/`.toLowerCase() : '';
+  const lower = original.toLowerCase();
+  if (draftsRoot && lower.startsWith(draftsRoot)) {
+    const afterRoot = original.slice(draftsRoot.length);
+    const slash = afterRoot.indexOf('/');
+    if (slash > 0 && fs.existsSync(path.join(dir, afterRoot.slice(slash + 1)))) return true;
+  }
+  const m = /\/capcut drafts\/[^/]+\/(.+)$/i.exec(original);
+  return !!m && fs.existsSync(path.join(dir, m[1]));
+}
+
 function* scanLinks(video: string): Generator<void, CapCutLinks> {
   const prefix = `${fwd(config.videoProjectsDir)}/${video}/`.toLowerCase();
   const heartMind = `${fwd(path.dirname(path.resolve(config.videoProjectsDir)))}/`.toLowerCase();
@@ -185,7 +203,7 @@ function* scanLinks(video: string): Generator<void, CapCutLinks> {
         // A file (it has an extension) in the HeartMind folders that isn't there.
         if (!driveCopy && /\.[a-z0-9]{2,5}$/i.test(value) && !seen.has(value)) {
           seen.add(value);
-          if (!fs.existsSync(original)) missing.push(`${d}: ${original}`);
+          if (!capcutLinkExists(dir, original)) missing.push(`${d}: ${original}`);
         }
       }
     }

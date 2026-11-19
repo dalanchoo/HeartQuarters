@@ -169,6 +169,18 @@ describe('renameFolder', () => {
     expect(JSON.parse(read(path.join(drafts(), '022_S01 - One', 'Timelines', 'T1', 'draft_content.json'))).path).toBe(newMedia);
   });
 
+  it('relinks internal subdraft paths when renaming a CapCut draft', () => {
+    const oldDraftDir = path.join(drafts(), '022 - Worth Telling Them(2)');
+    const subFile = path.join(oldDraftDir, 'subdraft', 'ABC', 'draft_content.json');
+    fs.mkdirSync(path.dirname(subFile), { recursive: true });
+    fs.writeFileSync(subFile, JSON.stringify({ sub: `${oldDraftDir.split(path.sep).join('/')}/subdraft/ABC/sub_draft_config.json` }));
+    renameFolder('022 - Worth Telling Them', '022 - Worth Saying', ['022 - Worth Telling Them(2)']);
+    const newDraftDir = path.join(drafts(), '022 - Worth Saying');
+    expect(read(path.join(newDraftDir, 'subdraft', 'ABC', 'draft_content.json'))).toContain(
+      `${newDraftDir.split(path.sep).join('/')}/subdraft/ABC/sub_draft_config.json`,
+    );
+  });
+
   it('keeps fixing links past a draft it cannot read, and names that draft', () => {
     // There, but unreadable: a folder where the file should be.
     fs.rmSync(path.join(drafts(), 'Unrelated', 'draft_meta_info.json'));

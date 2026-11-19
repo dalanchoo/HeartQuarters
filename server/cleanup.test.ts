@@ -182,6 +182,15 @@ describe('cleaning up a video', () => {
     expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
   });
 
+  it('resolves internal subdraft links inside the current CapCut draft when the draft was renamed from an older working name', () => {
+    const subDir = path.join(tmp, 'Drafts', '022 - V', 'subdraft', '121B5324');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(subDir, 'sub_draft_config.json'), '{}');
+    const oldDraftLink = `${fwd(path.join(tmp, 'Drafts', '022 - Old Working Name'))}/subdraft/121B5324/sub_draft_config.json`;
+    fs.writeFileSync(path.join(subDir, 'draft_content.json'), JSON.stringify({ path: oldDraftLink }));
+    expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
+  });
+
   it("checks a Short's own project too, even when its links all point somewhere else", () => {
     const draft = path.join(tmp, 'Drafts', '022_S01 - A');
     fs.mkdirSync(draft, { recursive: true });
