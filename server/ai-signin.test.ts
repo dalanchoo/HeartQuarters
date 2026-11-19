@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { aiModelArgs, aiOverview, availableModels, chooseAi, chooseAiModel, chosenModel, parseGeminiModels, runAiProcess } from './ai';
+import { aiModelArgs, aiOverview, availableModels, chooseAi, chooseAiModel, chosenModel, parseGeminiModels, rememberGeminiModels, runAiProcess } from './ai';
 import { aiSignIns, openSignIn, readSignIn, type Runner } from './ai-signin';
 import { makeTree, removeTree } from './testing';
 
@@ -122,10 +122,13 @@ describe('per-AI model selection and catalog discovery', () => {
         { id: 'gpt-6.2-sol', label: 'GPT-6.2-Sol' },
         { id: 'gpt-6-sol', label: 'GPT-6-Sol' },
       ]);
-      expect(parseGeminiModels('Fetching available models...\ngemini-4-neon-high\tGemini 4 Neon (High)\ngemini-4-argon-medium\tGemini 4 Argon (Medium)\n')).toEqual([
+      const geminiList = parseGeminiModels('Fetching available models...\ngemini-4-neon-high\tGemini 4 Neon (High)\ngemini-4-argon-medium\tGemini 4 Argon (Medium)\n');
+      expect(geminiList).toEqual([
         { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)' },
         { id: 'gemini-4-argon-medium', label: 'Gemini 4 Argon (Medium)' },
       ]);
+      rememberGeminiModels(geminiList);
+      expect(availableModels('gemini', home).defaultLabel).toBe('Default (Gemini 4 Neon (High))');
     } finally {
       removeTree(home);
     }

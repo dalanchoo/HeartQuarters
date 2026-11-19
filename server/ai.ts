@@ -181,7 +181,7 @@ export function availableModels(ai: AiId, home = os.homedir()): { defaultLabel: 
     } catch { /* no settings.json */ }
     models = cachedGeminiModels ?? DEFAULT_GEMINI_MODELS;
   }
-  const defaultName = defaultModel ? (models.find((m) => m.id === defaultModel)?.label ?? defaultModel) : '';
+  const defaultName = defaultModel ? (models.find((m) => m.id === defaultModel)?.label ?? defaultModel) : (models[0]?.label ?? '');
   return { defaultLabel: defaultName ? `Default (${defaultName})` : 'Default', models };
 }
 
