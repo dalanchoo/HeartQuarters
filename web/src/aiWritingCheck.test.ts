@@ -2,19 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
 
 describe('findAiWritingTells', () => {
-  it('returns empty for plain, natural first-person writing', () => {
+  it('returns empty for plain, natural first-person writing with varied sentence length', () => {
     const sample =
-      "I took magic mushrooms with a friend, and this turned into a real example of the placebo effect. I didn't believe it existed, but I tried anyway.";
+      "I took magic mushrooms with a friend, and this turned into a real example of the placebo effect and healing through friendship. My friend told me, on psilocybin, that he had a psychic parasite in his back feeding off his self-doubt. I didn't believe it existed. Still, I dug my fingers into his back anyway and pretended to pull it out. He fell to his knees and threw up.";
     expect(findAiWritingTells(sample)).toEqual([]);
   });
 
-  it('flags formulaic contrasts, AI clichés, em-dashes, and hype words', () => {
+  it('flags formulaic contrasts, AI clichés, em-dashes, moralizing closers, and hype words', () => {
     const sample =
-      "It's not about memory — it's about connection. Let's delve into this transformative journey. This changed everything!";
+      "It's not about memory — it's about connection. Let's delve into this transformative journey. Because ultimately, healing is a reminder that we are human. This changed everything!";
     const tells = findAiWritingTells(sample);
     expect(tells.map((t) => t.match.toLowerCase())).toEqual(
-      expect.arrayContaining(["not about memory — it's about", '—', 'delve', 'transformative', 'this changed everything']),
+      expect.arrayContaining([
+        "not about memory — it's about",
+        '—',
+        'delve',
+        'transformative',
+        'ultimately, healing',
+        'is a reminder that',
+        'this changed everything',
+      ]),
     );
+  });
+
+  it('flags flat sentence rhythm (low burstiness) when 5 consecutive sentences have almost identical word counts', () => {
+    const flat = [
+      'I walked into the quiet room and looked around at all the people sitting there.',
+      'Everyone seemed to be waiting for something important to happen before the night began.',
+      'The facilitator sat at the front and spoke softly about what we might experience.',
+      'I noticed my chest tightening as I thought about why I had come here today.',
+      'Nobody said a word as the lights dimmed and the first song started playing.',
+    ].join(' ');
+    const tells = findAiWritingTells(flat);
+    expect(tells.some((t) => t.reason.includes('low burstiness'))).toBe(true);
   });
 
   it('checks prose fields like Title, Description, and Pinned Comment, and skips Tags and settings', () => {
