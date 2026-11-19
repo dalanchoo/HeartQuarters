@@ -18,11 +18,11 @@ describe('analytics analysis', () => {
     const { job, finished } = startAnalyticsAnalysis('Video/Longform', '2026-11-18', ask);
     await finished;
     expect(job.state).toBe('done');
-    expect(seen.slice(0, 3)).toEqual([['Stats.json'], ['Stats.json'], ['Stats.json']]);
-    expect(seen[3]).toEqual(['ChatGPT.md', 'Claude.md', 'Gemini.md', 'Stats.json']);
-    expect(seen[4]).toEqual(['ChatGPT.md', 'Claude.md', 'Gemini.md', 'Recommendations.md', 'Stats.json']);
+    expect(seen.slice(0, 3)).toEqual([['Context.txt', 'Stats.json'], ['Context.txt', 'Stats.json'], ['Context.txt', 'Stats.json']]);
+    expect(seen[3]).toEqual(['ChatGPT.md', 'Claude.md', 'Context.txt', 'Gemini.md', 'Stats.json']);
+    expect(seen[4]).toEqual(['ChatGPT.md', 'Claude.md', 'Context.txt', 'Gemini.md', 'Recommendations.md', 'Stats.json']);
     const result = analyticsAnalysis('Video/Longform', '2026-11-18')[0];
-    expect(result).toMatchObject({ claude: 'claude review 1\n', codex: 'codex review 1\n', gemini: 'gemini review 1\n', recommendations: 'claude review 4\n', summary: 'claude review 5\n' });
+    expect(result).toMatchObject({ claude: 'claude review 2\n', codex: 'codex review 2\n', gemini: 'gemini review 2\n', recommendations: 'claude review 5\n', summary: 'claude review 6\n' });
     expect(() => startAnalyticsSummary('Video/Longform', '2026-11-18', job.id, ask)).toThrow('already has a summary');
     expect(fs.readFileSync(path.join(root, 'Video/Longform/Analytics/2026-11-18/Stats.json'), 'utf8')).toContain('periods');
   });
@@ -39,5 +39,14 @@ describe('analytics analysis', () => {
   it('rejects paths outside the snapshots', () => {
     expect(() => startAnalyticsAnalysis('../outside', '2026-11-18')).toThrow();
     expect(() => startAnalyticsAnalysis('', '../2026-11-18')).toThrow();
+  });
+  it('gives each reviewer manually supplied CTR with its period, and rejects malformed values', async () => {
+    const contexts: string[] = [];
+    const ask: AskAi = async (_ai, _prompt, cwd) => { contexts.push(fs.readFileSync(path.join(cwd, 'Context.txt'), 'utf8')); return 'review'; };
+    const { finished } = startAnalyticsAnalysis('Video/Longform', '2026-11-18', ask, { ctr: 3.2, impressions: 500, period: 'Lifetime' });
+    await finished;
+    expect(contexts).toHaveLength(5);
+    expect(contexts.every(value => value.includes('3.2%') && value.includes('Lifetime') && value.includes('Manually supplied'))).toBe(true);
+    expect(() => startAnalyticsAnalysis('Video/Longform', '2026-11-18', ask, { ctr: 120, impressions: null, period: 'Lifetime' })).toThrow();
   });
 });

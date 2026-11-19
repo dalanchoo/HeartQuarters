@@ -87,7 +87,7 @@ app.post('/api/youtube/analytics/channel', (_req, res) => {
 });
 app.get('/api/youtube/analytics/snapshots', handle((req, res) => { res.json(analyticsSnapshots(String(req.query.piece ?? ''))); }));
 app.get('/api/youtube/analytics/analysis', handle((req, res) => { res.json(analyticsAnalysis(String(req.query.piece ?? ''), String(req.query.snapshot ?? ''))); }));
-app.post('/api/youtube/analytics/analyze', handle((req, res) => { res.json(startAnalyticsAnalysis(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? '')).job); }));
+app.post('/api/youtube/analytics/analyze', handle((req, res) => { res.json(startAnalyticsAnalysis(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? ''), undefined, req.body?.reach).job); }));
 app.post('/api/youtube/analytics/summarize', handle((req, res) => { res.json(startAnalyticsSummary(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? ''), String(req.body?.id ?? '')).step); }));
 // How much of today's YouTube quota HeartQuarters has used (it counts its own requests).
 app.get('/api/youtube/quota', handle((_req, res) => { res.json(youtubeQuota()); }));
