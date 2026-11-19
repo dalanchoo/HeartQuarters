@@ -117,22 +117,27 @@ interface ThumbJobs {
 function useThumbJobs(piece: string, open: boolean, onChanged?: () => void): ThumbJobs {
   const [jobs, setJobs] = useState<ThumbJob[]>([]);
   const before = useRef<Record<string, string>>({});
-  const load = () =>
+  const load = (isActive?: () => boolean) =>
     getJson<ThumbJob[]>(`/api/thumbs?piece=${encodeURIComponent(piece)}`).then((list) => {
+      if (isActive && !isActive()) return;
       const finished = list.some((j) => before.current[j.conversation] === 'working' && j.state !== 'working');
       before.current = Object.fromEntries(list.map((j) => [j.conversation, j.state]));
       setJobs(list);
       if (finished) onChanged?.();
     }, () => undefined);
   useEffect(() => {
-    if (open) void load();
+    if (!open) return;
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
   }, [open, piece]);
   const working = jobs.some((j) => j.state === 'working');
   useEffect(() => {
-    if (!working) return;
-    const timer = setInterval(() => void load(), 4000);
-    return () => clearInterval(timer);
-  }, [working]);
+    if (!working || !open) return;
+    let active = true;
+    const timer = setInterval(() => void load(() => active), 4000);
+    return () => { active = false; clearInterval(timer); };
+  }, [working, open, piece]);
   return { jobs, refresh: () => void load() };
 }
 
@@ -226,8 +231,17 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   }, []);
   // Best Photos for This Pair: Claude ranks the photos once per pair (saved in Drafts), started here when there's none.
   const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null } | null>(null);
-  const loadRanking = () => getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(setRanking, (e: Error) => setError(e.message));
-  useEffect(() => void loadRanking(), [piece, choice.pick.title]);
+  const loadRanking = (isActive?: () => boolean) =>
+    getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
+      (r) => { if (!isActive || isActive()) setRanking(r); },
+      (e: Error) => { if (!isActive || isActive()) setError(e.message); },
+    );
+  useEffect(() => {
+    let active = true;
+    setRanking(null);
+    void loadRanking(() => active);
+    return () => { active = false; };
+  }, [piece, choice.pick.title]);
   const ranked = ranking?.ranking && ranking.ranking.title === choice.pick.title ? ranking.ranking : null;
   const rankingNow = ranking?.job?.state === 'working';
   const rank = () => {
@@ -239,12 +253,13 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
     asked.current = choice.pick.title;
     rank();
-  }, [ranking, ranked, rankingNow]);
+  }, [ranking, ranked, rankingNow, choice.pick.title]);
   useEffect(() => {
     if (!rankingNow) return;
-    const timer = setInterval(() => void loadRanking(), 3000);
-    return () => clearInterval(timer);
-  }, [rankingNow]);
+    let active = true;
+    const timer = setInterval(() => void loadRanking(() => active), 3000);
+    return () => { active = false; clearInterval(timer); };
+  }, [rankingNow, piece]);
   // The pair's own categories first, then any John adds from the whole library.
   const [added, setAdded] = useState<string[]>([]);
   const categories = [...categoriesIn(choice.pick.expression), ...added.filter((c) => !categoriesIn(choice.pick.expression).includes(c))];
@@ -476,15 +491,20 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
   const [error, setError] = useState('');
   const wasRunning = useRef(false);
 
-  const load = () =>
+  const load = (isActive?: () => boolean) =>
     getJson<{ source: BriefSource | null; job: BriefJob | null }>(`/api/brief?piece=${encodeURIComponent(piece)}`).then(
       (r) => {
+        if (isActive && !isActive()) return;
         setSource(r.source);
         setJob(r.job);
       },
-      (e: Error) => setError(e.message),
+      (e: Error) => { if (!isActive || isActive()) setError(e.message); },
     );
-  useEffect(() => void load(), [piece]);
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
+  }, [piece]);
 
   // While the AIs work, check every few seconds. When they finish, the card reloads to show the new brief.
   const running = job?.status === 'running';
@@ -495,9 +515,10 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
       onChanged?.();
     }
     if (!running) return;
-    const timer = setInterval(() => void load(), 3000);
-    return () => clearInterval(timer);
-  }, [running]);
+    let active = true;
+    const timer = setInterval(() => void load(() => active), 3000);
+    return () => { active = false; clearInterval(timer); };
+  }, [running, piece]);
 
   const start = () => {
     if (hasBrief && !window.confirm('Write a new brief? The current Brief.md is kept, renamed with its date and time.')) return;
@@ -582,7 +603,7 @@ function readImages(files: File[]): Promise<Reference[]> {
             reader.onerror = () => reject(new Error('Could not read the image.'));
             reader.onload = () => {
               const url = String(reader.result);
-              resolve({ kind: 'pasted', data: url.split(',')[1] ?? '', preview: url });
+              resolve({ kind: 'pasted', data: url.split(',')[1] ?? '', preview: URL.createObjectURL(f) });
             };
             reader.readAsDataURL(f);
           }),
@@ -773,13 +794,21 @@ function ThumbnailFeedback({ piece, image, hasMetadata }: { piece: string; image
   const [jobs, setJobs] = useState<ThumbnailReviewJob[]>([]);
   const [starting, setStarting] = useState<AiId[]>([]);
   const [error, setError] = useState('');
+  const workingFeedback = jobs.some(job => job.state === 'working');
   useEffect(() => {
     if (!open) return;
     let active = true;
     const load = () => { void getJson<{ reviews: ThumbnailReview[]; jobs: ThumbnailReviewJob[] }>(`/api/thumbs/reviews?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`).then(data => { if (active) { setReviews(data.reviews); setJobs(data.jobs); setError(''); } }, (e: Error) => { if (active) setError(e.message); }); };
-    load(); const timer = setInterval(load, 4000);
-    return () => { active = false; clearInterval(timer); };
+    load();
+    return () => { active = false; };
   }, [open, piece, image]);
+  useEffect(() => {
+    if (!open || !workingFeedback) return;
+    let active = true;
+    const load = () => { void getJson<{ reviews: ThumbnailReview[]; jobs: ThumbnailReviewJob[] }>(`/api/thumbs/reviews?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`).then(data => { if (active) { setReviews(data.reviews); setJobs(data.jobs); setError(''); } }, (e: Error) => { if (active) setError(e.message); }); };
+    const timer = setInterval(load, 4000);
+    return () => { active = false; clearInterval(timer); };
+  }, [open, workingFeedback, piece, image]);
   const ask = (ai: AiId) => {
     setError(''); setStarting(items => [...items, ai]);
     postJson<ThumbnailReviewJob>('/api/thumbs/reviews', { piece, image, ai, question }).then(job => setJobs(items => [...items.filter(item => item.ai !== ai), job]), (e: Error) => setError(e.message)).finally(() => setStarting(items => items.filter(item => item !== ai)));

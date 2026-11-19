@@ -304,7 +304,9 @@ function readDrafts(packagingRoot: string): Drafts | null {
   if (!name) return null;
   const dir = path.join(packagingRoot, name);
   const named = (files: FileRef[], want: string) => files.find((f) => f.name.toLowerCase() === want) ?? null;
-  const conversations = subfolders(dir).map((c): DraftConversation => {
+  const conversations = subfolders(dir)
+    .filter((c) => c.toLowerCase() !== 'research')
+    .map((c): DraftConversation => {
     const cDir = path.join(dir, c);
     return {
       name: c,

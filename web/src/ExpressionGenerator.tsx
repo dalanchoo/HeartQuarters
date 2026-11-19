@@ -20,7 +20,7 @@ export function ExpressionGenerator({ category, references, photos, categories, 
       if (edited.current && lastSuggestion.current && lastSuggestion.current !== result.prompt) setOutdated(true);
       if (!edited.current) setPrompt(result.prompt);
       lastSuggestion.current = result.prompt; setSuggested(result.prompt); setLoadingPrompt(false);
-    }, e => { if (active) { setMessage(e.message); } });
+    }, e => { if (active) { setMessage(e.message); setLoadingPrompt(false); } });
     return () => { active = false; };
   }, [category.path, framing, angle, gaze]);
   const start = async () => {
@@ -53,7 +53,12 @@ export function ExpressionCandidates({ categories, revision, onSaved, onViewCand
   const [jobs, setJobs] = useState<Job[]>([]); const [message, setMessage] = useState(''); const [busy, setBusy] = useState<string | null>(null);
   const load = async () => { try { setJobs(await getJson<Job[]>('/api/expression-generation/jobs')); } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } };
   useEffect(() => { void load(); }, [revision]);
-  useEffect(() => { const timer = setInterval(() => void load(), 3000); return () => clearInterval(timer); }, []);
+  const working = jobs.some(j => j.state === 'working');
+  useEffect(() => {
+    if (!working) return;
+    const timer = setInterval(() => void load(), 3000);
+    return () => clearInterval(timer);
+  }, [working]);
   const action = async (id: string, fn: () => Promise<void>) => { setBusy(id); setMessage(''); try { await fn(); await load(); } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); } };
   const parents = new Set(categories.map(c => c.parent));
   return <details className="expression-planning" open><summary>Candidates for Review ({jobs.length})</summary>

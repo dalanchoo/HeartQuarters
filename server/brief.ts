@@ -500,14 +500,6 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
   const brief = path.join(drafts, BRIEF_FILE);
   if (!fs.existsSync(brief)) throw new Error('There is no Brief.md to pick from yet. Write the brief first.');
   const found = findSource(dir);
-  const work = workFolder(piece);
-  fs.copyFileSync(readable(brief), path.join(work, 'brief.md'));
-  if (found) fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
-  if (found?.kind === 'transcript') copySourceTimings(dir, work);
-  const saved = saveResearchImages(drafts, work, images, new Date());
-  const shots = saved.map((s) => s.file);
-  const notes = notesWithImages(rawNotes, saved);
-  if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
   const job: BriefJob = {
     piece,
     status: 'running',
@@ -516,6 +508,22 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     startedAt: new Date().toISOString(),
   };
   jobs.set(piece, job);
+  let work: string;
+  let notes: string;
+  let shots: string[];
+  try {
+    work = workFolder(piece);
+    fs.copyFileSync(readable(brief), path.join(work, 'brief.md'));
+    if (found) fs.writeFileSync(path.join(work, 'source.txt'), await readSource(found.full));
+    if (found?.kind === 'transcript') copySourceTimings(dir, work);
+    const saved = saveResearchImages(drafts, work, images, new Date());
+    shots = saved.map((s) => s.file);
+    notes = notesWithImages(rawNotes, saved);
+    if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
+  } catch (e) {
+    jobs.delete(piece);
+    throw e;
+  }
   const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots).then(() => {
     job.status = job.steps[0].state === 'done' ? 'done' : 'failed';
   });

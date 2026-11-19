@@ -95,12 +95,13 @@ export function previewExpressionChange(photo: string, destination: string | nul
 export function applyExpressionChange(photo: string, destination: string | null, token: string, sidecarUpdate?: { before: string; after: string }): ExpressionPlan {
   const { plan, links, references } = makePlan(photo, destination);
   if (plan.token !== token) throw new Error('The files changed since the preview. Review the action again.');
-  if (!config.trashDir) throw new Error('No trash folder is configured. Nothing was changed.');
-  const trash = path.join(config.trashDir, `Expression ${crypto.randomUUID()}`);
+  const needsTrash = plan.changes.some(c => c.to === null);
+  if (needsTrash && !config.trashDir) throw new Error('No trash folder is configured. Nothing was changed.');
+  const trash = needsTrash ? path.join(config.trashDir, `Expression ${crypto.randomUUID()}`) : '';
   const moved: { from: string; to: string }[] = [], written: JsonLink[] = [], copies: string[] = [];
   let refsWritten = false; let updatedSidecar: string | undefined;
   try {
-    fs.mkdirSync(trash, { recursive: true });
+    if (needsTrash) fs.mkdirSync(trash, { recursive: true });
     for (const l of links) if (l.copyTo && l.copyFrom) {
       fs.mkdirSync(path.dirname(l.copyTo), { recursive: true });
       if (fs.lstatSync(path.dirname(l.copyTo)).isSymbolicLink()) throw new Error('The project Source folder is a shortcut. Nothing was changed.');

@@ -1,4 +1,6 @@
 // Reading the Video Projects folder: layouts, versions, names with en-dashes.
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { listProjects, readProject } from './projects';
@@ -166,6 +168,15 @@ describe('readProject', () => {
     expect(short.kind).toBe('short');
     const piece = short.videos[0].pieces[0];
     expect([piece.kind, piece.name, piece.exports.length]).toEqual(['short', '999-2026-01 - First One', 1]);
+  });
+
+  it('ignores Packaging/Drafts/Research when listing thumbnail conversations', () => {
+    const dir = path.join(config.videoProjectsDir, '006 - Old Layout', 'Packaging', 'Drafts');
+    fs.mkdirSync(path.join(dir, 'Research', '2026-11-18'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'ChatGPT 01'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'ChatGPT 01', '01.png'), 'img');
+    const drafts = readProject('006 - Old Layout').videos[0].pieces[0].drafts;
+    expect(drafts?.conversations.map((c) => c.name)).toEqual(['ChatGPT 01']);
   });
 
   it('opens a group folder with its contents', () => {

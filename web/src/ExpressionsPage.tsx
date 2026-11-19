@@ -66,18 +66,36 @@ export function ExpressionsPage() {
   const [assessmentJobs, setAssessmentJobs] = useState<string[]>([]);
   useEffect(() => { if (activeTab === 'inbox') refreshInbox(); }, [activeTab, refreshInbox]);
   useEffect(() => { window.addEventListener('hq-expression-inbox-changed', refreshInbox); return () => window.removeEventListener('hq-expression-inbox-changed', refreshInbox); }, [refreshInbox]);
+  const [candidatesWorking, setCandidatesWorking] = useState(false);
   useEffect(() => {
     if (!assessmentJobs.length) return;
     let active = true;
-    const check = () => { void Promise.all(assessmentJobs.map(id => getJson<{ id: string; state: string }>(`/api/expressions/assessment?id=${encodeURIComponent(id)}`).catch(() => null))).then(jobs => { if (!active) return; const completed = jobs.filter(job => job && job.state !== 'working'); if (completed.length) { setAssessmentJobs(ids => ids.filter(id => !completed.some(job => job?.id === id))); if (completed.some(job => job?.state === 'done')) { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); refreshInbox(); } } }); };
+    const check = () => {
+      void Promise.all(assessmentJobs.map(id => getJson<{ id: string; state: string }>(`/api/expressions/assessment?id=${encodeURIComponent(id)}`).catch(() => ({ id, state: 'missing' })))).then(jobs => {
+        if (!active) return;
+        const done = jobs.filter(job => job.state !== 'working');
+        if (done.length) {
+          setAssessmentJobs(ids => ids.filter(id => !done.some(job => job.id === id)));
+          if (done.some(job => job.state === 'done')) { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); refreshInbox(); }
+        }
+      });
+    };
     const timer = setInterval(check, 3000); return () => { active = false; clearInterval(timer); };
   }, [assessmentJobs]);
   useEffect(() => {
     let active = true;
-    const load = () => { void getJson<{ state: string }[]>('/api/expression-generation/jobs').then(jobs => { if (active) setReadyCount(readyCandidateCount(jobs)); }, () => { if (active) setReadyCount(null); }); };
-    load(); const timer = setInterval(load, 5000);
+    const load = () => {
+      void getJson<{ state: string }[]>('/api/expression-generation/jobs').then(jobs => {
+        if (!active) return;
+        setReadyCount(readyCandidateCount(jobs));
+        setCandidatesWorking(jobs.some(j => j.state === 'working'));
+      }, () => { if (active) { setReadyCount(null); setCandidatesWorking(false); } });
+    };
+    load();
+    if (!candidatesWorking) return () => { active = false; };
+    const timer = setInterval(load, 5000);
     return () => { active = false; clearInterval(timer); };
-  }, [candidateRevision]);
+  }, [candidateRevision, candidatesWorking]);
   const changeTag = async (photo: ExpressionPhoto, action: TagAction) => {
     let newPath = photo.path;
     if (action.kind === 'add') await postJson('/api/expressions/add-tag', { photo: photo.path, tag: action.name, group: action.group });

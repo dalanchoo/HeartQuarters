@@ -580,21 +580,46 @@ function TrimBar({
     return () => v.removeEventListener('seeked', next);
   }, []);
 
-  // The playhead follows the video directly, so playing doesn't redraw the rest of the card.
+  // The playhead follows the video directly, so playing doesn't redraw the rest of the card. Runs only while playing.
   useEffect(() => {
+    const v = videoRef.current;
     let timer = 0;
-    const follow = () => {
-      const v = videoRef.current;
+    const update = () => {
       const line = playhead.current;
       if (line) {
         const inView = !!v && v.readyState > 0 && v.currentTime >= shown.from && v.currentTime <= shown.to;
         line.style.display = inView ? 'block' : 'none';
         if (v && inView) line.style.left = percent(v.currentTime);
       }
-      timer = requestAnimationFrame(follow);
     };
-    follow();
-    return () => cancelAnimationFrame(timer);
+    const follow = () => {
+      update();
+      if (v && !v.paused && !v.ended) timer = requestAnimationFrame(follow);
+    };
+    const start = () => {
+      cancelAnimationFrame(timer);
+      follow();
+    };
+    const stop = () => {
+      cancelAnimationFrame(timer);
+      update();
+    };
+    update();
+    if (!v) return;
+    if (!v.paused && !v.ended) start();
+    v.addEventListener('play', start);
+    v.addEventListener('pause', stop);
+    v.addEventListener('ended', stop);
+    v.addEventListener('seeked', update);
+    v.addEventListener('loadedmetadata', update);
+    return () => {
+      cancelAnimationFrame(timer);
+      v.removeEventListener('play', start);
+      v.removeEventListener('pause', stop);
+      v.removeEventListener('ended', stop);
+      v.removeEventListener('seeked', update);
+      v.removeEventListener('loadedmetadata', update);
+    };
   }, [shown.from, shown.to]);
 
   const handle = (edge: 'start' | 'end') => ({
@@ -706,14 +731,13 @@ function TranscriptPicker({
   useEffect(() => reveal(last), [last]);
   useEffect(() => reveal(first), [first]);
 
-  // Lights the word being said. This sets a mark on that one word directly, so playing doesn't redraw the whole
-  // transcript. The box follows along only while playing, so it doesn't move while John is selecting.
+  // Lights the word being said. Runs only while playing (plus seeks), so idle cards use no CPU.
   useEffect(() => {
+    const v = videoRef.current;
     let timer = 0;
     let lit = -1;
-    const follow = () => {
+    const update = () => {
       const list = box.current;
-      const v = videoRef.current;
       if (list && v && v.readyState > 0) {
         const now = wordAt(words, v.currentTime);
         if (now !== lit) {
@@ -723,10 +747,35 @@ function TranscriptPicker({
           if (now >= 0 && !v.paused) reveal(now);
         }
       }
-      timer = requestAnimationFrame(follow);
     };
-    follow();
-    return () => cancelAnimationFrame(timer);
+    const follow = () => {
+      update();
+      if (v && !v.paused && !v.ended) timer = requestAnimationFrame(follow);
+    };
+    const start = () => {
+      cancelAnimationFrame(timer);
+      follow();
+    };
+    const stop = () => {
+      cancelAnimationFrame(timer);
+      update();
+    };
+    update();
+    if (!v) return;
+    if (!v.paused && !v.ended) start();
+    v.addEventListener('play', start);
+    v.addEventListener('pause', stop);
+    v.addEventListener('ended', stop);
+    v.addEventListener('seeked', update);
+    v.addEventListener('loadedmetadata', update);
+    return () => {
+      cancelAnimationFrame(timer);
+      v.removeEventListener('play', start);
+      v.removeEventListener('pause', stop);
+      v.removeEventListener('ended', stop);
+      v.removeEventListener('seeked', update);
+      v.removeEventListener('loadedmetadata', update);
+    };
   }, [words]);
 
   useEffect(() => {
