@@ -12,7 +12,9 @@ export function confirmExpressionFolder(photoPath: string, name: string, confide
   const index = buildExpressionIndex(); const photo = findExpressionPhoto(index, photoPath);
   if (!photo || !name || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or expression is not available.');
   const parents = new Set(index.categories.map(c => c.parent));
-  const destinations = index.categories.filter(c => c.path && !parents.has(c.path) && c.name.toLowerCase() === name.toLowerCase());
+  const named = index.categories.filter(c => c.path && c.name.toLowerCase() === name.toLowerCase());
+  const leaves = named.filter(c => !parents.has(c.path));
+  const destinations = leaves.length ? leaves : named;
   if (destinations.length !== 1) throw new Error('Could not identify one destination folder for this expression. Nothing was changed.');
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file.');

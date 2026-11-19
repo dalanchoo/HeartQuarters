@@ -54,4 +54,12 @@ describe('confirming an expression folder', () => {
     expect(() => confirmExpressionFolder(photo, 'Skepticism', 90)).toThrow(/one destination/);
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
   });
+  it('moves the photo into a category that also has sub-categories when its name is unique', () => {
+    fs.mkdirSync(path.join(tmp, 'Expressions/Apprehension/Fear/Panic'), { recursive: true });
+    const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt');
+    fs.writeFileSync(file, 'Fear, N/A, UNCONFIRMED\n');
+    const result = confirmExpressionFolder(photo, 'Fear', null);
+    expect(result.path).toBe('Apprehension/Fear/Fear_001.jpg');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Apprehension/Fear/Fear_001.txt'), 'utf8')).toBe('Fear, N/A, CONFIRMED\n');
+  });
 });
