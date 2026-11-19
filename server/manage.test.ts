@@ -220,6 +220,20 @@ describe('renameFolder', () => {
     expect(read(2).piece).toBe('015 - NVC/015A - Part One/Longform');
   });
 
+  it('relinks CapCut drafts storing escaped backslashes or lowercase drive letters', () => {
+    const meta = path.join(drafts(), '022 - Worth Telling Them(2)', 'draft_meta_info.json');
+    const winOld = path.join(tmp, 'Video Projects', '022 - Worth Telling Them', 'Longform', 'Raw', 'a.mp4').replace(/^[A-Z]:/, (m) => m.toLowerCase());
+    fs.writeFileSync(meta, JSON.stringify({ draft_name: '022 - Worth Telling Them(2)', draft_materials: [{ value: [{ file_Path: winOld }] }] }));
+    const result = renameFolder('022 - Worth Telling Them', '022 - Renamed', []);
+    expect(result.message).toMatch(/Updated the links in 2 CapCut drafts/);
+    expect(read(meta)).toContain('022 - Renamed\\\\Longform\\\\Raw\\\\a.mp4');
+  });
+
+  it('allows case-only renames including the CapCut draft', () => {
+    const result = renameFolder('022 - Worth Telling Them/Shorts/022_S01 - One', '022_S01 - ONE', ['022_S01 - One']);
+    expect(result.message).toContain('Renamed the CapCut draft');
+  });
+
   it('refuses while CapCut is open, changing nothing', () => {
     capcutOpen = true;
     expect(() => renameFolder('022 - Worth Telling Them', '022 - X', [])).toThrow(/close CapCut/i);

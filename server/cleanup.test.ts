@@ -191,6 +191,27 @@ describe('cleaning up a video', () => {
     expect(cleanupPlan('022 - V/Shorts/022_S01 - A').missing).toEqual([`022_S01 - A: ${elsewhere}`]);
   });
 
+  it('keeps and relinks CapCut paths stored with escaped backslashes or different drive-letter case', () => {
+    const content = path.join(tmp, 'Drafts', '022 - V', 'Timelines', 'T1', 'draft_content.json');
+    const meta = path.join(tmp, 'Drafts', '022 - V', 'draft_meta_info.json');
+    const winUsed = V('Longform', 'Claude', 'broll', 'graded.mp4').replace(/^[A-Z]:/, (m) => m.toLowerCase());
+    const winMotion = V('Longform', 'Intermediate', 'Motion Graphics', 'used.mov').replace(/^[A-Z]:/, (m) => m.toLowerCase());
+    fs.writeFileSync(meta, JSON.stringify({ draft_materials: [{ value: [{ file_Path: winUsed }] }] }));
+    fs.writeFileSync(content, JSON.stringify({ materials: { videos: [{ path: winUsed }, { path: winMotion }] } }));
+    const plan = cleanupPlan('022 - V/Longform');
+    const done = runCleanup('022 - V/Longform', plan.token);
+    expect(done.moved).toBe(1);
+    const updated = fs.readFileSync(content, 'utf8');
+    expect(updated).toContain('Intermediate\\\\broll\\\\graded.mp4');
+    expect(updated).not.toContain('Claude\\\\broll');
+  });
+
+  it('refuses Clean Up if a CapCut draft metadata file cannot be read', () => {
+    const unreadable = path.join(tmp, 'Drafts', 'Other Draft');
+    fs.mkdirSync(path.join(unreadable, 'draft_meta_info.json'), { recursive: true });
+    expect(() => cleanupPlan('022 - V/Longform')).toThrow(/Couldn't read CapCut project "Other Draft"/);
+  });
+
   it('stays inside the Video Projects folder', () => {
     expect(() => cleanupPlan('../outside/Longform')).toThrow();
     expect(() => cleanupPlan('')).toThrow();

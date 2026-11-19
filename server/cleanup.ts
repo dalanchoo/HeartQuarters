@@ -16,7 +16,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { listDrafts, plainDraftName } from './create.js';
 import { writeFileSafely } from './files.js';
-import { requireCapCutClosed, trashSlot } from './manage.js';
+import { capCutMentionsPath, replaceCapCutPath, requireCapCutClosed, trashSlot } from './manage.js';
 import { writable } from './safe-files.js';
 
 /** Inside a version's Thumbnail\Source: the list of files HeartQuarters added (Use Thumbnail writes it). */
@@ -131,12 +131,13 @@ function videoDrafts(video: string): string[] {
   const prefix = `${fwd(config.videoProjectsDir)}/${video}/`.toLowerCase();
   const own = new Set([path.basename(video), ...shortNames(video)].map((n) => plainDraftName(n).toLowerCase()));
   return listDrafts().filter((d) => {
+    let meta: string;
     try {
-      const meta = fs.readFileSync(path.join(config.capcutDraftsDir, d, 'draft_meta_info.json'), 'utf8');
-      return own.has(plainDraftName(d).toLowerCase()) || meta.toLowerCase().includes(prefix);
-    } catch {
-      return false;
+      meta = fs.readFileSync(path.join(config.capcutDraftsDir, d, 'draft_meta_info.json'), 'utf8');
+    } catch (e) {
+      throw new Error(`Couldn't read CapCut project "${d}" (${e instanceof Error ? e.message.split('\n')[0] : e}). Wait for CapCut or Drive to finish with it and try again. Nothing was changed.`);
     }
+    return own.has(plainDraftName(d).toLowerCase()) || capCutMentionsPath(meta, prefix);
   });
 }
 
@@ -338,7 +339,7 @@ export function runCleanup(piece: string, token: unknown): { removed: number; mo
       for (const file of draftTextFiles(path.join(config.capcutDraftsDir, d))) {
         if (fs.statSync(file).size > 200_000_000) continue;
         const text = fs.readFileSync(file, 'utf8');
-        const after = relinks.reduce((t, [from, to]) => (t.includes(from) ? t.split(from).join(to) : t), text);
+        const after = relinks.reduce((t, [from, to]) => replaceCapCutPath(t, from, to), text);
         if (after !== text) writeFileSafely(file, after);
       }
     }

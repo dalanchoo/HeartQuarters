@@ -152,6 +152,21 @@ function parentPage(segments: string[]): string {
 
 const forwardSlashes = (p: string) => p.split(path.sep).join('/');
 
+/** True when CapCut JSON text contains `prefixFwd`, with forward slashes or JSON-escaped backslashes. */
+export function capCutMentionsPath(text: string, prefixFwd: string): boolean {
+  return text.replace(/\\\\/g, '/').replace(/\\/g, '/').toLowerCase().includes(prefixFwd.toLowerCase());
+}
+
+/** Replaces a Windows path in CapCut JSON text, matching forward slashes or JSON-escaped backslashes case-insensitively. */
+export function replaceCapCutPath(text: string, fromFwd: string, toFwd: string): string {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fromJsonBack = fromFwd.replace(/\//g, '\\\\');
+  const toJsonBack = toFwd.replace(/\//g, '\\\\');
+  return text
+    .replace(new RegExp(esc(fromFwd), 'gi'), () => toFwd)
+    .replace(new RegExp(esc(fromJsonBack), 'gi'), () => toJsonBack);
+}
+
 /** Updates one draft's text files. Throws if any of them can't be read or written. */
 export function relinkDraft(dir: string, from: string, to: string) {
   for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
@@ -159,8 +174,9 @@ export function relinkDraft(dir: string, from: string, to: string) {
     const file = path.join(e.parentPath, e.name);
     if (fs.statSync(file).size > 200_000_000) continue;
     const text = fs.readFileSync(file, 'utf8');
-    if (!text.includes(from)) continue;
-    writeFileSafely(file, text.split(from).join(to));
+    const after = replaceCapCutPath(text, from, to);
+    if (after === text) continue;
+    writeFileSafely(file, after);
   }
 }
 
@@ -179,7 +195,7 @@ function relinkDrafts(oldId: string, newId: string): { updated: number; failed: 
     const dir = path.join(config.capcutDraftsDir, d);
     try {
       // Every draft lists the files it uses in draft_meta_info.json: a quick way to skip the others.
-      if (!fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8').includes(from)) continue;
+      if (!capCutMentionsPath(fs.readFileSync(path.join(dir, 'draft_meta_info.json'), 'utf8'), from)) continue;
       relinkDraft(dir, from, to);
       updated++;
     } catch (e) {
@@ -193,7 +209,7 @@ function relinkDrafts(oldId: string, newId: string): { updated: number; failed: 
 function renameDraft(oldDraft: string, newDraft: string) {
   const from = path.join(config.capcutDraftsDir, oldDraft);
   const to = path.join(config.capcutDraftsDir, newDraft);
-  if (fs.existsSync(to)) throw new Error(`A CapCut draft called "${newDraft}" already exists.`);
+  if (fs.existsSync(to) && from.toLowerCase() !== to.toLowerCase()) throw new Error(`A CapCut draft called "${newDraft}" already exists.`);
   fs.renameSync(from, to);
   const metaFile = path.join(to, 'draft_meta_info.json');
   const meta = fs
@@ -240,7 +256,7 @@ export function renameFolder(id: string, rawNewName: string, drafts: unknown): M
   const notes: string[] = [`Renamed the folder to "${newName}".`];
   for (const d of chosen) {
     // Exactly the new name, without CapCut's "(2)" (John, 2026-11-18); the number stays only if that name is taken.
-    const taken = (name: string) => fs.existsSync(path.join(config.capcutDraftsDir, name));
+    const taken = (name: string) => name.toLowerCase() !== d.toLowerCase() && fs.existsSync(path.join(config.capcutDraftsDir, name));
     const renamed = taken(newName) ? newName + d.slice(plainDraftName(d).length) : newName;
     try {
       renameDraft(d, renamed);
@@ -273,9 +289,16 @@ export function trashSlot(name: string): string {
   const now = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
-  const slot = path.join(config.trashDir, `${stamp} - ${name}`);
-  fs.mkdirSync(slot, { recursive: true });
-  return slot;
+  fs.mkdirSync(config.trashDir, { recursive: true });
+  for (let n = 1; ; n++) {
+    const slot = path.join(config.trashDir, `${stamp} - ${name}${n === 1 ? '' : ` (${n})`}`);
+    try {
+      fs.mkdirSync(slot);
+      return slot;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    }
+  }
 }
 
 /** Regenerate: moves one CapCut project into the trash, so a fresh copy can take its name. Returns where it went. */
@@ -296,6 +319,7 @@ export function deleteFolder(id: string, drafts: unknown): ManageResult {
   const dir = safeResolve('projects', id);
   const chosen = checkDrafts(drafts, draftsFor(videoNames(dir)));
   if (chosen.length) requireCapCutClosed();
+  if (uploadingInside(id)) throw new Error('A YouTube upload from this folder is still running. Wait for it to finish, then delete. Nothing was changed.');
   if (!config.trashDir) throw new Error('No trash folder is set in config.json. Nothing was changed.');
 
   const slot = trashSlot(name);
