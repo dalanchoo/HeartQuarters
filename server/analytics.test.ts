@@ -25,7 +25,8 @@ describe('video analytics', () => {
     expect(snapshot.periods[0].statistics.rows).toEqual([[12]]);
     expect(snapshot.periods[0].retention).toBeNull();
     expect(snapshot.periods[0].retentionError).toContain('400');
-    expect(youtubeQuota()).toMatchObject({ used: 0, analyticsUsed: 8 });
+    expect(youtubeQuota()).toMatchObject({ used: 0, analyticsUsed: 11 });
+    expect(snapshot.breakdowns?.map(item => item.name)).toEqual(['Traffic Sources', 'Devices', 'Countries']);
     const one = saveVideoAnalytics("023 – John's Video/Longform", snapshot);
     const two = saveVideoAnalytics("023 – John's Video/Longform", snapshot);
     expect(one).not.toBe(two);

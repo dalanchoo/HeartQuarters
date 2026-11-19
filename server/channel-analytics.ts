@@ -3,17 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
 import { pacificDate, type AnalyticsReport } from './analytics.js';
-import { youtubeAccessToken } from './youtube-auth.js';
+import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { youtubeChannel } from './youtube.js';
 import { recordAnalyticsUse } from './youtube-quota.js';
+import { getReachData, type ReachData } from './youtube-reach.js';
 
 const FIRST_DATE = '2008-07-01';
 const METRICS = 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained,subscribersLost';
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 export interface ChannelSnapshot {
   channel: { id: string; title: string }; downloadedAt: string;
-  reports: { name: string; start: string; end: string; report: AnalyticsReport }[];
+  reports: { name: string; start: string; end: string; report: AnalyticsReport; error?: string }[];
   notes: string[];
+  reach?: ReachData | { status: 'unavailable'; note: string };
 }
 
 function daysBefore(day: string, n: number): string {
@@ -29,18 +31,26 @@ export async function collectChannelAnalytics(channel: ChannelSnapshot['channel'
     { name: 'Last 365 Days', start: daysBefore(end, 364) },
     { name: 'Daily: Last 90 Days', start: daysBefore(end, 89), dimensions: 'day', sort: 'day' },
     { name: 'Top Videos: Lifetime', start: FIRST_DATE, dimensions: 'video', sort: '-views', maxResults: '200' },
+    { name: 'Traffic Sources: Lifetime', start: FIRST_DATE, dimensions: 'insightTrafficSourceType', sort: '-views' },
+    { name: 'Devices: Lifetime', start: FIRST_DATE, dimensions: 'deviceType', sort: '-views' },
+    { name: 'Countries: Lifetime', start: FIRST_DATE, dimensions: 'country', sort: '-views' },
   ];
   const reports: ChannelSnapshot['reports'] = [];
   for (const item of requests) {
-    const params = new URLSearchParams({ ids: 'channel==MINE', startDate: item.start, endDate: end, metrics: METRICS });
+    const params = new URLSearchParams({ ids: 'channel==MINE', startDate: item.start, endDate: end, metrics: ['insightTrafficSourceType', 'deviceType', 'country'].includes(item.dimensions ?? '') ? 'views,estimatedMinutesWatched' : METRICS });
     if (item.dimensions) params.set('dimensions', item.dimensions);
     if (item.sort) params.set('sort', item.sort);
     if (item.maxResults) params.set('maxResults', item.maxResults);
-    recordAnalyticsUse();
-    const response = await fetcher(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error(`YouTube Analytics could not load ${item.name} (${response.status}). Check that the Analytics API is enabled and your YouTube connection is working.`);
-    const data = await response.json() as { columnHeaders?: unknown[]; rows?: unknown[][] };
-    reports.push({ name: item.name, start: item.start, end, report: { columns: data.columnHeaders ?? [], rows: data.rows ?? [] } });
+    try {
+      recordAnalyticsUse();
+      const response = await fetcher(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error(`YouTube Analytics could not load ${item.name} (${response.status}). Check that the Analytics API is enabled and your YouTube connection is working.`);
+      const data = await response.json() as { columnHeaders?: unknown[]; rows?: unknown[][] };
+      reports.push({ name: item.name, start: item.start, end, report: { columns: data.columnHeaders ?? [], rows: data.rows ?? [] } });
+    } catch (error) {
+      if (!['insightTrafficSourceType', 'deviceType', 'country'].includes(item.dimensions ?? '')) throw error;
+      reports.push({ name: item.name, start: item.start, end, report: { columns: [], rows: [] }, error: error instanceof Error ? error.message : String(error) });
+    }
   }
   return { channel, downloadedAt: now.toISOString(), reports, notes: [
     'Dates are Pacific calendar days. Recent data may not yet be available.',
@@ -68,6 +78,8 @@ export async function downloadChannelAnalytics() {
   const channel = await youtubeChannel();
   const token = await youtubeAccessToken();
   const snapshot = await collectChannelAnalytics(channel, token);
+  if (!youtubeStatus().reportingAccess) snapshot.reach = { status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to retrieve impressions and CTR.' };
+  else try { snapshot.reach = await getReachData(token); } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
   const file = saveChannelAnalytics(snapshot);
-  return { file, channel: channel.title, emptyReports: snapshot.reports.filter(item => !item.report.rows?.length).map(item => item.name), topVideoCount: snapshot.reports.at(-1)?.report.rows?.length ?? 0 };
+  return { file, channel: channel.title, emptyReports: snapshot.reports.filter(item => !item.report.rows?.length).map(item => item.name), topVideoCount: snapshot.reports.find(item => item.name === 'Top Videos: Lifetime')?.report.rows?.length ?? 0, reach: snapshot.reach };
 }

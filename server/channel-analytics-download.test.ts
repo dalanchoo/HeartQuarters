@@ -4,7 +4,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
 
-vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token' }));
+vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
 vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }), uploadsFor: () => [] }));
 import { downloadChannelAnalytics } from './channel-analytics.js';
 
@@ -16,5 +16,6 @@ it('saves the connected channel reports under the projects analytics folder', as
   expect(result.channel).toBe('Heart Mind Fusion');
   const saved = JSON.parse(fs.readFileSync(path.join(root, result.file), 'utf8'));
   expect(saved.channel.id).toBe('channel-id');
-  expect(saved.reports).toHaveLength(6);
+  expect(saved.reports).toHaveLength(9);
+  expect(saved.reach.status).toBe('unavailable');
 });

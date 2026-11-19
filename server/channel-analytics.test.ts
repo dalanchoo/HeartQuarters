@@ -16,11 +16,11 @@ describe('channel analytics', () => {
   it('gets six channel reports and stores distinct snapshots without overwriting', async () => {
     const queries: URL[] = [];
     const snapshot = await collectChannelAnalytics(channel, 'token', now, async url => { queries.push(new URL(url)); return Response.json({ columnHeaders: [{ name: 'views' }], rows: [[12]] }); });
-    expect(snapshot.reports).toHaveLength(6);
+    expect(snapshot.reports).toHaveLength(9);
     expect(queries[4].searchParams.get('dimensions')).toBe('day');
     expect(queries[5].searchParams.get('dimensions')).toBe('video');
     expect(queries[5].searchParams.get('maxResults')).toBe('200');
-    expect(youtubeQuota()).toMatchObject({ analyticsUsed: 6, used: 0 });
+    expect(youtubeQuota()).toMatchObject({ analyticsUsed: 9, used: 0 });
     const first = saveChannelAnalytics(snapshot); const second = saveChannelAnalytics(snapshot);
     expect(first).not.toBe(second);
     expect(JSON.parse(fs.readFileSync(path.join(root, first), 'utf8'))).toEqual(snapshot);
@@ -29,6 +29,11 @@ describe('channel analytics', () => {
     await expect(collectChannelAnalytics(channel, 'token', now, async () => new Response('', { status: 403 }))).rejects.toThrow('Lifetime (403)');
     expect(youtubeQuota().analyticsUsed).toBe(1);
     expect(fs.existsSync(path.join(root, 'Analytics'))).toBe(false);
+  });
+  it('keeps the main reports when an optional breakdown is unavailable', async () => {
+    const snapshot = await collectChannelAnalytics(channel, 'token', now, async url => new URL(url).searchParams.get('dimensions') === 'country' ? new Response('', { status: 403 }) : Response.json({ rows: [[1]] }));
+    expect(snapshot.reports.find(item => item.name === 'Countries: Lifetime')?.error).toContain('403');
+    expect(snapshot.reports[0].report.rows).toEqual([[1]]);
   });
   it('refuses a linked analytics folder pointing outside the projects root', () => {
     const outside = makeTree({});

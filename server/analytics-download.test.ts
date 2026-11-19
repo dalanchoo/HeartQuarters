@@ -4,7 +4,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
 
-vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token' }));
+vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
 vi.mock('./youtube.js', () => ({ uploadsFor: (piece: string) => piece === 'Video/Longform' ? [{ id: 'linked', status: 'done', videoId: 'abcdefghijk' }] : [] }));
 vi.mock('./youtube-video.js', () => ({ readYoutubeVideo: async () => ({ resource: { snippet: { publishedAt: '2026-01-01T12:00:00Z' } } }) }));
 import { downloadVideoAnalytics } from './analytics.js';
@@ -19,6 +19,7 @@ it('downloads and saves a linked video using its YouTube publication date', asyn
   const saved = JSON.parse(fs.readFileSync(path.join(root, result.file), 'utf8'));
   expect(saved.videoId).toBe('abcdefghijk');
   expect(saved.periods).toHaveLength(4);
+  expect(saved.reach.status).toBe('unavailable');
 });
 
 it('does not download or write for an unrelated or missing link', async () => {

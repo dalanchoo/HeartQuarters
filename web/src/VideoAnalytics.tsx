@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { openInExplorer, postJson } from './api';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
+import { ReachSetup } from './ReachSetup';
 
-interface Result { file: string; missingRetention: string[]; emptyStatistics: string[] }
+interface Result { file: string; missingRetention: string[]; emptyStatistics: string[]; unavailableBreakdowns: string[]; reach?: { status: string; note: string; truncated?: boolean } }
 
 export function VideoAnalytics({ piece, id, children }: { piece: string; id: string; children?: ReactNode }) {
   const [busy, setBusy] = useState(false);
@@ -16,12 +17,15 @@ export function VideoAnalytics({ piece, id, children }: { piece: string; id: str
     finally { setBusy(false); }
   };
   return <div className="video-analytics">
-    <div className="yt-linkbar-row">{children}<button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button><span className="muted small-text">about 1 Data API unit + 8 Analytics units</span></div>
+    <div className="yt-linkbar-row">{children}<button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Stats…' : 'Download Video Stats'}</button><span className="muted small-text">about 1 Data API unit + 11 Analytics units; reach reporting may add up to 101 Reporting requests</span></div>
+    <ReachSetup />
     {busy && <span role="status"> Downloading statistics and retention from YouTube…</span>}
     {error && <p className="error" role="alert">{error}</p>}
     {result && <div role="status"><p>Stats saved to {result.file}. <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button></p>
       {result.missingRetention.length > 0 && <p>Retention was unavailable or empty for: {result.missingRetention.join(', ')}.</p>}
       {result.emptyStatistics.length > 0 && <p>YouTube returned no statistics for: {result.emptyStatistics.join(', ')}.</p>}
+      {result.unavailableBreakdowns?.length > 0 && <p>YouTube returned no data for: {result.unavailableBreakdowns.join(', ')}.</p>}
+      {result.reach && <p>Impressions and CTR: {result.reach.note}{result.reach.truncated ? ' Some reports or rows were omitted.' : ''}</p>}
       <p className="muted small-text">Periods use Pacific calendar days; the first month is 30 days. YouTube data may be delayed.</p>
     </div>}
     <AnalyticsAnalysis piece={piece} refresh={refresh} />

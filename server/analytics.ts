@@ -3,16 +3,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { youtubeAccessToken } from './youtube-auth.js';
+import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { uploadsFor } from './youtube.js';
 import { readYoutubeVideo } from './youtube-video.js';
 import { recordAnalyticsUse } from './youtube-quota.js';
+import { getReachData, type ReachData } from './youtube-reach.js';
 
 export interface AnalyticsPeriod { name: string; start: string; end: string; complete: boolean }
 export interface AnalyticsReport { columns?: unknown[]; rows?: unknown[][] }
 export interface AnalyticsSnapshot {
   videoId: string; publishedAt: string; downloadedAt: string;
   periods: { period: AnalyticsPeriod; statistics: AnalyticsReport; retention: AnalyticsReport | null; retentionError?: string }[];
+  breakdowns?: { name: string; start: string; end: string; report: AnalyticsReport | null; error?: string }[];
+  reach?: ReachData | { status: 'unavailable'; note: string };
 }
 
 /** YouTube reports use Pacific calendar days, not elapsed 24-hour periods. */
@@ -61,7 +64,19 @@ export async function collectVideoAnalytics(videoId: string, publishedAt: string
     catch (error) { retentionError = error instanceof Error ? error.message : String(error); }
     periods.push({ period, statistics, retention, ...(retentionError ? { retentionError } : {}) });
   }
-  return { videoId, publishedAt, downloadedAt: now.toISOString(), periods };
+  const lifetime = periods.at(-1)!.period;
+  const breakdowns: NonNullable<AnalyticsSnapshot['breakdowns']> = [];
+  for (const [name, dimension] of [['Traffic Sources', 'insightTrafficSourceType'], ['Devices', 'deviceType'], ['Countries', 'country']] as const) {
+    const params = new URLSearchParams({ ids: 'channel==MINE', startDate: lifetime.start, endDate: lifetime.end, filters: `video==${videoId}`, dimensions: dimension, metrics: 'views,estimatedMinutesWatched', sort: '-views' });
+    try {
+      recordAnalyticsUse();
+      const response = await fetcher(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error(`YouTube returned ${response.status}.`);
+      const data = await response.json() as { columnHeaders?: unknown[]; rows?: unknown[][] };
+      breakdowns.push({ name, start: lifetime.start, end: lifetime.end, report: { columns: data.columnHeaders ?? [], rows: data.rows ?? [] } });
+    } catch (error) { breakdowns.push({ name, start: lifetime.start, end: lifetime.end, report: null, error: error instanceof Error ? error.message : String(error) }); }
+  }
+  return { videoId, publishedAt, downloadedAt: now.toISOString(), periods, breakdowns };
 }
 
 /** Save a new snapshot alongside the video, never replacing a previous download. */
@@ -94,7 +109,9 @@ export async function downloadVideoAnalytics(piece: string, id: string) {
   const publishedAt = resource.snippet?.publishedAt;
   if (typeof publishedAt !== 'string' || !Number.isFinite(Date.parse(publishedAt))) throw new Error('YouTube did not provide a publication date for this video.');
   const snapshot = await collectVideoAnalytics(job.videoId, publishedAt, token);
+  if (!youtubeStatus().reportingAccess) snapshot.reach = { status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to retrieve impressions and CTR.' };
+  else try { snapshot.reach = await getReachData(token, job.videoId); } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
   const file = saveVideoAnalytics(piece, snapshot);
   const missing = snapshot.periods.filter(p => !p.retention || !p.retention.rows?.length).map(p => p.period.name);
-  return { file, missingRetention: missing, emptyStatistics: snapshot.periods.filter(p => !p.statistics.rows?.length).map(p => p.period.name) };
+  return { file, missingRetention: missing, emptyStatistics: snapshot.periods.filter(p => !p.statistics.rows?.length).map(p => p.period.name), unavailableBreakdowns: snapshot.breakdowns?.filter(item => !item.report || !item.report.rows?.length).map(item => item.name) ?? [], reach: snapshot.reach };
 }
