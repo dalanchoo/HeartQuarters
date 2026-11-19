@@ -9,15 +9,16 @@ import { setPendingPackaging } from './pendingPackaging';
 import { LockSwitch } from './LockSwitch';
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
-export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>> }) {
+export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, draftImage, setDraftImage }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; draftImage: string; setDraftImage: (path: string) => void }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
   // Draft: what Generate Packaging made for the chosen pair, with one of its images (the newest unless John picks another).
   const drafts = piece.drafts;
   const choice = drafts?.choice && isCurrentChoice(drafts.choice, drafts.picks) ? drafts.choice : null;
   const images = choice && drafts ? draftImages(choice, drafts.conversations) : [];
-  const [imagePath, setImagePath] = useState('');
-  const image = images.find(i => i.path === imagePath) ?? images[0] ?? null;
-  const generated: GeneratedDraft | undefined = choice ? { piece: piece.path, text: draftText(choice.pick), image, images, chooseImage: setImagePath } : undefined;
+  // The image John picked is kept by the card, like the two selections, so locking or unlocking a version (which
+  // rebuilds this) doesn't put it back to the newest (John, 2026-11-18).
+  const image = images.find(i => i.path === draftImage) ?? images[0] ?? null;
+  const generated: GeneratedDraft | undefined = choice ? { piece: piece.path, text: draftText(choice.pick), image, images, chooseImage: setDraftImage } : undefined;
   // Draft first, then the versions, then YouTube; the left is always earlier than the right.
   const order = choiceOrder(versions.map(v => v.path), !!generated);
   const { left, right } = orderedChoices(choices, version.path, order);
@@ -75,7 +76,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
     })()}
     {usesDraft && <p className="muted small-text">The Draft can only be copied into an unlocked version. To send it to YouTube, copy it into a version first, then compare that version with YouTube.</p>}
     {usesDraft ? (
-      unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}|${image?.path ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} generated={generated} />
+      unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} generated={generated} />
     ) : usesYoutube || !right ? localDoc ? <LocalVsYouTube key={`${localVersion.path}|${left}|${right}`} piece={piece} doc={localDoc} covers={localVersion.covers} version={localVersion.path} versionName={localVersion.name} link={link} onChanged={onChanged} longform={longform} display={display} reverse={selection.reverse} onDirty={setDirty} /> : <p className="muted">Loading Version…</p> :
       unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} />}
   </details>;

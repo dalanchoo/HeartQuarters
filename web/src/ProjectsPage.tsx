@@ -642,6 +642,8 @@ function PieceCard({
   const allowVersionChange = () => !compareDirty || window.confirm('You have unapplied packaging changes. Discard them and change versions?');
   const version = piece.versions.find((v) => v.name === versionName) ?? piece.versions.at(-1);
   const [compareChoices, setCompareChoices] = useState(() => ({ left: version?.path ?? '', right: YOUTUBE_SELECTION }));
+  // The Draft's image John picked in View and Compare Packaging (empty: the newest), kept here so it survives a lock change.
+  const [draftImage, setDraftImage] = useState('');
   // One version at most is unlocked, and it's the selected one: unlocking a version with its switch in View and
   // Compare Packaging selects it and locks every other. Unlocking lasts until the page is reloaded or another version
   // is selected; a version he has just made starts unlocked, since he made it to change it.
@@ -746,7 +748,7 @@ function PieceCard({
           if (unlocked === path) { setUnlocked(null); return; }
           setVersionName(v.name);
           setUnlocked(path);
-        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} />
+        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} draftImage={draftImage} setDraftImage={setDraftImage} />
       ) : (
         <>
           {version && version.docs.length === 0 && <p className="muted">No text files in this version.</p>}
