@@ -11,6 +11,7 @@ import { missingTagInOpening, wouldLoseChapters } from './youtubePackaging';
 import { useStagedDoc } from './useStagedDoc';
 import { CopyDirectionControls, CopyDirectionFrame, localCopyDirection } from './CopyDirection';
 import { canSelectIncomingCopy } from './stagedPackaging';
+import { AiWritingChecker } from './AiWritingChecker';
 
 const youtubeFile = (version?: PackagingVersion) => version?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name));
 const thumbnail = (version?: PackagingVersion) => version?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
@@ -141,7 +142,7 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
       const status = <>{!right && warnLeft && tagWarning(leftName)}{diff && <span className={`comparison-status ${diff.same && leftValue !== undefined && rightValue !== undefined ? 'comparison-same' : 'comparison-different'}`}>{diff.same && leftValue !== undefined && rightValue !== undefined ? '✓ Same' : '≠ Different'}</span>}{direction && <span className="comparison-status comparison-waiting">Selected to Copy</span>}</>;
       const side = (which: 'left' | 'right', value: string | undefined) => {
         const preview = <pre className="lvy-value">{value === undefined ? '(not provided)' : value ? <DiffText parts={which === 'left' ? diff!.left : diff!.right} side={which === 'left' ? 'local' : 'youtube'} /> : '(empty)'}</pre>;
-        return <div>{!locked && (which === 'left' ? targetIsLeft : targetIsRight) && index >= 0 ? <EditableComparisonValue doc={doc} index={index} field={{ ...doc.fields![index], value: displayValue(doc.fields![index].value) ?? '' }} current={preview} savedValue={displayValue(savedFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value) ?? ''} edited={edited} copySelected={!!direction} busy={busy} cancelCopy={() => toggle(label)} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} /> : preview}</div>;
+        return <div>{!locked && (which === 'left' ? targetIsLeft : targetIsRight) && index >= 0 ? <EditableComparisonValue doc={doc} index={index} field={{ ...doc.fields![index], value: displayValue(doc.fields![index].value) ?? '' }} current={preview} savedValue={displayValue(savedFields.find(f => f.label.toLowerCase() === label.toLowerCase())?.value) ?? ''} edited={edited} copySelected={!!direction} busy={busy} cancelCopy={() => toggle(label)} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} /> : <>{preview}<AiWritingChecker text={value ?? ''} label={label} /></>}</div>;
       };
       const controls = right ? <CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={direction} disabled={busy} showCopyRight={targetIsRight} showCopyLeft={targetIsLeft} canCopyRight={!busy && canCopy && targetIsRight && sourceHas(label) && !sameValues && canSelectIncomingCopy(edited, !!direction)} canCopyLeft={!busy && canCopy && targetIsLeft && sourceHas(label) && !sameValues && canSelectIncomingCopy(edited, !!direction)} copyRight={() => toggle(label)} copyLeft={() => toggle(label)} /> : null;
       return <ComparisonRow key={label} label={label} status={status} actions={controls} collapsible={isLongComparisonField(label, leftValue, rightValue)}>
@@ -149,7 +150,7 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
           {edited && canCopy && sourceHas(label) && <p className="comparison-edit-warning">This field has an unsaved edit. Choose Edited, then Undo Edit before selecting a copy into {version.name}.</p>}
           {(warnLeft || warnRight) && <div className="compare-warnings"><div>{warnLeft && tagWarning(leftName)}</div><div>{warnRight && tagWarning(rightName)}</div></div>}
           <div className="compare-columns">{side('left', leftValue)}{side('right', rightValue)}</div>
-        </CopyDirectionFrame> : left === version.path && index >= 0 ? <FieldEditor doc={doc} index={index} field={doc.fields![index]} /> : <pre className="lvy-value">{leftValue || '(empty)'}</pre>}
+        </CopyDirectionFrame> : left === version.path && index >= 0 ? <><FieldEditor doc={doc} index={index} field={doc.fields![index]} /><AiWritingChecker text={doc.fields![index].value} label={label} /></> : <><pre className="lvy-value">{leftValue || '(empty)'}</pre><AiWritingChecker text={leftValue ?? ''} label={label} /></>}
         {diff?.reordered && <p className="muted small-text">The same tags are present in a different order.</p>}
       </ComparisonRow>;
     })}

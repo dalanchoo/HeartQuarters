@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import DOMPurify from 'dompurify';
 import { getJson, postJson } from './api';
+import { AiWritingChecker } from './AiWritingChecker';
 import { CopyButton } from './PackagingDoc';
 import type { ScriptFile } from '../../server/script';
 
@@ -222,6 +223,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
             onMouseUp={updateCurrentBlockTag}
             onKeyDown={onKeyDown}
           />
+          <AiWritingChecker text={plain} label="YouTube Script" />
         </div>
       )}
     </details>

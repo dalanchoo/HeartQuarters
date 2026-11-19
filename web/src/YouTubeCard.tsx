@@ -15,6 +15,7 @@ import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
+import { AiWritingChecker } from './AiWritingChecker';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
 import { canSelectIncomingCopy } from './stagedPackaging';
 
@@ -601,7 +602,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const direction = youtubeCopyDirection(reverse, waiting, pulling);
           const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : local : '(empty)'}</pre>;
-          const localPart = field ? (doc.locked ? localPreview :
+          const localPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} /></> :
             <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} savedValue={label.toLowerCase() === 'tags' ? sortTags(savedField?.value ?? '') : savedField?.value ?? ''} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} />
           ) : (
             <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
@@ -629,6 +630,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
                     <pre className="lvy-value">
                       <DiffText parts={diff.left} side="local" />
                     </pre>
+                    <AiWritingChecker text={local} label={label} />
                   </div>
                   <div>{youtubePart}</div>
                 </div>
@@ -788,6 +790,7 @@ export function EditableComparisonValue({ doc, index, field, current, savedValue
         {undoError && <p className="error">{undoError}</p>}
       </>}
     </div>
+    <AiWritingChecker text={field.value} label={field.label} />
   </div>;
 }
 

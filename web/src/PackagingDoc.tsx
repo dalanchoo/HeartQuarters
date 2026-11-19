@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { copyText, getText, postJson, type FileRef } from './api';
+import { AiWritingChecker } from './AiWritingChecker';
 import { setLocalValue } from './youtubePackaging';
 import {
   inPlatformOrder,
@@ -133,6 +134,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
       />
+      <AiWritingChecker text={draft} label={field.label} />
       {error && <p className="error small-text">Not saved: {error}</p>}
     </details>
   );

@@ -65,6 +65,7 @@ import { downloadVideoAnalytics } from './analytics.js';
 import { downloadChannelAnalytics } from './channel-analytics.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { readScript, saveScript } from './script.js';
+import { checkAiWriting } from './ai-writing.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -156,6 +157,9 @@ app.post('/api/script', (req, res) => {
     html: req.body?.html !== undefined ? String(req.body.html) : undefined,
     text: req.body?.text !== undefined ? String(req.body.text) : undefined,
   }).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
+app.post('/api/ai-writing-check', (req, res) => {
+  checkAiWriting(req.body?.text, req.body?.label).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected, req.body?.sourceExpected)); }));
