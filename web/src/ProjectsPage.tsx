@@ -761,7 +761,7 @@ function PieceCard({
         </>
       )}
       <PackagingOtherPlatforms docs={docs} />
-      {piece.kind !== 'reel' && <AnalyticsAnalysis key={`analysis-${piece.path}`} piece={piece.path} />}
+      {piece.kind !== 'reel' && <AnalyticsAnalysis key={`analysis-${piece.path}`} piece={piece.path} jobId={link.status?.connected && link.job?.status === 'done' ? link.job.id : undefined} />}
       {piece.kind !== 'reel' && <CleanUp piece={piece.path} onDone={onChanged} />}
     </>
   );

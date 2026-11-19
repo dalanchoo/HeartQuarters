@@ -15,7 +15,6 @@ import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
-import { VideoAnalytics } from './VideoAnalytics';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
 import { canSelectIncomingCopy } from './stagedPackaging';
 
@@ -239,14 +238,16 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
             </button>
             <span className="muted small-text">{units(2)}</span>
           </div>
-          {linked && job && <VideoAnalytics key={job.id} piece={piece.path} id={job.id}>
-            <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job.videoId })))}>
-              Open in YouTube Studio ↗
-            </button>
-            <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
-              Reload from YouTube
-            </button>
-          </VideoAnalytics>}
+          {linked && job && (
+            <div className="yt-linkbar-row">
+              <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job.videoId })))}>
+                Open in YouTube Studio ↗
+              </button>
+              <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
+                Reload from YouTube
+              </button>
+            </div>
+          )}
           {!status.captionAccess && (
             <p className="small-text">
               To save playlists and captions, reconnect and grant Google’s additional permission. {signIn}

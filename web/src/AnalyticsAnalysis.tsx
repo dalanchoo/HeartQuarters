@@ -4,22 +4,16 @@ import remarkGfm from 'remark-gfm';
 import { getJson, openInExplorer, postJson } from './api';
 import type { AnalysisJob } from '../../server/analytics-analysis';
 import { analyticsSummarySections } from './analyticsSummary';
+import { VideoAnalytics } from './VideoAnalytics';
 
 type Run = { id: string; claude: string | null; codex: string | null; gemini: string | null; recommendations: string | null; summary: string | null; job: AnalysisJob | null; summaryJob: { state: string; error?: string } | null };
-export function AnalyticsAnalysis({ piece, refresh = 0 }: { piece: string; refresh?: number }) {
+export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string; jobId?: string; refresh?: number }) {
   const [snapshots, setSnapshots] = useState<string[]>([]);
   const [selected, setSelected] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const onDownloaded = (e: Event) => {
-      if ((e as CustomEvent<string>).detail === piece) setTick((n) => n + 1);
-    };
-    window.addEventListener('hq-analytics-downloaded', onDownloaded);
-    return () => window.removeEventListener('hq-analytics-downloaded', onDownloaded);
-  }, [piece]);
   useEffect(() => { let active = true; getJson<string[]>(`/api/youtube/analytics/snapshots?piece=${encodeURIComponent(piece)}`).then(list => { if (active) { setSnapshots(list); setSelected(current => list.includes(current) ? current : list[0] ?? ''); } }, (e: Error) => { if (active) setError(e.message); }); return () => { active = false; }; }, [piece, refresh, tick]);
   useEffect(() => {
     if (!selected) { setRuns([]); return; }
@@ -31,6 +25,7 @@ export function AnalyticsAnalysis({ piece, refresh = 0 }: { piece: string; refre
   const summarize = async (id: string) => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/summarize', { piece, snapshot: selected, id }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
   const running = runs.some(run => run.job?.state === 'working');
   return <details className="yt-section"><summary>Analysis</summary>
+    {piece && <VideoAnalytics key={jobId ?? 'unlinked'} piece={piece} id={jobId} onDownloaded={() => setTick(n => n + 1)} />}
     {!snapshots.length ? <p>Download stats first.</p> : <><label>Snapshot <select value={selected} onChange={e => setSelected(e.target.value)}>{snapshots.map(name => <option key={name}>{name}</option>)}</select></label>{' '}
       <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>Analyze With All Three AIs</button>
       <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p></>}
