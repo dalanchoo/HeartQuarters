@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { openInExplorer, postJson } from './api';
-import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ReachSetup } from './ReachSetup';
 
 interface Result { file: string; missingRetention: string[]; emptyStatistics: string[]; unavailableBreakdowns: string[]; reach?: { status: string; note: string; truncated?: boolean } }
@@ -9,10 +8,12 @@ export function VideoAnalytics({ piece, id, children }: { piece: string; id: str
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
   const download = async () => {
     setBusy(true); setError(''); setResult(null);
-    try { setResult(await postJson<Result>('/api/youtube/analytics/video', { piece, id })); setRefresh(n => n + 1); }
+    try {
+      setResult(await postJson<Result>('/api/youtube/analytics/video', { piece, id }));
+      window.dispatchEvent(new CustomEvent('hq-analytics-downloaded', { detail: piece }));
+    }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -28,6 +29,5 @@ export function VideoAnalytics({ piece, id, children }: { piece: string; id: str
       {result.reach && <p>Impressions and CTR: {result.reach.note}{result.reach.truncated ? ' Some reports or rows were omitted.' : ''}</p>}
       <p className="muted small-text">Periods use Pacific calendar days; the first month is 30 days. YouTube data may be delayed.</p>
     </div>}
-    <AnalyticsAnalysis piece={piece} refresh={refresh} />
   </div>;
 }

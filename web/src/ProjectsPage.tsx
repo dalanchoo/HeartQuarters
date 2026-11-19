@@ -13,6 +13,7 @@ import {
 } from './api';
 import { ManageButtons } from './ManageFolder';
 import { CleanUp } from './CleanUp';
+import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ShortsPlanCard } from './ShortsPlan';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
@@ -738,7 +739,8 @@ function PieceCard({
         </div>
       </div>
 
-      {/* Every field of YouTube.md, beside what YouTube has. Other files (a reel's) show as before. */}
+      {/* 1. Generate Packaging, 2. View and Compare Packaging, 3. Analysis, 4. Clean Up. */}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
         <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={(path) => {
           const v = piece.versions.find(x => x.path === path);
@@ -758,8 +760,8 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </>
       )}
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       <PackagingOtherPlatforms docs={docs} />
+      {piece.kind !== 'reel' && <AnalyticsAnalysis key={`analysis-${piece.path}`} piece={piece.path} />}
       {piece.kind !== 'reel' && <CleanUp piece={piece.path} onDone={onChanged} />}
     </>
   );
