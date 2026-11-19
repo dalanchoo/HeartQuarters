@@ -2,7 +2,7 @@
 // program, not the AI itself. Signing in opens the AI's program in its own window, where John finishes in the browser.
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { AI_NAMES, aiCommand, isAiId, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, isAiId, parseGeminiModels, rememberGeminiModels, runAiProcess, type AiId } from './ai.js';
 
 export type SignInState = 'in' | 'out' | 'unknown';
 export interface SignIn { id: AiId; name: string; state: SignInState; detail: string }
@@ -36,7 +36,11 @@ export function readSignIn(ai: AiId, ran: Ran): { state: SignInState; detail: st
     if (ran.code === 0 && /logged in/i.test(out)) return { state: 'in', detail: out.split('\n')[0] };
     if (/not logged in|logged out/i.test(out)) return { state: 'out', detail: 'Not signed in.' };
   } else {
-    if (ran.code === 0 && out.split('\n').some((l) => /^gemini/i.test(l))) return { state: 'in', detail: 'Signed in' };
+    const models = parseGeminiModels(out);
+    if (ran.code === 0 && (models.length > 0 || out.split('\n').some((l) => /^gemini/i.test(l)))) {
+      rememberGeminiModels(models);
+      return { state: 'in', detail: 'Signed in' };
+    }
     if (ran.code !== null && ran.code !== 0) return { state: 'out', detail: lastLines(out) || "It couldn't list its models, so it's probably not signed in." };
   }
   return { state: 'unknown', detail: lastLines(out) || "Its answer wasn't one HeartQuarters knows." };

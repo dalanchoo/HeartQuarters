@@ -10,34 +10,179 @@ export type AiId = 'claude' | 'codex' | 'gemini';
 
 export const AI_NAMES: Record<AiId, string> = { claude: 'Claude', codex: 'ChatGPT', gemini: 'Gemini' };
 
+export interface AiModelOption {
+  id: string;
+  label: string;
+}
+
 export interface AiOverview {
   chosen: AiId;
-  options: { id: AiId; name: string; available: boolean }[];
+  options: {
+    id: AiId;
+    name: string;
+    available: boolean;
+    model: string;
+    defaultLabel: string;
+    models: AiModelOption[];
+  }[];
 }
 
 // HQ_AI_FILE lets tests and a test copy keep their own choice, away from John's.
 const choiceFile = () => process.env.HQ_AI_FILE ?? path.join(appDir, 'data', 'ai-choice.json');
+const MODEL_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 export function isAiId(value: unknown): value is AiId {
   return value === 'claude' || value === 'codex' || value === 'gemini';
 }
 
+interface StoredAiChoice {
+  ai: AiId;
+  models: Partial<Record<AiId, string>>;
+}
+
+function readChoiceData(): StoredAiChoice {
+  try {
+    const raw = JSON.parse(fs.readFileSync(choiceFile(), 'utf8')) as { ai?: unknown; models?: Record<string, unknown> };
+    const models: Partial<Record<AiId, string>> = {};
+    for (const id of ['claude', 'codex', 'gemini'] as const) {
+      const m = raw.models?.[id];
+      if (typeof m === 'string' && MODEL_ID_RE.test(m)) models[id] = m;
+    }
+    return { ai: isAiId(raw.ai) ? raw.ai : 'claude', models };
+  } catch {
+    return { ai: 'claude', models: {} };
+  }
+}
+
+function writeChoiceData(data: StoredAiChoice) {
+  const file = choiceFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data));
+}
+
 /** The AI John picked. Claude if he never has, or if the file is unreadable. */
 export function chosenAi(): AiId {
-  try {
-    const ai: unknown = JSON.parse(fs.readFileSync(choiceFile(), 'utf8')).ai;
-    return isAiId(ai) ? ai : 'claude';
-  } catch {
-    return 'claude';
-  }
+  return readChoiceData().ai;
 }
 
 export function chooseAi(value: unknown): AiId {
   if (!isAiId(value)) throw new Error('Unknown AI.');
-  const file = choiceFile();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ ai: value }));
+  const current = readChoiceData();
+  writeChoiceData({ ...current, ai: value });
   return value;
+}
+
+/** The model John picked for `ai`, or '' for that CLI's own default. */
+export function chosenModel(ai: AiId): string {
+  return readChoiceData().models[ai] ?? '';
+}
+
+export function chooseAiModel(ai: unknown, model: unknown): string {
+  if (!isAiId(ai)) throw new Error('Unknown AI.');
+  const clean = String(model ?? '').trim();
+  if (clean && !MODEL_ID_RE.test(clean)) throw new Error('Invalid model name.');
+  const current = readChoiceData();
+  const models = { ...current.models };
+  if (clean) models[ai] = clean;
+  else delete models[ai];
+  writeChoiceData({ ...current, models });
+  return clean;
+}
+
+/** Command-line arguments to pass the chosen model for `ai` (empty when set to Default). */
+export function aiModelArgs(ai: AiId): string[] {
+  const model = chosenModel(ai);
+  if (!model) return [];
+  return ai === 'codex' ? ['-c', `model=${JSON.stringify(model)}`] : ['--model', model];
+}
+
+let cachedGeminiModels: AiModelOption[] | null = null;
+
+/** Parses `<id>\t<label>` lines printed by `agy.exe models`. */
+export function parseGeminiModels(out: string): AiModelOption[] {
+  const seen = new Set<string>();
+  const list: AiModelOption[] = [];
+  for (const line of out.split(/\r?\n/)) {
+    const [id, label] = line.trim().split('\t');
+    if (!id || !label || !MODEL_ID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    list.push({ id, label: label.trim() });
+  }
+  return list;
+}
+
+export function rememberGeminiModels(models: AiModelOption[]) {
+  if (models.length) cachedGeminiModels = models;
+}
+
+const DEFAULT_CLAUDE_MODELS: AiModelOption[] = [
+  { id: 'claude-opus-5-5', label: 'Opus 5.5' },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+  { id: 'claude-fable-5-2', label: 'Fable 5.2' },
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5' },
+];
+
+const DEFAULT_CODEX_MODELS: AiModelOption[] = [
+  { id: 'gpt-6.2-sol', label: 'GPT-6.2-Sol' },
+  { id: 'gpt-6.2-astra', label: 'GPT-6.2-Astra' },
+  { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' },
+  { id: 'gpt-6-sol', label: 'GPT-6-Sol' },
+];
+
+const DEFAULT_GEMINI_MODELS: AiModelOption[] = [
+  { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)' },
+  { id: 'gemini-4-neon-medium', label: 'Gemini 4 Neon (Medium)' },
+  { id: 'gemini-4-argon-high', label: 'Gemini 4 Argon (High)' },
+  { id: 'gemini-4-argon-medium', label: 'Gemini 4 Argon (Medium)' },
+  { id: 'gemini-4-hydrogen-high', label: 'Gemini 4 Hydrogen (High)' },
+  { id: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)' },
+];
+
+export function availableModels(ai: AiId, home = os.homedir()): { defaultLabel: string; models: AiModelOption[] } {
+  let defaultModel = '';
+  let models: AiModelOption[] = [];
+  if (ai === 'claude') {
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(home, '.claude', 'settings.json'), 'utf8')) as { model?: unknown };
+      if (typeof s.model === 'string') defaultModel = s.model;
+    } catch { /* no explicit model in settings.json */ }
+    try {
+      const dir = path.join(home, '.claude', 'cache', 'model-catalog');
+      const newest = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith('-cc.json'))
+        .map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs }))
+        .sort((a, b) => b.t - a.t)[0];
+      if (newest) {
+        const raw = JSON.parse(fs.readFileSync(path.join(dir, newest.f), 'utf8')) as { catalog?: { config?: { models?: { id?: string; name?: string }[] } } };
+        models = (raw.catalog?.config?.models ?? [])
+          .filter((m): m is { id: string; name?: string } => typeof m.id === 'string' && MODEL_ID_RE.test(m.id))
+          .map((m) => ({ id: m.id, label: m.name || m.id }));
+      }
+    } catch { /* fall back to default list */ }
+    if (!models.length) models = DEFAULT_CLAUDE_MODELS;
+  } else if (ai === 'codex') {
+    try {
+      const toml = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
+      defaultModel = /^\s*model\s*=\s*"([^"]+)"/m.exec(toml)?.[1] ?? '';
+    } catch { /* no config.toml */ }
+    try {
+      const raw = JSON.parse(fs.readFileSync(path.join(home, '.codex', 'models_cache.json'), 'utf8')) as { models?: { slug?: string; display_name?: string; visibility?: string }[] };
+      models = (raw.models ?? [])
+        .filter((m): m is { slug: string; display_name?: string; visibility?: string } => typeof m.slug === 'string' && MODEL_ID_RE.test(m.slug) && m.visibility !== 'hide')
+        .map((m) => ({ id: m.slug, label: m.display_name || m.slug }));
+    } catch { /* fall back to default list */ }
+    if (!models.length) models = DEFAULT_CODEX_MODELS;
+  } else {
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(home, '.gemini', 'antigravity-cli', 'settings.json'), 'utf8')) as { model?: unknown };
+      if (typeof s.model === 'string') defaultModel = s.model;
+    } catch { /* no settings.json */ }
+    models = cachedGeminiModels ?? DEFAULT_GEMINI_MODELS;
+  }
+  const defaultName = defaultModel ? (models.find((m) => m.id === defaultModel)?.label ?? defaultModel) : '';
+  return { defaultLabel: defaultName ? `Default (${defaultName})` : 'Default', models };
 }
 
 export function aiCommand(ai: AiId): string[] {
@@ -51,9 +196,15 @@ function isAvailable(ai: AiId): boolean {
 }
 
 export function aiOverview(): AiOverview {
+  const data = readChoiceData();
   return {
-    chosen: chosenAi(),
-    options: (['claude', 'codex', 'gemini'] as const).map((id) => ({ id, name: AI_NAMES[id], available: isAvailable(id) })),
+    chosen: data.ai,
+    options: (['claude', 'codex', 'gemini'] as const).map((id) => {
+      const model = data.models[id] ?? '';
+      const { defaultLabel, models } = availableModels(id);
+      const list = model && !models.some((m) => m.id === model) ? [{ id: model, label: model }, ...models] : models;
+      return { id, name: AI_NAMES[id], available: isAvailable(id), model, defaultLabel, models: list };
+    }),
   };
 }
 
@@ -90,6 +241,7 @@ export function codexArgs(sessionId: string | null, message: string, writable: s
     ...(sessionId ? ['resume', sessionId] : []),
     '--json',
     '--skip-git-repo-check',
+    ...aiModelArgs('codex'),
     '-c', 'sandbox_mode="workspace-write"',
     '-c', 'sandbox_workspace_write.network_access=true',
     // A JSON list of strings is also valid in Codex's settings format, backslashes included.
@@ -155,6 +307,7 @@ export function geminiArgs(sessionId: string | null, message: string, writable: 
     '-p', message,
     '--output-format', 'stream-json',
     ...(sessionId ? ['--conversation', sessionId] : []),
+    ...aiModelArgs('gemini'),
     '--sandbox',
     ...writable.flatMap((folder) => ['--add-dir', folder]),
     '--settings', JSON.stringify(settings),

@@ -1,7 +1,10 @@
 // Whether each AI is signed in, and opening its sign-in. Fake programs only: no real AI runs.
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { runAiProcess } from './ai';
+import { aiModelArgs, aiOverview, availableModels, chooseAi, chooseAiModel, chosenModel, parseGeminiModels, runAiProcess } from './ai';
 import { aiSignIns, openSignIn, readSignIn, type Runner } from './ai-signin';
+import { makeTree, removeTree } from './testing';
 
 describe('reading each AI sign-in check', () => {
   it('Claude: its JSON says whether it is signed in', () => {
@@ -55,5 +58,76 @@ describe('runAiProcess', () => {
 
     const slow = await runAiProcess(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { cwd: process.cwd(), timeoutMs: 150 });
     expect(slow.timedOut).toBe(true);
+  });
+});
+
+describe('per-AI model selection and catalog discovery', () => {
+  it('remembers a chosen model per AI across AI switches and formats CLI model args', () => {
+    const tmp = makeTree({});
+    const oldFile = process.env.HQ_AI_FILE;
+    process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
+    try {
+      expect(chosenModel('claude')).toBe('');
+      expect(aiModelArgs('claude')).toEqual([]);
+      chooseAiModel('claude', 'claude-opus-5-5');
+      chooseAiModel('codex', 'gpt-6.2-sol');
+      chooseAi('gemini');
+      chooseAiModel('gemini', 'gemini-4-argon-medium');
+      expect(chosenModel('claude')).toBe('claude-opus-5-5');
+      expect(chosenModel('codex')).toBe('gpt-6.2-sol');
+      expect(chosenModel('gemini')).toBe('gemini-4-argon-medium');
+      expect(aiModelArgs('claude')).toEqual(['--model', 'claude-opus-5-5']);
+      expect(aiModelArgs('codex')).toEqual(['-c', 'model="gpt-6.2-sol"']);
+      expect(aiModelArgs('gemini')).toEqual(['--model', 'gemini-4-argon-medium']);
+      expect(aiOverview().options.map((o) => [o.id, o.model])).toEqual([
+        ['claude', 'claude-opus-5-5'],
+        ['codex', 'gpt-6.2-sol'],
+        ['gemini', 'gemini-4-argon-medium'],
+      ]);
+      expect(() => chooseAiModel('claude', 'bad model; rm -rf')).toThrow(/Invalid model/);
+      chooseAiModel('claude', '');
+      expect(chosenModel('claude')).toBe('');
+    } finally {
+      if (oldFile === undefined) delete process.env.HQ_AI_FILE;
+      else process.env.HQ_AI_FILE = oldFile;
+      removeTree(tmp);
+    }
+  });
+
+  it('reads local Claude and Codex model catalogs and parses Gemini models', () => {
+    const home = makeTree({
+      '.claude/settings.json': JSON.stringify({ model: 'claude-sonnet-5-5' }),
+      '.claude/cache/model-catalog/abc-cc.json': JSON.stringify({
+        catalog: { config: { models: [{ id: 'claude-opus-5-5', name: 'Opus 5.5' }, { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5' }] } },
+      }),
+      '.codex/config.toml': 'model = "gpt-6-sol"\n',
+      '.codex/models_cache.json': JSON.stringify({
+        models: [
+          { slug: 'gpt-6.2-sol', display_name: 'GPT-6.2-Sol', visibility: 'list' },
+          { slug: 'gpt-6-sol', display_name: 'GPT-6-Sol', visibility: 'list' },
+          { slug: 'gpt-hidden', display_name: 'Hidden', visibility: 'hide' },
+        ],
+      }),
+    });
+    try {
+      const claude = availableModels('claude', home);
+      expect(claude.defaultLabel).toBe('Default (Sonnet 5.5)');
+      expect(claude.models).toEqual([
+        { id: 'claude-opus-5-5', label: 'Opus 5.5' },
+        { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+      ]);
+      const codex = availableModels('codex', home);
+      expect(codex.defaultLabel).toBe('Default (GPT-6-Sol)');
+      expect(codex.models).toEqual([
+        { id: 'gpt-6.2-sol', label: 'GPT-6.2-Sol' },
+        { id: 'gpt-6-sol', label: 'GPT-6-Sol' },
+      ]);
+      expect(parseGeminiModels('Fetching available models...\ngemini-4-neon-high\tGemini 4 Neon (High)\ngemini-4-argon-medium\tGemini 4 Argon (Medium)\n')).toEqual([
+        { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)' },
+        { id: 'gemini-4-argon-medium', label: 'Gemini 4 Argon (Medium)' },
+      ]);
+    } finally {
+      removeTree(home);
+    }
   });
 });

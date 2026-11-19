@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
@@ -216,7 +216,7 @@ export function geminiImageArgs(prompt: string, cwd: string, opts: { session?: s
   const images = [...(photo ? [photo] : []), ...refs];
   const said = images.length ? `${prompt}\n\nReference image files:\n${images.map((file) => `- ${file}`).join('\n')}` : prompt;
   const dirs = [...new Set([cwd, ...images.map((file) => path.dirname(file))])];
-  return ['-p', said, '--output-format', 'stream-json', ...(session ? ['--conversation', session] : []), '--sandbox', ...dirs.flatMap((dir) => ['--add-dir', dir]), '--settings', JSON.stringify(settings), '--print-timeout', '900s'];
+  return ['-p', said, '--output-format', 'stream-json', ...(session ? ['--conversation', session] : []), ...aiModelArgs('gemini'), '--sandbox', ...dirs.flatMap((dir) => ['--add-dir', dir]), '--settings', JSON.stringify(settings), '--print-timeout', '900s'];
 }
 
 export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, photo, refs }) => {
@@ -225,7 +225,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
   const started = Date.now();
   if (ai === 'codex') {
     const images = [...(photo ? [photo] : []), ...(refs ?? [])];
-    const args = ['exec', ...(session ? ['resume', session] : []), '--json', '--skip-git-repo-check', '-c', 'sandbox_mode="workspace-write"', prompt, ...images.flatMap((i) => ['-i', i])];
+    const args = ['exec', ...(session ? ['resume', session] : []), '--json', '--skip-git-repo-check', ...aiModelArgs('codex'), '-c', 'sandbox_mode="workspace-write"', prompt, ...images.flatMap((i) => ['-i', i])];
     const output = await run(cmd, [...pre, ...args], cwd);
     const id = session || sessionFrom(output, 'thread_id');
     // If it didn't save where asked, the image tool keeps its own copy.

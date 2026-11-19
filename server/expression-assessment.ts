@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, type ExpressionCategory } from './expressions.js';
@@ -128,9 +128,10 @@ async function prepareImage(source: string, dest: string): Promise<void> {
 export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
-  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
-    : ai === 'claude' ? ['-p', prompt, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
-    : ['-p', prompt, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
+  const modelArgs = aiModelArgs(ai);
+  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...modelArgs, '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
+    : ai === 'claude' ? ['-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
+    : ['-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
   const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000 });
   if (res.startError) throw new Error(`Could not start the AI: ${res.startError}`);
   if (res.code !== 0) throw new Error(res.timedOut ? 'The assessment timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);

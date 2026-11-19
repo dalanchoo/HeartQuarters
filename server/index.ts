@@ -29,7 +29,7 @@ import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
-import { aiOverview, chooseAi } from './ai.js';
+import { aiOverview, chooseAi, chooseAiModel } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
@@ -340,9 +340,10 @@ app.get('/api/ai', handle((_req, res) => {
   res.json(aiOverview());
 }));
 
-// { id: "claude" or "codex" }
+// { id: "claude" | "codex" | "gemini", model?: string }
 app.post('/api/ai', handle((req, res) => {
-  chooseAi(req.body?.id);
+  if (req.body?.model !== undefined) chooseAiModel(req.body?.id, req.body?.model);
+  else chooseAi(req.body?.id);
   res.json(aiOverview());
 }));
 

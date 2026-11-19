@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
-import { AI_NAMES, aiCommand, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
@@ -219,11 +219,12 @@ async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.Proces
 /** The real AIs, read-only: none of them may change a file. */
 export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...pre] = aiCommand(ai);
+  const modelArgs = aiModelArgs(ai);
   if (ai === 'claude') {
     // Claude.ai's connectors (vidIQ) are only loaded in a background run when asked for.
     const out = await run(
       cmd,
-      [...pre, '-p', prompt, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...VIDIQ_TOOLS, '--add-dir', config.skillsDir, config.videoProjectsDir],
+      [...pre, '-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...VIDIQ_TOOLS, '--add-dir', config.skillsDir, config.videoProjectsDir],
       cwd,
       { ...process.env, ENABLE_CLAUDEAI_MCP_SERVERS: 'true' },
     );
@@ -233,11 +234,11 @@ export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
   }
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
     return fs.readFileSync(answer, 'utf8');
   }
   const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };
-  return run(cmd, [...pre, '-p', prompt, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify(settings), '--print-timeout', '1200s'], cwd);
+  return run(cmd, [...pre, '-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify(settings), '--print-timeout', '1200s'], cwd);
 };
 
 // ---- The job ----------------------------------------------------------------------------------------------

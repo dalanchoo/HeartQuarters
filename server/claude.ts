@@ -14,6 +14,7 @@ import path from 'node:path';
 import {
   AI_NAMES,
   aiCommand,
+  aiModelArgs,
   chosenAi,
   codexArgs,
   codexWritableFolders,
@@ -163,6 +164,7 @@ export function claudeArgs(run: ClaudeRun, message: string, first: boolean): str
     '-p', message,
     '--output-format', 'stream-json', '--verbose',
     ...(first ? ['--session-id', run.sessionId] : ['--resume', run.sessionId]),
+    ...aiModelArgs('claude'),
     '--permission-mode', 'acceptEdits',
     '--allowedTools', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill', 'Bash', 'PowerShell', 'TodoWrite',
     '--add-dir', config.skillsDir, config.capcutDraftsDir,
@@ -474,8 +476,11 @@ export function askInConversation(video: string, job: ClaudeJob, draft: string, 
 
 /** Ends a turn, along with whatever it started. On Windows, killing only the program would leave those running. */
 function stopProcess(child: ChildProcess) {
-  if (process.platform === 'win32' && child.pid) spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f']);
-  else child.kill();
+  if (process.platform === 'win32' && child.pid) {
+    const res = spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true });
+    if (res.status === 0) return;
+  }
+  try { child.kill(); } catch { /* already exited */ }
 }
 
 /** Stops the AI mid-turn. The conversation is kept; a note carries it on. */
