@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
+import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -61,6 +61,12 @@ describe('the source', () => {
     expect(briefSource('024 - Nothing Yet/Longform')).toBeNull();
     const found = findSource(path.join(tmp, LONGFORM))!;
     expect(await readSource(found.full)).toBe('If you have SDAM, you may have agonized.');
+  });
+
+  it('gives the source as text, for the research question', async () => {
+    expect(await briefSourceText(LONGFORM)).toEqual({ kind: 'transcript', path: `${LONGFORM}/Subtitles/022-captions.srt`, text: 'If you have SDAM, you may have agonized.' });
+    expect(await briefSourceText('024 - Nothing Yet/Longform')).toBeNull();
+    await expect(briefSourceText('../outside')).rejects.toThrow();
   });
 
   it('prefers the -captions.txt over an .srt', () => {

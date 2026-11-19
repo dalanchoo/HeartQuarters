@@ -32,7 +32,7 @@ import { listSkills, setSkillLink, targetFolder } from './skills.js';
 import { aiOverview, chooseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startEdit, startShortsProposal, stopRun } from './claude.js';
-import { briefSource, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
+import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
@@ -506,6 +506,16 @@ app.get('/api/brief', handle((req, res) => {
   const piece = String(req.query.piece ?? '');
   res.json({ source: briefSource(piece), job: getBrief(piece) });
 }));
+
+// ?piece=: the brief's transcript (or script) as text, for the vidIQ and Ask Studio question before the video is on
+// YouTube. Reads only.
+app.get('/api/brief/source-text', async (req, res) => {
+  try {
+    res.json(await briefSourceText(String(req.query.piece ?? '')));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // { piece, notes }: Claude writes the brief, then ChatGPT and Gemini review it, in the background.
 app.post('/api/brief/start', async (req, res) => {

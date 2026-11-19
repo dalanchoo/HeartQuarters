@@ -15,6 +15,12 @@ describe('the research question for vidIQ and Ask Studio', () => {
     expect(q).not.toContain("What it's about");
     expect(q).toContain('under about 60 characters');
   });
+  it("adds the transcript (or script) while it isn't on YouTube, and leaves it out once it is", () => {
+    const transcript = { kind: 'transcript' as const, text: ' So I told them. ' };
+    expect(researchQuestion({ title: 'T', about: '', short: true, source: transcript })).toMatch(/\n\nThe Short's transcript:\nSo I told them\.$/);
+    expect(researchQuestion({ title: 'T', about: '', short: false, source: { kind: 'script', text: 'Hello' } })).toMatch(/The video's script \(the recording may differ\):\nHello$/);
+    expect(researchQuestion({ title: 'T', about: '', short: true, url: 'https://youtube.com/shorts/x', source: transcript })).not.toContain('So I told them');
+  });
 });
 
 describe('combining the notes boxes', () => {

@@ -118,6 +118,15 @@ export function briefSource(piece: string): BriefSource | null {
   return found ? { kind: found.kind, path: rel(found.full) } : null;
 }
 
+/**
+ * The same source as text, for the question John pastes into vidIQ and Ask Studio while the video isn't on YouTube
+ * yet: neither tool can watch it then (John, 2026-11-18). Changes nothing.
+ */
+export async function briefSourceText(piece: string): Promise<(BriefSource & { text: string }) | null> {
+  const found = findSource(pieceFolder(piece));
+  return found ? { kind: found.kind, path: rel(found.full), text: (await readSource(found.full)).trim() } : null;
+}
+
 /** Provide timestamps only when there is one unambiguous timed subtitle file for this piece. */
 function copySourceTimings(pieceDir: string, work: string): void {
   const subs = path.join(pieceDir, 'Subtitles'); const files = filesIn(subs).filter(f => /\.(srt|vtt)$/i.test(f));

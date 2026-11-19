@@ -10,6 +10,11 @@ export interface ResearchFacts {
   short: boolean;
   /** The YouTube address when it's already on YouTube. */
   url?: string;
+  /**
+   * While it isn't on YouTube, its transcript (or the script, before there is one), since the tools can't watch it
+   * then (John, 2026-11-18). Left out once it's on YouTube.
+   */
+  source?: { kind: 'transcript' | 'script'; text: string };
 }
 
 /** The question for vidIQ and Ask Studio: what the video is, then what to suggest and how, honest to the video. */
@@ -28,6 +33,9 @@ export function researchQuestion(f: ResearchFacts): string {
     "- why someone who doesn't know me would click, and what backs that up (search terms, or similar videos that did well).",
     '',
     'Then say which pair you would choose and why. Suggest a description, comma-separated tags, hashtags, and a pinned comment. For longform, suggest chapters only if you have reliable timestamps; otherwise say you cannot determine them. Every suggestion must be true to what actually happens in the video; do not invent details or timestamps.',
+    ...(!f.url && f.source?.text.trim()
+      ? ['', f.source.kind === 'transcript' ? `The ${f.short ? "Short's" : "video's"} transcript:` : `The ${f.short ? "Short's" : "video's"} script (the recording may differ):`, f.source.text.trim()]
+      : []),
   ].join('\n');
 }
 

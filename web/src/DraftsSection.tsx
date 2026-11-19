@@ -458,7 +458,21 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
   const [boxes, setBox] = useBriefBoxes(piece);
   // The AIs get the three boxes as one text, each part under its own heading.
   const notes = combineNotes(boxes.notes, boxes.vidiq, boxes.studio);
-  const question = research ? researchQuestion(research) : '';
+  // Not on YouTube yet: vidIQ and Ask Studio can't watch it, so the question carries its transcript (or script).
+  const [sourceText, setSourceText] = useState<{ kind: 'transcript' | 'script'; text: string } | null>(null);
+  const onYoutube = !!research?.url;
+  useEffect(() => {
+    if (onYoutube) return setSourceText(null);
+    let active = true;
+    getJson<{ kind: 'transcript' | 'script'; text: string } | null>(`/api/brief/source-text?piece=${encodeURIComponent(piece)}`).then(
+      (r) => active && setSourceText(r),
+      () => active && setSourceText(null),
+    );
+    return () => {
+      active = false;
+    };
+  }, [piece, onYoutube, source?.path]);
+  const question = research ? researchQuestion({ ...research, source: sourceText ?? undefined }) : '';
   const [error, setError] = useState('');
   const wasRunning = useRef(false);
 
