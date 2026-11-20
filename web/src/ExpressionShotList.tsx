@@ -110,8 +110,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
         </div>
         {pictureUrl && <div className="expression-shot-pictures">
-          {list.length > 1 && <label>Picture <select value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select></label>}
           <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
+          {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
           <button className="small" disabled={!!busy} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
           {copied[shot.id] && <p className="muted small-text" role="status">{copied[shot.id]}</p>}
         </div>}
