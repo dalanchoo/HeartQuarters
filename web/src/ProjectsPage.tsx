@@ -537,17 +537,13 @@ function DeletePackagingVersion({ piece, version, locked, onChanged }: { piece: 
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
 /**
  * At the top of a longform or short with nothing in Exports: export comes first, before the metadata, because
- * uploading to YouTube needs the video file. "Copy Exports Folder" is for pasting into CapCut's export window.
+ * uploading to YouTube needs the video file. "Open Exports Folder" makes the folder if it isn't there yet.
  */
 function ExportFirst({ piece, draft }: { piece: Piece; draft: string }) {
-  const [copied, setCopied] = useState('');
-  const copyFolder = async () => {
-    try {
-      const { path } = await getJson<{ path: string }>(`/api/full-path?root=projects&path=${encodeURIComponent(`${piece.path}/Exports`)}`);
-      setCopied((await copyText(path)) ? `Copied: ${path}` : `Couldn't copy. The folder is ${path}`);
-    } catch (e) {
-      setCopied(e instanceof Error ? e.message : String(e));
-    }
+  const [problem, setProblem] = useState('');
+  const openFolder = () => {
+    setProblem('');
+    postJson('/api/open-exports', { piece: piece.path }).catch((e: Error) => setProblem(e.message));
   };
   return (
     <div className="next-step" role="status">
@@ -558,9 +554,9 @@ function ExportFirst({ piece, draft }: { piece: Piece; draft: string }) {
       </p>
       <div className="next-step-actions">
         <OpenInCapCut draft={draft} />
-        <button className="small" onClick={() => void copyFolder()}>Copy Exports Folder</button>
+        <button className="small" onClick={openFolder}>Open Exports Folder</button>
       </div>
-      {copied && <p className="small-text muted">{copied}</p>}
+      {problem && <p className="error small-text">{problem}</p>}
     </div>
   );
 }

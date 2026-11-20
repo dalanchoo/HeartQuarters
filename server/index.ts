@@ -68,6 +68,7 @@ import { downloadChannelAnalytics } from './channel-analytics.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
+import { ensureExportsFolder } from './exports-folder.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -246,10 +247,11 @@ app.post('/api/open', handle((req, res) => {
   res.json({ ok: true });
 }));
 
-// ?root=&path=: the full Windows path of a place in a root, for pasting into another program's Save window (CapCut's
-// export, for example). The place doesn't have to exist yet. Changes nothing.
-app.get('/api/full-path', handle((req, res) => {
-  res.json({ path: safeResolve(parseRoot(req.query.root), String(req.query.path ?? '')) });
+// { piece }: opens a longform's or short's Exports folder in File Explorer, making it (empty) first if needed.
+app.post('/api/open-exports', handle((req, res) => {
+  const full = ensureExportsFolder(req.body?.piece);
+  spawn('explorer.exe', [full], { detached: true, stdio: 'ignore' }).unref();
+  res.json({ ok: true, path: full });
 }));
 
 // Small JPEG preview of an image (made once, then cached in data/thumbs).
