@@ -379,13 +379,6 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark the photo.'); }
     finally { setBusy(false); }
   };
-  const toggleMotion = async () => {
-    const next = !isMotionExpression(photo);
-    setBusy(true); setMessage('');
-    try { await postJson('/api/expressions/mark-motion', { photo: photo.path, motion: next }); onChanged(next ? 'Photo marked as a motion image.' : 'Removed motion image mark.'); }
-    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not update the photo.'); }
-    finally { setBusy(false); }
-  };
   useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setMessage(''); }, [photo.path]);
   const preview = async (kind: 'delete' | 'move') => {
     setBusy(true); setMessage(''); setPlan(null); setOperation(kind);
@@ -406,7 +399,6 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
       <CopyButton text={fullPath} label="Copy File Path" />
       <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Select in Explorer</button>
       {!isAiExpression(photo) && <button className="small" disabled={busy} onClick={() => void markAi()}>Mark as AI</button>}
-      {!photo.motionPhoto && <button className="small" disabled={busy} onClick={() => void toggleMotion()}>{isMotionExpression(photo) ? 'Unmark Motion Image' : 'Mark as Motion Image'}</button>}
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>

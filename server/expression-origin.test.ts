@@ -21,8 +21,8 @@ describe('expression photo origin', () => {
     expect(matchesExpressionOrigin(unmarked, 'ai')).toBe(false);
   });
   it('recognizes and filters motion images separately from still photos', () => {
-    const motion = { tags: [{ tag: 'MotionImage', confirmed: true }] };
-    const still = { tags: [{ tag: 'AIGenerated', confirmed: true }] };
+    const motion = { motionPhoto: true };
+    const still = {};
     expect(isMotionExpression(motion)).toBe(true);
     expect(isMotionExpression(still)).toBe(false);
     expect(matchesMotionFilter(motion, 'motion')).toBe(true);

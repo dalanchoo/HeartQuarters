@@ -9,7 +9,7 @@ export function groupExpressionAttributes(tags: Tag[]): { details: Tag[]; framin
   const groups: { details: Tag[]; framing: Tag[]; pose: Tag[]; morphology: Tag[]; expressions: Tag[] } = { details: [], framing: [], pose: [], morphology: [], expressions: [] };
   for (const tag of tags) {
     const key = tag.tag.toLowerCase();
-    const group = key === 'aigenerated' || key === 'motionimage' ? 'details' : FRAMING.has(key) ? 'framing' : POSE.has(key) ? 'pose' : MORPHOLOGY.has(key) ? 'morphology' : 'expressions';
+    const group = key === 'aigenerated' ? 'details' : FRAMING.has(key) ? 'framing' : POSE.has(key) ? 'pose' : MORPHOLOGY.has(key) ? 'morphology' : 'expressions';
     groups[group].push(tag);
   }
   for (const group of Object.values(groups)) group.sort((a, b) => Number(b.confirmed) - Number(a.confirmed));

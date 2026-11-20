@@ -21,7 +21,7 @@ export function confirmExpressionFolder(photoPath: string, name: string, confide
   const before = fs.readFileSync(sidecar, 'utf8'); const lines = before.split(/(?<=\n)/);
   const matches = lines.map((line, i) => ({ i, tag: parseTags(line)[0] })).filter(item => item.tag?.tag === name);
   if (matches.length !== 1 || matches[0].tag.confidence !== confidence) throw new Error('The expression changed since it was shown. Refresh and try again.');
-  const attributeNames = new Set([...FRAMING_TAGS, ...POSE_TAGS, ...MORPHOLOGY_TAGS, 'AIGenerated', 'MotionImage'].map(s => s.toLowerCase()));
+  const attributeNames = new Set([...FRAMING_TAGS, ...POSE_TAGS, ...MORPHOLOGY_TAGS, 'AIGenerated'].map(s => s.toLowerCase()));
   for (let i = 0; i < lines.length; i++) {
     const tag = parseTags(lines[i])[0]; if (!tag) continue;
     if (i === matches[0].i) {
