@@ -129,3 +129,11 @@ export function setShotDone(id: unknown, done: unknown): ExpressionShot[] {
   if (!shot) throw new Error('That shot is no longer on the list.');
   shot.done = done; save(shots, original); return shots;
 }
+
+/** Remove one look from the list. Only the list file changes; no photos are touched. */
+export function deleteShot(id: unknown): ExpressionShot[] {
+  if (typeof id !== 'string') throw new Error('Choose a valid shot.');
+  const { shots, original } = load(); const at = shots.findIndex(item => item.id === id);
+  if (at < 0) throw new Error('That shot is no longer on the list.');
+  shots.splice(at, 1); save(shots, original); return shots;
+}

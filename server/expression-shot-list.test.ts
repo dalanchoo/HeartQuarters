@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { addExpressionShots, INITIAL_SHOTS, parseShotSuggestion, readShotList, seedShotList, setShotDone, shotHasSuggestion, SHOT_LIST_FILE } from './expression-shot-list';
+import { addExpressionShots, deleteShot, INITIAL_SHOTS, parseShotSuggestion, readShotList, seedShotList, setShotDone, shotHasSuggestion, SHOT_LIST_FILE } from './expression-shot-list';
 import { makeTree, removeTree } from './testing';
 
 let root: string;
@@ -47,6 +47,13 @@ describe('expression shot list', () => {
     expect(shotHasSuggestion(shot, ' composure > calm (STEADY) ')).toBe(true);
     setShotDone('a', true);
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toMatchObject({ version: 2, shots: [{ id: 'a', done: true }] });
+  });
+  it('deletes only the chosen shot and refuses an unknown one', () => {
+    const [first, second, third] = seedShotList();
+    expect(deleteShot(second.id).map(s => s.id)).toEqual([first.id, third.id]);
+    expect(readShotList()).toHaveLength(2);
+    expect(() => deleteShot(second.id)).toThrow(/no longer on the list/);
+    expect(() => deleteShot(42)).toThrow(/valid shot/);
   });
   it('never overwrites an unreadable list or accepts a path outside projects', () => {
     const file = path.join(config.expressionsDir, SHOT_LIST_FILE); fs.writeFileSync(file, 'not json');

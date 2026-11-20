@@ -427,7 +427,8 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot { padding: .8rem; margin: .65rem 0; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
 .expression-shot p { margin: .45rem 0; }
 .expression-shot.is-done { opacity: .7; }
-.expression-shot h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.expression-shot > summary { cursor: pointer; }
+.expression-shot-group .expression-shot-group { margin-left: .5rem; }
 .expression-shot-tags { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .9em; }
 .expression-shot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
 .expression-shot details > summary { cursor: pointer; }

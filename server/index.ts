@@ -17,7 +17,7 @@ import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
-import { addExpressionShots, readShotList, setShotDone } from './expression-shot-list.js';
+import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -278,6 +278,7 @@ app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashIn
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
+app.post('/api/expressions/shot-list/delete', handle((req, res) => { res.json(deleteShot(req.body?.id)); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
 app.post('/api/expressions/videos/open', handle((_req, res) => { ensureGeneratedVideosDir(); res.json({ ok: true }); }));
 app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {

@@ -35,6 +35,14 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
     finally { setBusy(''); }
   };
 
+  const remove = async (shot: ExpressionShot) => {
+    if (!window.confirm(`Delete “${shot.title || shot.description}” from the Shot List? This cannot be undone.`)) return;
+    setBusy(shot.id); setError('');
+    try { setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/delete', { id: shot.id })); window.dispatchEvent(new Event('hq-expression-shot-list-changed')); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(''); }
+  };
+
   const remaining = shots?.filter(shot => !shot.done) ?? [];
   const photographed = shots?.filter(shot => shot.done) ?? [];
   const gaps = useMemo(() => (index ? findLibraryGaps(index) : []), [index]);
@@ -48,16 +56,17 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
   const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
   const card = (shot: ExpressionShot) => {
     const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
-    return <article className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
-      {shot.title && <h3>{shot.title}</h3>}
-      <p>{shot.description || <span className="muted">No description yet.</span>}</p>
+    return <details className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
+      <summary><strong>{shot.title || shot.description || 'Untitled Shot'}</strong></summary>
+      {shot.title && <p>{shot.description || <span className="muted">No description yet.</span>}</p>}
       {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([name, list]) => <span key={name}><strong>{name}:</strong> {list.join(', ')}</span>)}</p>}
       {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
       <div className="expression-shot-actions">
         {!shot.done && <button className="small" disabled={!known.has(shot.category)} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => onGenerate(shot)}>Generate Reference With AI</button>}
-        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to Shot List' : 'Mark Done'}</button>
+        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Mark Done'}</button>
+        <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
       </div>
-    </article>;
+    </details>;
   };
   const byFolder = new Map<string, ExpressionShot[]>();
   for (const shot of remaining) byFolder.set(shot.category, [...(byFolder.get(shot.category) ?? []), shot]);
@@ -71,12 +80,13 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
 
     {!shots && !error && <p className="muted">Loading Shot List…</p>}
     {shots && <section className="expression-shot-groups">
-      <h3>To Photograph ({remaining.length})</h3>
+      <details className="yt-section expression-shot-group" open><summary>To Photograph ({remaining.length})</summary>
       {!remaining.length && <p className="muted small-text">No shots waiting to be photographed.</p>}
       {folders.map(folder => <details className="yt-section expression-shot-group" key={folder || 'unsorted'}>
         <summary>{folderLabel(folder)} ({byFolder.get(folder)!.length})</summary>
         {byFolder.get(folder)!.map(card)}
       </details>)}
+      </details>
       {photographed.length > 0 && <details className="yt-section expression-shot-group"><summary>Photographed ({photographed.length})</summary>{photographed.map(card)}</details>}
     </section>}
     <details className="yt-section video-prompt-builder">
