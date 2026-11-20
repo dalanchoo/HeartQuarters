@@ -63,6 +63,10 @@ export function ExpressionsPage() {
   // Reference Photos: the photos that show the AI what John looks like. Separate from the stars.
   const [likeness, setLikeness] = useState<string[]>([]);
   const [likenessBusy, setLikenessBusy] = useState(false);
+  // Photos unmarked while the Library shows only Starred or Reference Photos stay in view, with an Undo.
+  const [keptInView, setKeptInView] = useState<string[]>([]);
+  const [markUndo, setMarkUndo] = useState<{ path: string; name: string; kind: 'star' | 'reference' } | null>(null);
+  const noteUnmarked = (photo: ExpressionPhoto, kind: 'star' | 'reference') => { setKeptInView(current => current.includes(photo.path) ? current : [...current, photo.path]); setMarkUndo({ path: photo.path, name: photo.name, kind }); };
   const [referenceError, setReferenceError] = useState('');
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceBusy, setReferenceBusy] = useState(false);
@@ -181,8 +185,8 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, photoScope === 'reference' ? likeness : references, { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
-  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, photoScope, references, likeness, libraryFilters, reviewFolders, categoryNames]);
+    return filterSelectablePhotos(index.photos, [...(photoScope === 'reference' ? likeness : references), ...keptInView], { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, photoScope, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
 
@@ -246,6 +250,7 @@ export function ExpressionsPage() {
           ))}
         </div>
         {changeMessage && <p role="status">{changeMessage}</p>}
+        {markUndo && !(markUndo.kind === 'star' ? references : likeness).includes(markUndo.path) && <p role="status">{markUndo.name} is no longer {markUndo.kind === 'star' ? 'starred' : 'a Reference Photo'}. <button type="button" className="small" disabled={referenceBusy || likenessBusy} onClick={() => { void (markUndo.kind === 'star' ? setReference(markUndo.path, true) : setLikenessPhoto(markUndo.path, true)); setMarkUndo(null); }}>Undo</button></p>}
 
         <div className="expr-head">
           {current.reference && (
@@ -268,7 +273,7 @@ export function ExpressionsPage() {
           </div>
         </div>
         <div className="generation-photo-filters expression-library-filters">
-          <label>Photos <select value={photoScope} onChange={e => { setPhotoScope(e.target.value as 'all' | 'starred' | 'reference'); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option><option value="reference">Reference Photos</option></select></label>
+          <label>Photos <select value={photoScope} onChange={e => { setPhotoScope(e.target.value as 'all' | 'starred' | 'reference'); setKeptInView([]); setMarkUndo(null); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option><option value="reference">Reference Photos</option></select></label>
           <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
           <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
           <label>Motion Image <select value={motionFilter} onChange={e => { setMotionFilter(e.target.value as 'all' | 'motion' | 'still'); setOpen(null); }}><option value="all">All Photos</option><option value="motion">Motion Images Only</option><option value="still">Still Photos Only</option></select></label>
@@ -287,7 +292,7 @@ export function ExpressionsPage() {
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
-            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => void setReference(p.path, !references.includes(p.path))}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => void setLikenessPhoto(p.path, !likeness.includes(p.path))}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
+            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => { if (references.includes(p.path)) noteUnmarked(p, 'star'); void setReference(p.path, !references.includes(p.path)); }}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => { if (likeness.includes(p.path)) noteUnmarked(p, 'reference'); void setLikenessPhoto(p.path, !likeness.includes(p.path)); }}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
               <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); reloadLikeness(); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
             </div>
           ))}

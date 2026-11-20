@@ -9,6 +9,13 @@ type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; s
 export function ExpressionGenerator({ category, references, photos, categories, onStarted, onViewPhoto, onToggleStar, starBusy }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [filters, setFilters] = useState(emptyPhotoFilters);
+  // Photos unmarked here stay in view (until the Photos choice changes) so they never vanish without a trace.
+  const [kept, setKept] = useState<string[]>([]); const [undo, setUndo] = useState<{ path: string; name: string } | null>(null);
+  const toggleReference = (photo: ExpressionPhoto, on: boolean) => {
+    onToggleStar(photo.path, on);
+    if (!on) { setKept(current => current.includes(photo.path) ? current : [...current, photo.path]); setUndo({ path: photo.path, name: photo.name }); }
+    else setUndo(current => current?.path === photo.path ? null : current);
+  };
   useEffect(() => { setChosen(current => current.filter(path => photos.some(photo => photo.path === path))); }, [photos]);
   const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState(''); const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
@@ -28,16 +35,17 @@ export function ExpressionGenerator({ category, references, photos, categories, 
     try { await postJson('/api/expression-generation/start', { category: category.path, references: chosen, options: { framing, angle, gaze }, ai, prompt }); setMessage('Generation started. The candidate will appear in Candidates for Review.'); onStarted(); }
     catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
-  const visible = filterSelectablePhotos(photos, references, { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
+  const visible = filterSelectablePhotos(photos, [...references, ...kept], { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
     <details className="yt-section generation-likeness">
     <summary>Likeness Photos ({chosen.length} of 5 Selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`})</summary>
     <p>Choose up to five photos for likeness. Reference Photos are remembered and only used for generating images of you; your choices here are for this candidate.</p>
-    <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Reference Photos</option><option value="all">All Photos</option></select></label>
+    <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => { setScope(e.target.value as 'starred' | 'all'); setKept([]); setUndo(null); }}><option value="starred">Reference Photos</option><option value="all">All Photos</option></select></label>
       <ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div>
     <div className="generation-photo-grid">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
       <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => setChosen(current => selected ? current.filter(p => p !== photo.path) : [...current, photo.path])}><img src={thumbUrl('expressions', photo.path, 240, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
-      <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => onToggleStar(photo.path, !starred)}>{starred ? '✓ Reference Photo' : 'Make Reference Photo'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
+      <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => toggleReference(photo, !starred)}>{starred ? '✓ Reference Photo' : 'Make Reference Photo'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
+    {undo && !references.includes(undo.path) && <p role="status">{undo.name} is no longer a Reference Photo. <button type="button" className="small" disabled={starBusy} onClick={() => { onToggleStar(undo.path, true); setUndo(null); }}>Undo</button></p>}
     {!visible.length && <p className="muted">No photos match these filters. Choose All Photos to see the whole library.</p>}
     </details>
     {!chosen.length && <p className="muted small-text">Open Likeness Photos and choose at least one photo before generating.</p>}
