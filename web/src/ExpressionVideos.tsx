@@ -163,11 +163,13 @@ export function ExpressionVideos({ active }: { active: boolean }) {
 
   return (
     <details className="yt-section" open>
-      <summary>Generated Videos &amp; Frame Snapshots ({videos.length})</summary>
+      <summary>AI Videos ({videos.length})</summary>
       <p className="muted small-text">
-        Drop AI-generated expression videos here, step frame-by-frame to find crisp expressions, and save snapshots straight into your Expression Inbox (marked as AI).
+        Step through AI-generated expression videos frame by frame and save the best frames straight into your Expression Inbox (marked as AI).
       </p>
 
+      <details className="yt-section" open={videos.length === 0}>
+      <summary>Add Videos</summary>
       <div
         className="expression-inbox-drop"
         onDragOver={(e) => e.preventDefault()}
@@ -200,6 +202,7 @@ export function ExpressionVideos({ active }: { active: boolean }) {
           Open Videos Folder
         </button>
       </div>
+      </details>
 
       {error && <p className="error" role="alert">{error}</p>}
       {status && <p role="status" className="small-text">{status}</p>}
@@ -208,31 +211,15 @@ export function ExpressionVideos({ active }: { active: boolean }) {
         <p className="muted small-text" style={{ marginTop: '0.5rem' }}>No generated videos yet.</p>
       ) : (
         <div className="generated-videos-layout">
-          <div className="generated-videos-list">
-            {videos.map((v) => (
-              <div key={v.name} className={`generated-video-item${v.name === current?.name ? ' active' : ''}`}>
-                <button
-                  type="button"
-                  className="generated-video-pick"
-                  onClick={() => {
-                    setSelected(v.name);
-                    setCurrentTime(0);
-                    setDuration(0);
-                  }}
-                >
-                  <span className="generated-video-name">{v.name}</span>
-                  <span className="muted small-text">{formatSize(v.size)}</span>
-                </button>
-                <div className="generated-video-actions">
-                  <button type="button" className="small" disabled={busy} onClick={() => void rename(v)}>
-                    Rename
-                  </button>
-                  <button type="button" className="small danger-outline" disabled={busy} onClick={() => void trash(v)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="generated-video-picker">
+            <select aria-label="Choose a video" value={current?.name ?? ''} onChange={(e) => { setSelected(e.target.value); setCurrentTime(0); setDuration(0); }}>
+              {!current && <option value="">Choose a video…</option>}
+              {videos.map((v) => <option key={v.name} value={v.name}>{v.name} ({formatSize(v.size)})</option>)}
+            </select>
+            {current && <>
+              <button type="button" className="small" disabled={busy} onClick={() => void rename(current)}>Rename</button>
+              <button type="button" className="small danger-outline" disabled={busy} onClick={() => void trash(current)}>Delete</button>
+            </>}
           </div>
 
           {current && (
