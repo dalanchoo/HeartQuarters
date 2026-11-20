@@ -17,6 +17,7 @@ import {
   type TimedWord,
 } from './api';
 import { ClaudeChat } from './ClaudeChat';
+import { PieceSteps } from './VideoSteps';
 import { CleanUp } from './CleanUp';
 import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
@@ -139,6 +140,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
       <ShortCard
         key={s.id}
         short={s}
+        video={video}
         nearMiss={nearMiss}
         words={transcript?.words ?? null}
         exportFile={exportFile}
@@ -275,6 +277,7 @@ type Clip = { start: number; end: number };
 
 function ShortCard({
   short,
+  video,
   nearMiss,
   words,
   exportFile,
@@ -291,6 +294,7 @@ function ShortCard({
   onStop,
 }: {
   short: PlannedShort;
+  video: string;
   nearMiss: boolean;
   words: TimedWord[] | null;
   exportFile: string | null;
@@ -359,6 +363,7 @@ function ShortCard({
           {nearMiss && short.reason && ` · ${short.reason}`}
         </span>
         {status && <span className="short-status small-text">{status}</span>}
+        {made && <PieceSteps path={`${video}/Shorts/${short.made}`} />}
       </summary>
       {open && (
         <div className="short-card-body">

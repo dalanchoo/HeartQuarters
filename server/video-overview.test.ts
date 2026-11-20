@@ -19,6 +19,26 @@ describe('video overview', () => {
     expect(result[0]).toMatchObject({ link: 'linked', localThumbnail: true });
     expect(result[1]).toMatchObject({ link: 'linked', localThumbnail: false });
   });
+  it('reports the CapCut, Exported and Packaged steps', () => {
+    const old = config.videoProjectsDir; config.videoProjectsDir = tmp;
+    try {
+      fs.mkdirSync(path.join(tmp, 'p/Longform/Packaging/V01'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'p/Longform/Packaging/V01/YouTube.md'), 'Title:\nA Title\n');
+      const doc = { name: 'YouTube.md', path: 'p/Longform/Packaging/V01/YouTube.md', size: 1 };
+      const cover = { name: 'Thumbnail.png', path: 'p/Longform/Packaging/V01/Thumbnail/Thumbnail.png', size: 1 };
+      const video: Video = { name: 'p', path: 'p', pieces: [
+        { name: 'Longform', kind: 'longform', path: 'p/Longform', exports: [{ name: 'p.mp4', path: 'p/Longform/Exports/p.mp4', size: 1 }], packagingVersion: 'V01', drafts: null, versions: [{ name: 'V01', path: 'p/Longform/Packaging/V01', docs: [doc], covers: [cover], notes: null }] },
+        { name: 'p_S01 - One', kind: 'short', path: 'p/Shorts/p_S01 - One', exports: [], packagingVersion: 'V01', drafts: null, versions: [{ name: 'V01', path: 'x', docs: [], covers: [cover], notes: null }] },
+        { name: 'p_S02 - Two', kind: 'short', path: 'p/Shorts/p_S02 - Two', exports: [], packagingVersion: null, drafts: null, versions: [] },
+      ] };
+      const result = makeVideoOverview([{ projectId: 'Group/p', video }], { jobs: [], complete: true }, () => ({ state: 'missing' }), new Set(['p', 'p_s01 - one']));
+      expect(result.map(({ capcut, exported, packaged }) => ({ capcut, exported, packaged }))).toEqual([
+        { capcut: true, exported: true, packaged: true },
+        { capcut: true, exported: false, packaged: false },
+        { capcut: false, exported: false, packaged: false },
+      ]);
+    } finally { config.videoProjectsDir = old; }
+  });
   it('does not call an unreadable record or unknown upload missing', () => {
     const result = makeVideoOverview(videos, { jobs: [{ piece: 'p/Shorts/s', status: 'unknown' }], complete: false }, () => ({ state: 'missing' }));
     expect(result.map((item) => item.link)).toEqual(['unknown', 'unknown']);

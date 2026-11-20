@@ -16,6 +16,7 @@ import { CleanUp } from './CleanUp';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ScriptSection } from './ScriptSection';
 import { ShortsPlanCard } from './ShortsPlan';
+import { OverviewItems, VideoSteps } from './VideoSteps';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { localValue } from './youtubePackaging';
@@ -63,9 +64,8 @@ function CleanupBadge({ item }: { item: VideoOverview }) {
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
-  const text = item.link === 'linked' ? 'YT Linked' : item.link === 'missing' ? 'YT No Link' : 'YT Unknown';
-  const hint = item.link === 'linked' ? 'A YouTube link is saved in HeartQuarters or the longform URL file.' : item.link === 'missing' ? 'No YouTube link is saved here. This does not mean the video is absent from YouTube.' : 'The saved link status could not be determined.';
-  return <span className="status-badges"><span className={`status-pill status-${item.link}`} title={hint}>{text}</span>{!item.localThumbnail && <span className="status-pill status-review" title="The newest packaging version has no Thumbnail\Thumbnail.png or .jpg">No Local Thumbnail</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
+  // The steps bar shows CapCut, Exported, Packaged and Uploaded; the pills after it are things to look at.
+  return <span className="status-badges"><VideoSteps item={item} />{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -214,7 +214,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><div className="split">
+    <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><OverviewItems.Provider value={overview}><div className="split">
       <aside className="sidebar">
         <div className="sidebar-actions">
           <NewFolderButton kind="top" onCreated={onCreated} />
@@ -222,7 +222,7 @@ export function ProjectsPage() {
         </div>
         <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="missing-link">No Saved YouTube Link</option><option value="review">Needs Review</option></select></label>
         <label className="status-filter">Find Video <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" /></label>
-        <p className="status-legend">YT Linked / YT No Link refer to saved links. YouTube checks last for this session; check again after changing Studio.</p>
+        <p className="status-legend">Steps: CapCut project, Exported, Packaged (thumbnail and title), Uploaded (a YouTube link is saved here). Hover a step for details. YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
         <QuotaMeter />
@@ -242,7 +242,7 @@ export function ProjectsPage() {
           <p className="muted">Pick a project on the left.</p>
         )}
       </section>
-    </div></StatusContext.Provider>
+    </div></OverviewItems.Provider></StatusContext.Provider>
   );
 }
 
@@ -287,7 +287,7 @@ function NodeLink({ node, selected }: { node: ProjectNode; selected: string | nu
       {node.number && <span className="num">{node.number}</span>}
       <span className="title">{node.title}</span>
       <span className="badges">
-        {node.exported && <span title="Exported">🎬</span>}
+        {node.exported && !primary && <span title="Exported">🎬</span>}
         {node.kind !== 'short' && node.shortCount > 0 && <span title="Shorts">{node.shortCount}▮</span>}
       </span>
       <StatusBadges item={primary} checks={primary && checks[primary.path]} />
@@ -571,13 +571,13 @@ function rememberOpen(name: string, open: boolean) {
   }
 }
 
-/** "✓ exported · packaging V01" */
+/** "packaging V01" (whether it's exported shows in the steps bar beside it; a reel has no bar, so it says so here) */
 function pieceSummary(piece: Piece): string {
   return (
-    (piece.exports.length > 0 ? '✓ exported' : 'not exported') +
+    (piece.kind === 'reel' ? (piece.exports.length > 0 ? '✓ exported · ' : 'not exported · ') : '') +
     (piece.packagingVersion
-      ? ` · packaging ${versionLabel(piece.packagingVersion)}` + (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
-      : ' · no packaging')
+      ? `packaging ${versionLabel(piece.packagingVersion)}` + (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
+      : 'no packaging')
   );
 }
 
