@@ -1,7 +1,5 @@
 import type { ExpressionIndex } from './api';
-import type { ExpressionShot } from '../../server/expression-shot-list';
 
-export type VideoPromptMode = 'shot-list' | 'library-gaps';
 export type VideoGazeDirection = 'right' | 'left' | 'both';
 
 export interface ExpressionTarget {
@@ -51,12 +49,6 @@ export function findLibraryGaps(index: ExpressionIndex): LibraryGap[] {
       };
     })
     .sort((a, b) => a.count - b.count || a.rightCount - b.rightCount || a.path.localeCompare(b.path));
-}
-
-function formatShotExpression(shot: ExpressionShot): ExpressionTarget {
-  const folder = shot.category.split('/').join(' > ');
-  const label = [folder, shot.title].filter(Boolean).join(': ') || shot.description;
-  return { label, detail: label === shot.description ? undefined : shot.description || undefined };
 }
 
 function formatGapExpression(gap: LibraryGap): ExpressionTarget {
@@ -116,21 +108,17 @@ export function buildVideoPrompts(
   });
 }
 
-export function buildPromptsFromShotList(
-  shots: ExpressionShot[],
-  gaze: VideoGazeDirection,
-  perClip = 3,
-): GeneratedVideoPrompt[] {
-  const remaining = shots.filter((s) => !s.done).map(formatShotExpression);
-  return buildVideoPrompts(remaining, gaze, perClip);
-}
+/** How many of the emptiest folders one prompt chooses from, so each click gives a different mix. */
+const POOL = 12;
 
-export function buildPromptsFromGaps(
-  gaps: LibraryGap[],
-  gaze: VideoGazeDirection,
-  perClip = 3,
-  maxExistingPhotos = 2,
-): GeneratedVideoPrompt[] {
-  const needed = gaps.filter((g) => g.count <= maxExistingPhotos).map(formatGapExpression);
-  return buildVideoPrompts(needed, gaze, perClip);
+/**
+ * One ready-to-paste video prompt for expressions the library lacks: three folders picked at random
+ * from the twelve with the fewest photos. Gestural folders are left out because they are hand
+ * gestures rather than faces.
+ */
+export function buildLackingVideoPrompt(index: ExpressionIndex, random: () => number = Math.random, count = 3): GeneratedVideoPrompt | null {
+  const pool = findLibraryGaps(index).filter((g) => !g.path.startsWith('Gestural/')).slice(0, POOL);
+  const picked: LibraryGap[] = [];
+  while (picked.length < count && pool.length) picked.push(pool.splice(Math.floor(random() * pool.length), 1)[0]);
+  return buildVideoPrompts(picked.map(formatGapExpression), 'right', count)[0] ?? null;
 }

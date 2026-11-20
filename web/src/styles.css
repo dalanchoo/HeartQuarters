@@ -889,13 +889,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .ai-tell-mark { position: relative; text-decoration: underline wavy #7e22ce 2px; text-underline-offset: 2px; background: #f3e8ff; color: #581c87; border-radius: 3px; cursor: help; }
 .diff-local .ai-tell-mark, .diff-youtube .ai-tell-mark { background: transparent; color: inherit; box-shadow: 0 -1px 0 #7e22ce inset; }
 .ai-tell-mark:hover::after { content: attr(data-ai-tell); position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 20; width: max-content; max-width: 24rem; padding: 0.3rem 0.55rem; border-radius: 6px; background: #3b0764; color: #fff; font-size: 0.78rem; font-weight: 500; line-height: 1.35; white-space: normal; box-shadow: 0 4px 12px rgba(0,0,0,0.25); pointer-events: none; }
-.video-prompt-controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; margin: 0.5rem 0 0.75rem; }
-.video-prompt-controls label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; font-weight: 600; }
-.video-prompt-list { display: flex; flex-direction: column; gap: 0.45rem; }
-.video-prompt-card { margin: 0; background: var(--bg); }
-.video-prompt-head { display: flex; align-items: center; gap: 0.5rem; }
-.video-prompt-head > button { margin-left: auto; }
-.video-prompt-text { margin: 0.5rem 0 0; white-space: pre-wrap; font: inherit; font-size: 0.86rem; line-height: 1.45; }
+.generated-video-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 0; }
 .generated-videos-layout { margin-top: 0.65rem; }
 .generated-video-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
 .generated-video-picker select { max-width: 100%; }

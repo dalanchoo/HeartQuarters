@@ -1,16 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import type { ShotReference } from '../../server/shot-reference';
-import { CopyButton } from './PackagingDoc';
 import { ExpressionVideos } from './ExpressionVideos';
-import {
-  buildPromptsFromGaps,
-  buildPromptsFromShotList,
-  findLibraryGaps,
-  type VideoGazeDirection,
-  type VideoPromptMode,
-} from './expressionVideoPrompts';
 
 export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
@@ -20,10 +12,6 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const [copied, setCopied] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [promptMode, setPromptMode] = useState<VideoPromptMode>('shot-list');
-  const [gaze, setGaze] = useState<VideoGazeDirection>('right');
-  const [perClip, setPerClip] = useState(3);
-  const [maxPhotos, setMaxPhotos] = useState(2);
 
   useEffect(() => {
     if (!active) return;
@@ -77,12 +65,6 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
 
   const remaining = shots?.filter(shot => !shot.done) ?? [];
   const photographed = shots?.filter(shot => shot.done) ?? [];
-  const gaps = useMemo(() => (index ? findLibraryGaps(index) : []), [index]);
-  const gapMatches = useMemo(() => gaps.filter(g => g.count <= maxPhotos), [gaps, maxPhotos]);
-  const videoPrompts = useMemo(() => {
-    if (promptMode === 'shot-list') return buildPromptsFromShotList(shots ?? [], gaze, perClip);
-    return buildPromptsFromGaps(gaps, gaze, perClip, maxPhotos);
-  }, [promptMode, shots, gaps, gaze, perClip, maxPhotos]);
 
   const known = new Set(index?.categories.map(c => c.path) ?? []);
   const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
@@ -143,68 +125,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
       {section('To Photograph', remaining, true, 'No shots waiting to be photographed.')}
       {section('Photographed', photographed, false, 'No photographed shots yet.')}
     </section>}
-    <details className="yt-section video-prompt-builder">
-      <summary>AI Video Prompts (Seed With Reference Photo)</summary>
-      <p className="muted small-text">
-        Google Veo in Gemini generates up to 8 seconds per clip (up to 15 seconds on newer Gemini video models). Using 3 expressions per 8s clip (or 2 when turning both directions) leaves room for smooth head turns and a ~1.5s still hold on each pose.
-      </p>
-      <div className="video-prompt-controls">
-        <label>
-          Source{' '}
-          <select value={promptMode} onChange={e => setPromptMode(e.target.value as VideoPromptMode)}>
-            <option value="shot-list">From Shot List ({remaining.length} waiting)</option>
-            <option value="library-gaps">Fill Library Gaps ({gapMatches.length} categories)</option>
-          </select>
-        </label>
-        <label>
-          Gaze Direction{' '}
-          <select value={gaze} onChange={e => setGaze(e.target.value as VideoGazeDirection)}>
-            <option value="right">Camera Right (for Left Side of Thumbnail)</option>
-            <option value="left">Camera Left (for Right Side of Thumbnail)</option>
-            <option value="both">Both (Right Then Left)</option>
-          </select>
-        </label>
-        <label>
-          Expressions per Clip{' '}
-          <select value={perClip} onChange={e => setPerClip(Number(e.target.value))}>
-            <option value={2}>2 (8s clip w/ both turns)</option>
-            <option value={3}>3 (8s Veo clip)</option>
-            <option value={4}>4 (~10–12s clip)</option>
-            <option value={5}>5 (~12–15s clip)</option>
-          </select>
-        </label>
-        {promptMode === 'library-gaps' && (
-          <label>
-            Include Categories With{' '}
-            <select value={maxPhotos} onChange={e => setMaxPhotos(Number(e.target.value))}>
-              <option value={0}>0 photos (Empty only)</option>
-              <option value={1}>0–1 photos</option>
-              <option value={2}>0–2 photos</option>
-              <option value={3}>0–3 photos</option>
-            </select>
-          </label>
-        )}
-      </div>
 
-      {!videoPrompts.length ? (
-        <p className="muted small-text">
-          {promptMode === 'shot-list' ? 'No shots waiting in To Photograph.' : 'No expression categories match that photo count.'}
-        </p>
-      ) : (
-        <div className="video-prompt-list">
-          {videoPrompts.map((item, i) => (
-            <details className="yt-section video-prompt-card" key={i}>
-              <summary className="video-prompt-head">
-                <strong>{item.title}</strong>
-                <CopyButton text={item.prompt} label="Copy Prompt" />
-              </summary>
-              <pre className="video-prompt-text">{item.prompt}</pre>
-            </details>
-          ))}
-        </div>
-      )}
-    </details>
-
-    <ExpressionVideos active={active} />
+    <ExpressionVideos active={active} index={index} />
   </section>;
 }

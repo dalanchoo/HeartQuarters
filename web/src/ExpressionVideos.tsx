@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { formatSize, getJson, openInExplorer, postJson } from './api';
+import { copyText, formatSize, getJson, openInExplorer, postJson, type ExpressionIndex } from './api';
+import { buildLackingVideoPrompt } from './expressionVideoPrompts';
 import type { GeneratedVideo } from '../../server/expression-videos';
 
 function formatTime(sec: number): string {
@@ -23,7 +24,15 @@ async function uploadVideoFile(file: File): Promise<GeneratedVideo> {
   return body as GeneratedVideo;
 }
 
-export function ExpressionVideos({ active }: { active: boolean }) {
+export function ExpressionVideos({ active, index }: { active: boolean; index: ExpressionIndex | null }) {
+  const [promptNote, setPromptNote] = useState('');
+  const copyPrompt = async () => {
+    const prompt = index ? buildLackingVideoPrompt(index) : null;
+    if (!prompt) { setPromptNote('No expression folders to choose from yet.'); return; }
+    setPromptNote(await copyText(prompt.prompt)
+      ? `Copied a prompt for ${prompt.expressions.join(', ')}. Paste it into Gemini with a reference photo of you, then add the video below.`
+      : 'Could not copy the prompt. Try again.');
+  };
   const [videos, setVideos] = useState<GeneratedVideo[]>([]);
   const [selected, setSelected] = useState('');
   const [fps, setFps] = useState(24);
@@ -167,6 +176,12 @@ export function ExpressionVideos({ active }: { active: boolean }) {
       <p className="muted small-text">
         Step through AI-generated expression videos frame by frame and save the best frames straight into your Expression Inbox (marked as AI).
       </p>
+
+      <div className="generated-video-prompt">
+        <button type="button" disabled={!index} onClick={() => void copyPrompt()}>Copy Video Prompt</button>
+        <span className="muted small-text">Picks three expressions your library is lacking. Each click picks a new mix.</span>
+      </div>
+      {promptNote && <p role="status" className="small-text">{promptNote}</p>}
 
       <details className="yt-section" open={videos.length === 0}>
       <summary>Add Videos</summary>
