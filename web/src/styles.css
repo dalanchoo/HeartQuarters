@@ -113,6 +113,8 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .trim-handle:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .trim-scale { display: flex; justify-content: space-between; gap: 0.6rem; margin-top: 0.2rem; }
 .short-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
+.error-note { display: flex; align-items: center; gap: 0.6rem; margin: 0.4rem 0; padding: 0.55rem 0.75rem; border: 1px solid var(--bad); border-left-width: 5px; border-radius: 6px; background: #fff0ef; color: var(--bad); font-weight: 600; }
+.error-note svg { flex: 0 0 auto; }
 .unmade-shorts, .made-shorts, .near-misses { margin-top: 0.8rem; }
 .unmade-shorts > summary, .made-shorts > summary, .near-misses > summary { cursor: pointer; font-weight: 600; margin-bottom: 0.3rem; }
 .unmade-shorts > :not(summary), .made-shorts > :not(summary), .near-misses > :not(summary) { margin-left: 1.2rem; }

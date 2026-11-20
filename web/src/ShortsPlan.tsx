@@ -34,6 +34,8 @@ export function ShortsPlanCard({ video }: { video: string }) {
   const [draft, setDraft] = useState('');
   const [making, setMaking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A failed Make or Regenerate shows its message under that short's buttons, not at the top.
+  const [makeError, setMakeError] = useState<{ id: string; message: string } | null>(null);
 
   const fail = (e: Error) => setError(e.message);
   const saveSeq = useRef(0);
@@ -122,9 +124,10 @@ export function ShortsPlanCard({ video }: { video: string }) {
   };
   const make = (s: PlannedShort, how: 'make' | 'regenerate' = 'make') => {
     setError(null);
+    setMakeError(null);
     setMaking(s.id);
     postJson(`/api/shorts/${how}`, { video, id: s.id, draft: source })
-      .then(refresh, fail)
+      .then(refresh, (e: Error) => setMakeError({ id: s.id, message: e.message }))
       .finally(() => setMaking(null));
   };
 
@@ -141,6 +144,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
         exportFile={exportFile}
         build={builds[s.id] ?? null}
         making={making === s.id}
+        makeError={makeError?.id === s.id ? makeError.message : null}
         canMake={!!source && !making}
         onChange={(next) => put(list.map((x) => (x.id === s.id ? next : x)))}
         onDelete={() => put(list.filter((x) => x.id !== s.id))}
@@ -276,6 +280,7 @@ function ShortCard({
   exportFile,
   build,
   making,
+  makeError,
   canMake,
   onChange,
   onDelete,
@@ -291,6 +296,7 @@ function ShortCard({
   exportFile: string | null;
   build: ClaudeRun | null;
   making: boolean;
+  makeError: string | null;
   canMake: boolean;
   onChange: (next: PlannedShort) => void;
   onDelete: () => void;
@@ -441,6 +447,7 @@ function ShortCard({
               </button>
             )}
           </div>
+          {makeError && <ErrorNote message={makeError} />}
 
           {build && (
             <ClaudeChat
@@ -880,5 +887,18 @@ function TimeField({ value, disabled, onCommit }: { value: number; disabled: boo
         else if (showTime(t) !== showTime(value)) onCommit(t);
       }}
     />
+  );
+}
+
+/** An error that needs to be noticed: a red box with a red circle-X icon, placed next to the button that failed. */
+function ErrorNote({ message }: { message: string }) {
+  return (
+    <div className="error-note" role="alert">
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="currentColor" />
+        <path d="M8 8l8 8M16 8l-8 8" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+      </svg>
+      <span>{message}</span>
+    </div>
   );
 }
