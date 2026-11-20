@@ -32,7 +32,23 @@ export function units(count: number): string {
   return `about ${n(count)} unit${count === 1 ? '' : 's'}`;
 }
 
-/** Shown by the Check Linked Videos button: always visible, so John knows what he has left. */
+/**
+ * In the title bar: how much of today's YouTube quota is used, in a few words. Click it for the details, which fold
+ * away again. Turns red when the quota is used up.
+ */
+export function QuotaBadge() {
+  const quota = useYoutubeQuota();
+  if (!quota) return null;
+  const out = quota.exhausted || quota.used >= quota.limit;
+  return (
+    <details className={`quota-badge${out ? ' quota-out' : ''}`}>
+      <summary title="YouTube quota today">YouTube {out ? 'Quota Used Up' : `${n(quota.used)} / ${n(quota.limit)}`}</summary>
+      <div className="quota-badge-panel"><QuotaMeter /></div>
+    </details>
+  );
+}
+
+/** The quota in full: what's used, when it starts again, uploads, and Analytics and Reporting requests. */
 export function QuotaMeter() {
   const quota = useYoutubeQuota();
   if (!quota) return null;

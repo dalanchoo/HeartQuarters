@@ -1,5 +1,6 @@
 import { Component, useEffect, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { AiPicker } from './AiPicker';
+import { QuotaBadge } from './youtubeQuota';
 import { postJson } from './api';
 
 // A page load starts with no old AI conversations (John, 2026-11-12). Done once here, not on every tab change.
@@ -122,6 +123,7 @@ export function App() {
             </a>
           ))}
         </nav>
+        <QuotaBadge />
         <AiPicker />
       </header>
       <main>

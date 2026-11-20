@@ -21,7 +21,7 @@ import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { localValue } from './youtubePackaging';
 import { PieceAI } from './PieceAI';
-import { QuotaMeter, quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
+import { quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
 import { DraftsSection } from './DraftsSection';
 import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
@@ -233,12 +233,15 @@ export function ProjectsPage() {
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
-        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="review">Needs Review</option><option value="clean-up">Can Clean Up</option></select></label>
-        <label className="status-filter">Find Video <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" /></label>
-        <p className="status-legend">YouTube checks last for this session; check again after changing Studio.</p>
-        <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
-        <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
-        <QuotaMeter />
+        {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
+        <div className="sidebar-filters">
+          <label htmlFor="video-show">Show</label>
+          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="review">Needs Review</option><option value="clean-up">Can Clean Up</option></select>
+          <label htmlFor="video-find">Find</label>
+          <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
+        </div>
+        <button className="small" title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
+        <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
         <ChannelAnalytics />
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}

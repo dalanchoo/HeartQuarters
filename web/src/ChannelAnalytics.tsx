@@ -15,7 +15,7 @@ export function ChannelAnalytics() {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  return <details className="sidebar-section">
+  return <details className="sidebar-section channel-analytics">
     <summary>Channel Analytics</summary>
     <button type="button" disabled={busy} onClick={() => void download()}>{busy ? 'Downloading Channel Stats…' : 'Download Channel Stats'}</button>
     <span className="muted small-text"> about 1 Data API unit + 9 Analytics units; reach reporting may add up to 101 Reporting requests</span>
