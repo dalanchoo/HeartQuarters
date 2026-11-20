@@ -11,7 +11,7 @@ import {
   type ExpressionPhoto,
 } from './api';
 import { CopyButton } from './PackagingDoc';
-import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
+import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences, readChosenLikeness, saveChosenLikeness } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator, LikenessPicker } from './ExpressionGenerator';
@@ -63,7 +63,9 @@ export function ExpressionsPage() {
   // Reference Photos: the photos that show the AI what John looks like. Separate from the stars.
   const [likeness, setLikeness] = useState<string[]>([]);
   const [likenessBusy, setLikenessBusy] = useState(false);
-  const [likenessChosen, setLikenessChosen] = useState<string[]>([]);
+  // The likeness photos picked last time come back after a reload.
+  const [likenessChosen, setLikenessChosen] = useState<string[]>(() => { try { return readChosenLikeness(localStorage); } catch { return []; } });
+  const chooseLikeness = (paths: string[]) => { setLikenessChosen(paths); try { saveChosenLikeness(localStorage, paths); } catch { /* only a convenience */ } };
   useEffect(() => { if (index) setLikenessChosen(current => current.filter(path => index.photos.some(photo => photo.path === path))); }, [index]);
   // Photos unmarked while the Library shows only Starred or Reference Photos stay in view until the Photos choice changes.
   const [keptInView, setKeptInView] = useState<string[]>([]);
@@ -236,7 +238,7 @@ export function ExpressionsPage() {
             {generationSelection?.definition && <p>{generationSelection.definition}</p>}
           </div>
         </div>
-        <LikenessPicker chosen={likenessChosen} onChoose={setLikenessChosen} references={likeness} photos={index.photos} categories={index.categories} starBusy={likenessBusy} onToggleStar={(path, on) => void setLikenessPhoto(path, on)} onViewPhoto={(photo) => setPreview({ photo })} />
+        <LikenessPicker chosen={likenessChosen} onChoose={chooseLikeness} references={likeness} photos={index.photos} categories={index.categories} starBusy={likenessBusy} onToggleStar={(path, on) => void setLikenessPhoto(path, on)} onViewPhoto={(photo) => setPreview({ photo })} />
         </div>
         {referenceError && <p className="error">{referenceError}</p>}
         {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator category={generationSelection} chosen={likenessChosen} onStarted={() => setCandidateRevision(n => n + 1)} />}

@@ -17,6 +17,13 @@ export function readReferences(storage: Pick<Storage, 'getItem'>): string[] {
 }
 export function saveReferences(storage: Pick<Storage, 'setItem'>, paths: string[]): void { storage.setItem(KEY, JSON.stringify([...new Set(paths)])); }
 
+/** The likeness photos last picked in Generate & Review, remembered in this browser (at most five). */
+const CHOSEN_KEY = 'hq-likeness-chosen';
+export function readChosenLikeness(storage: Pick<Storage, 'getItem'>): string[] {
+  try { const value: unknown = JSON.parse(storage.getItem(CHOSEN_KEY) ?? '[]'); return Array.isArray(value) ? [...new Set(value.filter((p): p is string => typeof p === 'string'))].slice(0, 5) : []; } catch { return []; }
+}
+export function saveChosenLikeness(storage: Pick<Storage, 'setItem'>, paths: string[]): void { try { storage.setItem(CHOSEN_KEY, JSON.stringify([...new Set(paths)].slice(0, 5))); } catch { /* only a convenience */ } }
+
 export function generationCategories(categories: ExpressionCategory[]): ExpressionCategory[] {
   const parents = new Set(categories.map(c => c.parent));
   return categories.filter(c => !!c.path && !parents.has(c.path));

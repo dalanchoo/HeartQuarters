@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { filterCategoryOptions, filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readReferences, readyCandidateCount, saveReferences, suggestedCategories } from './expressionPlanning';
+import { filterCategoryOptions, filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, nextCategoryIndex, readChosenLikeness, readReferences, readyCandidateCount, saveChosenLikeness, saveReferences, suggestedCategories } from './expressionPlanning';
 import type { ExpressionCategory } from './api';
 describe('expression planning', () => {
   it('remembers distinct reference paths and handles damaged data', () => {
     let value = ''; const storage = { getItem: () => value, setItem: (_key: string, v: string) => { value = v; } };
     saveReferences(storage, ['a.jpg', 'a.jpg', 'b.jpg']); expect(readReferences(storage)).toEqual(['a.jpg', 'b.jpg']);
     value = '{'; expect(readReferences(storage)).toEqual([]);
+  });
+  it('remembers up to five chosen likeness photos and survives damaged or blocked storage', () => {
+    let value: string | null = null; const storage = { getItem: () => value, setItem: (_key: string, v: string) => { value = v; } };
+    expect(readChosenLikeness(storage)).toEqual([]);
+    saveChosenLikeness(storage, ['a.jpg', 'a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg', 'f.jpg']);
+    expect(readChosenLikeness(storage)).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg']);
+    value = '{'; expect(readChosenLikeness(storage)).toEqual([]);
+    expect(() => saveChosenLikeness({ setItem: () => { throw new Error('blocked'); } }, ['a.jpg'])).not.toThrow();
   });
   it('suggests sparse useful leaf categories first', () => {
     const category = (path: string, name: string, parent: string, ownCount: number): ExpressionCategory => ({ path, name, parent, ownCount, totalCount: ownCount, reference: null, definition: null });
