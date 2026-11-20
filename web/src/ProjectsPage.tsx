@@ -38,12 +38,24 @@ import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 import { ChannelAnalytics } from './ChannelAnalytics';
 
-type Filter = 'all' | 'missing-link' | 'review';
+type Filter = 'all' | 'no-capcut' | 'not-exported' | 'not-packaged' | 'not-uploaded' | 'review' | 'clean-up';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 function needsReview(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return item.link !== 'linked' || !item.localThumbnail || !!checks[item.path]?.issues.length || !!checks[item.path]?.unknown.length; }
-function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks>, filter: Filter): boolean {
-  return filter === 'all' || (filter === 'missing-link' && item.link === 'missing') || (filter === 'review' && needsReview(item, checks));
+/** Whether Clean Up has files for this video (for a longform, also Make Shorts' plan and graphs). */
+function canCleanUp(item: VideoOverview, cleanup: CleanupStatus['pieces']): boolean {
+  return (cleanup[item.path]?.files ?? 0) > 0 || (item.kind === 'longform' && (cleanup[`${item.projectId}/Shorts`]?.files ?? 0) > 0);
+}
+function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks>, filter: Filter, cleanup: CleanupStatus['pieces'] = {}): boolean {
+  switch (filter) {
+    case 'all': return true;
+    case 'no-capcut': return !item.capcut;
+    case 'not-exported': return !item.exported;
+    case 'not-packaged': return !item.packaged;
+    case 'not-uploaded': return item.link !== 'linked';
+    case 'review': return needsReview(item, checks);
+    case 'clean-up': return canCleanUp(item, cleanup);
+  }
 }
 /**
  * Can Clean Up: Clean Up has files for this piece (for a longform, also Make Shorts' plan and graphs). Clean Up Blocked:
@@ -220,9 +232,9 @@ export function ProjectsPage() {
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
-        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="missing-link">No Saved YouTube Link</option><option value="review">Needs Review</option></select></label>
+        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="not-packaged">Not Packaged</option><option value="not-uploaded">Not Uploaded</option><option value="review">Needs Review</option><option value="clean-up">Can Clean Up</option></select></label>
         <label className="status-filter">Find Video <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" /></label>
-        <p className="status-legend">Steps: CapCut project, Exported, Packaged (thumbnail and title), Uploaded (a YouTube link is saved here). Hover a step for details. YouTube checks last for this session; check again after changing Studio.</p>
+        <p className="status-legend">YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
         <span className="muted small-text"> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
         <QuotaMeter />
@@ -280,29 +292,27 @@ function NoteBox({ note, onDismiss }: { note: Note; onDismiss: () => void }) {
 }
 
 function NodeLink({ node, selected }: { node: ProjectNode; selected: string | null }) {
-  const { items, checks, focus } = useContext(StatusContext);
-  const primary = items.find((item) => item.projectId === node.id && (item.kind === 'longform' || node.kind === 'short'));
+  const { focus } = useContext(StatusContext);
   return (
     <a href={linkTo(node.id)} className={`project-link ${node.id === selected && !focus ? 'active' : ''}`}>
       {node.number && <span className="num">{node.number}</span>}
       <span className="title">{node.title}</span>
       <span className="badges">
-        {node.exported && !primary && <span title="Exported">🎬</span>}
+        {node.exported && <span title="Exported">🎬</span>}
         {node.kind !== 'short' && node.shortCount > 0 && <span title="Shorts">{node.shortCount}▮</span>}
       </span>
-      <StatusBadges item={primary} checks={primary && checks[primary.path]} />
     </a>
   );
 }
 
 /** One row in the sidebar; series and groups can be expanded to show what's inside. */
 function TreeItem({ node, selected, filter, search }: { node: ProjectNode; selected: string | null; filter: Filter; search: string }) {
-  const { items, checks, focus } = useContext(StatusContext);
+  const { items, checks, focus, cleanup } = useContext(StatusContext);
   const relevant = items.filter((item) => item.projectId === node.id || item.projectId.startsWith(`${node.id}/`));
-  if (filter !== 'all' && !relevant.some((item) => matchesFilter(item, checks, filter))) return null;
+  if (filter !== 'all' && !relevant.some((item) => matchesFilter(item, checks, filter, cleanup))) return null;
   const nodeMatches = matchesProjectSearch(node.id, node.title, search);
-  if (search.trim() && !nodeMatches && !relevant.some(item => matchesFilter(item, checks, filter) && matchesVideoSearch(item, search))) return null;
-  const shorts = node.kind !== 'short' ? items.filter((item) => item.projectId === node.id && item.kind === 'short' && matchesFilter(item, checks, filter) && (nodeMatches || matchesVideoSearch(item, search))) : [];
+  if (search.trim() && !nodeMatches && !relevant.some(item => matchesFilter(item, checks, filter, cleanup) && matchesVideoSearch(item, search))) return null;
+  const shorts = node.kind !== 'short' ? items.filter((item) => item.projectId === node.id && item.kind === 'short' && matchesFilter(item, checks, filter, cleanup) && (nodeMatches || matchesVideoSearch(item, search))) : [];
   if (node.children.length === 0 && shorts.length === 0) {
     return (
       <div className="tree-leaf">
@@ -320,7 +330,7 @@ function TreeItem({ node, selected, filter, search }: { node: ProjectNode; selec
         {ordered(node, node.children).map((c) => (
           <TreeItem key={c.id} node={c} selected={selected} filter={filter} search={search} />
         ))}
-        {shorts.map((short) => <a key={short.path} href={`${linkTo(node.id)}/${encodeURIComponent(short.path)}`} className={`project-link short-tree-link ${focus === short.path && selected === node.id ? 'active' : ''}`}><span className="title">{short.name}</span><StatusBadges item={short} checks={checks[short.path]} /></a>)}
+        {shorts.map((short) => <a key={short.path} href={`${linkTo(node.id)}/${encodeURIComponent(short.path)}`} className={`project-link short-tree-link ${focus === short.path && selected === node.id ? 'active' : ''}`}><span className="title">{short.name}</span></a>)}
       </div>
     </details>
   );
