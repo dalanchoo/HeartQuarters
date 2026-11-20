@@ -846,7 +846,7 @@ function PieceCard({
   return (
     <details
       ref={card}
-      className="card piece-card"
+      className={`card piece-card${piece.kind === 'short' ? ' short-row' : ''}`}
       open={open}
       onToggle={(e) => {
         const now = e.currentTarget.open;
