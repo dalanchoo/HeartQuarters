@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { copyText, formatSize, getJson, openInExplorer, postJson, type ExpressionIndex } from './api';
+import { copyText, fileUrl, formatSize, getJson, openInExplorer, postJson, type ExpressionIndex } from './api';
 import { buildLackingVideoPrompt } from './expressionVideoPrompts';
 import type { GeneratedVideo } from '../../server/expression-videos';
 
@@ -26,6 +26,25 @@ async function uploadVideoFile(file: File): Promise<GeneratedVideo> {
 
 export function ExpressionVideos({ active, index }: { active: boolean; index: ExpressionIndex | null }) {
   const [promptNote, setPromptNote] = useState('');
+  /** Copy the first starred photo (or a Neutral one) as a picture, ready to paste into Gemini with Ctrl+V. */
+  const copyPhoto = async () => {
+    setPromptNote('');
+    try {
+      const starred = (await getJson<{ paths: string[] }>('/api/expression-references')).paths;
+      const photos = index?.photos ?? [];
+      const photo = starred.map(p => photos.find(item => item.path === p)).find(Boolean) ?? photos.find(item => item.category === 'Neutral');
+      if (!photo) { setPromptNote('Star a photo of yourself in Generate & Review first.'); return; }
+      const response = await fetch(fileUrl('expressions', photo.path));
+      if (!response.ok) throw new Error('The photo could not be read.');
+      // Clipboards accept pictures as PNG, so the photo is redrawn as one.
+      const bitmap = await createImageBitmap(await response.blob());
+      const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+      canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+      const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The photo could not be converted.')), 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      setPromptNote(`Copied ${photo.name}. Press Ctrl+V in Gemini to attach it, then copy the prompt.`);
+    } catch (e) { setPromptNote(`Could not copy the photo: ${e instanceof Error ? e.message : String(e)}`); }
+  };
   const copyPrompt = async () => {
     const prompt = index ? buildLackingVideoPrompt(index) : null;
     if (!prompt) { setPromptNote('No expression folders to choose from yet.'); return; }
@@ -178,8 +197,9 @@ export function ExpressionVideos({ active, index }: { active: boolean; index: Ex
       </p>
 
       <div className="generated-video-prompt">
+        <button type="button" disabled={!index} onClick={() => void copyPhoto()}>Copy Reference Photo</button>
         <button type="button" disabled={!index} onClick={() => void copyPrompt()}>Copy Video Prompt</button>
-        <span className="muted small-text">Picks three expressions your library is lacking. Each click picks a new mix.</span>
+        <span className="muted small-text">Paste the photo into Gemini, then the prompt. The prompt picks three expressions your library is lacking, a new mix each click.</span>
       </div>
       {promptNote && <p role="status" className="small-text">{promptNote}</p>}
 
