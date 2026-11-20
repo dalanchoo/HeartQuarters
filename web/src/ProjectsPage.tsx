@@ -39,7 +39,7 @@ import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 import { ChannelAnalytics } from './ChannelAnalytics';
 
-type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'different' | 'clean-up';
+type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'different' | 'no-comment' | 'clean-up';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 /**
@@ -60,6 +60,7 @@ function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks
     case 'no-thumbnail': return !item.localThumbnail;
     case 'not-uploaded': return item.link !== 'linked';
     case 'different': return problemsOnYoutube(item, checks);
+    case 'no-comment': return !!checks[item.path]?.issues.includes('no comment posted');
     case 'clean-up': return canCleanUp(item, cleanup);
   }
 }
@@ -250,7 +251,7 @@ export function ProjectsPage() {
         {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
         <div className="sidebar-filters">
           <label htmlFor="video-show">Show</label>
-          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different">Problems on YouTube</option><option value="clean-up">Can Clean Up</option></select>
+          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different">Problems on YouTube</option><option value="no-comment">No Comment Posted</option><option value="clean-up">Can Clean Up</option></select>
           <label htmlFor="video-find">Find</label>
           <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
         </div>
