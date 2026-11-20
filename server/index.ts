@@ -69,6 +69,7 @@ import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAna
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
+import { checkOwnComments } from './youtube-comment.js';
 
 const app = express();
 app.use(guard); // see security.ts: blocks other websites
@@ -109,6 +110,8 @@ app.get('/api/youtube/callback', (req, res) => {
 });
 app.get('/api/youtube/channel', (_req, res) => { youtubeChannel().then((channel) => res.json(channel), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 // ?ids=a,b,c (up to 50): video details for the review tags, without captions.
+// ?ids=a,b,…: whether the channel's own comment is posted on each video (1 unit per video).
+app.get('/api/youtube/own-comments', (req, res) => { checkOwnComments(req.query.ids).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/check-videos', (req, res) => { checkYoutubeVideos(req.query.ids).then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/playlists', (_req, res) => { youtubePlaylists().then((playlists) => res.json(playlists), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });
 app.get('/api/youtube/video-settings', (req, res) => { existingYoutubeSettings(String(req.query.piece ?? ''), String(req.query.id ?? ''), req.query.captions !== '0').then((result) => res.json(result), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) })); });

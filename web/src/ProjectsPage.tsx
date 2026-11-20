@@ -34,6 +34,7 @@ import type { VideoOverview } from '../../server/video-overview';
 import type { CleanupStatus } from '../../server/cleanup-status';
 import type { YoutubeChecks } from './videoChecks';
 import { checkYoutubeVideo } from './videoChecks';
+import type { CommentCheck } from '../../server/youtube-comment';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 import { ChannelAnalytics } from './ChannelAnalytics';
@@ -189,8 +190,9 @@ export function ProjectsPage() {
     const candidates = overview.filter((item) => item.videoId);
     const ambiguous = overview.filter((item) => item.link === 'linked' && !item.videoId).length;
     if (!candidates.length) { setScan('No uniquely linked videos are available to check.'); return; }
-    // Title, description, tags, thumbnail and chapters, 50 videos to a YouTube request (about 1 unit each). Captions
-    // cost 50 units per video, so they're checked on one video's card instead.
+    // Title, description, tags, thumbnail and chapters, 50 videos to a YouTube request (about 1 unit each), then whether
+    // your own comment is posted (1 unit per video). Captions cost 50 units per video, so they're checked on one
+    // video's card instead.
     const epoch = ++scanEpoch.current; let done = 0; let missing = 0; let stopped = '';
     setScanning(true); setScan(`Checking 0 of ${candidates.length}…`);
     for (let i = 0; i < candidates.length && epoch === scanEpoch.current; i += 50) {
@@ -200,9 +202,12 @@ export function ProjectsPage() {
         if (epoch !== scanEpoch.current) break;
         const found = batch.filter((item) => videos[item.videoId!]);
         missing += batch.length - found.length;
+        // A failed comment check leaves those videos "not confirmed" rather than stopping the whole check.
+        const comments = found.length ? await getJson<Record<string, CommentCheck>>(`/api/youtube/own-comments?ids=${found.map((item) => encodeURIComponent(item.videoId!)).join(',')}`).catch(() => ({} as Record<string, CommentCheck>)) : {};
+        if (epoch !== scanEpoch.current) break;
         setChecks((old) => ({
           ...old,
-          ...Object.fromEntries(batch.map((item) => [item.path, videos[item.videoId!] ? checkYoutubeVideo(videos[item.videoId!], undefined, item.kind === 'short') : { issues: [], unknown: ['YouTube did not return this video'] }])),
+          ...Object.fromEntries(batch.map((item) => [item.path, videos[item.videoId!] ? checkYoutubeVideo(videos[item.videoId!], undefined, item.kind === 'short', comments[item.videoId!] ?? null) : { issues: [], unknown: ['YouTube did not return this video'] }])),
         }));
         done += batch.length; setScan(`Checking ${done} of ${candidates.length}…`);
       } catch (e) { stopped = e instanceof Error ? e.message : String(e); break; }
@@ -250,7 +255,7 @@ export function ProjectsPage() {
           <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
         </div>
         <button className="small" title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
-        <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)))}</span>
+        <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
         <ChannelAnalytics />
         {scan && <p className="status-legend" role="status">{scan}</p>}
         {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}

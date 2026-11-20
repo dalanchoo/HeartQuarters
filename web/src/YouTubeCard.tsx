@@ -13,7 +13,8 @@ import { ChoiceField } from './ChoiceField';
 import { fieldChoices, localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { copyValuesMatch, metadataDiff, type DiffPart } from './metadataDiff';
-import { checkYoutubeVideo } from './videoChecks';
+import { checkYoutubeVideo, sameComment } from './videoChecks';
+import type { CommentCheck } from '../../server/youtube-comment';
 import { cachedYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
@@ -306,6 +307,18 @@ type RowKey = SyncField | 'Thumbnail' | 'Captions';
 const VIEW_KEY = 'hq-local-vs-youtube-view';
 // The order of the rows. Fields YouTube doesn't have are shown from the file only.
 const ORDER = ['Title', 'Description', 'Hashtags', 'Tags', 'Pinned Comment', 'Video language', 'Made for kids', 'Altered content'];
+/**
+ * Pinned Comment's YouTube column, once the video has been read: whether your own comment is posted and whether it
+ * matches this file. YouTube doesn't tell apps which comment is pinned, so that part is always checked in Studio.
+ */
+function CommentStatus({ comment, local }: { comment: CommentCheck | null; local: string }) {
+  if (comment === null) return <p className="muted small-text">Couldn't check the comments on YouTube.</p>;
+  if (comment.disabled) return <p className="muted small-text">Comments are turned off on this video.</p>;
+  if (!comment.posted) return <p className="small-text comment-missing">✗ You haven't posted a comment on this video yet. Post the pinned comment and pin it in Studio.</p>;
+  const matches = (comment.texts ?? []).some((text) => sameComment(text, local));
+  return <p className="small-text comment-posted">{matches ? '✓ Your comment is posted and matches this file.' : '✓ You posted a comment, but its text differs from this file.'} Apps can't see whether it's pinned: check that in Studio.</p>;
+}
+
 const LOCAL_ONLY_NOTE: Record<string, string> = {
   hashtags: 'On YouTube, these are the end of the description.',
   'pinned comment': "YouTube doesn't let apps read or set the pinned comment. Copy it and pin it in Studio.",
@@ -353,6 +366,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
 
   // What YouTube has: read only when needed (looking at YouTube or the differences, or pushing), then remembered.
   const [data, setData] = useState<Existing | null>(null);
+  // Whether your own comment is posted on the video (read with the video; null when YouTube couldn't say).
+  const [comment, setComment] = useState<CommentCheck | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -373,7 +388,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       setPrivacy(r.video.privacy);
       setPlaylists(r.selected);
       setStaged([]);
-      window.dispatchEvent(new CustomEvent('hq-youtube-checked', { detail: { path: piece.path, checks: checkYoutubeVideo(r.video, undefined, piece.kind === 'short') } }));
+      const posted = job.videoId ? await getJson<Record<string, CommentCheck>>(`/api/youtube/own-comments?ids=${encodeURIComponent(job.videoId)}`).then((all) => all[job.videoId!] ?? null, () => null) : undefined;
+      setComment(posted);
+      window.dispatchEvent(new CustomEvent('hq-youtube-checked', { detail: { path: piece.path, checks: checkYoutubeVideo(r.video, undefined, piece.kind === 'short', posted) } }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -613,7 +630,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           ) : (
             <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
           );
-          const youtubePart = !sync ? (
+          const youtubePart = label.toLowerCase() === 'pinned comment' && linked && comment !== undefined ? (
+            <CommentStatus comment={comment} local={local ?? ''} />
+          ) : !sync ? (
             <p className="muted small-text">{note ?? 'Only in the local file.'}</p>
           ) : !linked ? (
             <p className="muted small-text">Not on YouTube yet. Upload to YouTube sends this.</p>
