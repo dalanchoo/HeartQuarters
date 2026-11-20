@@ -5,6 +5,7 @@ import { appDir, safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
 import { geminiImageArgs, makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
+import { addGeneratedImageToInbox } from './expression-inbox.js';
 
 export type Options = { framing: string; angle: string; gaze: string };
 type Job = { id: string; category: string; ai: ImageAi | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; options: Options; format?: 'png' | 'jpg' | 'webp'; prompt: string; references: string[]; createdAt: string; recovered?: boolean };
@@ -92,23 +93,16 @@ export function assignExpressionCategory(id: string, category: string): Job {
 }
 export function candidateFile(id: string): string { const job = expressionJob(id); if (job.state !== 'ready' || !job.format) throw new Error('Candidate is not ready.'); return path.join(valid(id), `candidate.${job.format}`); }
 export function rejectExpression(id: string): void { const job = expressionJob(id); if (job.state === 'working') throw new Error('Wait for generation to finish.'); fs.rmSync(valid(id), { recursive: true, force: true }); jobs.delete(id); }
+/**
+ * Approve a candidate: it moves into the Expression Inbox, marked as AI, with the category, framing and gaze as
+ * unconfirmed tag guesses. It is filed into a category from the Inbox like any other photo.
+ */
 export function approveExpression(id: string): { path: string } {
   const job = expressionJob(id); const image = candidateFile(id);
-  if (!job.category) throw new Error('Choose a category for this recovered photo first.');
-  const category = buildExpressionIndex().categories.find((c) => c.path === job.category);
-  if (!category) throw new Error('The category no longer exists.');
-  const folder = safeResolve('expressions', category.path);
-  const existing = fs.readdirSync(folder).map(file => file.toLowerCase());
-  let number = 1;
-  while (number <= 999 && existing.some(file => {
-    const prefix = `${category.name}_AI_${String(number).padStart(3, '0')}`.toLowerCase();
-    return file === prefix || file.startsWith(`${prefix}.`) || file.startsWith(`${prefix}_`);
-  })) number++;
-  if (number > 999) throw new Error('There are no free three-digit numbers in this category. The candidate has been kept.');
-  const name = `${category.name}_AI_${String(number).padStart(3, '0')}`;
-  const dest = safeResolve('expressions', `${category.path}/${name}.${job.format}`); const sidecar = safeResolve('expressions', `${category.path}/${name}.txt`);
-  const data = fs.readFileSync(image); const groups = [[job.options.gaze], [job.options.framing, job.options.angle], [category.name]].map((group) => group.filter(Boolean)).filter((group) => group.length);
-  fs.writeFileSync(sidecar, groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')).join('\n==========\n') + '\n==========\nAIGenerated, N/A, CONFIRMED\n', { flag: 'wx' });
-  try { fs.writeFileSync(dest, data, { flag: 'wx' }); } catch (e) { fs.unlinkSync(sidecar); throw e; }
-  rejectExpression(id); clearExpressionIndex(); return { path: `${category.path}/${name}.${job.format}` };
+  const category = job.category ? buildExpressionIndex().categories.find((c) => c.path === job.category) : undefined;
+  if (job.category && !category) throw new Error('The category no longer exists.');
+  const groups = [[job.options.gaze], [job.options.framing, job.options.angle], [category?.name ?? '']].map((group) => group.filter(Boolean)).filter((group) => group.length);
+  const sidecar = [...groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
+  const result = addGeneratedImageToInbox(`${category?.name ?? 'Expression'} AI Candidate`, fs.readFileSync(image), `.${job.format}`, sidecar);
+  rejectExpression(id); clearExpressionIndex(); return result;
 }

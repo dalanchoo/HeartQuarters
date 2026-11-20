@@ -13,13 +13,15 @@ beforeEach(() => { tmp = makeTree({ 'Expressions/Positive/Warmth/Warmth.txt': 'A
 afterEach(() => { config.expressionsDir = oldRoot; if (oldRefs === undefined) delete process.env.HQ_EXPRESSION_REFS_FILE; else process.env.HQ_EXPRESSION_REFS_FILE = oldRefs; if (oldDrafts === undefined) delete process.env.HQ_EXPRESSION_DRAFTS; else process.env.HQ_EXPRESSION_DRAFTS = oldDrafts; removeTree(tmp); });
 const fake: MakeImage = async (_ai, _prompt, cwd, out) => { const image = path.join(cwd, out); fs.writeFileSync(image, png); return { image, session: 'test' }; };
 describe('expression generation', () => {
-  it('keeps the candidate separate until approval and records unconfirmed tags', async () => {
+  it('keeps the candidate separate until approval, then moves it to the Inbox with unconfirmed tags', async () => {
     const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake); await finished;
     expect(expressionJob(job.id).state).toBe('ready'); expect(fs.existsSync(candidateFile(job.id))).toBe(true);
     expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Warmth'))).toEqual(['Warmth.txt']);
-    const result = approveExpression(job.id); expect(result.path).toBe('Positive/Warmth/Warmth_AI_001.png'); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
-    expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('Warmth, N/A, UNCONFIRMED');
-    expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('AIGenerated, N/A, CONFIRMED');
+    const result = approveExpression(job.id); expect(result.path).toBe('_Inbox/Warmth AI Candidate.png'); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
+    const sidecar = fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8');
+    expect(sidecar).toContain('Warmth, N/A, UNCONFIRMED'); expect(sidecar).toContain('LookAtCamera, N/A, UNCONFIRMED'); expect(sidecar).toContain('AIGenerated, N/A, CONFIRMED');
+    expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Warmth'))).toEqual(['Warmth.txt']);
+    expect(() => expressionJob(job.id)).toThrow(/not found/);
   });
   it('adds a shot list look to the suggested prompt only when one is given', () => {
     const options = { framing: 'HeadShoulders', angle: '', gaze: 'LookAtCamera' };
@@ -71,25 +73,12 @@ describe('expression generation', () => {
     expect(result.path).toMatch(/\.jpg$/);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(jpeg);
   });
-  it('uses the first free number without overwriting photos or sidecar files', async () => {
-    const folder = path.join(tmp, 'Expressions/Positive/Warmth');
-    fs.writeFileSync(path.join(folder, 'Warmth_001.jpg'), 'existing photo');
-    fs.writeFileSync(path.join(folder, 'warmth_AI_002_GPT.txt'), 'existing sidecar');
+  it('never overwrites an Inbox photo with the same name', async () => {
     const first = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake);
     const second = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'gemini', fake);
     await Promise.all([first.finished, second.finished]);
-    expect(approveExpression(first.job.id).path).toBe('Positive/Warmth/Warmth_AI_001.png');
-    expect(approveExpression(second.job.id).path).toBe('Positive/Warmth/Warmth_AI_003.png');
-    expect(fs.readFileSync(path.join(folder, 'Warmth_001.jpg'), 'utf8')).toBe('existing photo');
-    expect(fs.readFileSync(path.join(folder, 'warmth_AI_002_GPT.txt'), 'utf8')).toBe('existing sidecar');
-  });
-  it('keeps the candidate when all three-digit numbers are in use', async () => {
-    const folder = path.join(tmp, 'Expressions/Positive/Warmth');
-    for (let n = 1; n <= 999; n++) fs.writeFileSync(path.join(folder, `Warmth_AI_${String(n).padStart(3, '0')}.txt`), 'existing');
-    const { job, finished } = startExpressionGeneration('Positive/Warmth', ['Neutral/ref.jpg'], options, 'codex', fake); await finished;
-    expect(() => approveExpression(job.id)).toThrow(/no free three-digit numbers/i);
-    expect(fs.existsSync(candidateFile(job.id))).toBe(true);
-    rejectExpression(job.id);
+    expect(approveExpression(first.job.id).path).toBe('_Inbox/Warmth AI Candidate.png');
+    expect(approveExpression(second.job.id).path).toBe('_Inbox/Warmth AI Candidate (2).png');
   });
   it('keeps several candidates across a restart, with their exact prompts and categories', async () => {
     fs.mkdirSync(path.join(tmp, 'Expressions/Positive/Joy'));
@@ -110,11 +99,10 @@ describe('expression generation', () => {
     const dir = path.join(tmp, 'drafts', id); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'candidate.png'), png);
     reloadExpressionJobs();
     expect(expressionJob(id)).toMatchObject({ category: '', ai: 'unknown', state: 'ready', recovered: true });
-    expect(() => approveExpression(id)).toThrow(/Choose a category/);
     assignExpressionCategory(id, 'Positive/Warmth');
     reloadExpressionJobs();
     expect(expressionJob(id).category).toBe('Positive/Warmth');
-    expect(approveExpression(id).path).toMatch(/^Positive\/Warmth\//);
+    expect(approveExpression(id).path).toBe('_Inbox/Warmth AI Candidate.png');
   });
   it('marks an interrupted generation as failed after restart', () => {
     const id = '12345678-1234-4123-8123-123456789abc';

@@ -26,7 +26,7 @@ function cleanStem(name: unknown): string {
   return !stem || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem) ? 'Photo' : stem;
 }
 
-function addBytes(name: unknown, data: Buffer, ext: string, ai: boolean): { path: string } {
+function addBytes(name: unknown, data: Buffer, ext: string, ai: boolean, sidecarText?: string): { path: string } {
   const dir = ensureExpressionInbox(); const stem = cleanStem(name); const existing = fs.readdirSync(dir).map(item => item.toLowerCase());
   let base = stem; let n = 2;
   while (existing.some(item => item.startsWith(`${base.toLowerCase()}.`) || item.startsWith(`${base.toLowerCase()}_`))) base = `${stem} (${n++})`;
@@ -34,7 +34,8 @@ function addBytes(name: unknown, data: Buffer, ext: string, ai: boolean): { path
   const sidecar = safeResolve('expressions', `${EXPRESSION_INBOX}/${base}.txt`);
   fs.writeFileSync(image, data, { flag: 'wx' });
   try {
-    if (ai) fs.writeFileSync(sidecar, 'AIGenerated, N/A, CONFIRMED\n', { flag: 'wx' });
+    if (sidecarText !== undefined) fs.writeFileSync(sidecar, sidecarText, { flag: 'wx' });
+    else if (ai) fs.writeFileSync(sidecar, 'AIGenerated, N/A, CONFIRMED\n', { flag: 'wx' });
   }
   catch (error) { fs.unlinkSync(image); throw error; }
   return { path: `${EXPRESSION_INBOX}/${base}${ext}` };
@@ -60,6 +61,11 @@ export function copyInboxPhotoForPhotopea(photoPath: string): { path: string } {
 export function copyAiImageToInbox(name: string, file: string): { path: string } {
   const decoded = decodeReference(fs.readFileSync(file).toString('base64'));
   return addBytes(name, decoded.data, decoded.ext, true);
+}
+
+/** Add an AI image HeartQuarters generated to the inbox, with its own sidecar text (tag guesses plus the AI mark). */
+export function addGeneratedImageToInbox(name: string, data: Buffer, ext: string, sidecarText: string): { path: string } {
+  return addBytes(name, data, ext, true, sidecarText);
 }
 
 /** Copy a draft or packaging thumbnail from this video, leaving the source untouched. */
