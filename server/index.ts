@@ -18,7 +18,7 @@ import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
-import { removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
+import { copyShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -282,7 +282,8 @@ app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(se
 app.post('/api/expressions/shot-list/delete', handle((req, res) => { const shots = deleteShot(req.body?.id); removeShotReference(String(req.body?.id)); res.json(shots); }));
 app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.json(shotReferences()); }));
 app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id).job); }));
-app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''))); }));
+app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''), String(req.query.name ?? ''))); }));
+app.post('/api/expressions/shot-list/reference/copy-to-inbox', handle((req, res) => { res.json(copyShotReferenceToInbox(req.body?.id, req.body?.name)); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
 app.post('/api/expressions/videos/open', handle((_req, res) => { ensureGeneratedVideosDir(); res.json({ ok: true }); }));
 app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {

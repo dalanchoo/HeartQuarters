@@ -56,6 +56,12 @@ export function copyInboxPhotoForPhotopea(photoPath: string): { path: string } {
   return addBytes(`${photo.name} - Photopea Copy`, fs.readFileSync(source), path.extname(source), isAiExpression(photo));
 }
 
+/** Copy an AI picture HeartQuarters made (such as a Shot List reference) into the inbox, marked as AI. */
+export function copyAiImageToInbox(name: string, file: string): { path: string } {
+  const decoded = decodeReference(fs.readFileSync(file).toString('base64'));
+  return addBytes(name, decoded.data, decoded.ext, true);
+}
+
 /** Copy a draft or packaging thumbnail from this video, leaving the source untouched. */
 export function copyThumbnailToInbox(piece: string, image: string): { path: string } {
   if (!piece || !image) throw new Error('Choose a video and thumbnail.');

@@ -435,8 +435,10 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot[open] > summary::before { transform: rotate(90deg); }
 .expression-shot-group .expression-shot-group { margin-left: .5rem; }
 .expression-shot-body { display: flex; gap: 1rem; align-items: flex-start; }
-.expression-shot-body > div { flex: 1; min-width: 0; }
-.expression-shot-picture { flex: none; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: none; cursor: zoom-in; }
+.expression-shot-body > div:first-child { flex: 1; min-width: 0; }
+.expression-shot-pictures { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; max-width: 14rem; }
+.expression-shot-pictures p { margin: 0; }
+.expression-shot-picture { padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: none; cursor: zoom-in; }
 .expression-shot-picture img { display: block; height: 7rem; width: auto; }
 .expression-shot-tags { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .9em; }
 .expression-shot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; }

@@ -8,12 +8,15 @@ import { readExpressionReferences } from './expression-references.js';
 import { readShotList, type ExpressionShot } from './expression-shot-list.js';
 import { makeImage, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
+import { copyAiImageToInbox } from './expression-inbox.js';
 
 /**
- * An AI picture of what a Shot List look should be, so John can see the target before photographing it.
- * Kept on this computer in data/shot-references/<shot id>/, never in the Expressions library.
+ * AI pictures of what a Shot List look should be, so John can see the target before photographing it.
+ * Every picture is kept (reference-001.png, reference-002.jpg, …) on this computer in
+ * data/shot-references/<shot id>/, never in the Expressions library. `pictures` lists them newest first.
  */
-export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; format?: 'png' | 'jpg' | 'webp'; prompt: string; createdAt: string };
+export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[] };
+const PICTURE = /^reference(?:-(\d{3}))?\.(png|jpg|webp)$/;
 
 const root = () => process.env.HQ_SHOT_REFERENCES ?? path.join(appDir, 'data', 'shot-references');
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
@@ -39,18 +42,27 @@ export function shotLook(shot: ExpressionShot): string {
   return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}`.trim();
 }
 
+/** The pictures in a shot's folder, newest first. An older single "reference.png" counts as the first. */
+function listPictures(shotId: string): string[] {
+  const dir = folder(shotId);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile() && PICTURE.test(e.name))
+    .map(e => ({ name: e.name, n: Number(PICTURE.exec(e.name)![1] ?? 0) })).sort((a, b) => b.n - a.n).map(e => e.name);
+}
+
 function readJob(shotId: string): ShotReference | null {
   const file = path.join(folder(shotId), 'job.json');
   if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) return null;
   try {
     const job = JSON.parse(fs.readFileSync(file, 'utf8')) as ShotReference;
-    if (job.shotId !== shotId || !['working', 'ready', 'failed'].includes(job.state) || (job.state === 'ready' && !job.format) || (job.format !== undefined && !['png', 'jpg', 'webp'].includes(job.format))) return null;
+    if (job.shotId !== shotId || !['working', 'ready', 'failed'].includes(job.state)) return null;
+    const result = { shotId, state: job.state, prompt: job.prompt, createdAt: job.createdAt, pictures: listPictures(shotId), ...(job.error ? { error: job.error } : {}) };
     // A job still marked working that no longer runs was cut off when HeartQuarters stopped.
-    if (job.state === 'working' && !running.has(shotId)) return { ...job, state: 'failed', error: 'Generation was interrupted when HeartQuarters stopped. Try again.' };
-    return job;
+    if (job.state === 'working' && !running.has(shotId)) return { ...result, state: 'failed', error: 'Generation was interrupted when HeartQuarters stopped. Try again.' };
+    return result;
   } catch { return null; }
 }
-const saveJob = (job: ShotReference) => writeFileSafely(path.join(folder(job.shotId), 'job.json'), JSON.stringify(job, null, 2));
+const saveJob = ({ pictures: _computed, ...job }: ShotReference) => writeFileSafely(path.join(folder(job.shotId), 'job.json'), JSON.stringify(job, null, 2));
 
 /** Every shot's reference picture status, keyed by shot id. */
 export function shotReferences(): Record<string, ShotReference> {
@@ -84,9 +96,7 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage)
   const files = likenessPhotos().map(p => safeResolve('expressions', p));
   const prompt = expressionPrompt(category.name, category.definition, shotOptions(shot), shotLook(shot));
   fs.mkdirSync(dir, { recursive: true });
-  // Keep showing the previous picture (if any) while the new one is made, and if making it fails.
-  const previous = readJob(shotId);
-  const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), ...(previous?.format ? { format: previous.format } : {}) };
+  const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), pictures: listPictures(shotId) };
   saveJob(job); running.add(shotId);
   const work = path.join(dir, `work-${randomUUID()}`);
   const finished = (async () => {
@@ -94,24 +104,35 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage)
     const answer = await make('codex', prompt, work, 'candidate.png', { photo: files[0], refs: files.slice(1) });
     const data = fs.readFileSync(answer.image); const format = imageFormat(data);
     if (!format) throw new Error('The generated image was not a PNG, JPEG or WebP.');
-    // Replace the previous picture only once the new one is safely made.
-    for (const ext of ['png', 'jpg', 'webp']) fs.rmSync(path.join(dir, `reference.${ext}`), { force: true });
-    fs.writeFileSync(path.join(dir, `reference.${format}`), data);
-    job.state = 'ready'; job.format = format; saveJob(job);
+    // Add it as the next number; earlier pictures are kept.
+    const taken = listPictures(shotId).map(name => Number(PICTURE.exec(name)![1] ?? 0));
+    const next = Math.max(0, ...taken) + 1;
+    if (next > 999) throw new Error('This shot already has 999 pictures.');
+    fs.writeFileSync(path.join(dir, `reference-${String(next).padStart(3, '0')}.${format}`), data, { flag: 'wx' });
+    job.state = 'ready'; saveJob(job);
   })().catch((e: unknown) => { job.state = 'failed'; job.error = e instanceof Error ? e.message : String(e); try { saveJob(job); } catch { /* the error still shows until restart */ } })
     .finally(() => { running.delete(shotId); fs.rmSync(work, { recursive: true, force: true }); });
   return { job, finished };
 }
 
-export function shotReferenceFile(shotId: string): string {
-  const job = readJob(shotId);
-  if (!job?.format) throw new Error('This shot has no reference picture yet.');
-  const file = path.join(folder(shotId), `reference.${job.format}`);
-  if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) throw new Error('This shot has no reference picture yet.');
+/** One of a shot's pictures, checked against the folder listing so no other file can be asked for. */
+export function shotReferenceFile(shotId: string, name: string): string {
+  if (!listPictures(shotId).includes(name)) throw new Error('That picture is no longer there.');
+  const file = path.join(folder(shotId), name);
+  if (fs.lstatSync(file).isSymbolicLink()) throw new Error('That picture is no longer there.');
   return file;
 }
 
-/** Remove a deleted shot's picture. Leaves it alone while one is still being made. */
+/** Copy one picture into the Expression Inbox as an AI image; the picture itself stays here. */
+export function copyShotReferenceToInbox(shotId: unknown, name: unknown): { path: string } {
+  if (typeof shotId !== 'string' || typeof name !== 'string') throw new Error('Choose a picture.');
+  const file = shotReferenceFile(shotId, name);
+  const shot = readShotList().find(s => s.id === shotId);
+  const number = listPictures(shotId).length - listPictures(shotId).indexOf(name);
+  return copyAiImageToInbox(`${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`, file);
+}
+
+/** Remove a deleted shot's pictures. Leaves it alone while one is still being made. */
 export function removeShotReference(shotId: string): void {
   if (!UUID.test(shotId) || running.has(shotId)) return;
   fs.rmSync(folder(shotId), { recursive: true, force: true });

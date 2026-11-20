@@ -15,6 +15,9 @@ import {
 export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
   const [pictures, setPictures] = useState<Record<string, ShotReference>>({});
+  // The picture John picked for each shot; a newly made picture takes over again.
+  const [chosen, setChosen] = useState<Record<string, { name: string; count: number }>>({});
+  const [copied, setCopied] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [promptMode, setPromptMode] = useState<VideoPromptMode>('shot-list');
@@ -47,6 +50,16 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
+  const copyToInbox = async (shot: ExpressionShot, name: string) => {
+    setBusy(shot.id); setError('');
+    try {
+      const result = await postJson<{ path: string }>('/api/expressions/shot-list/reference/copy-to-inbox', { id: shot.id, name });
+      setCopied(current => ({ ...current, [shot.id]: `Copied to the Expression Inbox: ${result.path}` }));
+      window.dispatchEvent(new Event('hq-expression-inbox-changed'));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(''); }
+  };
+
   const setDone = async (shot: ExpressionShot, done: boolean) => {
     setBusy(shot.id); setError('');
     try { setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/status', { id: shot.id, done })); window.dispatchEvent(new Event('hq-expression-shot-list-changed')); }
@@ -76,7 +89,10 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const card = (shot: ExpressionShot) => {
     const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
     const picture = pictures[shot.id];
-    const pictureUrl = picture?.format ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&v=${encodeURIComponent(picture.createdAt)}` : '';
+    const list = picture?.pictures ?? [];
+    const pick = chosen[shot.id]?.count === list.length && list.includes(chosen[shot.id].name) ? chosen[shot.id].name : list[0];
+    const pictureUrl = pick ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(pick)}` : '';
+    const pictureLabel = (name: string) => `AI ${String(list.length - list.indexOf(name)).padStart(2, '0')}${name === list[0] ? ' (Newest)' : ''}`;
     const name = shot.title || shot.description || 'Untitled Shot';
     return <details className="expression-shot" key={shot.id}>
       <summary><strong>{name}</strong></summary>
@@ -93,7 +109,12 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           {picture?.state === 'working' && <p className="muted small-text" role="status">ChatGPT is making the picture. This can take a few minutes.</p>}
           {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
         </div>
-        {pictureUrl && <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} (AI Reference)`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>}
+        {pictureUrl && <div className="expression-shot-pictures">
+          {list.length > 1 && <label>Picture <select value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select></label>}
+          <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
+          <button className="small" disabled={!!busy} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
+          {copied[shot.id] && <p className="muted small-text" role="status">{copied[shot.id]}</p>}
+        </div>}
       </div>
     </details>;
   };

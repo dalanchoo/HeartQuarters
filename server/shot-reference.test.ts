@@ -6,7 +6,7 @@ import { makeTree, removeTree } from './testing';
 import { saveExpressionReferences } from './expression-references';
 import { readShotList, seedShotList } from './expression-shot-list';
 import { clearExpressionIndex } from './expressions';
-import { removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
+import { copyShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
 import type { MakeImage } from './thumbnails';
 
 let tmp: string; let oldRoot: string; const env = ['HQ_EXPRESSION_REFS_FILE', 'HQ_SHOT_REFERENCES'] as const; let oldEnv: (string | undefined)[];
@@ -31,24 +31,42 @@ describe('shot reference pictures', () => {
     const { finished } = startShotReference(shot.id, making(png, seen)); await finished;
     expect(seen.prompt).toContain('Expression: Relief.'); expect(seen.prompt).toContain('a quiet, relieved half-smile');
     expect(seen.refs).toEqual([path.join(tmp, 'Expressions/Neutral/Neutral_002.jpg')]);
-    expect(shotReferences()[shot.id].state).toBe('ready');
-    expect(fs.readFileSync(shotReferenceFile(shot.id))).toEqual(png);
+    expect(shotReferences()[shot.id]).toMatchObject({ state: 'ready', pictures: ['reference-001.png'] });
+    expect(fs.readFileSync(shotReferenceFile(shot.id, 'reference-001.png'))).toEqual(png);
     expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Relief'))).toEqual(['Relief.txt']);
   });
-  it('uses Neutral photos when nothing is starred, and replaces the old picture with the new type', async () => {
+  it('uses Neutral photos when nothing is starred, and keeps every picture, newest first', async () => {
     const [shot] = seedShotList(); const seen: { refs?: string[] } = {};
     await startShotReference(shot.id, making(png, seen)).finished;
     expect(seen.refs).toHaveLength(2);
     await startShotReference(shot.id, making(jpg)).finished;
-    expect(shotReferenceFile(shot.id).endsWith('reference.jpg')).toBe(true);
-    expect(fs.readdirSync(path.join(tmp, 'shot-references', shot.id)).sort()).toEqual(['job.json', 'reference.jpg']);
+    expect(shotReferences()[shot.id].pictures).toEqual(['reference-002.jpg', 'reference-001.png']);
+    expect(fs.readFileSync(shotReferenceFile(shot.id, 'reference-002.jpg'))).toEqual(jpg);
   });
-  it('keeps the previous picture when a new attempt fails', async () => {
+  it('keeps the earlier pictures when a new attempt fails', async () => {
     const [shot] = seedShotList();
     await startShotReference(shot.id, making(png)).finished;
     await startShotReference(shot.id, async () => { throw new Error('ChatGPT is busy'); }).finished;
-    expect(shotReferences()[shot.id]).toMatchObject({ state: 'failed', error: 'ChatGPT is busy' });
-    expect(fs.readFileSync(shotReferenceFile(shot.id))).toEqual(png);
+    expect(shotReferences()[shot.id]).toMatchObject({ state: 'failed', error: 'ChatGPT is busy', pictures: ['reference-001.png'] });
+  });
+  it('shows an older single picture as the first, and refuses any other file name', async () => {
+    const [shot] = seedShotList();
+    await startShotReference(shot.id, making(png)).finished;
+    fs.renameSync(path.join(tmp, 'shot-references', shot.id, 'reference-001.png'), path.join(tmp, 'shot-references', shot.id, 'reference.png'));
+    await startShotReference(shot.id, making(jpg)).finished;
+    expect(shotReferences()[shot.id].pictures).toEqual(['reference-001.jpg', 'reference.png']);
+    expect(() => shotReferenceFile(shot.id, 'job.json')).toThrow(/no longer there/);
+    expect(() => shotReferenceFile(shot.id, '../../refs.json')).toThrow(/no longer there/);
+  });
+  it('copies a chosen picture into the Expression Inbox as an AI image, keeping the original', async () => {
+    const [shot] = seedShotList();
+    await startShotReference(shot.id, making(png)).finished;
+    await startShotReference(shot.id, making(jpg)).finished;
+    const result = copyShotReferenceToInbox(shot.id, 'reference-001.png');
+    expect(result.path).toBe('_Inbox/Shot List - AI Reference 01.png');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/_Inbox/Shot List - AI Reference 01.txt'), 'utf8')).toContain('AIGenerated');
+    expect(shotReferences()[shot.id].pictures).toHaveLength(2);
   });
   it('refuses a second start while one runs, an unsorted shot and a bad id', async () => {
     const [shot] = seedShotList();
