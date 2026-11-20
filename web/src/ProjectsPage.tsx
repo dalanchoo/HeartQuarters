@@ -93,6 +93,9 @@ function ordered(node: ProjectNode | null, nodes: ProjectNode[]): ProjectNode[] 
 export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectNode[] | null>(null);
   const [selected, setSelected] = useState<string | null>(projectFromHash);
+  // A newly picked video opens at the top of the right panel, not wherever the last one was scrolled to.
+  const contentRef = useRef<HTMLElement>(null);
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [selected]);
   const [error, setError] = useState<string | null>(null);
   // Goes up by one after a new folder is made, so the list and the page re-read the disk.
   const [reloads, setReloads] = useState(0);
@@ -231,7 +234,7 @@ export function ProjectsPage() {
         {projects &&
           ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} search={search} />)}
       </aside>
-      <section className="content">
+      <section className="content" ref={contentRef}>
         {note && note.showId === (selected ?? '') && <NoteBox note={note} onDismiss={() => setNote(null)} />}
         {selected ? (
           <ProjectView id={selected} reloads={reloads} onCreated={onCreated} onManaged={onManaged} />
