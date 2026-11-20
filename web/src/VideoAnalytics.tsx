@@ -26,7 +26,7 @@ export function VideoAnalytics({ piece, id, onDownloaded }: { piece: string; id?
     {id && <ReachSetup />}
     {busy && <span role="status"> Downloading statistics and retention from YouTube…</span>}
     {error && <p className="error" role="alert">{error}</p>}
-    {result && <div role="status"><p>Stats saved to {result.file}. <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button></p>
+    {result && <div role="status"><p>Stats saved to {result.file}. <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Select in Explorer</button></p>
       {result.missingRetention.length > 0 && <p>Retention was unavailable or empty for: {result.missingRetention.join(', ')}.</p>}
       {result.emptyStatistics.length > 0 && <p>YouTube returned no statistics for: {result.emptyStatistics.join(', ')}.</p>}
       {result.unavailableBreakdowns?.length > 0 && <p>YouTube returned no data for: {result.unavailableBreakdowns.join(', ')}.</p>}

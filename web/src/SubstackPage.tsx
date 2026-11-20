@@ -190,7 +190,7 @@ function DraftView({ path }: { path: string }) {
     <div className="draft">
       <div className="draft-actions">
         <button className="small" onClick={() => openInExplorer('writing', path)}>
-          Open Folder
+          Select in Explorer
         </button>
         <a className="small button-link" href={fileUrl('writing', path)} download>
           Download .docx

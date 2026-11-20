@@ -61,7 +61,7 @@ export function GuidesPage() {
           <>
             <div className="page-head">
               <span className="muted">{current.path}</span>
-              <button onClick={() => openInExplorer(current.root, current.path)}>Open Folder</button>
+              <button onClick={() => openInExplorer(current.root, current.path)}>Select in Explorer</button>
             </div>
             <article className="markdown">
               <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>

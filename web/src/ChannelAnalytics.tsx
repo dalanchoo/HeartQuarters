@@ -23,7 +23,7 @@ export function ChannelAnalytics() {
     {busy && <p role="status">Downloading channel statistics…</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {result && <div role="status"><p>Saved stats for {result.channel} to {result.file}.</p>
-      <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Open Folder</button>
+      <button type="button" onClick={() => void openInExplorer('projects', result.file)}>Select in Explorer</button>
       <p className="small-text">Top-video report: {result.topVideoCount} videos (maximum 200). This report may not include every video. Data may be delayed.</p>
       {result.reach && <p>Impressions and CTR: {result.reach.note}{result.reach.truncated ? ' Some reports or rows were omitted.' : ''}</p>}
       {result.emptyReports.length > 0 && <p>Empty reports: {result.emptyReports.join(', ')}.</p>}

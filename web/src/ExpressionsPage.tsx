@@ -404,7 +404,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   return <div className="expression-actions">
     <div className="expression-action-buttons">
       <CopyButton text={fullPath} label="Copy File Path" />
-      <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Open Folder</button>
+      <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Select in Explorer</button>
       {!isAiExpression(photo) && <button className="small" disabled={busy} onClick={() => void markAi()}>Mark as AI</button>}
       {!photo.motionPhoto && <button className="small" disabled={busy} onClick={() => void toggleMotion()}>{isMotionExpression(photo) ? 'Unmark Motion Image' : 'Mark as Motion Image'}</button>}
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
@@ -561,6 +561,7 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, onClos
               <span className="muted">{photo.category.split('/').join(' › ')}</span>
             </div>
             {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
+            {detailsExpanded && !imageUrl && <button type="button" className="small" onClick={() => void openInExplorer('expressions', photo.path)}>Select in Explorer</button>}
             <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>
           <div id="expression-photo-details" hidden={!detailsExpanded}>

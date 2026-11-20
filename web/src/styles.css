@@ -529,9 +529,8 @@ body.expression-viewer-open .split > .content, body.expression-viewer-open .spli
 .lb-attribute-control button { flex: 0 0 auto; }
 @media (max-width: 700px) { .lb-info { flex-wrap: wrap; } .lb-details { flex-basis: 100%; } }
 .lb-close { flex: 0 0 auto; width: 2.2rem; height: 2.2rem; min-height: 0; padding: 0; font-size: 1.4rem; line-height: 1; }
-.lb-title { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, 200px) auto; gap: 1rem; align-items: center; }
-.lb-info.is-collapsed .lb-title { grid-template-columns: minmax(0, 1fr) auto; }
-.lb-title-name { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.65rem; min-width: 0; overflow-wrap: anywhere; }
+.lb-title { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; }
+.lb-title-name { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.65rem; min-width: 0; margin-right: auto; overflow-wrap: anywhere; }
 .lb-star { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; min-height: 0; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); box-shadow: none; cursor: pointer; }
 .lb-star:hover:not(:disabled) { border-color: #d97706; color: #b45309; background: #fef9c3; }
 .lb-star.is-starred { border-color: #eab308; background: #fef9c3; }
