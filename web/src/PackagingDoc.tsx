@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { copyText, getText, postJson, type FileRef } from './api';
 import { AiWritingChecker } from './AiWritingChecker';
+import { SuggestionTextarea } from './SuggestionTextarea';
+import { fieldKey } from './fieldSuggestions';
 import { setLocalValue } from './youtubePackaging';
 import {
   inPlatformOrder,
@@ -152,7 +154,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         {draft && <CopyButton text={draft} />}
         {status && <span className="muted small-text">{status === 'saving' ? 'Saving…' : 'Saved ✓'}</span>}
       </summary>
-      <textarea
+      <SuggestionTextarea
         className="field-value field-input"
         aria-label={field.label}
         placeholder="(empty)"
@@ -162,8 +164,10 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         readOnly={doc.locked}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
+        suggestionKey={fieldKey(doc.file.path, field.label)}
+        onAccept={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }}
       />
-      <AiWritingChecker text={draft} label={field.label} onReplace={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }} />
+      <AiWritingChecker text={draft} label={field.label} suggestionKey={fieldKey(doc.file.path, field.label)} onReplace={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }} />
       {error && <p className="error small-text">Not saved: {error}</p>}
     </details>
   );

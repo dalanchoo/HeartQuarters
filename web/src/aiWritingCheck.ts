@@ -194,3 +194,32 @@ export function applySuggestion(text: string, find: string, replace: string): st
   const at = text.indexOf(find);
   return at < 0 ? null : text.slice(0, at) + replace + text.slice(at + find.length);
 }
+
+export type DiffPart = { text: string; kind: 'same' | 'removed' | 'added' };
+
+/** A word-by-word difference between two sentences, for showing a rewrite the way Grammarly does. */
+export function wordDiff(before: string, after: string): DiffPart[] {
+  // Each word with the spaces before and after it, so a removed run reads as one piece ("is not too ").
+  const words = (text: string) => text.match(/\s*\S+\s*/g) ?? [];
+  const a = words(before);
+  const b = words(after);
+  // Longest common run, filled from the end, then walked from the start.
+  const table = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  const parts: DiffPart[] = [];
+  const push = (text: string, kind: DiffPart['kind']) => {
+    const last = parts[parts.length - 1];
+    if (last?.kind === kind) last.text += text;
+    else parts.push({ text, kind });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { push(a[i], 'same'); i++; j++; }
+    else if (table[i + 1][j] >= table[i][j + 1]) push(a[i++], 'removed');
+    else push(b[j++], 'added');
+  }
+  while (i < a.length) push(a[i++], 'removed');
+  while (j < b.length) push(b[j++], 'added');
+  return parts;
+}

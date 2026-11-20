@@ -13,6 +13,7 @@ import { CopyDirectionControls, CopyDirectionFrame, localCopyDirection } from '.
 import { canSelectIncomingCopy } from './stagedPackaging';
 import { AiHighlightedText, AiWritingChecker } from './AiWritingChecker';
 import { setFieldValue } from './packaging';
+import { fieldKey } from './fieldSuggestions';
 
 const youtubeFile = (version?: PackagingVersion) => version?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name));
 const thumbnail = (version?: PackagingVersion) => version?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
@@ -151,7 +152,7 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
           {edited && canCopy && sourceHas(label) && <p className="comparison-edit-warning">This field has an unsaved edit. Choose Edited, then Undo Edit before selecting a copy into {version.name}.</p>}
           {(warnLeft || warnRight) && <div className="compare-warnings"><div>{warnLeft && tagWarning(leftName)}</div><div>{warnRight && tagWarning(rightName)}</div></div>}
           <div className="compare-columns">{side('left', leftValue)}{side('right', rightValue)}</div>
-        </CopyDirectionFrame> : left === version.path && index >= 0 ? <><FieldEditor doc={doc} index={index} field={doc.fields![index]} /><AiWritingChecker text={doc.fields![index].value} label={label} onReplace={doc.locked ? undefined : (next) => doc.save((text) => setFieldValue(text, index, next))} /></> : <><pre className="lvy-value">{leftValue ? <AiHighlightedText text={leftValue} /> : '(empty)'}</pre><AiWritingChecker text={leftValue ?? ''} label={label} /></>}
+        </CopyDirectionFrame> : left === version.path && index >= 0 ? <><FieldEditor doc={doc} index={index} field={doc.fields![index]} /><AiWritingChecker text={doc.fields![index].value} label={label} suggestionKey={fieldKey(doc.file.path, label)} onReplace={doc.locked ? undefined : (next) => doc.save((text) => setFieldValue(text, index, next))} /></> : <><pre className="lvy-value">{leftValue ? <AiHighlightedText text={leftValue} /> : '(empty)'}</pre><AiWritingChecker text={leftValue ?? ''} label={label} /></>}
         {diff?.reordered && <p className="muted small-text">The same tags are present in a different order.</p>}
       </ComparisonRow>;
     })}

@@ -931,3 +931,17 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .generated-video-player { outline: none; }
 .generated-video-player .player { margin-top: 0; }
 .generated-video-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.5rem; }
+
+/* Grammarly-style rewrites in an edit box (SuggestionTextarea): underlines on a see-through layer, and a popup. */
+.suggest-wrap { position: relative; }
+.suggest-layer { position: absolute; top: 0; left: 0; overflow: hidden; pointer-events: none; color: transparent; margin: 0; }
+.suggest-mark { text-decoration: underline 2px #e0a100; text-underline-offset: 3px; background: rgba(255, 196, 0, 0.14); border-radius: 2px; }
+.suggest-mark.open { background: rgba(255, 196, 0, 0.32); }
+.suggest-popup { position: absolute; z-index: 30; width: min(380px, 100%); padding: 0.6rem 0.8rem; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16); font-size: 0.95rem; }
+.suggest-popup-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 0.85rem; }
+.suggest-close { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 1rem; padding: 0 0.2rem; }
+.suggest-diff { margin: 0.35rem 0; line-height: 1.5; }
+.suggest-removed { color: #b3261e; text-decoration: line-through; }
+.suggest-added { color: #6d28d9; font-weight: 600; }
+.suggest-why { margin: 0.2rem 0 0.4rem; color: var(--muted); font-size: 0.85rem; }
+.suggest-actions { display: flex; gap: 0.4rem; }

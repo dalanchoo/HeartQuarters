@@ -6,6 +6,8 @@ import type { UploadJob } from '../../server/youtube';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { SHORTS_PLAYLIST, VIDEO_LANGUAGES, type YoutubePlaylist } from '../../server/youtube-constants';
 import { setFieldValue, sortTags, undoFieldEdit, type Field } from './packaging';
+import { SuggestionTextarea } from './SuggestionTextarea';
+import { fieldKey, useFieldSuggestions } from './fieldSuggestions';
 import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
@@ -770,6 +772,9 @@ function WaitingBadge() {
 /** Show either the saved value or the draft, without displaying two large text blocks at once. */
 export function EditableComparisonValue({ doc, index, field, current, savedValue, edited, copySelected, cancelCopy, undoEdit, onEdited, busy = false }: { doc: LoadedDoc; index: number; field: Field; current: ReactNode; savedValue: string; edited: boolean; copySelected: boolean; cancelCopy: () => void; undoEdit: () => Promise<void>; onEdited?: () => void; busy?: boolean }) {
   const [tab, setTab] = useState<'current' | 'edited'>('current');
+  // After an AI writing check, show the Edited tab: that's where the rewrites are underlined and can be accepted.
+  const rewrites = useFieldSuggestions(fieldKey(doc.file.path, field.label));
+  useEffect(() => { if (rewrites.length && !doc.locked && !copySelected) setTab('edited'); }, [rewrites, doc.locked, copySelected]);
   const [showChanges, setShowChanges] = useState(false);
   const [undoError, setUndoError] = useState('');
   const id = useId();
@@ -791,7 +796,7 @@ export function EditableComparisonValue({ doc, index, field, current, savedValue
         {undoError && <p className="error">{undoError}</p>}
       </>}
     </div>
-    <AiWritingChecker text={field.value} label={field.label} onReplace={doc.locked || copySelected ? undefined : (next) => { onEdited?.(); return doc.save((text) => setFieldValue(text, index, next)); }} />
+    <AiWritingChecker text={field.value} label={field.label} suggestionKey={fieldKey(doc.file.path, field.label)} onReplace={doc.locked || copySelected ? undefined : (next) => { onEdited?.(); return doc.save((text) => setFieldValue(text, index, next)); }} />
   </div>;
 }
 
@@ -803,7 +808,7 @@ export function FieldEditor({ doc, index, field, onEdited }: { doc: LoadedDoc; i
   useEffect(() => { if (!focused.current) setDraft(field.value); }, [field.value]);
   return (
     <>
-      <textarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onFocus={() => { focused.current = true; }} onChange={(e) => { const value = e.target.value; setDraft(value); setError(null); onEdited?.(); void doc.save(text => setFieldValue(text, index, value)).catch((err: Error) => setError(err.message)); }} onBlur={() => { focused.current = false; setDraft(draft.trim()); }} />
+      <SuggestionTextarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onFocus={() => { focused.current = true; }} onChange={(e) => { const value = e.target.value; setDraft(value); setError(null); onEdited?.(); void doc.save(text => setFieldValue(text, index, value)).catch((err: Error) => setError(err.message)); }} onBlur={() => { focused.current = false; setDraft(draft.trim()); }} suggestionKey={fieldKey(doc.file.path, field.label)} onAccept={doc.locked ? undefined : (next) => { setDraft(next); onEdited?.(); return doc.save(text => setFieldValue(text, index, next)); }} />
       {error && <p className="error small-text">Not staged: {error}</p>}
     </>
   );

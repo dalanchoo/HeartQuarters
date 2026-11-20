@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applySuggestion, findAiTellSpans, findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
+import { applySuggestion, findAiTellSpans, wordDiff, findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
 
 describe('findAiWritingTells', () => {
   it('returns empty for plain, natural first-person writing with varied sentence length', () => {
@@ -73,5 +73,16 @@ describe('applySuggestion', () => {
   });
   it('returns null when the sentence is no longer in the text', () => {
     expect(applySuggestion('One.', 'Two.', 'x')).toBeNull();
+  });
+});
+
+describe('wordDiff', () => {
+  it('marks removed and added words and keeps the rest', () => {
+    const parts = wordDiff('There is not too much there.', "There wasn't much to do there.");
+    expect(parts.find((p) => p.kind === 'removed')?.text).toContain('not');
+    expect(parts.find((p) => p.kind === 'added')?.text).toContain("wasn't");
+    expect(parts[0]).toEqual({ text: 'There ', kind: 'same' });
+    expect(parts.filter((p) => p.kind !== 'removed').map((p) => p.text).join('')).toBe("There wasn't much to do there.");
+    expect(parts.filter((p) => p.kind !== 'added').map((p) => p.text).join('')).toBe('There is not too much there.');
   });
 });

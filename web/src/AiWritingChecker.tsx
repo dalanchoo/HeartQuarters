@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { postJson } from './api';
 import { applySuggestion, findAiTellSpans, findAiWritingTells, isProseFieldLabel, type AiTellSpan } from './aiWritingCheck';
 import type { AiWritingReview, AiWritingSuggestion } from '../../server/ai-writing';
+import { setFieldSuggestions } from './fieldSuggestions';
 
 /**
  * Renders `text` (which starts at `offset` within the full string) with `<span className="ai-tell-mark">`
@@ -82,7 +83,9 @@ function SuggestionText({ text, suggestions, picked, onPick }: { text: string; s
  * Under a field: quick checks for common AI phrasing, and "Check for AI Writing", which asks the chosen AI for whole
  * sentences to rewrite. With `onReplace` (an editable field), a rewrite can be put straight into the field.
  */
-export function AiWritingChecker({ text, label, onReplace }: { text: string; label: string; onReplace?: (next: string) => void | Promise<void> }) {
+export function AiWritingChecker({ text, label, onReplace, suggestionKey }: { text: string; label: string; onReplace?: (next: string) => void | Promise<void>; suggestionKey?: string }) {
+  // With an edit box above that underlines rewrites (it shares `suggestionKey`), the rewrites are shown there instead.
+  const inBox = !!onReplace && !!suggestionKey;
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState<AiWritingReview | null>(null);
   const [error, setError] = useState('');
@@ -98,7 +101,9 @@ export function AiWritingChecker({ text, label, onReplace }: { text: string; lab
     setBusy(true);
     setError('');
     try {
-      setReview(await postJson<AiWritingReview>('/api/ai-writing-check', { text: trimmed, label }));
+      const result = await postJson<AiWritingReview>('/api/ai-writing-check', { text: trimmed, label });
+      setReview(result);
+      if (suggestionKey) setFieldSuggestions(suggestionKey, result.suggestions);
       setPicked(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -160,7 +165,7 @@ export function AiWritingChecker({ text, label, onReplace }: { text: string; lab
           {busy ? 'Checking for AI Writing…' : 'Check for AI Writing'}
         </button>
         {review && (
-          <button type="button" className="small" onClick={() => setReview(null)}>
+          <button type="button" className="small" onClick={() => { setReview(null); if (suggestionKey) setFieldSuggestions(suggestionKey, []); }}>
             Hide Review
           </button>
         )}
@@ -194,8 +199,14 @@ export function AiWritingChecker({ text, label, onReplace }: { text: string; lab
           )}
           {review.suggestions.length > 0 && (
             <>
-              <p className="small-text muted">Click a highlighted sentence to see its rewrite{onReplace ? ' and put it in' : ''}.</p>
-              <SuggestionText text={text} suggestions={review.suggestions} picked={picked} onPick={(i) => setPicked(picked === i ? null : i)} />
+              {inBox ? (
+                <p className="small-text">The sentences that sound like AI are underlined in the box above. Click one to see its rewrite and accept it.</p>
+              ) : (
+                <>
+                  <p className="small-text muted">Click a highlighted sentence to see its rewrite{onReplace ? ' and put it in' : ''}.</p>
+                  <SuggestionText text={text} suggestions={review.suggestions} picked={picked} onPick={(i) => setPicked(picked === i ? null : i)} />
+                </>
+              )}
               {picked !== null && review.suggestions[picked] && <ul className="ai-suggestions small-text">{suggestionCard(review.suggestions[picked], picked)}</ul>}
               <details className="ai-suggestion-list small-text">
                 <summary>All Suggestions, in Order ({review.suggestions.length})</summary>
