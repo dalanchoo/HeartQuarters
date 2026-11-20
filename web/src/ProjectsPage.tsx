@@ -712,7 +712,12 @@ function PieceCard({
     if (focus === piece.path) {
       setOpen(true);
       if (piece.kind === 'short') window.dispatchEvent(new CustomEvent(SHORT_OPENED, { detail: piece.path }));
-      card.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      // Jump (not glide) to the top of this card once other cards have closed, and again once its contents have
+      // loaded: a gliding scroll was thrown off when the cards above it changed height, landing mid-card.
+      const jump = () => card.current?.scrollIntoView({ block: 'start' });
+      const frame = requestAnimationFrame(() => requestAnimationFrame(jump));
+      const later = window.setTimeout(jump, 400);
+      return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
     }
   }, [focus, piece.path, piece.kind]);
 
