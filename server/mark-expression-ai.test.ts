@@ -3,8 +3,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { buildExpressionIndex } from './expressions';
-import { isAiExpression } from './expression-origin';
-import { markExpressionAi } from './mark-expression-ai';
+import { isAiExpression, isMotionExpression } from './expression-origin';
+import { markExpressionAi, setExpressionMotion } from './mark-expression-ai';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string; let previous: string;
@@ -26,5 +26,13 @@ describe('mark expression photo as AI', () => {
     markExpressionAi('Confidence/Confidence_002.png');
     expect(fs.readFileSync(path.join(tmp, 'Confidence/Confidence_002.txt'), 'utf8')).toBe('AIGenerated, N/A, CONFIRMED\n');
     expect(() => markExpressionAi('../other.png')).toThrow();
+  });
+  it('marks and unmarks motion images while keeping existing tags', () => {
+    setExpressionMotion('Confidence/Confidence_001.png', true);
+    expect(isMotionExpression(buildExpressionIndex().photos.find(p => p.name === 'Confidence_001')!)).toBe(true);
+    setExpressionMotion('Confidence/Confidence_001.png', false);
+    const updated = buildExpressionIndex().photos.find(p => p.name === 'Confidence_001')!;
+    expect(isMotionExpression(updated)).toBe(false);
+    expect(updated.tags.some(t => t.tag === 'Confidence')).toBe(true);
   });
 });

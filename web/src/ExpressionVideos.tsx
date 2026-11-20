@@ -140,6 +140,7 @@ export function ExpressionVideos({ active }: { active: boolean }) {
         name: `${stem} - ${stamp}s.png`,
         data,
         ai: true,
+        motion: true,
       });
       window.dispatchEvent(new Event('hq-expression-inbox-changed'));
       setStatus(`Saved snapshot to Inbox as AI: ${res.path}`);

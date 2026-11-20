@@ -26,22 +26,29 @@ function cleanStem(name: unknown): string {
   return !stem || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem) ? 'Photo' : stem;
 }
 
-function addBytes(name: unknown, data: Buffer, ext: string, ai: boolean): { path: string } {
+function addBytes(name: unknown, data: Buffer, ext: string, ai: boolean, motion = false): { path: string } {
   const dir = ensureExpressionInbox(); const stem = cleanStem(name); const existing = fs.readdirSync(dir).map(item => item.toLowerCase());
   let base = stem; let n = 2;
   while (existing.some(item => item.startsWith(`${base.toLowerCase()}.`) || item.startsWith(`${base.toLowerCase()}_`))) base = `${stem} (${n++})`;
   const image = safeResolve('expressions', `${EXPRESSION_INBOX}/${base}${ext}`);
   const sidecar = safeResolve('expressions', `${EXPRESSION_INBOX}/${base}.txt`);
   fs.writeFileSync(image, data, { flag: 'wx' });
-  try { if (ai) fs.writeFileSync(sidecar, 'AIGenerated, N/A, CONFIRMED\n', { flag: 'wx' }); }
+  try {
+    const tags = [
+      ...(ai ? ['AIGenerated, N/A, CONFIRMED'] : []),
+      ...(motion ? ['MotionImage, N/A, CONFIRMED'] : []),
+    ];
+    if (tags.length) fs.writeFileSync(sidecar, tags.join('\n') + '\n', { flag: 'wx' });
+  }
   catch (error) { fs.unlinkSync(image); throw error; }
   return { path: `${EXPRESSION_INBOX}/${base}${ext}` };
 }
 
-export function importInboxPhoto(name: unknown, encoded: unknown, ai: unknown): { path: string } {
+export function importInboxPhoto(name: unknown, encoded: unknown, ai: unknown, motion: unknown = false): { path: string } {
   if (typeof ai !== 'boolean') throw new Error('Choose whether this is an AI image.');
+  if (typeof motion !== 'boolean') throw new Error('Choose whether this is a motion image.');
   const { data, ext } = decodeReference(encoded);
-  return addBytes(name, data, ext, ai);
+  return addBytes(name, data, ext, ai, motion);
 }
 
 /** Create a separate Photopea working copy, keeping the original untouched. */

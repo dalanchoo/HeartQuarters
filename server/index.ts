@@ -21,7 +21,7 @@ import { addExpressionShots, readShotList, setShotDone } from './expression-shot
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
-import { markExpressionAi } from './mark-expression-ai.js';
+import { markExpressionAi, setExpressionMotion } from './mark-expression-ai.js';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
@@ -266,7 +266,7 @@ app.get('/api/expressions', handle((_req, res) => {
 }));
 app.get('/api/expressions/inbox', handle((_req, res) => { res.json(inboxExpressionPhotos()); }));
 app.post('/api/expressions/inbox/open', handle((_req, res) => { ensureExpressionInbox(); res.json({ ok: true }); }));
-app.post('/api/expressions/inbox/import', handle((req, res) => { res.json(importInboxPhoto(req.body?.name, req.body?.data, req.body?.ai)); }));
+app.post('/api/expressions/inbox/import', handle((req, res) => { res.json(importInboxPhoto(req.body?.name, req.body?.data, req.body?.ai, req.body?.motion ?? false)); }));
 app.post('/api/expressions/inbox/photopea-copy', handle((req, res) => {
   const result = copyInboxPhotoForPhotopea(String(req.body?.photo ?? ''));
   const full = safeResolve('expressions', result.path);
@@ -289,6 +289,7 @@ app.get('/api/expressions/videos/file', handle((req, res) => { sandboxHeaders(re
 app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''))); }));
 app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmentJob(String(req.query.id ?? ''))); }));
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));
+app.post('/api/expressions/mark-motion', handle((req, res) => { setExpressionMotion(String(req.body?.photo ?? ''), req.body?.motion); res.json({ ok: true }); }));
 app.post('/api/expressions/confirm-expression', handle((req, res) => { res.json(confirmExpressionFolder(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence)); }));
 app.post('/api/expressions/confirm-tag', handle((req, res) => { confirmExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence); res.json({ ok: true }); }));
 app.post('/api/expressions/disconfirm-tag', handle((req, res) => { disconfirmExpressionTag(String(req.body?.photo ?? ''), String(req.body?.tag ?? ''), req.body?.confidence, req.body?.confirmed, req.body?.disconfirmed); res.json({ ok: true }); }));

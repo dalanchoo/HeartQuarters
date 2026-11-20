@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAiExpression, matchesExpressionOrigin } from './expression-origin';
+import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMotionFilter } from './expression-origin';
 
 describe('expression photo origin', () => {
   it('recognizes both numbered and older AI filenames', () => {
@@ -19,5 +19,15 @@ describe('expression photo origin', () => {
     expect(matchesExpressionOrigin(ai, 'real')).toBe(false);
     expect(matchesExpressionOrigin(unmarked, 'real')).toBe(true);
     expect(matchesExpressionOrigin(unmarked, 'ai')).toBe(false);
+  });
+  it('recognizes and filters motion images separately from still photos', () => {
+    const motion = { tags: [{ tag: 'MotionImage', confirmed: true }] };
+    const still = { tags: [{ tag: 'AIGenerated', confirmed: true }] };
+    expect(isMotionExpression(motion)).toBe(true);
+    expect(isMotionExpression(still)).toBe(false);
+    expect(matchesMotionFilter(motion, 'motion')).toBe(true);
+    expect(matchesMotionFilter(motion, 'still')).toBe(false);
+    expect(matchesMotionFilter(still, 'still')).toBe(true);
+    expect(matchesMotionFilter(still, 'motion')).toBe(false);
   });
 });

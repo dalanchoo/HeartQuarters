@@ -18,7 +18,7 @@ import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator
 import { ExpressionShotList } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
-import { isAiExpression, matchesExpressionOrigin } from '../../server/expression-origin';
+import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMotionFilter } from '../../server/expression-origin';
 import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
@@ -53,6 +53,7 @@ export function ExpressionsPage() {
   const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
   const [reviewFolders, setReviewFolders] = useState<FolderReviewMode | 'all'>('all');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
+  const [motionFilter, setMotionFilter] = useState<'all' | 'motion' | 'still'>('all');
   const [assessmentFilter, setAssessmentFilter] = useState<'all' | 'three-ais' | 'not-three-ais'>('all');
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
@@ -166,8 +167,8 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
-  }, [index, current, includeSub, query, origin, assessmentFilter, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
+    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
 
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
 
@@ -256,6 +257,7 @@ export function ExpressionsPage() {
           <label>Photos <select value={starredOnly ? 'starred' : 'all'} onChange={e => { setStarredOnly(e.target.value === 'starred'); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option></select></label>
           <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
           <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
+          <label>Motion Image <select value={motionFilter} onChange={e => { setMotionFilter(e.target.value as 'all' | 'motion' | 'still'); setOpen(null); }}><option value="all">All Photos</option><option value="motion">Motion Images Only</option><option value="still">Still Photos Only</option></select></label>
           <label>Assessment <select value={assessmentFilter} onChange={e => { setAssessmentFilter(e.target.value as 'all' | 'three-ais' | 'not-three-ais'); setOpen(null); }}><option value="all">All Photos</option><option value="three-ais">Assessed by All Three AIs</option><option value="not-three-ais">Not Assessed by All Three AIs</option></select></label>
         </div>
         <label className="expression-review-filter">Folder Review <select value={reviewFolders} onChange={e => { const value = e.target.value as FolderReviewMode | 'all'; setReviewFolders(value); setOpen(null); if (value !== 'all') goTo(''); }}><option value="all">All Photos</option><option value="missing">Folder Expression Not Among Guesses</option><option value="higher">Another Expression Has a Higher Score</option></select></label>
@@ -377,6 +379,13 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
     catch (e) { setMessage(e instanceof Error ? e.message : 'Could not mark the photo.'); }
     finally { setBusy(false); }
   };
+  const toggleMotion = async () => {
+    const next = !isMotionExpression(photo);
+    setBusy(true); setMessage('');
+    try { await postJson('/api/expressions/mark-motion', { photo: photo.path, motion: next }); onChanged(next ? 'Photo marked as a motion image.' : 'Removed motion image mark.'); }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not update the photo.'); }
+    finally { setBusy(false); }
+  };
   useEffect(() => { setPlan(null); setOperation(null); setDestination(''); setMessage(''); }, [photo.path]);
   const preview = async (kind: 'delete' | 'move') => {
     setBusy(true); setMessage(''); setPlan(null); setOperation(kind);
@@ -397,6 +406,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
       <CopyButton text={fullPath} label="Copy File Path" />
       <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Open Folder</button>
       {!isAiExpression(photo) && <button className="small" disabled={busy} onClick={() => void markAi()}>Mark as AI</button>}
+      <button className="small" disabled={busy} onClick={() => void toggleMotion()}>{isMotionExpression(photo) ? 'Unmark Motion Image' : 'Mark as Motion Image'}</button>
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>
