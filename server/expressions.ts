@@ -47,6 +47,8 @@ export interface ExpressionPhoto {
   revision?: string;
   /** True when the photo's sidecar has a three-AI assessment marker or per-model scores. */
   assessedByThreeAIs?: boolean;
+  /** True when the image file itself contains embedded Motion Photo / MicroVideo XMP metadata. */
+  motionPhoto?: boolean;
   tags: Tag[];
 }
 
@@ -58,6 +60,26 @@ export interface ExpressionIndex {
 
 let cached: { at: number; index: ExpressionIndex } | null = null;
 export function clearExpressionIndex(): void { cached = null; }
+
+const MOTION_HEADER_BYTES = 65_536;
+const motionBuf = Buffer.alloc(MOTION_HEADER_BYTES);
+
+/** Detects Google/Android Motion Photo (or MicroVideo) XMP metadata in the image header. */
+export function hasMotionPhotoHeader(file: string): boolean {
+  if (!/\.(jpe?g|webp)$/i.test(file)) return false;
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const read = fs.readSync(fd, motionBuf, 0, MOTION_HEADER_BYTES, 0);
+      const head = motionBuf.subarray(0, read).toString('latin1');
+      return /GCamera:(?:MotionPhoto|MicroVideo)=["']1["']|Semantic=["']MotionPhoto["']/i.test(head);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
 
 export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
 
@@ -113,7 +135,7 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
     const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : { tags: [], assessedByThreeAIs: false };
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), tags: sidecarInfo.tags };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -177,8 +199,9 @@ export function buildExpressionIndex(): ExpressionIndex {
       if (base === `_${name}`) {
         category.reference = rel;
       } else if (!file.startsWith('_') && relPath) {
+        const full = path.join(dir, file);
         let stat: fs.Stats;
-        try { stat = fs.statSync(path.join(dir, file)); } catch { continue; }
+        try { stat = fs.statSync(full); } catch { continue; }
         const sidecarInfo = files.has(`${base}.txt`) ? readSidecar(path.join(dir, `${base}.txt`)) : { tags: [], assessedByThreeAIs: false };
         photos.push({
           path: rel,
@@ -186,6 +209,7 @@ export function buildExpressionIndex(): ExpressionIndex {
           name: base,
           category: relPath,
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
+          ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}),
           tags: sidecarInfo.tags,
         });
         category.ownCount++;

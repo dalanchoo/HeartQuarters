@@ -406,7 +406,7 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
       <CopyButton text={fullPath} label="Copy File Path" />
       <button className="small" onClick={() => openInExplorer('expressions', photo.path)}>Open Folder</button>
       {!isAiExpression(photo) && <button className="small" disabled={busy} onClick={() => void markAi()}>Mark as AI</button>}
-      <button className="small" disabled={busy} onClick={() => void toggleMotion()}>{isMotionExpression(photo) ? 'Unmark Motion Image' : 'Mark as Motion Image'}</button>
+      {!photo.motionPhoto && <button className="small" disabled={busy} onClick={() => void toggleMotion()}>{isMotionExpression(photo) ? 'Unmark Motion Image' : 'Mark as Motion Image'}</button>}
       <button className="small" disabled={busy} onClick={() => { setOperation(operation === 'move' ? null : 'move'); setPlan(null); setMessage(''); }}>Move</button>
       <button className="small" disabled={busy} onClick={() => void preview('delete')}>Delete</button>
     </div>

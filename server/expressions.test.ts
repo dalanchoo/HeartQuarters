@@ -111,6 +111,23 @@ describe('buildExpressionIndex', () => {
       removeTree(t);
     }
   });
+
+  it('detects embedded Google/Android Motion Photo headers automatically', () => {
+    const t = makeTree({
+      'Positive/Joy/Joy_001.jpg': 'fake-jpeg<x:xmpmeta GCamera:MotionPhoto="1">...</x:xmpmeta>',
+      'Positive/Joy/Joy_002.jpg': 'plain-jpeg-bytes',
+    });
+    const prev = config.expressionsDir;
+    config.expressionsDir = t;
+    try {
+      const photos = buildExpressionIndex().photos;
+      expect(photos.find((p) => p.name === 'Joy_001')?.motionPhoto).toBe(true);
+      expect(photos.find((p) => p.name === 'Joy_002')?.motionPhoto).toBeUndefined();
+    } finally {
+      config.expressionsDir = prev;
+      removeTree(t);
+    }
+  });
 });
 
 describe('looking up one photo without scanning the library (code review #8)', () => {

@@ -7,11 +7,11 @@ export function matchesExpressionOrigin(photo: { name: string; tags: { tag: stri
   return filter === 'all' || (filter === 'ai') === isAiExpression(photo);
 }
 
-/** Recognize photos explicitly marked as motion images (for example video frame snapshots). */
-export function isMotionExpression(photo: { tags: { tag: string; confirmed: boolean }[] }): boolean {
-  return photo.tags.some(t => t.confirmed && t.tag.toLowerCase() === 'motionimage');
+/** Recognize photos that are Motion Photos (embedded video) or explicitly marked as MotionImage. */
+export function isMotionExpression(photo: { motionPhoto?: boolean; tags: { tag: string; confirmed: boolean }[] }): boolean {
+  return !!photo.motionPhoto || photo.tags.some(t => t.confirmed && t.tag.toLowerCase() === 'motionimage');
 }
 
-export function matchesMotionFilter(photo: { tags: { tag: string; confirmed: boolean }[] }, filter: 'all' | 'motion' | 'still'): boolean {
+export function matchesMotionFilter(photo: { motionPhoto?: boolean; tags: { tag: string; confirmed: boolean }[] }, filter: 'all' | 'motion' | 'still'): boolean {
   return filter === 'all' || (filter === 'motion') === isMotionExpression(photo);
 }
