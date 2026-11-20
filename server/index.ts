@@ -237,11 +237,11 @@ app.get('/api/text', handle((req, res) => {
   res.type('text/plain; charset=utf-8').send(fs.readFileSync(full, 'utf8'));
 }));
 
-// Opens a folder in File Explorer (for a file, opens the folder it's in).
+// Opens a folder in File Explorer (for a file, opens its folder with that file selected).
 app.post('/api/open', handle((req, res) => {
   const full = safeResolve(parseRoot(req.body?.root), String(req.body?.path ?? ''));
-  const folder = fs.statSync(full).isDirectory() ? full : path.dirname(full);
-  spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore' }).unref();
+  const args = fs.statSync(full).isDirectory() ? [full] : ['/select,', full];
+  spawn('explorer.exe', args, { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
 }));
 
