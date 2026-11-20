@@ -444,7 +444,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   // The rows: the fields in the usual order, then any others in the file, then any YouTube setting the file lacks.
   const known = (label: string) => fields.findIndex((f) => f.label.toLowerCase() === label.toLowerCase());
   const shownLabels = [
-    ...ORDER.filter((l) => known(l) >= 0 || isSync(l)),
+    // Pinned Comment always has a row, even when the file lacks it, so it can be added (YouTube can't read it).
+    ...ORDER.filter((l) => known(l) >= 0 || isSync(l) || l === 'Pinned Comment'),
     ...fields.map((f) => f.label).filter((l) => !ORDER.some((o) => o.toLowerCase() === l.toLowerCase())),
   ].filter((l, i, all) => all.findIndex((x) => x.toLowerCase() === l.toLowerCase()) === i);
 
@@ -827,10 +828,10 @@ function MissingField({ doc, label }: { doc: LoadedDoc; label: string }) {
   const [error, setError] = useState('');
   return (
     <p className="muted small-text">
-      Not in this file yet.{' '}
-      <button className="small" disabled={doc.locked} onClick={() => doc.save((t) => setLocalValue(t, label as SyncField, '')).catch((e: Error) => setError(e.message))}>
+      Not in this file yet.{doc.locked ? ' Unlock this version to add it.' : ' '}
+      {!doc.locked && <button className="small" onClick={() => doc.save((t) => setLocalValue(t, label as SyncField, '')).catch((e: Error) => setError(e.message))}>
         Add
-      </button>
+      </button>}
       {error && <span className="error"> {error}</span>}
     </p>
   );
