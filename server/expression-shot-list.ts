@@ -4,8 +4,17 @@ import path from 'node:path';
 import { safeResolve } from './config.js';
 import { writeFileSafely } from './files.js';
 
-export interface ShotSource { piece: string; context: string }
-export interface ExpressionShot { id: string; expression: string; sources: ShotSource[]; addedAt: string; done: boolean }
+/** Where a suggestion came from, and the exact words it used (kept so it is never added twice). */
+export interface ShotSource { piece: string; context: string; text?: string }
+/**
+ * One look to photograph. `category` is the main expression folder ("Composure/Calm"),
+ * `description` says what the face should do, and the tag lists use the library's vocabulary.
+ */
+export interface ExpressionShot {
+  id: string; category: string; title: string; description: string;
+  framing: string[]; pose: string[]; morphology: string[]; alsoFits: string[];
+  sources: ShotSource[]; addedAt: string; done: boolean;
+}
 export const SHOT_LIST_FILE = 'Expression Shot List.json';
 export const INITIAL_SHOTS = [
   'Positive > Relief, Composure > Resolute, Positive > Warmth (open eyes, a quiet, relieved half-smile, the look of someone who has just come back)',
@@ -15,28 +24,65 @@ export const INITIAL_SHOTS = [
 
 export const shotKey = (expression: string) => expression.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 
+const CATEGORY = /\b([A-Z][A-Za-z]+) > ([A-Z][A-Za-z]+)/g;
+const capitalize = (text: string) => text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
+
+/**
+ * Split a free-text suggestion such as "Positive > Relief, Composure > Calm (a tired, soft smile)"
+ * into a main folder, other folders it fits, and the plain description of the face.
+ */
+export function parseShotSuggestion(text: string): Pick<ExpressionShot, 'category' | 'description' | 'alsoFits'> {
+  const clean = text.trim().replace(/\s+/g, ' ');
+  const folders = [...new Set([...clean.matchAll(CATEGORY)].map(m => `${m[1]}/${m[2]}`))];
+  const bracket = clean.match(/\(([^()]{3,})\)/)?.[1];
+  const rest = clean.replace(CATEGORY, '').replace(/\([^()]*\)/g, ' ')
+    .replace(/\s+/g, ' ').replace(/^(?:[\s,;:.—-]|\b(?:or|and|with|as a third choice)\b)+/i, '').trim();
+  const words = (bracket ?? (folders.length ? rest : clean)).trim().replace(/[.\s]+$/, '');
+  const description = words ? capitalize(words) + '.' : '';
+  return { category: folders[0] ?? '', alsoFits: folders.slice(1), description };
+}
+
+function fromText(text: string, sources: ShotSource[], addedAt: string, done: boolean, id: string = randomUUID()): ExpressionShot {
+  return { id, ...parseShotSuggestion(text), title: '', framing: [], pose: [], morphology: [], sources, addedAt, done };
+}
+
 function location() {
   const file = safeResolve('expressions', SHOT_LIST_FILE);
   if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) throw new Error('The shot list must be a real file.');
   return file;
 }
 
+const strings = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+const validSources = (value: unknown) => Array.isArray(value) && value.every(s => s && typeof s.piece === 'string' && typeof s.context === 'string' && (s.text === undefined || typeof s.text === 'string'));
+
 function load(): { shots: ExpressionShot[]; original: string | null } {
   const file = location();
   if (!fs.existsSync(file)) return { shots: [], original: null };
   const original = fs.readFileSync(file, 'utf8');
   let value: unknown;
-  try { value = JSON.parse(original.replace(/^\uFEFF/, '')); }
+  try { value = JSON.parse(original.replace(/^﻿/, '')); }
   catch { throw new Error('The expression shot list could not be read. Nothing was changed.'); }
   const data = value as { version?: unknown; shots?: unknown };
-  if (data?.version !== 1 || !Array.isArray(data.shots) || data.shots.some((s: ExpressionShot) => !s || typeof s.id !== 'string' || typeof s.expression !== 'string' || typeof s.addedAt !== 'string' || typeof s.done !== 'boolean' || !Array.isArray(s.sources) || s.sources.some(source => !source || typeof source.piece !== 'string' || typeof source.context !== 'string'))) throw new Error('The expression shot list has an unexpected format. Nothing was changed.');
+  const unexpected = new Error('The expression shot list has an unexpected format. Nothing was changed.');
+  if (!Array.isArray(data?.shots)) throw unexpected;
+  // Version 1 kept each suggestion as one line of text; read it as unsorted looks.
+  if (data.version === 1) {
+    const old = data.shots as { id?: unknown; expression?: unknown; sources?: unknown; addedAt?: unknown; done?: unknown }[];
+    if (old.some(s => !s || typeof s.id !== 'string' || typeof s.expression !== 'string' || typeof s.addedAt !== 'string' || typeof s.done !== 'boolean' || !validSources(s.sources))) throw unexpected;
+    return { shots: old.map(s => {
+      const text = s.expression as string; const sources = s.sources as ShotSource[];
+      const withText = sources.length ? sources.map(src => ({ ...src, text: src.text ?? text })) : [{ piece: '', context: '', text }];
+      return fromText(text, withText, s.addedAt as string, s.done as boolean, s.id as string);
+    }), original };
+  }
+  if (data.version !== 2 || (data.shots as ExpressionShot[]).some(s => !s || typeof s.id !== 'string' || typeof s.category !== 'string' || typeof s.title !== 'string' || typeof s.description !== 'string' || !strings(s.framing) || !strings(s.pose) || !strings(s.morphology) || !strings(s.alsoFits) || typeof s.addedAt !== 'string' || typeof s.done !== 'boolean' || !validSources(s.sources))) throw unexpected;
   return { shots: data.shots as ExpressionShot[], original };
 }
 
 export function readShotList(): ExpressionShot[] { return load().shots; }
 
 function save(shots: ExpressionShot[], original: string | null) {
-  const file = location(); const text = JSON.stringify({ version: 1, shots }, null, 2) + '\n';
+  const file = location(); const text = JSON.stringify({ version: 2, shots }, null, 2) + '\n';
   if (original === null) fs.writeFileSync(file, text, { flag: 'wx' });
   else {
     if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== original) throw new Error('The shot list changed elsewhere. Reload it and try again; nothing was changed.');
@@ -46,10 +92,14 @@ function save(shots: ExpressionShot[], original: string | null) {
 
 /** Create the requested starting list once; never replace an existing file. */
 export function seedShotList(): ExpressionShot[] {
-  const shots = INITIAL_SHOTS.map(expression => ({ id: randomUUID(), expression, sources: [], addedAt: new Date().toISOString(), done: false }));
-  fs.writeFileSync(location(), JSON.stringify({ version: 1, shots }, null, 2) + '\n', { flag: 'wx' });
+  const now = new Date().toISOString();
+  const shots = INITIAL_SHOTS.map(text => fromText(text, [{ piece: '', context: '', text }], now, false));
+  fs.writeFileSync(location(), JSON.stringify({ version: 2, shots }, null, 2) + '\n', { flag: 'wx' });
   return shots;
 }
+
+/** Has this exact suggestion (ignoring case and spacing) already been added to a look? */
+export const shotHasSuggestion = (shot: ExpressionShot, text: string) => shot.sources.some(s => s.text !== undefined && shotKey(s.text) === shotKey(text));
 
 /** Add the checked expressions, retaining where each suggestion came from. */
 export function addExpressionShots(piece: string, input: unknown): ExpressionShot[] {
@@ -63,12 +113,12 @@ export function addExpressionShots(piece: string, input: unknown): ExpressionSho
   });
   const { shots, original } = load();
   for (const item of items) {
-    const source = { piece, context: item.context };
-    const existing = shots.find(shot => shotKey(shot.expression) === shotKey(item.expression));
+    const source = { piece, context: item.context, text: item.expression };
+    const existing = shots.find(shot => shotHasSuggestion(shot, item.expression));
     if (existing) {
       if (!existing.sources.some(s => s.piece === piece && s.context === source.context)) existing.sources.push(source);
       existing.done = false;
-    } else shots.push({ id: randomUUID(), expression: item.expression, sources: [source], addedAt: new Date().toISOString(), done: false });
+    } else shots.push(fromText(item.expression, [source], new Date().toISOString(), false));
   }
   save(shots, original); return shots;
 }

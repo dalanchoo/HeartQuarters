@@ -40,15 +40,16 @@ export function reloadExpressionJobs(): void {
 }
 function ensureLoaded(): void { if (loadedRoot !== root()) reloadExpressionJobs(); }
 
-export function expressionPrompt(name: string, definition: string | null, options: Options): string {
-  return [`Create a high-resolution, photorealistic portrait of John based on the attached reference photos. Preserve his identity, age, hair, facial hair and natural features; do not make him younger or change his face. Keep his complexion even without plastic skin or exaggerated redness.`, `Expression: ${name}. ${definition ?? ''} Make it clear, authentic and restrained, not an exaggerated YouTube face.`, `Framing: ${options.framing || 'head and shoulders with room around the head'}. Face orientation: ${options.angle || 'natural'}. Gaze: ${options.gaze || 'natural'}.`, 'Use soft, flattering, even studio lighting and a plain neutral contrasting background that is easy to remove. No text, graphics, watermark, or extra people.', 'Use your image generation tool, not code. Save the image in the current folder as candidate.png and reply with its full path.'].join('\n\n');
+export function expressionPrompt(name: string, definition: string | null, options: Options, look = ''): string {
+  return [`Create a high-resolution, photorealistic portrait of John based on the attached reference photos. Preserve his identity, age, hair, facial hair and natural features; do not make him younger or change his face. Keep his complexion even without plastic skin or exaggerated redness.`, `Expression: ${name}. ${definition ?? ''} Make it clear, authentic and restrained, not an exaggerated YouTube face.${look ? ` The exact look: ${look}` : ''}`, `Framing: ${options.framing || 'head and shoulders with room around the head'}. Face orientation: ${options.angle || 'natural'}. Gaze: ${options.gaze || 'natural'}.`, 'Use soft, flattering, even studio lighting and a plain neutral contrasting background that is easy to remove. No text, graphics, watermark, or extra people.', 'Use your image generation tool, not code. Save the image in the current folder as candidate.png and reply with its full path.'].join('\n\n');
 }
 
-export function previewExpressionPrompt(category: string, options: Options): string {
+export function previewExpressionPrompt(category: string, options: Options, look = ''): string {
+  if (typeof look !== 'string' || look.length > 2000) throw new Error('The look description is too long.');
   const index = buildExpressionIndex(); const selected = index.categories.find((c) => c.path === category);
   if (!selected || !category || index.categories.some((c) => c.parent === category)) throw new Error('Choose a specific expression category.');
   if (!options || Object.entries(values).some(([key, allowed]) => !allowed.includes(options[key as keyof Options]))) throw new Error('Choose valid framing, face direction and gaze options.');
-  return expressionPrompt(selected.name, selected.definition, options);
+  return expressionPrompt(selected.name, selected.definition, options, look.trim());
 }
 
 export function startExpressionGeneration(category: string, refs: unknown, options: Options, ai: unknown = 'codex', make: MakeImage = makeImage, requestedPrompt?: unknown): { job: Job; finished: Promise<void> } {

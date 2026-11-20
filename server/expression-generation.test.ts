@@ -4,7 +4,7 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
 import { saveExpressionReferences } from './expression-references';
-import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, rejectExpression, reloadExpressionJobs, startExpressionGeneration } from './expression-generation';
+import { approveExpression, assignExpressionCategory, candidateFile, expressionJob, expressionJobs, expressionPrompt, rejectExpression, reloadExpressionJobs, startExpressionGeneration } from './expression-generation';
 import type { MakeImage } from './thumbnails';
 let tmp: string; let oldRoot: string; let oldRefs: string | undefined; let oldDrafts: string | undefined;
 const png = Buffer.from([137,80,78,71,13,10,26,10,1]);
@@ -20,6 +20,11 @@ describe('expression generation', () => {
     const result = approveExpression(job.id); expect(result.path).toBe('Positive/Warmth/Warmth_AI_001.png'); expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('Warmth, N/A, UNCONFIRMED');
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toContain('AIGenerated, N/A, CONFIRMED');
+  });
+  it('adds a shot list look to the suggested prompt only when one is given', () => {
+    const options = { framing: 'HeadShoulders', angle: '', gaze: 'LookAtCamera' };
+    expect(expressionPrompt('Calm', null, options, 'A slight, settled smile.')).toContain('The exact look: A slight, settled smile.');
+    expect(expressionPrompt('Calm', null, options)).not.toContain('The exact look');
   });
   it('rejects unsafe references and discards a rejected candidate', async () => {
     expect(() => startExpressionGeneration('Positive/Warmth', ['../bad.jpg'], options, 'codex', fake)).toThrow();

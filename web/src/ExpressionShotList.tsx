@@ -11,7 +11,7 @@ import {
   type VideoPromptMode,
 } from './expressionVideoPrompts';
 
-export function ExpressionShotList({ active, index }: { active: boolean; index: ExpressionIndex | null }) {
+export function ExpressionShotList({ active, index, onGenerate }: { active: boolean; index: ExpressionIndex | null; onGenerate: (shot: ExpressionShot) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -44,15 +44,24 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
     return buildPromptsFromGaps(gaps, gaze, perClip, maxPhotos);
   }, [promptMode, shots, gaps, gaze, perClip, maxPhotos]);
 
-  const group = (title: string, items: ExpressionShot[], initiallyOpen: boolean) => <details className="yt-section expression-shot-group" open={initiallyOpen}>
-    <summary>{title} ({items.length})</summary>
-    {!items.length && <p className="muted small-text">{initiallyOpen ? 'No shots waiting to be photographed.' : 'No photographed shots yet.'}</p>}
-    {items.map(shot => <article className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
-      <label><input type="checkbox" checked={shot.done} disabled={!!busy} onChange={e => void setDone(shot, e.target.checked)} /> <strong>{shot.done ? 'Done' : 'To Photograph'}</strong></label>
-      <p>{shot.expression}</p>
-      {shot.sources.length > 0 && <details><summary>Suggested For ({shot.sources.length})</summary><ul>{shot.sources.map((source, i) => <li key={`${source.piece}-${source.context}-${i}`}>{source.piece.split('/').join(' › ')}{source.context && ` · ${source.context}`}</li>)}</ul></details>}
-    </article>)}
-  </details>;
+  const known = new Set(index?.categories.map(c => c.path) ?? []);
+  const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
+  const card = (shot: ExpressionShot) => {
+    const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
+    return <article className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
+      {shot.title && <h3>{shot.title}</h3>}
+      <p>{shot.description || <span className="muted">No description yet.</span>}</p>
+      {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([name, list]) => <span key={name}><strong>{name}:</strong> {list.join(', ')}</span>)}</p>}
+      {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
+      <div className="expression-shot-actions">
+        {!shot.done && <button className="small" disabled={!known.has(shot.category)} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => onGenerate(shot)}>Generate Reference With AI</button>}
+        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to Shot List' : 'Mark Done'}</button>
+      </div>
+    </article>;
+  };
+  const byFolder = new Map<string, ExpressionShot[]>();
+  for (const shot of remaining) byFolder.set(shot.category, [...(byFolder.get(shot.category) ?? []), shot]);
+  const folders = [...byFolder.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
 
   return <section className="expression-shot-list">
     <h2>Expression Shot List</h2>
@@ -60,7 +69,17 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
     <p className="muted small-text">Saved in Expression Shot List.json in your Expressions folder.</p>
     {error && <p className="error" role="alert">{error}</p>}
 
-    <details className="yt-section video-prompt-builder" open>
+    {!shots && !error && <p className="muted">Loading Shot List…</p>}
+    {shots && <section className="expression-shot-groups">
+      <h3>To Photograph ({remaining.length})</h3>
+      {!remaining.length && <p className="muted small-text">No shots waiting to be photographed.</p>}
+      {folders.map(folder => <details className="yt-section expression-shot-group" key={folder || 'unsorted'}>
+        <summary>{folderLabel(folder)} ({byFolder.get(folder)!.length})</summary>
+        {byFolder.get(folder)!.map(card)}
+      </details>)}
+      {photographed.length > 0 && <details className="yt-section expression-shot-group"><summary>Photographed ({photographed.length})</summary>{photographed.map(card)}</details>}
+    </section>}
+    <details className="yt-section video-prompt-builder">
       <summary>AI Video Prompts (Seed With Reference Photo)</summary>
       <p className="muted small-text">
         Google Veo in Gemini generates up to 8 seconds per clip (up to 15 seconds on newer Gemini video models). Using 3 expressions per 8s clip (or 2 when turning both directions) leaves room for smooth head turns and a ~1.5s still hold on each pose.
@@ -105,7 +124,7 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
 
       {!videoPrompts.length ? (
         <p className="muted small-text">
-          {promptMode === 'shot-list' ? 'No unchecked shots in To Photograph.' : 'No expression categories match that photo count.'}
+          {promptMode === 'shot-list' ? 'No shots waiting in To Photograph.' : 'No expression categories match that photo count.'}
         </p>
       ) : (
         <div className="video-prompt-list">
@@ -122,8 +141,6 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
       )}
     </details>
 
-    {!shots && !error && <p className="muted">Loading Shot List…</p>}
-    {shots && <>{group('To Photograph', remaining, true)}{group('Photographed', photographed, false)}</>}
     <ExpressionVideos active={active} />
   </section>;
 }

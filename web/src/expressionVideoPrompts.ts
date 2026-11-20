@@ -54,8 +54,9 @@ export function findLibraryGaps(index: ExpressionIndex): LibraryGap[] {
 }
 
 function formatShotExpression(shot: ExpressionShot): ExpressionTarget {
-  const clean = shot.expression.trim().replace(/\s+/g, ' ');
-  return { label: clean };
+  const folder = shot.category.split('/').join(' > ');
+  const label = [folder, shot.title].filter(Boolean).join(': ') || shot.description;
+  return { label, detail: label === shot.description ? undefined : shot.description || undefined };
 }
 
 function formatGapExpression(gap: LibraryGap): ExpressionTarget {

@@ -30,14 +30,19 @@ describe('expressionVideoPrompts', () => {
     expect(gaps[2]).toMatchObject({ count: 3, rightCount: 1, leftCount: 1 });
   });
 
+  const shot = (id: string, category: string, done: boolean): ExpressionShot => ({ id, category, title: '', description: '', framing: [], pose: [], morphology: [], alsoFits: [], sources: [], addedAt: '', done });
+  it('uses a shot title and description in the clip list', () => {
+    const [prompt] = buildPromptsFromShotList([{ ...shot('1', 'Composure/Calm', false), title: 'Settled', description: 'A slight smile.' }], 'right', 3);
+    expect(prompt.prompt).toContain('1. Composure > Calm: Settled — A slight smile.');
+  });
   it('builds batched prompts from unchecked shot list items with neutral backdrop, studio lighting, and gaze', () => {
     const shots: ExpressionShot[] = [
-      { id: '1', expression: 'Already done', sources: [], addedAt: '', done: true },
-      { id: '2', expression: 'Positive > Relief', sources: [], addedAt: '', done: false },
-      { id: '3', expression: 'Composure > Calm', sources: [], addedAt: '', done: false },
-      { id: '4', expression: 'Reactive > Curiosity', sources: [], addedAt: '', done: false },
-      { id: '5', expression: 'Cognitive > Thinking', sources: [], addedAt: '', done: false },
-      { id: '6', expression: 'Empathy > Compassion', sources: [], addedAt: '', done: false },
+      shot('1', 'Already/Done', true),
+      shot('2', 'Positive/Relief', false),
+      shot('3', 'Composure/Calm', false),
+      shot('4', 'Reactive/Curiosity', false),
+      shot('5', 'Cognitive/Thinking', false),
+      shot('6', 'Empathy/Compassion', false),
     ];
     const prompts = buildPromptsFromShotList(shots, 'right', 4);
     expect(prompts).toHaveLength(2);
