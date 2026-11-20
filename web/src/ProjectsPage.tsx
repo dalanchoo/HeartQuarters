@@ -38,7 +38,7 @@ import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 import { ChannelAnalytics } from './ChannelAnalytics';
 
-type Filter = 'all' | 'no-capcut' | 'not-exported' | 'not-packaged' | 'not-uploaded' | 'review' | 'clean-up';
+type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'review' | 'clean-up';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 function needsReview(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return item.link !== 'linked' || !item.localThumbnail || !!checks[item.path]?.issues.length || !!checks[item.path]?.unknown.length; }
@@ -51,7 +51,8 @@ function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks
     case 'all': return true;
     case 'no-capcut': return !item.capcut;
     case 'not-exported': return !item.exported;
-    case 'not-packaged': return !item.packaged;
+    case 'no-metadata': return item.metadataMissing.length > 0;
+    case 'no-thumbnail': return !item.localThumbnail;
     case 'not-uploaded': return item.link !== 'linked';
     case 'review': return needsReview(item, checks);
     case 'clean-up': return canCleanUp(item, cleanup);
@@ -232,7 +233,7 @@ export function ProjectsPage() {
           <NewFolderButton kind="top" onCreated={onCreated} />
           <NewFolderButton kind="standalone" onCreated={onCreated} />
         </div>
-        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="not-packaged">Not Packaged</option><option value="not-uploaded">Not Uploaded</option><option value="review">Needs Review</option><option value="clean-up">Can Clean Up</option></select></label>
+        <label className="status-filter">Show <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="review">Needs Review</option><option value="clean-up">Can Clean Up</option></select></label>
         <label className="status-filter">Find Video <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" /></label>
         <p className="status-legend">YouTube checks last for this session; check again after changing Studio.</p>
         <button className="small" disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>

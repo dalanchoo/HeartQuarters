@@ -4,15 +4,16 @@ import { appDir, safeResolve } from './config.js';
 import { listProjectVideos, type Video } from './projects.js';
 import { listDrafts, plainDraftName } from './create.js';
 import { youtubeVideoId } from './youtube-video.js';
-import { parseFields } from '../web/src/packaging.js';
+import { missingMetadata, parseFields } from '../web/src/packaging.js';
 
 export type LinkState = 'linked' | 'missing' | 'unknown';
 /**
  * One video's place on the way to YouTube. capcut: a CapCut project with its name exists (the video folder's name for a
- * longform, the short's folder name for a short). exported: a file in Exports. packaged: the newest packaging version
- * has a thumbnail and a YouTube title. Being on YouTube is `link`.
+ * longform, the short's folder name for a short). exported: a file in Exports. metadataMissing: what the newest
+ * packaging version's YouTube text still lacks (empty when it's complete). localThumbnail: that version has a
+ * thumbnail. Being on YouTube is `link`.
  */
-export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; titles?: string[]; capcut: boolean; exported: boolean; packaged: boolean; }
+export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; titles?: string[]; capcut: boolean; exported: boolean; metadataMissing: string[]; }
 type RecordInfo = { piece?: string; status?: string; videoId?: string };
 type SavedLink = { state: LinkState; id?: string };
 
@@ -21,19 +22,29 @@ function savedTitles(piece: Video['pieces'][number]): string[] {
   return [...new Set(piece.versions.flatMap(versionTitles))];
 }
 
-/** The YouTube titles saved in one packaging version. */
-function versionTitles(version: Video['pieces'][number]['versions'][number]): string[] {
-  const titles: string[] = [];
+/** The YouTube text files (YouTube*.md) of one packaging version, read. Unreadable or very large ones are skipped. */
+function youtubeTexts(version: Video['pieces'][number]['versions'][number]): string[] {
+  const texts: string[] = [];
   for (const doc of version.docs) {
     if (!/^youtube.*\.md$/i.test(path.posix.basename(doc.name))) continue;
     try {
       const file = safeResolve('projects', doc.path);
       if (fs.statSync(file).size > 2_000_000) continue;
-      const title = parseFields(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))?.find(field => field.label.toLowerCase() === 'title')?.value.trim();
-      if (title) titles.push(title);
+      texts.push(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
     } catch { /* A missing or unreadable version should not hide the project list. */ }
   }
-  return titles;
+  return texts;
+}
+
+/** The YouTube titles saved in one packaging version. */
+function versionTitles(version: Video['pieces'][number]['versions'][number]): string[] {
+  return youtubeTexts(version).flatMap((text) => parseFields(text)?.find((field) => field.label.toLowerCase() === 'title')?.value.trim() || []);
+}
+
+/** What the newest version's YouTube text still lacks (the most complete file counts), or everything without one. */
+function versionMissing(version: Video['pieces'][number]['versions'][number] | undefined): string[] {
+  const lists = version ? youtubeTexts(version).map(missingMetadata) : [];
+  return lists.length ? lists.reduce((best, list) => (list.length < best.length ? list : best)) : missingMetadata('');
 }
 
 /** Read upload records once, rather than once per project. An unreadable record is not proof of a missing link. */
@@ -62,7 +73,7 @@ export function makeVideoOverview(videos: { projectId: string; video: Video }[],
     return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (latest?.covers.length ?? 0) > 0, titles: savedTitles(piece),
       capcut: capcutNames.has(plainDraftName(piece.kind === 'longform' ? path.posix.basename(projectId) : piece.name).toLowerCase()),
       exported: piece.exports.length > 0,
-      packaged: !!latest && latest.covers.length > 0 && versionTitles(latest).length > 0 };
+      metadataMissing: versionMissing(latest) };
   }));
 }
 

@@ -19,11 +19,11 @@ describe('video overview', () => {
     expect(result[0]).toMatchObject({ link: 'linked', localThumbnail: true });
     expect(result[1]).toMatchObject({ link: 'linked', localThumbnail: false });
   });
-  it('reports the CapCut, Exported and Packaged steps', () => {
+  it('reports the CapCut, Exported, Metadata and Thumbnail steps', () => {
     const old = config.videoProjectsDir; config.videoProjectsDir = tmp;
     try {
       fs.mkdirSync(path.join(tmp, 'p/Longform/Packaging/V01'), { recursive: true });
-      fs.writeFileSync(path.join(tmp, 'p/Longform/Packaging/V01/YouTube.md'), 'Title:\nA Title\n');
+      fs.writeFileSync(path.join(tmp, 'p/Longform/Packaging/V01/YouTube.md'), 'Title:\nA Title\n\nDescription:\nWords #sdam\n\nTags:\nSDAM\n\nPinned Comment:\nHi\n\nVideo language:\nen-US\n\nMade for kids:\nNo\n\nAltered content:\nNo\n');
       const doc = { name: 'YouTube.md', path: 'p/Longform/Packaging/V01/YouTube.md', size: 1 };
       const cover = { name: 'Thumbnail.png', path: 'p/Longform/Packaging/V01/Thumbnail/Thumbnail.png', size: 1 };
       const video: Video = { name: 'p', path: 'p', pieces: [
@@ -32,10 +32,10 @@ describe('video overview', () => {
         { name: 'p_S02 - Two', kind: 'short', path: 'p/Shorts/p_S02 - Two', exports: [], packagingVersion: null, drafts: null, versions: [] },
       ] };
       const result = makeVideoOverview([{ projectId: 'Group/p', video }], { jobs: [], complete: true }, () => ({ state: 'missing' }), new Set(['p', 'p_s01 - one']));
-      expect(result.map(({ capcut, exported, packaged }) => ({ capcut, exported, packaged }))).toEqual([
-        { capcut: true, exported: true, packaged: true },
-        { capcut: true, exported: false, packaged: false },
-        { capcut: false, exported: false, packaged: false },
+      expect(result.map(({ capcut, exported, metadataMissing, localThumbnail }) => ({ capcut, exported, metadata: metadataMissing.length, localThumbnail }))).toEqual([
+        { capcut: true, exported: true, metadata: 0, localThumbnail: true },
+        { capcut: true, exported: false, metadata: 8, localThumbnail: true },
+        { capcut: false, exported: false, metadata: 8, localThumbnail: false },
       ]);
     } finally { config.videoProjectsDir = old; }
   });

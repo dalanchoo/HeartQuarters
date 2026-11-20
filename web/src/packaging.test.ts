@@ -1,6 +1,6 @@
 // Splitting YouTube.md and similar files into fields for the Copy buttons.
 import { describe, expect, it } from 'vitest';
-import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags, undoFieldEdit } from './packaging';
+import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, missingMetadata, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags, undoFieldEdit } from './packaging';
 
 describe('undoing an individual field edit', () => {
   it('restores the saved field while keeping other edits', () => {
@@ -243,5 +243,22 @@ describe('the AI lines', () => {
   it('changes nothing when nothing changed, or when there is no description', () => {
     expect(setAiLines(FILE, { visuals: false, music: false })).toBe(FILE);
     expect(setAiLines('Title:\nA\n\nTags:\nb', { visuals: true, music: true })).toBe('Title:\nA\n\nTags:\nb');
+  });
+});
+
+describe('missingMetadata', () => {
+  const full = 'Title:\nA Title\n\nDescription:\nWords.\n\n#sdam #shorts\n\nTags:\nSDAM, Memory\n\nPinned Comment:\nWhat do you think?\n\nVideo language:\nen-US\n\nMade for kids:\nNo\n\nAltered content:\nNo\n';
+  it('is empty when every field is filled in', () => {
+    expect(missingMetadata(full)).toEqual([]);
+  });
+  it('lists empty or absent fields, and hashtags when there are none', () => {
+    const text = full.replace('#sdam #shorts', '#tags').replace('What do you think?', '').replace('Made for kids:\nNo\n\n', '');
+    expect(missingMetadata(text)).toEqual(['Hashtags', 'Pinned Comment', 'Made for kids']);
+  });
+  it('accepts hashtags in their own field', () => {
+    expect(missingMetadata(full.replace('#sdam #shorts', '') + '\nHashtags:\n#sdam\n')).toEqual([]);
+  });
+  it('lists everything for a file in another format', () => {
+    expect(missingMetadata('Just some notes')).toHaveLength(8);
   });
 });

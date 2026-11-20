@@ -211,3 +211,18 @@ export function setAiLines(text: string, want: AiLines): string {
   const endsWithBlank = range.to < lines.length || body[body.length - 1] === '';
   return [...lines.slice(0, range.from), ...newBody, ...(endsWithBlank ? [''] : []), ...lines.slice(range.to)].join(eol);
 }
+
+/** What a YouTube text file needs before the video counts as having its metadata, in the order they appear. */
+const REQUIRED_METADATA = ['Title', 'Description', 'Hashtags', 'Tags', 'Pinned Comment', 'Video language', 'Made for kids', 'Altered content'];
+
+/**
+ * The metadata a YouTube text file is still missing (empty when it's complete). Hashtags count when the description
+ * or a Hashtags field has at least one, other than the template's "#tags".
+ */
+export function missingMetadata(text: string): string[] {
+  const fields = parseFields(text.replace(/^﻿/, ''));
+  if (!fields) return [...REQUIRED_METADATA];
+  const value = (label: string) => fields.find((f) => f.label.toLowerCase() === label.toLowerCase())?.value.trim() ?? '';
+  const hashtags = `${value('Description')}\n${value('Hashtags')}`.match(/(^|\s)#[\p{L}\p{N}_]+/gu)?.some((tag) => tag.trim().toLowerCase() !== '#tags') ?? false;
+  return REQUIRED_METADATA.filter((label) => (label === 'Hashtags' ? !hashtags : !value(label)));
+}
