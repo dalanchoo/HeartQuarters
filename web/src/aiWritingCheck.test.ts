@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findAiTellSpans, findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
+import { applySuggestion, findAiTellSpans, findAiWritingTells, isProseFieldLabel } from './aiWritingCheck';
 
 describe('findAiWritingTells', () => {
   it('returns empty for plain, natural first-person writing with varied sentence length', () => {
@@ -64,5 +64,14 @@ describe('findAiWritingTells', () => {
     expect(isProseFieldLabel('Tags')).toBe(false);
     expect(isProseFieldLabel('Hashtags')).toBe(false);
     expect(isProseFieldLabel('Video language')).toBe(false);
+  });
+});
+
+describe('applySuggestion', () => {
+  it('replaces the whole sentence once, taking the rewrite literally', () => {
+    expect(applySuggestion('One. Two two. Three.', 'Two two.', 'It costs $1.')).toBe('One. It costs $1. Three.');
+  });
+  it('returns null when the sentence is no longer in the text', () => {
+    expect(applySuggestion('One.', 'Two.', 'x')).toBeNull();
   });
 });

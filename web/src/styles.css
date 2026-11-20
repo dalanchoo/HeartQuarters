@@ -908,6 +908,19 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .ai-writing-review { margin-top: 0.4rem; padding: 0.5rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .ai-writing-review .markdown > :first-child { margin-top: 0; }
 .ai-writing-review .markdown > :last-child { margin-bottom: 0; }
+.ai-suggestion-text { margin: 0.3rem 0; }
+.ai-suggestion-mark { cursor: pointer; background: #fff3c4; box-shadow: 0 -2px 0 #d4a106 inset; border-radius: 2px; white-space: pre-wrap; }
+.ai-suggestion-mark:hover, .ai-suggestion-mark.picked { background: #ffe27a; }
+.ai-suggestion-mark:focus-visible { outline: 2px solid #d4a106; }
+.ai-suggestions { margin: 0.3rem 0; padding-left: 1.2rem; }
+ul.ai-suggestions { list-style: none; padding-left: 0; }
+.ai-suggestion { margin: 0.35rem 0; padding: 0.45rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); display: grid; gap: 0.25rem; justify-items: start; }
+.ai-suggestion.picked { border-color: #d4a106; }
+.ai-suggestion.used { opacity: 0.6; }
+.ai-suggestion-label { font-weight: 700; color: var(--muted); }
+.ai-suggestion-find { text-decoration: line-through; text-decoration-color: #b3261e; }
+.ai-suggestion-replace { color: #21673d; font-weight: 600; }
+.ai-suggestion-list > summary { cursor: pointer; font-weight: 600; }
 .ai-tell-mark { position: relative; text-decoration: underline wavy #7e22ce 2px; text-underline-offset: 2px; background: #f3e8ff; color: #581c87; border-radius: 3px; cursor: help; }
 .diff-local .ai-tell-mark, .diff-youtube .ai-tell-mark { background: transparent; color: inherit; box-shadow: 0 -1px 0 #7e22ce inset; }
 .ai-tell-mark:hover::after { content: attr(data-ai-tell); position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 20; width: max-content; max-width: 24rem; padding: 0.3rem 0.55rem; border-radius: 6px; background: #3b0764; color: #fff; font-size: 0.78rem; font-weight: 500; line-height: 1.35; white-space: normal; box-shadow: 0 4px 12px rgba(0,0,0,0.25); pointer-events: none; }

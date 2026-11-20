@@ -791,7 +791,7 @@ export function EditableComparisonValue({ doc, index, field, current, savedValue
         {undoError && <p className="error">{undoError}</p>}
       </>}
     </div>
-    <AiWritingChecker text={field.value} label={field.label} />
+    <AiWritingChecker text={field.value} label={field.label} onReplace={doc.locked || copySelected ? undefined : (next) => { onEdited?.(); return doc.save((text) => setFieldValue(text, index, next)); }} />
   </div>;
 }
 

@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { postJson } from './api';
-import { findAiTellSpans, findAiWritingTells, isProseFieldLabel, type AiTellSpan } from './aiWritingCheck';
-import type { AiWritingReview } from '../../server/ai-writing';
+import { applySuggestion, findAiTellSpans, findAiWritingTells, isProseFieldLabel, type AiTellSpan } from './aiWritingCheck';
+import type { AiWritingReview, AiWritingSuggestion } from '../../server/ai-writing';
 
 /**
  * Renders `text` (which starts at `offset` within the full string) with `<span className="ai-tell-mark">`
@@ -42,10 +42,52 @@ export function AiHighlightedText({ text }: { text: string }) {
   return <>{renderTextWithAiTells(text)}</>;
 }
 
-export function AiWritingChecker({ text, label }: { text: string; label: string }) {
+/**
+ * The text with each suggestion still in it highlighted, in order. Clicking a highlight picks that suggestion.
+ * Suggestions already used (or edited away) aren't marked.
+ */
+function SuggestionText({ text, suggestions, picked, onPick }: { text: string; suggestions: AiWritingSuggestion[]; picked: number | null; onPick: (index: number) => void }) {
+  const parts: ReactNode[] = [];
+  let at = 0;
+  suggestions.forEach((s, i) => {
+    const found = text.indexOf(s.find, at);
+    if (found < 0) return;
+    parts.push(text.slice(at, found));
+    parts.push(
+      // A span, not a button, so a highlighted sentence flows inside its paragraph like the rest of the text.
+      <span
+        role="button"
+        tabIndex={0}
+        key={i}
+        className={`ai-suggestion-mark${picked === i ? ' picked' : ''}`}
+        title={s.why}
+        onClick={() => onPick(i)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onPick(i);
+          }
+        }}
+      >
+        {s.find}
+      </span>,
+    );
+    at = found + s.find.length;
+  });
+  parts.push(text.slice(at));
+  return <pre className="lvy-value ai-suggestion-text">{parts}</pre>;
+}
+
+/**
+ * Under a field: quick checks for common AI phrasing, and "Check for AI Writing", which asks the chosen AI for whole
+ * sentences to rewrite. With `onReplace` (an editable field), a rewrite can be put straight into the field.
+ */
+export function AiWritingChecker({ text, label, onReplace }: { text: string; label: string; onReplace?: (next: string) => void | Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState<AiWritingReview | null>(null);
   const [error, setError] = useState('');
+  const [picked, setPicked] = useState<number | null>(null);
+  const [copied, setCopied] = useState<number | null>(null);
 
   if (!isProseFieldLabel(label)) return null;
   const trimmed = text.trim();
@@ -57,6 +99,7 @@ export function AiWritingChecker({ text, label }: { text: string; label: string 
     setError('');
     try {
       setReview(await postJson<AiWritingReview>('/api/ai-writing-check', { text: trimmed, label }));
+      setPicked(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -65,6 +108,43 @@ export function AiWritingChecker({ text, label }: { text: string; label: string 
   };
 
   if (!trimmed && !review && !error) return null;
+
+  const use = async (i: number) => {
+    const s = review?.suggestions[i];
+    if (!s) return;
+    const next = applySuggestion(text, s.find, s.replace);
+    if (next === null) return;
+    setError('');
+    if (onReplace) {
+      try {
+        await onReplace(next);
+        setPicked(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    } else {
+      await navigator.clipboard.writeText(s.replace).catch(() => undefined);
+      setCopied(i);
+      setTimeout(() => setCopied((c) => (c === i ? null : c)), 1500);
+    }
+  };
+  const suggestionCard = (s: AiWritingSuggestion, i: number) => {
+    const open = text.includes(s.find);
+    return (
+      <li key={i} className={`ai-suggestion${picked === i ? ' picked' : ''}${open ? '' : ' used'}`}>
+        <div><span className="ai-suggestion-label">Replace</span> <span className="ai-suggestion-find">{s.find}</span></div>
+        <div><span className="ai-suggestion-label">With</span> <span className="ai-suggestion-replace">{s.replace}</span></div>
+        {s.why && <div className="muted">{s.why}</div>}
+        {open ? (
+          <button type="button" className="small" onClick={() => void use(i)}>
+            {onReplace ? 'Replace in Text' : copied === i ? 'Copied ✓' : 'Copy Rewrite'}
+          </button>
+        ) : (
+          <div className="muted">✓ No longer in the text.</div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="ai-writing-checker">
@@ -107,9 +187,22 @@ export function AiWritingChecker({ text, label }: { text: string; label: string 
           <div className="small-text muted" style={{ marginBottom: '0.25rem' }}>
             <strong>{review.aiName} Writing Check:</strong>
           </div>
-          <div className="markdown small-text">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{review.review}</ReactMarkdown>
-          </div>
+          {review.review && (
+            <div className="markdown small-text">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{review.review}</ReactMarkdown>
+            </div>
+          )}
+          {review.suggestions.length > 0 && (
+            <>
+              <p className="small-text muted">Click a highlighted sentence to see its rewrite{onReplace ? ' and put it in' : ''}.</p>
+              <SuggestionText text={text} suggestions={review.suggestions} picked={picked} onPick={(i) => setPicked(picked === i ? null : i)} />
+              {picked !== null && review.suggestions[picked] && <ul className="ai-suggestions small-text">{suggestionCard(review.suggestions[picked], picked)}</ul>}
+              <details className="ai-suggestion-list small-text">
+                <summary>All Suggestions, in Order ({review.suggestions.length})</summary>
+                <ol className="ai-suggestions">{review.suggestions.map(suggestionCard)}</ol>
+              </details>
+            </>
+          )}
         </div>
       )}
     </div>

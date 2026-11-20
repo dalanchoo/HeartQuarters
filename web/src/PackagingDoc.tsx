@@ -134,7 +134,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
       />
-      <AiWritingChecker text={draft} label={field.label} />
+      <AiWritingChecker text={draft} label={field.label} onReplace={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }} />
       {error && <p className="error small-text">Not saved: {error}</p>}
     </details>
   );

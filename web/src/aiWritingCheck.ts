@@ -188,3 +188,9 @@ export function findAiWritingTells(text: string): AiWritingTell[] {
 
   return found;
 }
+
+/** `text` with the first `find` replaced by `replace` (taken literally), or null when `find` is no longer in it. */
+export function applySuggestion(text: string, find: string, replace: string): string | null {
+  const at = text.indexOf(find);
+  return at < 0 ? null : text.slice(0, at) + replace + text.slice(at + find.length);
+}
