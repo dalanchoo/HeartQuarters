@@ -576,11 +576,11 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         {doc.text && <CopyButton text={doc.text} label="Copy All" />}
         <span className="muted small-text">
           {doc.file.name}
-          {!linked && ' · Link this video to YouTube at the top to compare.'}
           {linked && !data && (loading ? ' · Reading from YouTube…' : ` · Looking at YouTube reads it (${units(readVideoCost(quota))}).`)}
         </span>
       </div>
       {!linked && !piece.exports.length && <div className="next-step" role="status"><strong>Export the {piece.kind === 'short' ? 'Short' : 'Video'} Before Writing This</strong><p>There's no video in Exports yet, so this can't be uploaded to YouTube. Export it from CapCut first (the notice at the top of this card has the buttons). You can still write the metadata here.</p></div>}
+      {!linked && <div className="upload-hint" role="note"><strong>Not on YouTube Yet</strong><p>There's nothing on YouTube to copy into, so there are no copy buttons here yet. <b>Upload to YouTube</b>, further down, sends everything in this version (title, description, tags and settings) together with the video. Once it's on YouTube, you can copy single fields across here. If it's already on YouTube, link it in YouTube Studio at the top of this card instead.</p><button className="small" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_UPLOAD, { detail: piece.path }))}>Go to Upload to YouTube</button></div>}
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
       {/* Which side is which, once, instead of on every field. */}
@@ -614,7 +614,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const youtubePart = !sync ? (
             <p className="muted small-text">{note ?? 'Only in the local file.'}</p>
           ) : !linked ? (
-            <p className="muted small-text">Not on YouTube yet.</p>
+            <p className="muted small-text">Not on YouTube yet. Upload to YouTube sends this.</p>
           ) : !data ? (
             <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>
           ) : remote === null ? (
@@ -882,9 +882,26 @@ function Related({ longform }: { longform?: string }) {
   );
 }
 
+/** Sent by "Go to Upload to YouTube": opens the Upload to YouTube section of the piece in `detail`. */
+const OPEN_UPLOAD = 'hq-open-upload';
+
 /** For a video not on YouTube yet: Upload sends the local file's values, with the video, thumbnail, captions and playlists chosen here. */
 function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; link: YoutubeLink; longform?: string; localThumb?: FileRef; subtitles: FileChoice[] }) {
   const [open, setOpen] = useState(false);
+  // "Go to Upload to YouTube" (in View and Compare Packaging) opens this section and brings it into view.
+  const here = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const go = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== piece.path) return;
+      setOpen(true);
+      // A jump, not a glide: the page grows as the section opens, which would stop a glide partway.
+      const jump = () => here.current?.scrollIntoView({ block: 'start' });
+      requestAnimationFrame(() => requestAnimationFrame(jump));
+      setTimeout(jump, 400);
+    };
+    window.addEventListener(OPEN_UPLOAD, go);
+    return () => window.removeEventListener(OPEN_UPLOAD, go);
+  }, [piece.path]);
   const [video, setVideo] = useState(piece.exports[0]?.path ?? '');
   const [cover, setCover] = useState(localThumb?.path ?? '');
   const [subtitle, setSubtitle] = useState(defaultSubtitle(subtitles));
@@ -902,7 +919,7 @@ function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }
       setSelected(longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []);
     }, (e: Error) => setError(e.message));
   }, [open]);
-  if (!piece.exports.length) return <div className="next-step" role="status"><strong>Can't Upload Yet: Export the Video First</strong><p>There's no video in Exports yet. Export it from CapCut into this {piece.kind === 'short' ? "short's" : "video's"} Exports folder (the notice at the top of this card has the buttons), then come back here to upload.</p></div>;
+  if (!piece.exports.length) return <div className="next-step" role="status" ref={here as React.RefObject<HTMLDivElement>}><strong>Can't Upload Yet: Export the Video First</strong><p>There's no video in Exports yet. Export it from CapCut into this {piece.kind === 'short' ? "short's" : "video's"} Exports folder (the notice at the top of this card has the buttons), then come back here to upload.</p></div>;
   const value = (label: SyncField) => {
     try {
       return localValue(doc.text ?? '', label) ?? '';
@@ -916,7 +933,7 @@ function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }
   const kids = answer('Made for kids') || 'no';
   const synthetic = answer('Altered content');
   return (
-    <details className="yt-section lvy-upload" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details ref={here as React.RefObject<HTMLDetailsElement>} className="yt-section lvy-upload" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>Upload to YouTube</summary>
       <p className="small-text">Upload sends the title, description, tags and settings above, as they are in the file.</p>
       {!title.trim() && <p className="error small-text">The file has no title yet.</p>}

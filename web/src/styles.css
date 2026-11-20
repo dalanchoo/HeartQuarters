@@ -951,3 +951,5 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .next-step > strong { font-size: 1rem; }
 .next-step > p { margin: 0.25rem 0 0.45rem; }
 .next-step-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.upload-hint { margin: 0.4rem 0 0.6rem; padding: 0.55rem 0.8rem; border: 1px solid #b5cdf0; border-left-width: 5px; border-radius: 6px; background: #eef4fd; color: #1d3f72; }
+.upload-hint > p { margin: 0.2rem 0 0.45rem; }
