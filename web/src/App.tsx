@@ -103,7 +103,7 @@ export function App() {
 
   const page = (id: TabId, element: ReactNode) =>
     visited.includes(id) ? (
-      <div key={id} hidden={tab !== id}>
+      <div key={id} className="tab-page" hidden={tab !== id}>
         {element}
       </div>
     ) : null;

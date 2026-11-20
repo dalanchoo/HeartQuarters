@@ -150,6 +150,8 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .topbar nav a { padding: 0.35rem 0.48rem; border-radius: 6px; color: var(--text); text-decoration: none; white-space: nowrap; }
 .topbar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 main { flex: 1; min-height: 0; }
+/* Each tab fills the space below the header, so a page's list and its right panel scroll separately. */
+.tab-page { height: 100%; }
 
 .split { display: flex; height: 100%; }
 .sidebar { width: 290px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--line);
