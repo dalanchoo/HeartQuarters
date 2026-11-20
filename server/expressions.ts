@@ -45,6 +45,8 @@ export interface ExpressionPhoto {
   category: string;
   /** Changes when a different file occupies this path, for browser image caches. */
   revision?: string;
+  /** True when the photo's sidecar has a three-AI assessment marker or per-model scores. */
+  assessedByThreeAIs?: boolean;
   tags: Tag[];
 }
 
@@ -57,11 +59,18 @@ export interface ExpressionIndex {
 let cached: { at: number; index: ExpressionIndex } | null = null;
 export function clearExpressionIndex(): void { cached = null; }
 
-function parseTagsFile(file: string): Tag[] {
+export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
+
+function readSidecar(file: string): { tags: Tag[]; assessedByThreeAIs: boolean } {
   try {
-    return parseTags(fs.readFileSync(file, 'utf8'));
+    const text = fs.readFileSync(file, 'utf8');
+    const tags = parseTags(text);
+    const assessedByThreeAIs =
+      /(?:^|\n)#\s*AssessedWithAllThreeAIs\b/i.test(text) ||
+      tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
+    return { tags, assessedByThreeAIs };
   } catch {
-    return [];
+    return { tags: [], assessedByThreeAIs: false };
   }
 }
 
@@ -69,6 +78,7 @@ function parseTagsFile(file: string): Tag[] {
 export function parseTags(text: string): Tag[] {
   return text
     .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('#'))
     .map((line) => line.replace(/^([^,:]+):\s*/, '$1, ').split(',').map((s) => s.trim()))
     .filter((parts) => parts.length >= 2 && parts[0])
     .map(([tag, conf, status, ...sources]) => {
@@ -102,7 +112,8 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sameBase = images.filter(other => path.basename(other.name, path.extname(other.name)).toLowerCase() === base.toLowerCase());
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, tags: sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? parseTagsFile(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : [] };
+    const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : { tags: [], assessedByThreeAIs: false };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -168,12 +179,14 @@ export function buildExpressionIndex(): ExpressionIndex {
       } else if (!file.startsWith('_') && relPath) {
         let stat: fs.Stats;
         try { stat = fs.statSync(path.join(dir, file)); } catch { continue; }
+        const sidecarInfo = files.has(`${base}.txt`) ? readSidecar(path.join(dir, `${base}.txt`)) : { tags: [], assessedByThreeAIs: false };
         photos.push({
           path: rel,
           revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`,
           name: base,
           category: relPath,
-          tags: files.has(`${base}.txt`) ? parseTagsFile(path.join(dir, `${base}.txt`)) : [],
+          ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
+          tags: sidecarInfo.tags,
         });
         category.ownCount++;
       }

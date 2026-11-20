@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, type ExpressionCategory } from './expressions.js';
+import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
@@ -80,13 +80,16 @@ export function mergeModelAssessments(text: string, results: Record<AiId, Assess
   const aggregated = [...scores.values()].map(entry => ({ tag: entry.tag, confidence: Math.max(...Object.values(entry.byAi)) }));
   const base = mergeAssessment(text, aggregated, categories);
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  return base.split(/\r?\n/).map(line => {
+  const lines = base.split(/\r?\n/).filter(line => !/^#\s*AssessedWithAllThreeAIs\b/i.test(line.trim())).map(line => {
     const parsed = parseTags(line)[0]; if (!parsed) return line;
     const clean = line.replace(/,\s*(?:claude|codex|gemini)=\d{1,3}%/gi, '');
     const entry = scores.get(parsed.tag.toLowerCase()); if (!entry) return clean;
     const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed || parsed.disconfirmed) ? [`${ai}=${score}%`] : []; });
     return clean + (details.length ? `, ${details.join(', ')}` : '');
-  }).join(newline);
+  });
+  while (lines.at(-1) === '') lines.pop();
+  lines.push(THREE_AI_ASSESSED_MARKER);
+  return lines.join(newline) + newline;
 }
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
 export function startAssessment(photoPath: string, ask: AskAi = askReadOnlyImage, prepare: (source: string, dest: string) => Promise<void> = prepareImage): Job {

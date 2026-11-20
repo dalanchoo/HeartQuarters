@@ -88,6 +88,29 @@ describe('buildExpressionIndex', () => {
     });
     expect(cats.get('')?.totalCount).toBe(3);
   });
+
+  it('recognizes photos assessed by all three AIs from either the marker comment or per-model scores', () => {
+    const t = makeTree({
+      'Positive/Joy/Joy_001.jpg': 'a',
+      'Positive/Joy/Joy_001.txt': 'Joy, 90%, CONFIRMED\n# AssessedWithAllThreeAIs\n',
+      'Positive/Joy/Joy_002.jpg': 'b',
+      'Positive/Joy/Joy_002.txt': 'Joy, 85%, UNCONFIRMED, claude=85%, codex=80%\n',
+      'Positive/Joy/Joy_003.jpg': 'c',
+      'Positive/Joy/Joy_003.txt': 'Joy, 55%, UNCONFIRMED\n',
+    });
+    const prev = config.expressionsDir;
+    config.expressionsDir = t;
+    try {
+      const photos = buildExpressionIndex().photos;
+      expect(photos.find((p) => p.name === 'Joy_001')?.assessedByThreeAIs).toBe(true);
+      expect(photos.find((p) => p.name === 'Joy_001')?.tags).toHaveLength(1);
+      expect(photos.find((p) => p.name === 'Joy_002')?.assessedByThreeAIs).toBe(true);
+      expect(photos.find((p) => p.name === 'Joy_003')?.assessedByThreeAIs).toBeUndefined();
+    } finally {
+      config.expressionsDir = prev;
+      removeTree(t);
+    }
+  });
 });
 
 describe('looking up one photo without scanning the library (code review #8)', () => {

@@ -53,6 +53,7 @@ export function ExpressionsPage() {
   const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
   const [reviewFolders, setReviewFolders] = useState<FolderReviewMode | 'all'>('all');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
+  const [assessmentFilter, setAssessmentFilter] = useState<'all' | 'three-ais' | 'not-three-ais'>('all');
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
   const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
@@ -165,8 +166,8 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
-  }, [index, current, includeSub, query, origin, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
+    return filterSelectablePhotos(index.photos, references, { scope: starredOnly ? 'starred' : 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+  }, [index, current, includeSub, query, origin, assessmentFilter, starredOnly, references, libraryFilters, reviewFolders, categoryNames]);
 
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
 
@@ -255,6 +256,7 @@ export function ExpressionsPage() {
           <label>Photos <select value={starredOnly ? 'starred' : 'all'} onChange={e => { setStarredOnly(e.target.value === 'starred'); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option></select></label>
           <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
           <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
+          <label>Assessment <select value={assessmentFilter} onChange={e => { setAssessmentFilter(e.target.value as 'all' | 'three-ais' | 'not-three-ais'); setOpen(null); }}><option value="all">All Photos</option><option value="three-ais">Assessed by All Three AIs</option><option value="not-three-ais">Not Assessed by All Three AIs</option></select></label>
         </div>
         <label className="expression-review-filter">Folder Review <select value={reviewFolders} onChange={e => { const value = e.target.value as FolderReviewMode | 'all'; setReviewFolders(value); setOpen(null); if (value !== 'all') goTo(''); }}><option value="all">All Photos</option><option value="missing">Folder Expression Not Among Guesses</option><option value="higher">Another Expression Has a Higher Score</option></select></label>
         {reviewFolders !== 'all' && <p className="muted">{reviewFolders === 'missing' ? 'Shows photos with recorded expression guesses, but none matching the folder. Photos without expression guesses are not included.' : 'Shows photos where the folder expression and another expression have scores, and the other score is higher. Photos without comparable scores are not included.'} Other filters still apply. AI guesses can be wrong.</p>}

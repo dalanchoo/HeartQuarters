@@ -39,7 +39,7 @@ describe('blind expression assessment', () => {
   it('keeps disconfirmed attributes even if the AI suggests them again', () => {
     const cats = buildExpressionIndex().categories;
     const result = mergeModelAssessments('Smile, 60%, DISCONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 95 }], codex: [], gemini: [] }, cats);
-    expect(result).toBe('Smile, 60%, DISCONFIRMED, claude=95%\n');
+    expect(result).toBe('Smile, 60%, DISCONFIRMED, claude=95%\n# AssessedWithAllThreeAIs\n');
   });
   it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
     const cats = buildExpressionIndex().categories;
