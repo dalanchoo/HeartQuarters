@@ -57,6 +57,13 @@ export function usePackagingDocs(found: FileRef[], loads = 0): LoadedDoc[] {
       fields: null,
       save: (change: (text: string) => string) => {
         const run = line[i].then(async () => {
+          // Start from the file as it is now: another part of the page, the AI or another program may have saved it
+          // since it was loaded. The change is made to that newest text, so nothing done elsewhere is overwritten.
+          const fresh = await getText('projects', file.path);
+          if (fresh !== latest[i]) {
+            latest[i] = fresh;
+            show(i, fresh);
+          }
           const was = latest[i];
           const changed = change(was);
           const text = /^youtube\.md$/i.test(file.name.split('/').pop() ?? '') ? sortYoutubeTags(changed) : changed;
@@ -82,8 +89,30 @@ export function usePackagingDocs(found: FileRef[], loads = 0): LoadedDoc[] {
         },
       );
     });
+    // Notice changes made elsewhere (the AI, another part of the page, another program) soon, not only at a save:
+    // when the window comes back into view, and every 15 seconds. Waits behind any save in progress.
+    const recheck = () => {
+      if (document.hidden) return;
+      files.forEach((file, i) => {
+        if (!latest[i]) return;
+        line[i] = line[i].then(() =>
+          getText('projects', file.path).then(
+            (text) => {
+              if (text === latest[i]) return;
+              latest[i] = text;
+              show(i, text);
+            },
+            () => {},
+          ),
+        );
+      });
+    };
+    const timer = setInterval(recheck, 15_000);
+    window.addEventListener('focus', recheck);
     return () => {
       stale = true;
+      clearInterval(timer);
+      window.removeEventListener('focus', recheck);
     };
   }, [key]);
 

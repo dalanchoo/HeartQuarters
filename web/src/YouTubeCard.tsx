@@ -749,7 +749,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         </div>
       )}
       <div className={`push-summary${dirty ? ' has-changes' : ''}`}>
-        {dirty ? <><strong>Apply Changes Will:</strong><ul>
+        {dirty ? <>{draft.clashes.length > 0 && <p className="error-note" role="alert">{draft.clashes.join(', ')} also changed outside this page since you started editing (by the AI, another part of this page or another program), so Apply can't combine them. Copy your edit somewhere, click Discard Changes to see the newer text, then put your edit back.</p>}<strong>Apply Changes Will:</strong><ul>
           {draft.changes.filter(label => !fromYoutube.some(field => field.toLowerCase() === label.toLowerCase())).map(label => <li key={`edit-${label}`}>Save Edited {label} to {versionName ?? 'Local Version'}</li>)}
           {fromYoutube.map(label => <li key={`pull-${label}`}>Copy {label} From YouTube to {versionName ?? 'Local Version'}{draft.changes.some(field => field.toLowerCase() === label.toLowerCase()) ? ' (replaces the edit)' : ''}</li>)}
           {youtubeThumbnail && <li>Copy Thumbnail From YouTube to {versionName ?? 'Local Version'}</li>}

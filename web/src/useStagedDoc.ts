@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LoadedDoc } from './PackagingDoc';
 import { parseFields } from './packaging';
-import { applyStagedText, changedPackagingFields } from './stagedPackaging';
+import { applyStagedText, changedPackagingFields, clashingFields } from './stagedPackaging';
 
 /** Keep changes in memory until Apply; the disk save still checks the original file for conflicts. */
 export function useStagedDoc(original: LoadedDoc) {
@@ -13,6 +13,9 @@ export function useStagedDoc(original: LoadedDoc) {
   const discard = () => { draftRef.current = null; baseline.current = null; setDraft(null); };
   const pending = draft !== null && baseline.current !== null && draft !== baseline.current;
   const changes = pending ? changedPackagingFields(baseline.current!, draft!) : [];
+  // Fields you're editing that were also changed on disk since (the file is re-read now and then). Shown straight away,
+  // so you know before Apply that these can't be merged.
+  const clashes = pending && original.text !== null ? clashingFields(original.text, baseline.current!, draft!) : [];
   const doc: LoadedDoc = {
     ...original,
     text: draft ?? original.text,
@@ -35,5 +38,5 @@ export function useStagedDoc(original: LoadedDoc) {
     await original.save(current => applyStagedText(current, was, value));
     discard();
   };
-  return { doc, pending, changes, apply, discard };
+  return { doc, pending, changes, clashes, apply, discard };
 }
