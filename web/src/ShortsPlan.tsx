@@ -17,7 +17,6 @@ import {
   type TimedWord,
 } from './api';
 import { ClaudeChat } from './ClaudeChat';
-import { PieceSteps } from './VideoSteps';
 import { CleanUp } from './CleanUp';
 import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
@@ -140,7 +139,6 @@ export function ShortsPlanCard({ video }: { video: string }) {
       <ShortCard
         key={s.id}
         short={s}
-        video={video}
         nearMiss={nearMiss}
         words={transcript?.words ?? null}
         exportFile={exportFile}
@@ -248,13 +246,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
             </button>
           </details>
 
-          {groups.made.length > 0 && (
-            <details className="made-shorts">
-              <summary>Made Shorts ({groups.made.length})</summary>
-              <p className="muted small-text">These Shorts have already been created. Open a row to review its plan or conversation.</p>
-              {groups.made.map((s) => card(s, false))}
-            </details>
-          )}
+          {/* A made short is simply one of the video's Shorts (in the Shorts list above), so it isn't listed here. */}
 
           {plan.rejected.length > 0 && (
             <details className="near-misses" open>
@@ -267,7 +259,7 @@ export function ShortsPlanCard({ video }: { video: string }) {
       <CleanUp
         piece={`${video}/Shorts`}
         onDone={refresh}
-        intro="When you've made all the Shorts you want from this video: the Shorts Plan (with its earlier copies) and the retention graphs go to HeartQuarters Trash, and Unmade Shorts, Made Shorts and Near Misses go with them. The Shorts themselves stay."
+        intro="When you've made all the Shorts you want from this video: the Shorts Plan (with its earlier copies) and the retention graphs go to HeartQuarters Trash, and Unmade Shorts and Near Misses go with them. The Shorts themselves stay."
       />
     </div>
   );
@@ -277,7 +269,6 @@ type Clip = { start: number; end: number };
 
 function ShortCard({
   short,
-  video,
   nearMiss,
   words,
   exportFile,
@@ -294,7 +285,6 @@ function ShortCard({
   onStop,
 }: {
   short: PlannedShort;
-  video: string;
   nearMiss: boolean;
   words: TimedWord[] | null;
   exportFile: string | null;
@@ -312,7 +302,7 @@ function ShortCard({
 }) {
   // The insides, the video above all, exist only while the card is open.
   const [open, setOpen] = useState(false);
-  // One short open at a time across Unmade Shorts, Made Shorts and Near Misses: opening one closes the others.
+  // One short open at a time across Unmade Shorts and Near Misses: opening one closes the others.
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const other = (e: Event) => {
@@ -363,7 +353,6 @@ function ShortCard({
           {nearMiss && short.reason && ` · ${short.reason}`}
         </span>
         {status && <span className="short-status small-text">{status}</span>}
-        {made && <PieceSteps path={`${video}/Shorts/${short.made}`} />}
       </summary>
       {open && (
         <div className="short-card-body">

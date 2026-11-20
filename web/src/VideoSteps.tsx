@@ -1,8 +1,4 @@
-import { createContext, useContext } from 'react';
 import type { VideoOverview } from '../../server/video-overview';
-
-/** Every video the Videos page knows about, so a part deep inside it (like Made Shorts) can show a video's steps. */
-export const OverviewItems = createContext<VideoOverview[]>([]);
 
 /**
  * How far a video is on its way to YouTube: CapCut, Exported, Metadata, Thumbnail, Uploaded. Each step is filled when it's done,
@@ -26,10 +22,4 @@ export function VideoSteps({ item }: { item: VideoOverview }) {
       ))}
     </span>
   );
-}
-
-/** The steps for the video at `path`, once the Videos page has its list. */
-export function PieceSteps({ path }: { path: string }) {
-  const item = useContext(OverviewItems).find((entry) => entry.path === path);
-  return item ? <VideoSteps item={item} /> : null;
 }

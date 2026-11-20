@@ -16,7 +16,7 @@ import { CleanUp } from './CleanUp';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ScriptSection } from './ScriptSection';
 import { ShortsPlanCard } from './ShortsPlan';
-import { OverviewItems, VideoSteps } from './VideoSteps';
+import { VideoSteps } from './VideoSteps';
 import { NewFolderButton } from './NewFolder';
 import { lockDocs, PackagingDocShort, PackagingDocsWide, PackagingOtherPlatforms, usePackagingDocs } from './PackagingDoc';
 import { localValue } from './youtubePackaging';
@@ -227,7 +227,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><OverviewItems.Provider value={overview}><div className="split">
+    <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><div className="split">
       <aside className="sidebar">
         <div className="sidebar-actions">
           <NewFolderButton kind="top" onCreated={onCreated} />
@@ -255,7 +255,7 @@ export function ProjectsPage() {
           <p className="muted">Pick a project on the left.</p>
         )}
       </section>
-    </div></OverviewItems.Provider></StatusContext.Provider>
+    </div></StatusContext.Provider>
   );
 }
 
