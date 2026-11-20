@@ -901,7 +901,7 @@ function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }
       setSelected(longform && piece.kind === 'short' && p.some((x) => x.id === SHORTS_PLAYLIST) ? [SHORTS_PLAYLIST] : []);
     }, (e: Error) => setError(e.message));
   }, [open]);
-  if (!piece.exports.length) return <p className="muted small-text">To upload, export the video first: there's no video in Exports yet.</p>;
+  if (!piece.exports.length) return <div className="next-step" role="status"><strong>Can't Upload Yet: Export the Video First</strong><p>There's no video in Exports yet. Export it from CapCut into this {piece.kind === 'short' ? "short's" : "video's"} Exports folder (the notice at the top of this card has the buttons), then come back here to upload.</p></div>;
   const value = (label: SyncField) => {
     try {
       return localValue(doc.text ?? '', label) ?? '';

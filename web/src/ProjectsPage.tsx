@@ -535,6 +535,36 @@ function DeletePackagingVersion({ piece, version, locked, onChanged }: { piece: 
 }
 
 /** Starts CapCut and copies the project's name. CapCut can't be told which project to open, so that step is John's. */
+/**
+ * At the top of a longform or short with nothing in Exports: export comes first, before the metadata, because
+ * uploading to YouTube needs the video file. "Copy Exports Folder" is for pasting into CapCut's export window.
+ */
+function ExportFirst({ piece, draft }: { piece: Piece; draft: string }) {
+  const [copied, setCopied] = useState('');
+  const copyFolder = async () => {
+    try {
+      const { path } = await getJson<{ path: string }>(`/api/full-path?root=projects&path=${encodeURIComponent(`${piece.path}/Exports`)}`);
+      setCopied((await copyText(path)) ? `Copied: ${path}` : `Couldn't copy. The folder is ${path}`);
+    } catch (e) {
+      setCopied(e instanceof Error ? e.message : String(e));
+    }
+  };
+  return (
+    <div className="next-step" role="status">
+      <strong>Next Step: Export the {piece.kind === 'short' ? 'Short' : 'Video'}</strong>
+      <p>
+        There's no video in this {piece.kind === 'short' ? "short's" : "video's"} Exports folder yet. Export it from CapCut into that folder before
+        writing the metadata: uploading to YouTube needs the video file, and the Exported step stays empty until then.
+      </p>
+      <div className="next-step-actions">
+        <OpenInCapCut draft={draft} />
+        <button className="small" onClick={() => void copyFolder()}>Copy Exports Folder</button>
+      </div>
+      {copied && <p className="small-text muted">{copied}</p>}
+    </div>
+  );
+}
+
 function OpenInCapCut({ draft }: { draft: string }) {
   const [message, setMessage] = useState<{ text: string; failed?: boolean } | null>(null);
   return (
@@ -759,6 +789,7 @@ function PieceCard({
   // 6. View and Compare Packaging, 7. Analysis, 8. Other Platforms, 9. Clean Up.
   const contents = (
     <>
+      {piece.kind !== 'reel' && !piece.exports.length && <ExportFirst piece={piece} draft={draft ?? piece.name} />}
       {piece.kind !== 'reel' && (
         <details className="yt-section">
           <summary>YouTube Studio</summary>

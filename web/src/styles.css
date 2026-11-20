@@ -945,3 +945,9 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .suggest-added { color: #6d28d9; font-weight: 600; }
 .suggest-why { margin: 0.2rem 0 0.4rem; color: var(--muted); font-size: 0.85rem; }
 .suggest-actions { display: flex; gap: 0.4rem; }
+
+/* A clear "do this next" notice at the top of a video's card (for example, Export before metadata). */
+.next-step { margin: 0 0 0.7rem; padding: 0.6rem 0.85rem; border: 1px solid #e0a100; border-left-width: 5px; border-radius: 6px; background: #fff8e1; color: #5c4300; }
+.next-step > strong { font-size: 1rem; }
+.next-step > p { margin: 0.25rem 0 0.45rem; }
+.next-step-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }

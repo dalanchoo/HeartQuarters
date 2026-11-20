@@ -246,6 +246,12 @@ app.post('/api/open', handle((req, res) => {
   res.json({ ok: true });
 }));
 
+// ?root=&path=: the full Windows path of a place in a root, for pasting into another program's Save window (CapCut's
+// export, for example). The place doesn't have to exist yet. Changes nothing.
+app.get('/api/full-path', handle((req, res) => {
+  res.json({ path: safeResolve(parseRoot(req.query.root), String(req.query.path ?? '')) });
+}));
+
 // Small JPEG preview of an image (made once, then cached in data/thumbs).
 app.get('/api/thumb', (req, res) => {
   try {
