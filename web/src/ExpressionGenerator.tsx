@@ -30,14 +30,17 @@ export function ExpressionGenerator({ category, references, photos, categories, 
   };
   const visible = filterSelectablePhotos(photos, references, { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
+    <details className="yt-section generation-likeness">
+    <summary>Likeness Photos ({chosen.length} of 5 Selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`})</summary>
     <p>Choose up to five photos for likeness. Stars are remembered; your choices here are for this candidate.</p>
     <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Starred Photos</option><option value="all">All Photos</option></select></label>
       <ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div>
-    <p className="muted">{chosen.length} of 5 selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`}</p>
     <div className="generation-photo-grid">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
       <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => setChosen(current => selected ? current.filter(p => p !== photo.path) : [...current, photo.path])}><img src={thumbUrl('expressions', photo.path, 240, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
       <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => onToggleStar(photo.path, !starred)}>{starred ? '★ Starred' : '☆ Star'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
     {!visible.length && <p className="muted">No photos match these filters. Choose All Photos to see the whole library.</p>}
+    </details>
+    {!chosen.length && <p className="muted small-text">Open Likeness Photos and choose at least one photo before generating.</p>}
     <div className="expression-generator-options"><label>Image Generator <select value={ai} onChange={e => setAi(e.target.value as 'codex' | 'gemini')}><option value="codex">ChatGPT</option><option value="gemini">Gemini</option></select></label><label>Framing <select value={framing} onChange={e => setFraming(e.target.value)}><option value="">Natural</option><option value="HeadShoulders">Head and Shoulders</option><option value="UpperBody">Upper Body</option><option value="CloseUp">Close-Up</option></select></label>
     <label>Face Direction <select value={angle} onChange={e => setAngle(e.target.value)}><option value="">Natural</option><option value="Frontal">Frontal</option><option value="ThreeQuarter">Three-Quarter</option><option value="LeftFacing">Face Left</option><option value="RightFacing">Face Right</option></select></label>
     <label>Gaze <select value={gaze} onChange={e => setGaze(e.target.value)}><option value="">Natural</option><option value="LookAtCamera">At Camera</option><option value="LookOffCamera">Away From Camera</option><option value="LookLeft">Left</option><option value="LookRight">Right</option><option value="LookUp">Up</option><option value="LookDown">Down</option></select></label></div>
