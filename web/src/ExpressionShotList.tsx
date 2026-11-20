@@ -56,21 +56,31 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
   const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
   const card = (shot: ExpressionShot) => {
     const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
-    return <details className={`expression-shot${shot.done ? ' is-done' : ''}`} key={shot.id}>
+    return <details className="expression-shot" key={shot.id}>
       <summary><strong>{shot.title || shot.description || 'Untitled Shot'}</strong></summary>
       {shot.title && <p>{shot.description || <span className="muted">No description yet.</span>}</p>}
       {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([name, list]) => <span key={name}><strong>{name}:</strong> {list.join(', ')}</span>)}</p>}
       {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
       <div className="expression-shot-actions">
         {!shot.done && <button className="small" disabled={!known.has(shot.category)} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => onGenerate(shot)}>Generate Reference With AI</button>}
-        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Mark Done'}</button>
+        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Move to Photographed'}</button>
         <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
       </div>
     </details>;
   };
-  const byFolder = new Map<string, ExpressionShot[]>();
-  for (const shot of remaining) byFolder.set(shot.category, [...(byFolder.get(shot.category) ?? []), shot]);
-  const folders = [...byFolder.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+  /** One top-level section, with its shots grouped into collapsible expression folders. */
+  const section = (title: string, items: ExpressionShot[], open: boolean, empty: string) => {
+    const byFolder = new Map<string, ExpressionShot[]>();
+    for (const shot of items) byFolder.set(shot.category, [...(byFolder.get(shot.category) ?? []), shot]);
+    const folders = [...byFolder.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+    return <details className="yt-section expression-shot-group" open={open}><summary>{title} ({items.length})</summary>
+      {!items.length && <p className="muted small-text">{empty}</p>}
+      {folders.map(folder => <details className="yt-section expression-shot-group" key={folder || 'unsorted'}>
+        <summary>{folderLabel(folder)} ({byFolder.get(folder)!.length})</summary>
+        {byFolder.get(folder)!.map(card)}
+      </details>)}
+    </details>;
+  };
 
   return <section className="expression-shot-list">
     <h2>Expression Shot List</h2>
@@ -80,14 +90,8 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
 
     {!shots && !error && <p className="muted">Loading Shot List…</p>}
     {shots && <section className="expression-shot-groups">
-      <details className="yt-section expression-shot-group" open><summary>To Photograph ({remaining.length})</summary>
-      {!remaining.length && <p className="muted small-text">No shots waiting to be photographed.</p>}
-      {folders.map(folder => <details className="yt-section expression-shot-group" key={folder || 'unsorted'}>
-        <summary>{folderLabel(folder)} ({byFolder.get(folder)!.length})</summary>
-        {byFolder.get(folder)!.map(card)}
-      </details>)}
-      </details>
-      {photographed.length > 0 && <details className="yt-section expression-shot-group"><summary>Photographed ({photographed.length})</summary>{photographed.map(card)}</details>}
+      {section('To Photograph', remaining, true, 'No shots waiting to be photographed.')}
+      {section('Photographed', photographed, false, 'No photographed shots yet.')}
     </section>}
     <details className="yt-section video-prompt-builder">
       <summary>AI Video Prompts (Seed With Reference Photo)</summary>
