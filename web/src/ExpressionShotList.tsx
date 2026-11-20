@@ -110,13 +110,13 @@ export function ExpressionShotList({ active, index }: { active: boolean; index: 
       ) : (
         <div className="video-prompt-list">
           {videoPrompts.map((item, i) => (
-            <div className="video-prompt-card" key={i}>
-              <div className="video-prompt-head">
+            <details className="yt-section video-prompt-card" key={i}>
+              <summary className="video-prompt-head">
                 <strong>{item.title}</strong>
                 <CopyButton text={item.prompt} label="Copy Prompt" />
-              </div>
+              </summary>
               <pre className="video-prompt-text">{item.prompt}</pre>
-            </div>
+            </details>
           ))}
         </div>
       )}
