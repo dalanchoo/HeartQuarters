@@ -9,7 +9,7 @@ import { setPendingPackaging } from './pendingPackaging';
 import { LockSwitch } from './LockSwitch';
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
-export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, draftImage, setDraftImage }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; draftImage: string; setDraftImage: (path: string) => void }) {
+export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, draftImage, setDraftImage, open, setOpen }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; draftImage: string; setDraftImage: (path: string) => void; open: boolean; setOpen: (open: boolean) => void }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
   // Draft: what Generate Packaging made for the chosen pair, with one of its images (the newest unless John picks another).
   const drafts = piece.drafts;
@@ -53,7 +53,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const leftOptions = order.filter(value => rightChoices(value, order).length > 0 || value === YOUTUBE);
   const usesDraft = left === DRAFT || right === DRAFT;
 
-  return <details className="yt-section"><summary>View and Compare Packaging</summary>
+  return <details className="yt-section" open={open} onToggle={e => setOpen(e.currentTarget.open)}><summary>View and Compare Packaging</summary>
     <div className="compare-columns">
       <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
       <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>

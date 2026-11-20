@@ -691,6 +691,8 @@ function PieceCard({
   const [compareChoices, setCompareChoices] = useState(() => ({ left: version?.path ?? '', right: YOUTUBE_SELECTION }));
   // The Draft's image John picked in View and Compare Packaging (empty: the newest), kept here so it survives a lock change.
   const [draftImage, setDraftImage] = useState('');
+  // Whether View and Compare Packaging is open, kept here too: unlocking a version rebuilds it, and it should stay open.
+  const [compareOpen, setCompareOpen] = useState(false);
   // One version at most is unlocked, and it's the selected one: unlocking a version with its switch in View and
   // Compare Packaging selects it and locks every other. Unlocking lasts until the page is reloaded or another version
   // is selected; a version he has just made starts unlocked, since he made it to change it.
@@ -825,7 +827,7 @@ function PieceCard({
           if (unlocked === path) { setUnlocked(null); return; }
           setVersionName(v.name);
           setUnlocked(path);
-        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} draftImage={draftImage} setDraftImage={setDraftImage} />
+        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} draftImage={draftImage} setDraftImage={setDraftImage} open={compareOpen} setOpen={setCompareOpen} />
       ) : (
         <details className="yt-section">
           <summary>View and Compare Packaging</summary>
