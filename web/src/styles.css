@@ -424,12 +424,14 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-tabs [role='tab'][aria-selected='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .shot-suggestion { display: flex; align-items: flex-start; gap: .5rem; padding: .45rem 0; border-top: 1px solid var(--line); }
 .shot-suggestion input { margin-top: .25rem; flex-shrink: 0; }
-.expression-shot { padding: .8rem; margin: .65rem 0; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
-.expression-shot p { margin: .45rem 0; }
+.expression-shot { padding: .3rem .65rem; margin: .3rem 0; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+.expression-shot p { margin: .3rem 0; }
+.expression-shot[open] { padding-bottom: .5rem; }
+.expression-shot-group.yt-section { margin: .35rem 0; padding: .35rem .65rem; }
 .expression-shot > summary { cursor: pointer; }
 .expression-shot-group .expression-shot-group { margin-left: .5rem; }
 .expression-shot-tags { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .9em; }
-.expression-shot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+.expression-shot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; }
 .expression-shot details > summary { cursor: pointer; }
 .expression-inbox-drop { border: 2px dashed #9bacbf; border-radius: 9px; padding: 1rem; margin: .7rem 0; }
 .expression-inbox-drop label { display: block; margin: .4rem 0; }
