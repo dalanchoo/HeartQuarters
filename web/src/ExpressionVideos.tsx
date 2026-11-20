@@ -45,6 +45,13 @@ export function ExpressionVideos({ active, index }: { active: boolean; index: Ex
       setPromptNote(`Copied ${photo.name}. Press Ctrl+V in Gemini to attach it, then copy the prompt.`);
     } catch (e) { setPromptNote(`Could not copy the photo: ${e instanceof Error ? e.message : String(e)}`); }
   };
+  /** Copy the AI Videos folder's full path, to paste into the browser's Save dialog. */
+  const copyFolder = async () => {
+    try {
+      const { path } = await postJson<{ path: string }>('/api/expressions/videos/open');
+      setPromptNote(await copyText(path) ? `Copied ${path}. Paste it into the address box of the Save dialog. Videos saved there appear below.` : 'Could not copy the folder path. Try again.');
+    } catch (e) { setPromptNote(`Could not copy the folder path: ${e instanceof Error ? e.message : String(e)}`); }
+  };
   const copyPrompt = async () => {
     const prompt = index ? buildLackingVideoPrompt(index) : null;
     if (!prompt) { setPromptNote('No expression folders to choose from yet.'); return; }
@@ -77,7 +84,12 @@ export function ExpressionVideos({ active, index }: { active: boolean; index: Ex
   };
 
   useEffect(() => {
-    if (active) void load();
+    if (!active) return;
+    void load();
+    // Coming back from Gemini after saving a video into the folder shows it straight away.
+    const refresh = () => void load();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
   }, [active]);
 
   const current = videos.find((v) => v.name === selected) ?? null;
@@ -199,7 +211,8 @@ export function ExpressionVideos({ active, index }: { active: boolean; index: Ex
       <div className="generated-video-prompt">
         <button type="button" disabled={!index} onClick={() => void copyPhoto()}>Copy Reference Photo</button>
         <button type="button" disabled={!index} onClick={() => void copyPrompt()}>Copy Video Prompt</button>
-        <span className="muted small-text">Paste the photo into Gemini, then the prompt. The prompt picks three expressions your library is lacking, a new mix each click.</span>
+        <button type="button" onClick={() => void copyFolder()}>Copy Save Folder</button>
+        <span className="muted small-text">Paste the photo into Gemini, then the prompt (three expressions your library is lacking, a new mix each click). Save the video into the copied folder.</span>
       </div>
       {promptNote && <p role="status" className="small-text">{promptNote}</p>}
 

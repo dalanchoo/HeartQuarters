@@ -285,7 +285,7 @@ app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { re
 app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''), String(req.query.name ?? ''))); }));
 app.post('/api/expressions/shot-list/reference/copy-to-inbox', handle((req, res) => { res.json(copyShotReferenceToInbox(req.body?.id, req.body?.name)); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
-app.post('/api/expressions/videos/open', handle((_req, res) => { ensureGeneratedVideosDir(); res.json({ ok: true }); }));
+app.post('/api/expressions/videos/open', handle((_req, res) => { res.json({ ok: true, path: ensureGeneratedVideosDir() }); }));
 app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {
   res.json(saveGeneratedVideo(req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
 }));
