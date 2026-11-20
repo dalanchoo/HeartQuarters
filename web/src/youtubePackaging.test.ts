@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alteredContentValue, comparisonState, localBoolean, localValue, setLocalValue, missingTagInOpening, splitHashtags, SYNC_FIELDS, tagInOpening, youtubeValues, wouldLoseChapters } from './youtubePackaging';
+import { alteredContentValue, fieldChoices, comparisonState, localBoolean, localValue, setLocalValue, missingTagInOpening, splitHashtags, SYNC_FIELDS, tagInOpening, youtubeValues, wouldLoseChapters } from './youtubePackaging';
 
 describe('chapter safety', () => {
   const chapters = 'About the video\n\nCHAPTERS\n0:00 First\n1:08 Second\n1:02:03 Third';
@@ -95,5 +95,14 @@ describe("a tag in the description's first 200 characters (vidIQ's check)", () =
     expect(missingTagInOpening('', TAGS)).toBe(false);
     expect(missingTagInOpening('I had a good childhood.', 'Good Childhood, SDAM')).toBe(false);
     expect(missingTagInOpening('Sometimes I meet somebody.', TAGS)).toBe(true);
+  });
+});
+
+describe('fieldChoices', () => {
+  it('gives the fixed answers for the language, kids and altered content fields, and none for free text', () => {
+    expect(fieldChoices('Video language')?.map((c) => c.value)).toEqual(['en-US', 'en-GB', 'en']);
+    expect(fieldChoices('Made for kids')?.map((c) => c.value)).toEqual(['Yes', 'No']);
+    expect(fieldChoices('altered content')?.map((c) => c.value)).toEqual(['Yes', 'No']);
+    expect(fieldChoices('Title')).toBeNull();
   });
 });

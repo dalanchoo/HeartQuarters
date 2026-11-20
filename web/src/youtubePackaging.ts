@@ -1,5 +1,6 @@
 import { parseFields, setFieldValue, sortTags } from './packaging';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
+import { VIDEO_LANGUAGES } from '../../server/youtube-constants';
 
 // Visibility and playlists aren't kept in the file (John, 2026-11-12): YouTube is their only home.
 export const SYNC_FIELDS = ['Title', 'Description', 'Tags', 'Video language', 'Made for kids', 'Altered content'] as const;
@@ -117,4 +118,15 @@ export function tagInOpening(description: string, tags: string): string | null {
  */
 export function missingTagInOpening(description: string | null | undefined, tags: string | null | undefined): boolean {
   return !!description?.trim() && !!tags?.split(',').some((t) => t.trim()) && !tagInOpening(description, tags);
+}
+
+/**
+ * The answers a field allows, when it has a fixed set (shown as a dropdown instead of a text box): the video
+ * languages YouTube accepts here, and Yes or No. Null for a field you write freely.
+ */
+export function fieldChoices(label: string): { value: string; label: string }[] | null {
+  const name = label.trim().toLowerCase();
+  if (name === 'video language') return VIDEO_LANGUAGES.map((l) => ({ value: l.value, label: `${l.label} (${l.value})` }));
+  if (name === 'made for kids' || name === 'altered content') return [{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }];
+  return null;
 }

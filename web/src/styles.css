@@ -970,3 +970,4 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .quota-badge.quota-out > summary { color: #b42318; font-weight: 600; }
 .quota-badge-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 22rem; padding: 0.4rem 0.75rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); }
 .quota-badge-panel .quota-meter { margin: 0.2rem 0; }
+.field-choice { min-width: 14rem; max-width: 100%; }

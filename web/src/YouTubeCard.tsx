@@ -9,7 +9,8 @@ import { setFieldValue, sortTags, undoFieldEdit, type Field } from './packaging'
 import { SuggestionTextarea } from './SuggestionTextarea';
 import { fieldKey, useFieldSuggestions } from './fieldSuggestions';
 import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
-import { localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
+import { ChoiceField } from './ChoiceField';
+import { fieldChoices, localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
 import { copyValuesMatch, metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo } from './videoChecks';
@@ -806,6 +807,13 @@ export function FieldEditor({ doc, index, field, onEdited }: { doc: LoadedDoc; i
   const focused = useRef(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { if (!focused.current) setDraft(field.value); }, [field.value]);
+  const choices = fieldChoices(field.label);
+  if (choices) return (
+    <>
+      <ChoiceField label={field.label} value={draft} choices={choices} disabled={doc.locked} onChange={(value) => { setDraft(value); setError(null); onEdited?.(); void doc.save(text => setFieldValue(text, index, value)).catch((err: Error) => setError(err.message)); }} />
+      {error && <p className="error small-text">Not staged: {error}</p>}
+    </>
+  );
   return (
     <>
       <SuggestionTextarea className="field-value field-input" aria-label={field.label} placeholder="(empty)" spellCheck rows={Math.min(20, draft.split('\n').length)} value={draft} readOnly={doc.locked} onFocus={() => { focused.current = true; }} onChange={(e) => { const value = e.target.value; setDraft(value); setError(null); onEdited?.(); void doc.save(text => setFieldValue(text, index, value)).catch((err: Error) => setError(err.message)); }} onBlur={() => { focused.current = false; setDraft(draft.trim()); }} suggestionKey={fieldKey(doc.file.path, field.label)} onAccept={doc.locked ? undefined : (next) => { setDraft(next); onEdited?.(); return doc.save(text => setFieldValue(text, index, next)); }} />

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { copyText, getText, postJson, type FileRef } from './api';
 import { AiWritingChecker } from './AiWritingChecker';
 import { SuggestionTextarea } from './SuggestionTextarea';
+import { ChoiceField } from './ChoiceField';
+import { fieldChoices } from './youtubePackaging';
 import { fieldKey } from './fieldSuggestions';
 import { setLocalValue } from './youtubePackaging';
 import {
@@ -154,6 +156,19 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         {draft && <CopyButton text={draft} />}
         {status && <span className="muted small-text">{status === 'saving' ? 'Saving…' : 'Saved ✓'}</span>}
       </summary>
+      {fieldChoices(field.label) ? (
+        <ChoiceField
+          label={field.label}
+          value={draft}
+          choices={fieldChoices(field.label)!}
+          disabled={doc.locked}
+          onChange={(value) => {
+            setDraft(value);
+            setError(null);
+            doc.save((text) => setFieldValue(text, index, value)).catch((e: Error) => setError(e.message));
+          }}
+        />
+      ) : (
       <SuggestionTextarea
         className="field-value field-input"
         aria-label={field.label}
@@ -167,6 +182,7 @@ function FieldView({ doc, index, field }: { doc: LoadedDoc; index: number; field
         suggestionKey={fieldKey(doc.file.path, field.label)}
         onAccept={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }}
       />
+      )}
       <AiWritingChecker text={draft} label={field.label} suggestionKey={fieldKey(doc.file.path, field.label)} onReplace={doc.locked ? undefined : async (next) => { await doc.save((text) => setFieldValue(text, index, next.trim())); setDraft(next.trim()); }} />
       {error && <p className="error small-text">Not saved: {error}</p>}
     </details>
