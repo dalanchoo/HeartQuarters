@@ -4,20 +4,17 @@ import { CategoryPicker } from './CategoryPicker';
 import { filterSelectablePhotos } from './expressionPlanning';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 
-/** Settings a Shot List look fills in when it opens the generator. */
-export type GenerationPreset = { framing: string; angle: string; gaze: string; look: string };
-
 type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; references: string[]; recovered?: boolean };
 
-export function ExpressionGenerator({ category, preset, references, photos, categories, onStarted, onViewPhoto, onToggleStar, starBusy }: { category: ExpressionCategory; preset?: GenerationPreset; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
+export function ExpressionGenerator({ category, references, photos, categories, onStarted, onViewPhoto, onToggleStar, starBusy }: { category: ExpressionCategory; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onStarted: () => void; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [filters, setFilters] = useState(emptyPhotoFilters);
   useEffect(() => { setChosen(current => current.filter(path => photos.some(photo => photo.path === path))); }, [photos]);
-  const [framing, setFraming] = useState(preset?.framing ?? 'HeadShoulders'); const [angle, setAngle] = useState(preset?.angle ?? ''); const [gaze, setGaze] = useState(preset?.gaze ?? ''); const look = preset?.look ?? ''; const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
+  const [framing, setFraming] = useState('HeadShoulders'); const [angle, setAngle] = useState(''); const [gaze, setGaze] = useState(''); const [ai, setAi] = useState<'codex' | 'gemini'>('codex');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
   const [loadingPrompt, setLoadingPrompt] = useState(true); const [suggested, setSuggested] = useState(''); const [outdated, setOutdated] = useState(false); const edited = useRef(false); const lastSuggestion = useRef('');
   useEffect(() => {
-    let active = true; setLoadingPrompt(true); const params = new URLSearchParams({ category: category.path, framing, angle, gaze, look });
+    let active = true; setLoadingPrompt(true); const params = new URLSearchParams({ category: category.path, framing, angle, gaze });
     void getJson<{ prompt: string }>(`/api/expression-generation/prompt?${params}`).then(result => {
       if (!active) return;
       if (edited.current && lastSuggestion.current && lastSuggestion.current !== result.prompt) setOutdated(true);
@@ -25,7 +22,7 @@ export function ExpressionGenerator({ category, preset, references, photos, cate
       lastSuggestion.current = result.prompt; setSuggested(result.prompt); setLoadingPrompt(false);
     }, e => { if (active) { setMessage(e.message); setLoadingPrompt(false); } });
     return () => { active = false; };
-  }, [category.path, framing, angle, gaze, look]);
+  }, [category.path, framing, angle, gaze]);
   const start = async () => {
     setBusy(true); setMessage('');
     try { await postJson('/api/expression-generation/start', { category: category.path, references: chosen, options: { framing, angle, gaze }, ai, prompt }); setMessage('Generation started. The candidate will appear in Candidates for Review.'); onStarted(); }
@@ -33,7 +30,6 @@ export function ExpressionGenerator({ category, preset, references, photos, cate
   };
   const visible = filterSelectablePhotos(photos, references, { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
-    {look && <p><strong>From the Shot List:</strong> {look}</p>}
     <p>Choose up to five photos for likeness. Stars are remembered; your choices here are for this candidate.</p>
     <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Starred Photos</option><option value="all">All Photos</option></select></label>
       <ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div>

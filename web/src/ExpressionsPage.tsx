@@ -14,8 +14,7 @@ import { CopyButton } from './PackagingDoc';
 import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
-import { ExpressionCandidates, ExpressionGenerator, type GenerationPreset } from './ExpressionGenerator';
-import { shotGenerationPreset } from './shotPreset';
+import { ExpressionCandidates, ExpressionGenerator } from './ExpressionGenerator';
 import { ExpressionShotList } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
@@ -47,7 +46,6 @@ export function ExpressionsPage() {
   const [selected, setSelected] = useState(categoryFromHash);
   const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>('library');
   const [generationCategory, setGenerationCategory] = useState('');
-  const [shotPreset, setShotPreset] = useState<{ id: string; category: string; preset: GenerationPreset } | null>(null);
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
@@ -210,7 +208,7 @@ export function ExpressionsPage() {
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
         <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} /></div>
-        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onGenerate={shot => { setShotPreset({ id: shot.id, category: shot.category, preset: shotGenerationPreset(shot) }); setGenerationCategory(shot.category); setActiveTab('generation'); setOpen(null); setPreview(null); }} /></div>
+        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onViewImage={(imageUrl, name, category) => setPreview({ photo: { path: imageUrl, name, category, tags: [] }, imageUrl })} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="expression-planning">
           <h2>Choose an Expression to Generate</h2>
@@ -219,7 +217,7 @@ export function ExpressionsPage() {
           </div>
         </div>
         {referenceError && <p className="error">{referenceError}</p>}
-        {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator key={shotPreset?.category === generationSelection.path ? shotPreset.id : 'manual'} category={generationSelection} preset={shotPreset?.category === generationSelection.path ? shotPreset.preset : undefined} references={references} photos={index.photos} categories={index.categories} starBusy={!referenceReady || referenceBusy} onToggleStar={(path, starred) => void setReference(path, starred)} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
+        {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator category={generationSelection} references={references} photos={index.photos} categories={index.categories} starBusy={!referenceReady || referenceBusy} onToggleStar={(path, starred) => void setReference(path, starred)} onViewPhoto={(photo) => setPreview({ photo })} onStarted={() => setCandidateRevision(n => n + 1)} />}
         <ExpressionCandidates categories={index.categories} revision={candidateRevision} onViewCandidate={(id, category) => setPreview({ photo: { path: id, name: 'Generated Candidate', category: category || 'Unassigned', tags: [] }, imageUrl: `/api/expression-generation/image?id=${encodeURIComponent(id)}` })} onSaved={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); setCandidateRevision(n => n + 1); }} />
         </div>
         <div id="expression-library" role="tabpanel" aria-labelledby="expression-library-tab" hidden={activeTab !== 'library'}>

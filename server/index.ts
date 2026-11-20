@@ -18,6 +18,7 @@ import { assessmentJob, startAssessment } from './expression-assessment.js';
 import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
+import { removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -278,7 +279,10 @@ app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashIn
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
-app.post('/api/expressions/shot-list/delete', handle((req, res) => { res.json(deleteShot(req.body?.id)); }));
+app.post('/api/expressions/shot-list/delete', handle((req, res) => { const shots = deleteShot(req.body?.id); removeShotReference(String(req.body?.id)); res.json(shots); }));
+app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.json(shotReferences()); }));
+app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id).job); }));
+app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''))); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
 app.post('/api/expressions/videos/open', handle((_req, res) => { ensureGeneratedVideosDir(); res.json({ ok: true }); }));
 app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {
@@ -300,7 +304,7 @@ app.post('/api/expressions/apply-change', handle((req, res) => { res.json(applyE
 app.get('/api/expression-references', handle((_req, res) => { res.json(readExpressionReferences()); }));
 app.post('/api/expression-references', handle((req, res) => { res.json(saveExpressionReferences(req.body?.paths, req.body?.initialize === true)); }));
 app.post('/api/expression-generation/start', handle((req, res) => { res.json(startExpressionGeneration(String(req.body?.category ?? ''), req.body?.references, req.body?.options, req.body?.ai, undefined, req.body?.prompt).job); }));
-app.get('/api/expression-generation/prompt', handle((req, res) => { res.json({ prompt: previewExpressionPrompt(String(req.query.category ?? ''), { framing: String(req.query.framing ?? ''), angle: String(req.query.angle ?? ''), gaze: String(req.query.gaze ?? '') }, String(req.query.look ?? '')) }); }));
+app.get('/api/expression-generation/prompt', handle((req, res) => { res.json({ prompt: previewExpressionPrompt(String(req.query.category ?? ''), { framing: String(req.query.framing ?? ''), angle: String(req.query.angle ?? ''), gaze: String(req.query.gaze ?? '') }) }); }));
 app.get('/api/expression-generation/jobs', handle((req, res) => { res.json(expressionJobs(req.query.category === undefined ? undefined : String(req.query.category))); }));
 app.get('/api/expression-generation/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(candidateFile(String(req.query.id ?? ''))); }));
 app.post('/api/expression-generation/assign-category', handle((req, res) => { res.json(assignExpressionCategory(String(req.body?.id ?? ''), String(req.body?.category ?? ''))); }));

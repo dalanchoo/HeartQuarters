@@ -6,7 +6,7 @@ import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
 import { geminiImageArgs, makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 
-type Options = { framing: string; angle: string; gaze: string };
+export type Options = { framing: string; angle: string; gaze: string };
 type Job = { id: string; category: string; ai: ImageAi | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; options: Options; format?: 'png' | 'jpg' | 'webp'; prompt: string; references: string[]; createdAt: string; recovered?: boolean };
 const jobs = new Map<string, Job>();
 const root = () => process.env.HQ_EXPRESSION_DRAFTS ?? path.join(appDir, 'data', 'expression-drafts');
@@ -40,16 +40,22 @@ export function reloadExpressionJobs(): void {
 }
 function ensureLoaded(): void { if (loadedRoot !== root()) reloadExpressionJobs(); }
 
+/** Which image type these bytes are, judged from the file's first bytes rather than its name. */
+export function imageFormat(data: Buffer): 'png' | 'jpg' | 'webp' | null {
+  return data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'png'
+    : data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff ? 'jpg'
+    : data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP' ? 'webp' : null;
+}
+
 export function expressionPrompt(name: string, definition: string | null, options: Options, look = ''): string {
   return [`Create a high-resolution, photorealistic portrait of John based on the attached reference photos. Preserve his identity, age, hair, facial hair and natural features; do not make him younger or change his face. Keep his complexion even without plastic skin or exaggerated redness.`, `Expression: ${name}. ${definition ?? ''} Make it clear, authentic and restrained, not an exaggerated YouTube face.${look ? ` The exact look: ${look}` : ''}`, `Framing: ${options.framing || 'head and shoulders with room around the head'}. Face orientation: ${options.angle || 'natural'}. Gaze: ${options.gaze || 'natural'}.`, 'Use soft, flattering, even studio lighting and a plain neutral contrasting background that is easy to remove. No text, graphics, watermark, or extra people.', 'Use your image generation tool, not code. Save the image in the current folder as candidate.png and reply with its full path.'].join('\n\n');
 }
 
-export function previewExpressionPrompt(category: string, options: Options, look = ''): string {
-  if (typeof look !== 'string' || look.length > 2000) throw new Error('The look description is too long.');
+export function previewExpressionPrompt(category: string, options: Options): string {
   const index = buildExpressionIndex(); const selected = index.categories.find((c) => c.path === category);
   if (!selected || !category || index.categories.some((c) => c.parent === category)) throw new Error('Choose a specific expression category.');
   if (!options || Object.entries(values).some(([key, allowed]) => !allowed.includes(options[key as keyof Options]))) throw new Error('Choose valid framing, face direction and gaze options.');
-  return expressionPrompt(selected.name, selected.definition, options, look.trim());
+  return expressionPrompt(selected.name, selected.definition, options);
 }
 
 export function startExpressionGeneration(category: string, refs: unknown, options: Options, ai: unknown = 'codex', make: MakeImage = makeImage, requestedPrompt?: unknown): { job: Job; finished: Promise<void> } {
@@ -67,9 +73,7 @@ export function startExpressionGeneration(category: string, refs: unknown, optio
   const finished = (async () => {
     const answer = await make(ai, prompt, dir, 'candidate.png', { photo: files[0], refs: files.slice(1) });
     const data = fs.readFileSync(answer.image);
-    const format = data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'png'
-      : data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff ? 'jpg'
-      : data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP' ? 'webp' : null;
+    const format = imageFormat(data);
     if (!format) throw new Error('The generated image was not a PNG, JPEG or WebP.');
     const dest = path.join(dir, `candidate.${format}`); if (path.resolve(answer.image) !== path.resolve(dest)) fs.writeFileSync(dest, data, { flag: 'wx' });
     job.format = format;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
+import type { ShotReference } from '../../server/shot-reference';
 import { CopyButton } from './PackagingDoc';
 import { ExpressionVideos } from './ExpressionVideos';
 import {
@@ -11,8 +12,9 @@ import {
   type VideoPromptMode,
 } from './expressionVideoPrompts';
 
-export function ExpressionShotList({ active, index, onGenerate }: { active: boolean; index: ExpressionIndex | null; onGenerate: (shot: ExpressionShot) => void }) {
+export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
+  const [pictures, setPictures] = useState<Record<string, ShotReference>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [promptMode, setPromptMode] = useState<VideoPromptMode>('shot-list');
@@ -27,6 +29,23 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
     load(); window.addEventListener('hq-expression-shot-list-changed', load);
     return () => { activeRequest = false; window.removeEventListener('hq-expression-shot-list-changed', load); };
   }, [active]);
+
+  const making = Object.values(pictures).some(p => p.state === 'working');
+  useEffect(() => {
+    if (!active) return;
+    let live = true;
+    const load = () => { void getJson<Record<string, ShotReference>>('/api/expressions/shot-list/references').then(value => { if (live) setPictures(value); }, (e: Error) => { if (live) setError(e.message); }); };
+    load();
+    // While a picture is being made, check every few seconds so it appears when ready.
+    const timer = making ? setInterval(load, 3000) : undefined;
+    return () => { live = false; if (timer) clearInterval(timer); };
+  }, [active, making]);
+
+  const makePicture = async (shot: ExpressionShot) => {
+    setError('');
+    try { const job = await postJson<ShotReference>('/api/expressions/shot-list/reference/start', { id: shot.id }); setPictures(current => ({ ...current, [shot.id]: job })); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  };
 
   const setDone = async (shot: ExpressionShot, done: boolean) => {
     setBusy(shot.id); setError('');
@@ -56,15 +75,25 @@ export function ExpressionShotList({ active, index, onGenerate }: { active: bool
   const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
   const card = (shot: ExpressionShot) => {
     const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
+    const picture = pictures[shot.id];
+    const pictureUrl = picture?.format ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&v=${encodeURIComponent(picture.createdAt)}` : '';
+    const name = shot.title || shot.description || 'Untitled Shot';
     return <details className="expression-shot" key={shot.id}>
-      <summary><strong>{shot.title || shot.description || 'Untitled Shot'}</strong></summary>
-      {shot.title && <p>{shot.description || <span className="muted">No description yet.</span>}</p>}
-      {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([name, list]) => <span key={name}><strong>{name}:</strong> {list.join(', ')}</span>)}</p>}
-      {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
-      <div className="expression-shot-actions">
-        {!shot.done && <button className="small" disabled={!known.has(shot.category)} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => onGenerate(shot)}>Generate Reference With AI</button>}
-        <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Move to Photographed'}</button>
-        <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
+      <summary><strong>{name}</strong></summary>
+      <div className="expression-shot-body">
+        <div>
+          {shot.title && <p>{shot.description || <span className="muted">No description yet.</span>}</p>}
+          {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([label, list]) => <span key={label}><strong>{label}:</strong> {list.join(', ')}</span>)}</p>}
+          {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
+          <div className="expression-shot-actions">
+            {!shot.done && <button className="small" disabled={!known.has(shot.category) || picture?.state === 'working'} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => void makePicture(shot)}>{picture?.state === 'working' ? 'Generating…' : pictureUrl ? 'Generate Another' : 'Generate Reference With AI'}</button>}
+            <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Move to Photographed'}</button>
+            <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
+          </div>
+          {picture?.state === 'working' && <p className="muted small-text" role="status">ChatGPT is making the picture. This can take a few minutes.</p>}
+          {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
+        </div>
+        {pictureUrl && <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} (AI Reference)`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>}
       </div>
     </details>;
   };
