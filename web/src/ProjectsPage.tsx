@@ -41,8 +41,11 @@ import { ChannelAnalytics } from './ChannelAnalytics';
 type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'different' | 'clean-up';
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
-/** After Check Linked Videos on YouTube: the video's title, description, tags or settings on YouTube differ from its newest packaging version. */
-function differsOnYoutube(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return !!checks[item.path]?.issues.length; }
+/**
+ * After Check Linked Videos on YouTube: something to fix on YouTube itself (an empty title or description, no tags,
+ * no custom thumbnail, only automatic captions, or a longform without chapters).
+ */
+function problemsOnYoutube(item: VideoOverview, checks: Record<string, YoutubeChecks>): boolean { return !!checks[item.path]?.issues.length; }
 /** Whether Clean Up has files for this video (for a longform, also Make Shorts' plan and graphs). */
 function canCleanUp(item: VideoOverview, cleanup: CleanupStatus['pieces']): boolean {
   return (cleanup[item.path]?.files ?? 0) > 0 || (item.kind === 'longform' && (cleanup[`${item.projectId}/Shorts`]?.files ?? 0) > 0);
@@ -55,7 +58,7 @@ function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks
     case 'no-metadata': return item.metadataMissing.length > 0;
     case 'no-thumbnail': return !item.localThumbnail;
     case 'not-uploaded': return item.link !== 'linked';
-    case 'different': return differsOnYoutube(item, checks);
+    case 'different': return problemsOnYoutube(item, checks);
     case 'clean-up': return canCleanUp(item, cleanup);
   }
 }
@@ -79,7 +82,7 @@ function CleanupBadge({ item }: { item: VideoOverview }) {
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
   // The steps bar shows CapCut, Exported, Packaged and Uploaded; the pills after it are things to look at.
-  return <span className="status-badges"><VideoSteps item={item} />{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title={`YouTube: ${checks.issues.join('; ')}`}>{checks.issues.length} to Review</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
+  return <span className="status-badges"><VideoSteps item={item} />{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself.">On YouTube: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -242,7 +245,7 @@ export function ProjectsPage() {
         {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
         <div className="sidebar-filters">
           <label htmlFor="video-show">Show</label>
-          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different">Different on YouTube</option><option value="clean-up">Can Clean Up</option></select>
+          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different">Problems on YouTube</option><option value="clean-up">Can Clean Up</option></select>
           <label htmlFor="video-find">Find</label>
           <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
         </div>
