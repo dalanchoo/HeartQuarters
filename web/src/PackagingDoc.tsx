@@ -75,6 +75,8 @@ export function usePackagingDocs(found: FileRef[], loads = 0): LoadedDoc[] {
           await postJson('/api/packaging/save', { path: file.path, text, was });
           latest[i] = text;
           show(i, text);
+          // The Videos list's steps (Metadata, Thumbnail…) and Show filters depend on these files.
+          window.dispatchEvent(new CustomEvent('hq-video-status-changed'));
         });
         line[i] = run.catch(() => {}); // a failed save is reported by whoever asked; the next one still gets its turn
         return run;

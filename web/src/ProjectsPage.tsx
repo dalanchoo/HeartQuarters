@@ -152,10 +152,15 @@ export function ProjectsPage() {
   useEffect(() => {
     let active = true;
     const load = () => getJson<VideoOverview[]>('/api/video-overview').then((items) => { if (active) { setOverview(items); setOverviewError(''); } }, (e) => { if (active) setOverviewError(e.message); });
-    const changed = (event: Event) => { const piece = (event as CustomEvent<string>).detail; if (piece) { scanEpoch.current++; setChecks((old) => { const next = { ...old }; delete next[piece]; return next; }); } void load(); };
+    // Several changes close together (typing in a field saves often) reload the list once, a moment after the last.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => { clearTimeout(timer); timer = setTimeout(() => void load(), 1200); };
+    const changed = (event: Event) => { const piece = (event as CustomEvent<string>).detail; if (piece) { scanEpoch.current++; setChecks((old) => { const next = { ...old }; delete next[piece]; return next; }); } soon(); };
     const checked = (event: Event) => { const { path, checks: values } = (event as CustomEvent<{ path: string; checks: YoutubeChecks }>).detail; setChecks((old) => ({ ...old, [path]: values })); };
-    void load(); window.addEventListener('hq-video-status-changed', changed); window.addEventListener('hq-youtube-checked', checked);
-    return () => { active = false; window.removeEventListener('hq-video-status-changed', changed); window.removeEventListener('hq-youtube-checked', checked); };
+    // Coming back to the window catches changes made elsewhere, like an export from CapCut.
+    const back = () => { if (!document.hidden) soon(); };
+    void load(); window.addEventListener('hq-video-status-changed', changed); window.addEventListener('hq-youtube-checked', checked); window.addEventListener('focus', back);
+    return () => { active = false; clearTimeout(timer); window.removeEventListener('hq-video-status-changed', changed); window.removeEventListener('hq-youtube-checked', checked); window.removeEventListener('focus', back); };
   }, [reloads]);
 
   // The Can Clean Up badges: the engine answers with its last check and works out a new one in the background, so
