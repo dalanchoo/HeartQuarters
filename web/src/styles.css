@@ -973,3 +973,4 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .field-choice { min-width: 14rem; max-width: 100%; }
 .comment-posted { color: #21673d; }
 .comment-missing { color: #8a5300; font-weight: 600; }
+.comment-posted-text { margin: 0.3rem 0; padding: 0.35rem 0.6rem; border-left: 3px solid var(--line); background: var(--bg); white-space: pre-wrap; }

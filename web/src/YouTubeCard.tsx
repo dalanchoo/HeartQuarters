@@ -311,12 +311,32 @@ const ORDER = ['Title', 'Description', 'Hashtags', 'Tags', 'Pinned Comment', 'Vi
  * Pinned Comment's YouTube column, once the video has been read: whether your own comment is posted and whether it
  * matches this file. YouTube doesn't tell apps which comment is pinned, so that part is always checked in Studio.
  */
-function CommentStatus({ comment, local }: { comment: CommentCheck | null; local: string }) {
+function CommentStatus({ comment, local, doc }: { comment: CommentCheck | null; local: string; doc: LoadedDoc }) {
+  const [error, setError] = useState('');
   if (comment === null) return <p className="muted small-text">Couldn't check the comments on YouTube.</p>;
   if (comment.disabled) return <p className="muted small-text">Comments are turned off on this video.</p>;
   if (!comment.posted) return <p className="small-text comment-missing">✗ You haven't posted a comment on this video yet. Post the pinned comment and pin it in Studio.</p>;
   const matches = (comment.texts ?? []).some((text) => sameComment(text, local));
-  return <p className="small-text comment-posted">{matches ? '✓ Your comment is posted and matches this file.' : '✓ You posted a comment, but its text differs from this file.'} Apps can't see whether it's pinned: check that in Studio.</p>;
+  // The first of your comments is the one YouTube ranks highest, which is where a pinned comment sits.
+  const posted = comment.texts?.[0] ?? '';
+  return (
+    <div className="small-text">
+      <p className="comment-posted">{matches ? '✓ Your comment is posted and matches this file.' : local.trim() ? '✓ You posted a comment, but its text differs from this file.' : '✓ You posted a comment, but this file has no Pinned Comment.'} Apps can't see whether it's pinned: check that in Studio.</p>
+      {!matches && posted && (
+        <>
+          <blockquote className="comment-posted-text">{posted}</blockquote>
+          {doc.locked ? (
+            <p className="muted">Unlock this version to copy it into the file.</p>
+          ) : (
+            <button className="small" onClick={() => { setError(''); doc.save((t) => setLocalValue(t, 'Pinned Comment' as SyncField, posted)).catch((e: Error) => setError(e.message)); }}>
+              Copy Posted Comment Into File
+            </button>
+          )}
+          {error && <p className="error">{error}</p>}
+        </>
+      )}
+    </div>
+  );
 }
 
 const LOCAL_ONLY_NOTE: Record<string, string> = {
@@ -631,7 +651,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
             <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
           );
           const youtubePart = label.toLowerCase() === 'pinned comment' && linked && comment !== undefined ? (
-            <CommentStatus comment={comment} local={local ?? ''} />
+            <CommentStatus comment={comment} local={local ?? ''} doc={busy ? { ...doc, locked: true } : doc} />
           ) : !sync ? (
             <p className="muted small-text">{note ?? 'Only in the local file.'}</p>
           ) : !linked ? (
