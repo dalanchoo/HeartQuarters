@@ -580,6 +580,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           {linked && !data && (loading ? ' · Reading from YouTube…' : ` · Looking at YouTube reads it (${units(readVideoCost(quota))}).`)}
         </span>
       </div>
+      {!linked && !piece.exports.length && <div className="next-step" role="status"><strong>Export the {piece.kind === 'short' ? 'Short' : 'Video'} Before Writing This</strong><p>There's no video in Exports yet, so this can't be uploaded to YouTube. Export it from CapCut first (the notice at the top of this card has the buttons). You can still write the metadata here.</p></div>}
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
       {/* Which side is which, once, instead of on every field. */}
