@@ -5,7 +5,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
 import { isAiExpression } from './expression-origin.js';
-import { readExpressionReferences, saveExpressionReferences } from './expression-references.js';
+import { readExpressionReferences, readLikenessReferences, saveExpressionReferences, saveLikenessReferences } from './expression-references.js';
 import { writeFileSafely } from './files.js';
 
 type Change = { from: string; to: string | null };
@@ -85,21 +85,22 @@ function makePlan(photo: string, destination: string | null) {
   const sidecars = changes.flatMap(c => filesFor(c.from));
   const links = findLinks(changes);
   const references = readExpressionReferences().paths;
-  const state = { photo, destination, changes, sidecars: sidecars.map(p => { const s = fs.statSync(safeResolve('expressions', p)); return [p, s.size, s.mtimeMs]; }), links: links.map(l => [l.file, l.before]), references };
+  const likeness = readLikenessReferences();
+  const state = { photo, destination, changes, sidecars: sidecars.map(p => { const s = fs.statSync(safeResolve('expressions', p)); return [p, s.size, s.mtimeMs]; }), links: links.map(l => [l.file, l.before]), references, likeness };
   const token = crypto.createHash('sha256').update(JSON.stringify(state)).digest('hex');
-  return { plan: { photo, destination, changes, sidecars, links: links.map(l => normalize(path.relative(config.videoProjectsDir, l.file))), references: references.filter(p => changes.some(c => eq(p, c.from))), token }, links, references };
+  return { plan: { photo, destination, changes, sidecars, links: links.map(l => normalize(path.relative(config.videoProjectsDir, l.file))), references: [...new Set([...references, ...likeness])].filter(p => changes.some(c => eq(p, c.from))), token }, links, references, likeness };
 }
 
 export function previewExpressionChange(photo: string, destination: string | null): ExpressionPlan { return makePlan(photo, destination).plan; }
 
 export function applyExpressionChange(photo: string, destination: string | null, token: string, sidecarUpdate?: { before: string; after: string }): ExpressionPlan {
-  const { plan, links, references } = makePlan(photo, destination);
+  const { plan, links, references, likeness } = makePlan(photo, destination);
   if (plan.token !== token) throw new Error('The files changed since the preview. Review the action again.');
   const needsTrash = plan.changes.some(c => c.to === null);
   if (needsTrash && !config.trashDir) throw new Error('No trash folder is configured. Nothing was changed.');
   const trash = needsTrash ? path.join(config.trashDir, `Expression ${crypto.randomUUID()}`) : '';
   const moved: { from: string; to: string }[] = [], written: JsonLink[] = [], copies: string[] = [];
-  let refsWritten = false; let updatedSidecar: string | undefined;
+  let refsWritten = false; let likenessWritten = false; let updatedSidecar: string | undefined;
   try {
     if (needsTrash) fs.mkdirSync(trash, { recursive: true });
     for (const l of links) if (l.copyTo && l.copyFrom) {
@@ -128,14 +129,18 @@ export function applyExpressionChange(photo: string, destination: string | null,
       writeFileSafely(sidecar, sidecarUpdate.after); updatedSidecar = sidecar;
     }
     for (const link of links) { writeFileSafely(link.file, link.after); written.push(link); }
-    const next = references.flatMap(p => { const c = plan.changes.find(x => eq(x.from, p)); return c ? c.to ? [c.to] : [] : [p]; });
+    const follow = (list: string[]) => list.flatMap(p => { const c = plan.changes.find(x => eq(x.from, p)); return c ? c.to ? [c.to] : [] : [p]; });
+    const next = follow(references);
     if (JSON.stringify(next) !== JSON.stringify(references)) { saveExpressionReferences(next, false); refsWritten = true; }
+    const nextLikeness = follow(likeness);
+    if (JSON.stringify(nextLikeness) !== JSON.stringify(likeness)) { saveLikenessReferences(nextLikeness); likenessWritten = true; }
     clearExpressionIndex();
     return plan;
   } catch (error) {
     const failures: string[] = [];
     if (updatedSidecar && sidecarUpdate) try { writeFileSafely(updatedSidecar, sidecarUpdate.before); } catch { failures.push(updatedSidecar); }
-    if (refsWritten) try { saveExpressionReferences(references, false); } catch { failures.push('reference list'); }
+    if (refsWritten) try { saveExpressionReferences(references, false); } catch { failures.push('starred photo list'); }
+    if (likenessWritten) try { saveLikenessReferences(likeness); } catch { failures.push('reference photo list'); }
     for (const l of written.reverse()) try { writeFileSafely(l.file, l.before); } catch { failures.push(l.file); }
     for (const m of moved.reverse()) try { fs.renameSync(m.to, m.from); } catch { failures.push(m.to); }
     for (const copy of copies) try { fs.unlinkSync(copy); } catch { failures.push(copy); }

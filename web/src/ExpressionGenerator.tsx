@@ -32,12 +32,12 @@ export function ExpressionGenerator({ category, references, photos, categories, 
   return <details className="expression-planning" open><summary>Generate an Expression</summary>
     <details className="yt-section generation-likeness">
     <summary>Likeness Photos ({chosen.length} of 5 Selected{chosen.length > 0 && `: ${chosen.map(path => photos.find(p => p.path === path)?.name ?? path).join(', ')}`})</summary>
-    <p>Choose up to five photos for likeness. Stars are remembered; your choices here are for this candidate.</p>
-    <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Starred Photos</option><option value="all">All Photos</option></select></label>
+    <p>Choose up to five photos for likeness. Reference Photos are remembered and only used for generating images of you; your choices here are for this candidate.</p>
+    <div className="generation-photo-filters"><label>Photos <select value={scope} onChange={e => setScope(e.target.value as 'starred' | 'all')}><option value="starred">Reference Photos</option><option value="all">All Photos</option></select></label>
       <ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div>
     <div className="generation-photo-grid">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
       <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => setChosen(current => selected ? current.filter(p => p !== photo.path) : [...current, photo.path])}><img src={thumbUrl('expressions', photo.path, 240, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
-      <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => onToggleStar(photo.path, !starred)}>{starred ? '★ Starred' : '☆ Star'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
+      <div className="generation-photo-actions"><button type="button" disabled={starBusy} aria-pressed={starred} onClick={() => onToggleStar(photo.path, !starred)}>{starred ? '✓ Reference Photo' : 'Make Reference Photo'}</button><button type="button" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
     {!visible.length && <p className="muted">No photos match these filters. Choose All Photos to see the whole library.</p>}
     </details>
     {!chosen.length && <p className="muted small-text">Open Likeness Photos and choose at least one photo before generating.</p>}

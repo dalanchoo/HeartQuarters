@@ -26,14 +26,14 @@ async function uploadVideoFile(file: File): Promise<GeneratedVideo> {
 
 export function ExpressionVideos({ active, index }: { active: boolean; index: ExpressionIndex | null }) {
   const [promptNote, setPromptNote] = useState('');
-  /** Copy the first starred photo (or a Neutral one) as a picture, ready to paste into Gemini with Ctrl+V. */
+  /** Copy the first Reference Photo (or a Neutral one) as a picture, ready to paste into Gemini with Ctrl+V. */
   const copyPhoto = async () => {
     setPromptNote('');
     try {
-      const starred = (await getJson<{ paths: string[] }>('/api/expression-references')).paths;
+      const starred = (await getJson<{ paths: string[] }>('/api/likeness-references')).paths;
       const photos = index?.photos ?? [];
       const photo = starred.map(p => photos.find(item => item.path === p)).find(Boolean) ?? photos.find(item => item.category === 'Neutral');
-      if (!photo) { setPromptNote('Star a photo of yourself in Generate & Review first.'); return; }
+      if (!photo) { setPromptNote('Mark a Reference Photo of yourself in Generate & Review first.'); return; }
       const response = await fetch(fileUrl('expressions', photo.path));
       if (!response.ok) throw new Error('The photo could not be read.');
       // Clipboards accept pictures as PNG, so the photo is redrawn as one.

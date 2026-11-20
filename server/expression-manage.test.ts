@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage';
-import { readExpressionReferences, saveExpressionReferences } from './expression-references';
+import { readExpressionReferences, readLikenessReferences, saveExpressionReferences, saveLikenessReferences } from './expression-references';
 import { resolveExpressionPhoto } from './expression-photo-path';
 import { makeTree, removeTree } from './testing';
 
@@ -56,6 +56,13 @@ describe('managing expression photos', () => {
     expect(fs.readFileSync(path.join(tmp, 'Expressions/Positive/Joy/Joy_002_GPT.txt'), 'utf8')).toBe('bad extra');
     expect(JSON.parse(fs.readFileSync(path.join(tmp, 'Projects', choice), 'utf8')).photo).toBe('Positive/Joy/Joy_002.jpg');
     expect(readExpressionReferences().paths).toEqual(['Positive/Joy/Joy_002.jpg', 'Communication/Listening/Listening_002.webp']);
+  });
+  it('keeps Reference Photos pointing at a moved photo and drops a deleted one', () => {
+    saveLikenessReferences([a]);
+    applyExpressionChange(a, 'Positive/Joy', previewExpressionChange(a, 'Positive/Joy').token);
+    expect(readLikenessReferences()).toEqual(['Positive/Joy/Joy_002.jpg']);
+    applyExpressionChange('Positive/Joy/Joy_002.jpg', null, previewExpressionChange('Positive/Joy/Joy_002.jpg', null).token);
+    expect(readLikenessReferences()).toEqual([]);
   });
   it('rolls back photo moves and sidecars if the confirmation update cannot be applied', () => {
     const plan = previewExpressionChange(a, 'Positive/Joy');

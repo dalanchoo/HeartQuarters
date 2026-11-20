@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { appDir, safeResolve } from './config.js';
 import { buildExpressionIndex } from './expressions.js';
 import { expressionPrompt, imageFormat, type Options } from './expression-generation.js';
-import { readExpressionReferences } from './expression-references.js';
+import { readLikenessReferences } from './expression-references.js';
 import { readShotList, type ExpressionShot } from './expression-shot-list.js';
 import { makeImage, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
@@ -75,12 +75,12 @@ export function shotReferences(): Record<string, ShotReference> {
   return result;
 }
 
-/** Likeness photos: the starred ones (up to five), or a few Neutral photos if nothing is starred. */
+/** Likeness photos: the Reference Photos (up to five), or a few Neutral photos if none are marked. */
 function likenessPhotos(): string[] {
   const photos = buildExpressionIndex().photos; const exists = new Set(photos.map(p => p.path));
-  const starred = readExpressionReferences().paths.filter(p => exists.has(p)).slice(0, 5);
-  const chosen = starred.length ? starred : photos.filter(p => p.category === 'Neutral').slice(0, 3).map(p => p.path);
-  if (!chosen.length) throw new Error('Star a few photos of yourself in Generate & Review so the AI knows what you look like.');
+  const marked = readLikenessReferences().filter(p => exists.has(p)).slice(0, 5);
+  const chosen = marked.length ? marked : photos.filter(p => p.category === 'Neutral').slice(0, 3).map(p => p.path);
+  if (!chosen.length) throw new Error('Mark a few Reference Photos of yourself in Generate & Review so the AI knows what you look like.');
   return chosen;
 }
 
