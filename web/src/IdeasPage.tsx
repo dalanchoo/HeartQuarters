@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
 import type { IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
+/** A filter dropdown value: "all" shows everything. */
+type Filter<T extends string> = 'all' | T;
+
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
 // Raw brain dumps stay in Raw; once turned into a clear idea they move to Processed.
 // The order is his: the top is what he'd make next.
@@ -23,6 +26,10 @@ export function IdeasPage() {
   const [title, setTitle] = useState('');
   const [showFinished, setShowFinished] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [category, setCategory] = useState<Filter<IdeaCategory>>('all');
+  const [format, setFormat] = useState<Filter<IdeaFormat>>('all');
+  const [status, setStatus] = useState<Filter<IdeaStatus>>('all');
+  const [text, setText] = useState('');
 
   const load = () => getJson<VideoIdea[]>('/api/ideas').then(setIdeas, (e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
@@ -41,10 +48,16 @@ export function IdeasPage() {
   };
 
   const all = ideas ?? [];
-  const visible = (idea: VideoIdea) => showFinished || !FINISHED.includes(idea.status);
+  const matches = (idea: VideoIdea) =>
+    (category === 'all' || idea.category === category)
+    && (format === 'all' || idea.format === format)
+    && (status === 'all' || idea.status === status)
+    && (!text.trim() || `${idea.title} ${idea.notes}`.toLocaleLowerCase().includes(text.trim().toLocaleLowerCase()));
+  const filtering = category !== 'all' || format !== 'all' || status !== 'all' || text.trim() !== '';
+  const visible = (idea: VideoIdea) => matches(idea) && (showFinished || filtering || !FINISHED.includes(idea.status));
   const raw = all.filter((idea) => !idea.processed && visible(idea));
   const done = all.filter((idea) => idea.processed && visible(idea));
-  const hidden = all.filter((idea) => !visible(idea)).length;
+  const hidden = all.filter((idea) => matches(idea) && !visible(idea)).length;
   const first = all[0]?.id;
   const last = all[all.length - 1]?.id;
 
@@ -65,6 +78,32 @@ export function IdeasPage() {
         <input type="text" value={title} maxLength={300} placeholder="A new video idea" onChange={(e) => setTitle(e.target.value)} />
         <button type="submit" disabled={busy || !title.trim()}>Add Idea</button>
       </form>
+
+      {ideas && (
+        <div className="idea-filters">
+          <label>Category
+            <select value={category} onChange={(e) => setCategory(e.target.value as Filter<IdeaCategory>)}>
+              <option value="all">All Categories</option>
+              {Object.entries(CATEGORY_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+          <label>Format
+            <select value={format} onChange={(e) => setFormat(e.target.value as Filter<IdeaFormat>)}>
+              <option value="all">All Formats</option>
+              {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+          <label>Status
+            <select value={status} onChange={(e) => setStatus(e.target.value as Filter<IdeaStatus>)}>
+              <option value="all">All Statuses</option>
+              {Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+          <label className="idea-filter-text">Filter
+            <input type="text" value={text} placeholder="Words in the title or notes" onChange={(e) => setText(e.target.value)} />
+          </label>
+        </div>
+      )}
 
       {ideas && !ideas.length && <p className="muted">No ideas yet. Type one above.</p>}
 
