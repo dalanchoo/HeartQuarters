@@ -799,14 +799,14 @@ function PieceCard({
     onChanged?.();
   };
   // Every card has 9 collapsible sections, top to bottom:
-  // 1. YouTube Studio, 2. Script, 3. Versions (open by default), 4. Generate Video, 5. Generate Packaging,
+  // 1. YouTube, 2. Script, 3. Versions (open by default), 4. Generate Video, 5. Generate Packaging,
   // 6. View and Compare Packaging, 7. Analysis, 8. Other Platforms, 9. Clean Up.
   const contents = (
     <>
       {piece.kind !== 'reel' && !piece.exports.length && <ExportFirst piece={piece} draft={draft ?? piece.name} />}
       {piece.kind !== 'reel' && (
         <details className="yt-section">
-          <summary>YouTube Studio</summary>
+          <summary>YouTube</summary>
           <PieceStatus path={piece.path} details />
           <YouTubeLinkBar piece={piece} link={link} />
         </details>

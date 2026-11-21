@@ -621,7 +621,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           {linked && !data && (loading ? ' · Reading from YouTube…' : ` · Looking at YouTube reads it (${units(readVideoCost(quota))}).`)}
         </span>
       </div>
-      {!linked && <div className="upload-hint" role="note"><strong>Not on YouTube Yet: Upload It First</strong><p><b>Upload to YouTube</b>, just below, sends everything in this version (title, description, tags and settings) together with the video. After that, you can copy single fields across here. If it's already on YouTube, link it in YouTube Studio at the top of this card instead.</p></div>}
+      {!linked && <div className="upload-hint" role="note"><strong>Not on YouTube Yet: Upload It First</strong><p><b>Upload to YouTube</b>, just below, sends everything in this version (title, description, tags and settings) together with the video. After that, you can copy single fields across here. If it's already on YouTube, link it in the YouTube section at the top of this card instead.</p></div>}
       {!linked && link.status?.connected && link.job?.status !== 'uploading' && (dirty ? <p className="muted small-text">Apply or discard your changes before uploading.</p> : <NewUpload piece={piece} doc={originalDoc} covers={covers} link={link} longform={longform} localThumb={localThumb} subtitles={subtitles} />)}
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
@@ -648,11 +648,17 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const direction = youtubeCopyDirection(reverse, waiting, pulling);
           const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : <AiHighlightedText text={local} /> : '(empty)'}</pre>;
-          const localPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} /></> :
+          const fieldPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} /></> :
             <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} savedValue={label.toLowerCase() === 'tags' ? sortTags(savedField?.value ?? '') : savedField?.value ?? ''} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} />
           ) : (
             <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
           );
+          const localPart = label === 'Pinned Comment' && job ? <>
+            {fieldPart}
+            <div className="draft-use">
+              <a className="button-link small" href={youtubeVideoUrl(job.videoId!, piece.kind === 'short')} target="_blank" rel="noopener noreferrer">Open in YouTube ↗</a>
+            </div>
+          </> : fieldPart;
           const youtubePart = label.toLowerCase() === 'pinned comment' && linked && comment !== undefined ? (
             <CommentStatus comment={comment} local={local ?? ''} doc={busy ? { ...doc, locked: true } : doc} />
           ) : !sync ? (
