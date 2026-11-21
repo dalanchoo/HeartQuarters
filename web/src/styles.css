@@ -1055,7 +1055,9 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 /* Ideas tab */
 .idea-add { display: flex; gap: 0.5rem; margin: 0.4rem 0 0.9rem; }
 .idea-add input { flex: 1; }
-.idea-card > summary { align-items: center; }
+.idea-card { padding: 0.3rem 0.7rem; margin-bottom: 0.3rem; }
+.idea-card > summary { align-items: center; font-size: 0.95rem; line-height: 1.25; }
+.idea-card[open] > summary { margin-bottom: 0.2rem; }
 .idea-card .idea-title { font-weight: 600; }
 .idea-card.finished .idea-title { color: var(--muted); font-weight: 400; }
 .idea-body { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; }
