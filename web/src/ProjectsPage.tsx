@@ -85,10 +85,20 @@ function CleanupBadge({ item }: { item: VideoOverview }) {
   if (!withFiles.length) return null;
   return <span className="status-pill status-clean" title={`Clean Up would move to Trash: ${withFiles.map(([name, p]) => `${name}: ${p.files} ${p.files === 1 ? 'file' : 'files'} (${formatSize(p.bytes)})`).join('; ')}`}>Can Clean Up</span>;
 }
+/** The newest downloaded stats, lifetime to date: views, then average percentage viewed and CTR when known. */
+function StatsPill({ stats }: { stats: NonNullable<VideoOverview['stats']> }) {
+  const whole = new Intl.NumberFormat('en-US');
+  const parts = [stats.views === null ? null : `${whole.format(stats.views)} ${stats.views === 1 ? 'view' : 'views'}`,
+    stats.averageViewPercent === null ? null : `${Math.round(stats.averageViewPercent)}% viewed`,
+    stats.ctrPercent === null ? null : `${stats.ctrPercent.toFixed(1)}% CTR`].filter(Boolean);
+  if (!parts.length) return null;
+  const when = stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : stats.snapshot;
+  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Download Video Stats in Analysis to update.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
+}
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
   // The steps bar shows CapCut, Exported, Packaged and Uploaded; the pills after it are things to look at.
-  return <span className="status-badges"><VideoSteps item={item} />{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself." aria-label={`On YouTube: ${checks.issues.join(', ')}`}>On <YouTubeIcon />: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
+  return <span className="status-badges"><VideoSteps item={item} />{item.stats && <StatsPill stats={item.stats} />}{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself." aria-label={`On YouTube: ${checks.issues.join(', ')}`}>On <YouTubeIcon />: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);

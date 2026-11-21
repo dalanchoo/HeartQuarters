@@ -1,3 +1,4 @@
+import { latestStats, type LatestStats } from './latest-stats.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { appDir, safeResolve } from './config.js';
@@ -13,7 +14,7 @@ export type LinkState = 'linked' | 'missing' | 'unknown';
  * packaging version's YouTube text still lacks (empty when it's complete). localThumbnail: that version has a
  * thumbnail. Being on YouTube is `link`.
  */
-export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; titles?: string[]; capcut: boolean; exported: boolean; metadataMissing: string[]; }
+export interface VideoOverview { path: string; projectId: string; name: string; kind: 'longform' | 'short'; link: LinkState; videoId?: string; localThumbnail: boolean; titles?: string[]; capcut: boolean; exported: boolean; metadataMissing: string[]; stats?: LatestStats; }
 type RecordInfo = { piece?: string; status?: string; videoId?: string };
 type SavedLink = { state: LinkState; id?: string };
 
@@ -59,7 +60,7 @@ export function readLinkRecords(dir: string): { jobs: RecordInfo[]; complete: bo
   } catch (e) { return { jobs: [], complete: (e as NodeJS.ErrnoException).code === 'ENOENT' }; }
 }
 
-export function makeVideoOverview(videos: { projectId: string; video: Video }[], records: { jobs: RecordInfo[]; complete: boolean }, savedUrl: (projectId: string) => SavedLink, capcutNames: Set<string> = new Set()): VideoOverview[] {
+export function makeVideoOverview(videos: { projectId: string; video: Video }[], records: { jobs: RecordInfo[]; complete: boolean }, savedUrl: (projectId: string) => SavedLink, capcutNames: Set<string> = new Set(), statsFor: (piece: string) => LatestStats | undefined = () => undefined): VideoOverview[] {
   const byPiece = new Map<string, RecordInfo[]>();
   for (const job of records.jobs) if (job.piece) byPiece.set(job.piece, [...(byPiece.get(job.piece) ?? []), job]);
   return videos.flatMap(({ projectId, video }) => video.pieces.filter((piece) => piece.kind !== 'reel').map((piece) => {
@@ -73,7 +74,8 @@ export function makeVideoOverview(videos: { projectId: string; video: Video }[],
     return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (latest?.covers.length ?? 0) > 0, titles: savedTitles(piece),
       capcut: capcutNames.has(plainDraftName(piece.kind === 'longform' ? path.posix.basename(projectId) : piece.name).toLowerCase()),
       exported: piece.exports.length > 0,
-      metadataMissing: versionMissing(latest) };
+      metadataMissing: versionMissing(latest),
+      ...(() => { const stats = statsFor(piece.path); return stats ? { stats } : {}; })() };
   }));
 }
 
@@ -89,5 +91,5 @@ function savedLongformLink(projectId: string): SavedLink {
 export function videoOverview(): VideoOverview[] {
   let capcut = new Set<string>();
   try { capcut = new Set(listDrafts().map((d) => plainDraftName(d).toLowerCase())); } catch { /* CapCut's folder can't be read: no video shows a CapCut project. */ }
-  return makeVideoOverview(listProjectVideos(), readLinkRecords(process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads')), savedLongformLink, capcut);
+  return makeVideoOverview(listProjectVideos(), readLinkRecords(process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads')), savedLongformLink, capcut, latestStats);
 }
