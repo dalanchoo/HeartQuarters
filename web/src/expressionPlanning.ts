@@ -1,7 +1,6 @@
 import type { ExpressionCategory, ExpressionPhoto } from './api';
 import { groupExpressionAttributes } from './expressionAttributes';
 import type { PhotoFilters } from './ExpressionPhotoFilters';
-import { matchesRatingFilter, type RatingFilter } from './expressionRating';
 
 const KEY = 'hq-expression-reference-photos';
 export type CategoryOption = { value: string; label: string; disabled?: boolean };
@@ -46,10 +45,10 @@ export function suggestedCategories(categories: ExpressionCategory[]): Expressio
     .sort((a, b) => a.ownCount - b.ownCount || a.name.localeCompare(b.name)).slice(0, 12);
 }
 
-export function filterSelectablePhotos(photos: ExpressionPhoto[], stars: string[], filter: { scope: 'starred' | 'all'; category: string; query: string; attributes?: string[]; textFilters?: Pick<PhotoFilters, 'categoryText' | 'framingText' | 'poseText' | 'morphologyText'>; includeSub?: boolean; rating?: RatingFilter }): ExpressionPhoto[] {
+export function filterSelectablePhotos(photos: ExpressionPhoto[], stars: string[], filter: { scope: 'starred' | 'all'; category: string; query: string; attributes?: string[]; textFilters?: Pick<PhotoFilters, 'categoryText' | 'framingText' | 'poseText' | 'morphologyText'>; includeSub?: boolean }): ExpressionPhoto[] {
   const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '').replace(/lookingoffcamera/g, 'lookoffcamera').replace(/lookingatcamera/g, 'lookatcamera');
   const term = normalize(filter.query); const starred = new Set(stars);
-  return photos.filter(photo => (filter.scope === 'all' || starred.has(photo.path)) && matchesRatingFilter(photo, filter.rating) && (filter.attributes ?? []).every(attribute => !attribute || photo.tags.some(tag => !tag.disconfirmed && tag.tag.toLowerCase() === attribute.toLowerCase())) && (filter.category === '*' || photo.category === filter.category || (filter.includeSub !== false && photo.category.startsWith(filter.category + '/'))) && matchesPhotoFilterTexts(photo, filter.textFilters) && normalize([photo.name, photo.category, ...photo.tags.filter(t => !t.disconfirmed).map(t => t.tag)].join(' ')).includes(term));
+  return photos.filter(photo => (filter.scope === 'all' || starred.has(photo.path)) && (filter.attributes ?? []).every(attribute => !attribute || photo.tags.some(tag => !tag.disconfirmed && tag.tag.toLowerCase() === attribute.toLowerCase())) && (filter.category === '*' || photo.category === filter.category || (filter.includeSub !== false && photo.category.startsWith(filter.category + '/'))) && matchesPhotoFilterTexts(photo, filter.textFilters) && normalize([photo.name, photo.category, ...photo.tags.filter(t => !t.disconfirmed).map(t => t.tag)].join(' ')).includes(term));
 }
 
 /** Each text filter searches only its corresponding category or attribute group. */

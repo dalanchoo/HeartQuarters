@@ -1,27 +1,18 @@
 import type { ExpressionPhoto } from './api';
 
 export type Rating = NonNullable<ExpressionPhoto['rating']>;
+/** One of the rating buttons in a filter: the three ratings, or "no rating yet". */
+export type RatingChoice = Rating | 'unrated';
 
-/** "" means every photo. */
-export type RatingFilter = '' | Rating | 'unrated' | 'not-disliked';
+/** A photo passes when no rating button is on, or when its rating is one of those that are on. */
+export function matchesRatingFilter(photo: Pick<ExpressionPhoto, 'rating'>, choices: readonly RatingChoice[] | undefined): boolean {
+  if (!choices?.length) return true;
+  return choices.includes(photo.rating ?? 'unrated');
+}
 
-/** A short mark for tiles and menus. The viewer draws its own icons. */
-export const RATING_MARK: Record<Rating, string> = { liked: '👍', meh: '🫳', disliked: '👎' };
-
-export const RATING_FILTER_OPTIONS: { value: RatingFilter; label: string }[] = [
-  { value: '', label: 'All Ratings' },
-  { value: 'liked', label: `${RATING_MARK.liked} Liked` },
-  { value: 'meh', label: `${RATING_MARK.meh} Meh` },
-  { value: 'disliked', label: `${RATING_MARK.disliked} Disliked` },
-  { value: 'unrated', label: 'Not Rated' },
-  { value: 'not-disliked', label: 'Everything Except Disliked' },
-];
-
-export function matchesRatingFilter(photo: Pick<ExpressionPhoto, 'rating'>, filter: RatingFilter | undefined): boolean {
-  if (!filter) return true;
-  if (filter === 'unrated') return !photo.rating;
-  if (filter === 'not-disliked') return photo.rating !== 'disliked';
-  return photo.rating === filter;
+/** The Star and Reference filter buttons; each one that is on must match. Both off shows every photo. */
+export function matchesMarkFilter(path: string, filter: { starred: boolean; reference: boolean }, starred: readonly string[], references: readonly string[]): boolean {
+  return (!filter.starred || starred.includes(path)) && (!filter.reference || references.includes(path));
 }
 
 /**

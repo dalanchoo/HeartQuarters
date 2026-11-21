@@ -3,29 +3,33 @@ import { getJson, postJson, thumbUrl, type ExpressionCategory, type ExpressionPh
 import { CategoryPicker } from './CategoryPicker';
 import { filterSelectablePhotos } from './expressionPlanning';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
+import { matchesMarkFilter, matchesRatingFilter, type Rating, type RatingChoice } from './expressionRating';
+import { PhotoMarkFilters, PhotoMarks } from './PhotoMarks';
 
 type Job = { id: string; category: string; ai: 'codex' | 'gemini' | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; references: string[]; recovered?: boolean };
 
 /**
  * The likeness photos: which photos show the AI what John looks like. Shown before any expression is chosen,
- * as one row that scrolls sideways. A photo unmarked here stays in view until the Photos choice changes.
+ * as one row that scrolls sideways. A photo whose marks change here stays in view until the filter buttons change.
  */
-export function LikenessPicker({ chosen, onChoose, references, photos, categories, onViewPhoto, onToggleStar, starBusy }: { chosen: string[]; onChoose: (paths: string[]) => void; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean }) {
-  const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [filters, setFilters] = useState(emptyPhotoFilters);
+export function LikenessPicker({ chosen, onChoose, references, photos, categories, onViewPhoto, onToggleStar, starBusy, starred, onToggleStarred, starredDisabled, onRate }: { chosen: string[]; onChoose: (paths: string[]) => void; references: string[]; photos: ExpressionPhoto[]; categories: ExpressionCategory[]; onViewPhoto: (photo: ExpressionPhoto) => void; onToggleStar: (path: string, starred: boolean) => void; starBusy: boolean; starred: string[]; onToggleStarred: (path: string, starred: boolean) => void; starredDisabled: boolean; onRate: (photo: ExpressionPhoto, rating: Rating | null) => void }) {
+  const [marks, setMarks] = useState<{ starred: boolean; reference: boolean; ratings: RatingChoice[] }>({ starred: false, reference: true, ratings: [] }); const [filters, setFilters] = useState(emptyPhotoFilters);
   const [kept, setKept] = useState<string[]>([]);
-  const toggleReference = (photo: ExpressionPhoto, on: boolean) => { onToggleStar(photo.path, on); if (!on) setKept(current => current.includes(photo.path) ? current : [...current, photo.path]); };
-  const visible = filterSelectablePhotos(photos, [...references, ...kept], { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters, rating: filters.rating });
+  const keep = (photo: ExpressionPhoto) => setKept(current => current.includes(photo.path) ? current : [...current, photo.path]);
+  const toggleReference = (photo: ExpressionPhoto, on: boolean) => { onToggleStar(photo.path, on); keep(photo); };
+  const visible = filterSelectablePhotos(photos, [], { scope: 'all', category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters })
+    .filter(photo => kept.includes(photo.path) || (matchesMarkFilter(photo.path, marks, starred, references) && matchesRatingFilter(photo, marks.ratings)));
   return <section className="expression-planning generation-likeness">
     <div className="generation-likeness-head">
       <h2>Likeness Photos <span className="muted small-text">({chosen.length} of 5 Selected)</span></h2>
-      <label>Photos <select value={scope} onChange={e => { setScope(e.target.value as 'starred' | 'all'); setKept([]); }}><option value="starred">Reference Photos</option><option value="all">All Photos</option></select></label>
+      <div className="photo-mark-filter-field"><span>Show Only</span><PhotoMarkFilters {...marks} onChange={next => { setMarks(next); setKept([]); }} /></div>
     </div>
     <p className="muted small-text">Click photos to use them for this candidate. Reference Photos are remembered and only used for generating images of you.</p>
     <details className="generation-more-filters"><summary>More Filters</summary><div className="generation-photo-filters"><ExpressionPhotoFilters categories={categories} filters={filters} onChange={setFilters} /></div></details>
-    <div className="generation-photo-strip">{visible.map(photo => { const selected = chosen.includes(photo.path); const starred = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
+    <div className="generation-photo-strip">{visible.map(photo => { const selected = chosen.includes(photo.path); const isReference = references.includes(photo.path); return <div className={`generation-photo-card${selected ? ' selected' : ''}`} key={photo.path}>
       <button type="button" className="generation-photo-select" aria-pressed={selected} disabled={!selected && chosen.length >= 5} onClick={() => onChoose(selected ? chosen.filter(p => p !== photo.path) : [...chosen, photo.path])}><img src={thumbUrl('expressions', photo.path, 240, photo.revision)} alt={photo.name} loading="lazy" /><span>{photo.name}</span></button>
-      <div className="generation-photo-actions"><button type="button" className="small" disabled={starBusy} aria-pressed={starred} onClick={() => toggleReference(photo, !starred)}>{starred ? '✓ Reference Photo' : 'Make Reference Photo'}</button><button type="button" className="small" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
-    {!visible.length && <p className="muted">No photos match these filters. Choose All Photos to see the whole library.</p>}
+      <div className="generation-photo-actions"><PhotoMarks small reference={isReference} referenceDisabled={starBusy} onToggleReference={() => toggleReference(photo, !isReference)} starred={starred.includes(photo.path)} starDisabled={starredDisabled} onToggleStar={() => { keep(photo); onToggleStarred(photo.path, !starred.includes(photo.path)); }} rating={photo.rating} onRate={rating => { keep(photo); onRate(photo, rating); }} /><button type="button" className="small" onClick={() => onViewPhoto(photo)}>View</button></div></div>; })}</div>
+    {!visible.length && <p className="muted">No photos match these filters. Turn off the Show Only buttons to see the whole library.</p>}
   </section>;
 }
 

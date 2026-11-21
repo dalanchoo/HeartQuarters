@@ -22,7 +22,8 @@ import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMot
 import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
-import { RATING_MARK, ratingSearchWords, type Rating } from './expressionRating';
+import { matchesMarkFilter, matchesRatingFilter, ratingSearchWords, type Rating, type RatingChoice } from './expressionRating';
+import { PhotoMarkFilters, PhotoMarks } from './PhotoMarks';
 
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
@@ -52,7 +53,8 @@ export function ExpressionsPage() {
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
   const [query, setQuery] = useState('');
-  const [photoScope, setPhotoScope] = useState<'all' | 'starred' | 'reference'>('all');
+  // The Reference, Star and rating buttons above the Library: each one that is on narrows the photos shown.
+  const [markFilter, setMarkFilter] = useState<{ starred: boolean; reference: boolean; ratings: RatingChoice[] }>({ starred: false, reference: false, ratings: [] });
   const [libraryFilters, setLibraryFilters] = useState(emptyPhotoFilters);
   const [reviewFolders, setReviewFolders] = useState<FolderReviewMode | 'all'>('all');
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
@@ -70,7 +72,7 @@ export function ExpressionsPage() {
   const [likenessChosen, setLikenessChosen] = useState<string[]>(() => { try { return readChosenLikeness(localStorage); } catch { return []; } });
   const chooseLikeness = (paths: string[]) => { setLikenessChosen(paths); try { saveChosenLikeness(localStorage, paths); } catch { /* only a convenience */ } };
   useEffect(() => { if (index) setLikenessChosen(current => current.filter(path => index.photos.some(photo => photo.path === path))); }, [index]);
-  // Photos unmarked while the Library shows only Starred or Reference Photos stay in view until the Photos choice changes.
+  // A photo whose star, reference or rating is changed while those filters are on stays in view until the filters change.
   const [keptInView, setKeptInView] = useState<string[]>([]);
   const noteUnmarked = (photo: ExpressionPhoto) => setKeptInView(current => current.includes(photo.path) ? current : [...current, photo.path]);
   const [referenceError, setReferenceError] = useState('');
@@ -208,14 +210,15 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, [...(photoScope === 'reference' ? likeness : references), ...keptInView], { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters, rating: libraryFilters.rating }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
-  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, photoScope, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
+    return filterSelectablePhotos(index.photos, [], { scope: 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => (keptInView.includes(p.path) || (matchesMarkFilter(p.path, markFilter, references, likeness) && matchesRatingFilter(p, markFilter.ratings))) && matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, markFilter, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
   const gridActions = useRef<GridActions>(null as unknown as GridActions);
   gridActions.current = {
     open: setOpen,
     star: p => { if (references.includes(p.path)) noteUnmarked(p); void setReference(p.path, !references.includes(p.path)); },
     reference: p => { if (likeness.includes(p.path)) noteUnmarked(p); void setLikenessPhoto(p.path, !likeness.includes(p.path)); },
+    rate: (p, rating) => { noteUnmarked(p); rate(p, rating).catch((e: unknown) => setChangeMessage(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`)); },
     changed: (message) => { setChangeMessage(message); reloadLikeness(); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); },
   };
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
@@ -271,7 +274,7 @@ export function ExpressionsPage() {
             {generationSelection?.definition && <p>{generationSelection.definition}</p>}
           </div>
         </div>
-        <LikenessPicker chosen={likenessChosen} onChoose={chooseLikeness} references={likeness} photos={index.photos} categories={index.categories} starBusy={likenessBusy} onToggleStar={(path, on) => void setLikenessPhoto(path, on)} onViewPhoto={(photo) => setPreview({ photo })} />
+        <LikenessPicker chosen={likenessChosen} onChoose={chooseLikeness} references={likeness} photos={index.photos} categories={index.categories} starBusy={likenessBusy} onToggleStar={(path, on) => void setLikenessPhoto(path, on)} onViewPhoto={(photo) => setPreview({ photo })} starred={references} starredDisabled={!referenceReady || referenceBusy} onToggleStarred={(path, on) => void setReference(path, on)} onRate={(photo, rating) => { rate(photo, rating).catch((e: unknown) => setReferenceError(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`)); }} />
         </div>
         {referenceError && <p className="error">{referenceError}</p>}
         {!generationSelection ? <p className="muted">Choose a category to generate an expression.</p> : <ExpressionGenerator category={generationSelection} chosen={likenessChosen} onStarted={() => setCandidateRevision(n => n + 1)} />}
@@ -311,7 +314,7 @@ export function ExpressionsPage() {
           </div>
         </div>
         <div className="generation-photo-filters expression-library-filters">
-          <label>Photos <select value={photoScope} onChange={e => { setPhotoScope(e.target.value as 'all' | 'starred' | 'reference'); setKeptInView([]); setOpen(null); }}><option value="all">All Photos</option><option value="starred">Starred Photos</option><option value="reference">Reference Photos</option></select></label>
+          <div className="photo-mark-filter-field"><span>Show Only</span><PhotoMarkFilters {...markFilter} onChange={next => { setMarkFilter(next); setKeptInView([]); setOpen(null); }} /></div>
           <ExpressionPhotoFilters categories={index.categories} filters={{ ...libraryFilters, category: current.path || '*' }} onChange={next => { if (next.category !== (current.path || '*')) goTo(next.category === '*' ? '' : next.category); setLibraryFilters(next); setOpen(null); }} />
           <label>Photo Type <select value={origin} onChange={e => { setOrigin(e.target.value as 'all' | 'real' | 'ai'); setOpen(null); }}><option value="all">All Photos</option><option value="real">Real / Unmarked Photos</option><option value="ai">AI Photos</option></select></label>
           <label>Motion Image <select value={motionFilter} onChange={e => { setMotionFilter(e.target.value as 'all' | 'motion' | 'still'); setOpen(null); }}><option value="all">All Photos</option><option value="motion">Motion Images Only</option><option value="still">Still Photos Only</option></select></label>
@@ -371,7 +374,7 @@ export function ExpressionsPage() {
   );
 }
 
-type GridActions = { open: (path: string) => void; star: (photo: ExpressionPhoto) => void; reference: (photo: ExpressionPhoto) => void; changed: (message: string) => void };
+type GridActions = { open: (path: string) => void; star: (photo: ExpressionPhoto) => void; reference: (photo: ExpressionPhoto) => void; rate: (photo: ExpressionPhoto, rating: Rating | null) => void; changed: (message: string) => void };
 /**
  * The Library's tiles. Kept separate (and memo'd) so stepping through photos in the viewer doesn't redraw every tile:
  * the actions come through a ref that always holds the page's latest handlers, so they never count as a change.
@@ -384,8 +387,9 @@ const LibraryGrid = memo(function LibraryGrid({ photos: shown, reviewFolders, ca
           {shown.map((p) => (
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => actions.current.open(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
-              <span>{p.rating ? `${RATING_MARK[p.rating]} ` : ''}{p.name}</span>
-            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={starDisabled} aria-pressed={references.includes(p.path)} onClick={() => actions.current.star(p)}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => actions.current.reference(p)}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
+              <span>{p.name}</span>
+            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}
+              <PhotoMarks small reference={likeness.includes(p.path)} referenceDisabled={likenessBusy} onToggleReference={() => actions.current.reference(p)} starred={references.includes(p.path)} starDisabled={starDisabled} onToggleStar={() => actions.current.star(p)} rating={p.rating} onRate={rating => actions.current.rate(p, rating)} />
               <PhotoActions photo={p} rootDir={rootDir} categories={categories} onChanged={message => actions.current.changed(message)} />
             </div>
           ))}
@@ -494,10 +498,10 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
   // No waiting: the page shows the new rating straight away and saves it in the background.
-  const saveRating = (rating: Rating) => {
+  const saveRating = (rating: Rating | null) => {
     if (!onRate) return;
     setConfirmError('');
-    onRate(photo.rating === rating ? null : rating).catch((e: unknown) => setConfirmError(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`));
+    onRate(rating).catch((e: unknown) => setConfirmError(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`));
   };
   const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
   useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
@@ -619,35 +623,9 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
           <div className="lb-details">
           <div className="lb-title">
             <div className="lb-title-name">
-              {onToggleStar && (
-                <button
-                  type="button"
-                  className={`lb-star${starred ? ' is-starred' : ''}`}
-                  disabled={starDisabled}
-                  aria-pressed={!!starred}
-                  aria-label={starred ? 'Remove from Favorites' : 'Add to Favorites'}
-                  title={starred ? 'Remove from Favorites' : 'Add to Favorites'}
-                  onClick={onToggleStar}
-                >
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path
-                      d="M12 2.5l2.93 5.94 6.56.95-4.74 4.62 1.12 6.53L12 17.45l-5.87 3.09 1.12-6.53L2.51 9.39l6.56-.95L12 2.5z"
-                      fill={starred ? '#facc15' : 'none'}
-                      stroke={starred ? '#b45309' : 'currentColor'}
-                      strokeWidth="1.8"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              )}
-              {onRate && <span className="lb-rating" role="group" aria-label="Rating">
-                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => saveRating('liked')}><ThumbIcon /></button>
-                <button type="button" className={`lb-thumb${photo.rating === 'meh' ? ' is-meh' : ''}`} aria-pressed={photo.rating === 'meh'} title={photo.rating === 'meh' ? 'Meh (click to clear)' : 'Meh: Neither Like Nor Dislike'} onClick={() => saveRating('meh')}><MehIcon /></button>
-                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => saveRating('disliked')}><ThumbIcon down /></button>
-              </span>}
+              <PhotoMarks reference={reference} referenceDisabled={referenceDisabled} onToggleReference={onToggleReference} starred={starred} starDisabled={starDisabled} onToggleStar={onToggleStar} rating={photo.rating} onRate={onRate ? rating => saveRating(rating) : undefined} />
               <strong>{photo.name}</strong>
               <span className="muted">{photo.category.split('/').join(' › ')}</span>
-              {onToggleReference && <button type="button" className="small" disabled={referenceDisabled} aria-pressed={!!reference} title="Reference Photos show the AI what you look like when it generates images of you." onClick={onToggleReference}>{reference ? '✓ Reference Photo' : 'Make Reference Photo'}</button>}
             </div>
             {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
             {detailsExpanded && !imageUrl && <button type="button" className="small" onClick={() => void openInExplorer('expressions', photo.path)}>Select in Explorer</button>}
@@ -676,24 +654,6 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
       </div>
     </div>
   );
-}
-
-/** An outlined thumb in the same style as the star; it fills in when chosen (colour comes from the CSS). */
-function ThumbIcon({ down = false }: { down?: boolean }) {
-  return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style={down ? { transform: 'rotate(180deg)' } : undefined}>
-    <path d="M7 10v12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" fill="var(--thumb-fill, none)" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-  </svg>;
-}
-
-/** A flat hand held sideways, the "so-so" gesture between the two thumbs. */
-function MehIcon() {
-  return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style={{ transform: 'rotate(-90deg)' }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
-    <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" />
-    <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
-    <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" fill="var(--thumb-fill, none)" />
-  </svg>;
 }
 
 /** Show the current library reference without leaving the photo viewer. */
