@@ -1,5 +1,5 @@
 // John's thumbs up / thumbs down on an expression photo, saved in the photo's sidecar (.txt) as one line:
-//   # Rating: Liked      or      # Rating: Disliked
+//   # Rating: Liked      # Rating: Meh      # Rating: Disliked
 // The line starts with "#", so the tag readers and the AI assessment keep it as it is. Nothing else in the file changes.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { writable, writeFile } from './safe-files.js';
 
 /** Sets the rating, or removes it when `rating` is null. */
 export function setExpressionRating(photoPath: string, rating: unknown): void {
-  if (rating !== null && rating !== 'liked' && rating !== 'disliked') throw new Error('Choose Like, Dislike or no rating.');
+  if (rating !== null && rating !== 'liked' && rating !== 'meh' && rating !== 'disliked') throw new Error('Choose Like, Meh, Dislike or no rating.');
   if (!isExpressionPhoto(photoPath)) throw new Error('That expression photo is no longer available.');
   const sidecar = writable(safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt'), 'expressions');
   let text = '';
@@ -27,4 +27,4 @@ export function setExpressionRating(photoPath: string, rating: unknown): void {
   clearExpressionIndex();
 }
 
-function label(rating: ExpressionRating): string { return rating === 'liked' ? 'Liked' : 'Disliked'; }
+function label(rating: ExpressionRating): string { return rating === 'liked' ? 'Liked' : rating === 'meh' ? 'Meh' : 'Disliked'; }

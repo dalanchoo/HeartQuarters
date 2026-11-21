@@ -22,7 +22,7 @@ import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMot
 import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
-import { ratingSearchWords } from './expressionRating';
+import { RATING_MARK, ratingSearchWords, type Rating } from './expressionRating';
 
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
@@ -132,7 +132,7 @@ export function ExpressionsPage() {
     if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
   };
   // Thumbs up / thumbs down, saved in the photo's sidecar. Clicking the same thumb again clears it.
-  const rate = async (photo: ExpressionPhoto, rating: 'liked' | 'disliked' | null) => {
+  const rate = async (photo: ExpressionPhoto, rating: Rating | null) => {
     await postJson('/api/expressions/rating', { photo: photo.path, rating });
     if (photo.category === '_Inbox') { refreshInbox(); return; }
     const updated = await getJson<ExpressionIndex>('/api/expressions');
@@ -376,7 +376,7 @@ const LibraryGrid = memo(function LibraryGrid({ photos: shown, reviewFolders, ca
           {shown.map((p) => (
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => actions.current.open(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
-              <span>{p.rating === 'liked' ? '👍 ' : p.rating === 'disliked' ? '👎 ' : ''}{p.name}</span>
+              <span>{p.rating ? `${RATING_MARK[p.rating]} ` : ''}{p.name}</span>
             </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={starDisabled} aria-pressed={references.includes(p.path)} onClick={() => actions.current.star(p)}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => actions.current.reference(p)}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
               <PhotoActions photo={p} rootDir={rootDir} categories={categories} onChanged={message => actions.current.changed(message)} />
             </div>
@@ -481,12 +481,12 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
 }
 
 function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, reference, referenceDisabled, onToggleReference, onClose, onPrev, onNext, onTagAction, onRate, onAssessmentStarted, onAssessmentDone }: {
-  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onRate?: (rating: 'liked' | 'disliked' | null) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
+  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onRate?: (rating: Rating | null) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
   const [ratingBusy, setRatingBusy] = useState(false);
-  const saveRating = async (rating: 'liked' | 'disliked') => {
+  const saveRating = async (rating: Rating) => {
     if (!onRate) return;
     setRatingBusy(true); setConfirmError('');
     try { await onRate(photo.rating === rating ? null : rating); }
@@ -636,6 +636,7 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
               )}
               {onRate && <span className="lb-rating" role="group" aria-label="Rating">
                 <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => void saveRating('liked')}><ThumbIcon /></button>
+                <button type="button" className={`lb-thumb${photo.rating === 'meh' ? ' is-meh' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'meh'} title={photo.rating === 'meh' ? 'Meh (click to clear)' : 'Meh: Neither Like Nor Dislike'} onClick={() => void saveRating('meh')}><MehIcon /></button>
                 <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => void saveRating('disliked')}><ThumbIcon down /></button>
               </span>}
               <strong>{photo.name}</strong>
@@ -644,7 +645,6 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
             </div>
             {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
             {detailsExpanded && !imageUrl && <button type="button" className="small" onClick={() => void openInExplorer('expressions', photo.path)}>Select in Explorer</button>}
-            {(onPrev || onNext) && <span className="lb-step"><button type="button" className="small" disabled={!onPrev} onClick={onPrev} title="Previous Photo (←)">‹ Previous</button><button type="button" className="small" disabled={!onNext} onClick={onNext} title="Next Photo (→)">Next ›</button></span>}
             <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>
           <div id="expression-photo-details" hidden={!detailsExpanded}>
@@ -677,6 +677,16 @@ function ThumbIcon({ down = false }: { down?: boolean }) {
   return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style={down ? { transform: 'rotate(180deg)' } : undefined}>
     <path d="M7 10v12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" fill="var(--thumb-fill, none)" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** A flat hand held sideways, the "so-so" gesture between the two thumbs. */
+function MehIcon() {
+  return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style={{ transform: 'rotate(-90deg)' }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+    <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" />
+    <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
+    <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" fill="var(--thumb-fill, none)" />
   </svg>;
 }
 

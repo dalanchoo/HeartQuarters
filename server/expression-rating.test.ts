@@ -14,15 +14,19 @@ beforeEach(() => {
 });
 afterEach(() => { config.expressionsDir = original; removeTree(tmp); });
 const sidecar = (name: string) => path.join(tmp, name);
+const TAGS = 'Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n';
 
 describe('expression ratings', () => {
   it('adds, switches and removes the rating line without touching tags or line endings', () => {
     setExpressionRating('Joy/Joy_001.jpg', 'liked');
-    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe('Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n# Rating: Liked\r\n');
+    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe(`${TAGS}# Rating: Liked\r\n`);
     setExpressionRating('Joy/Joy_001.jpg', 'disliked');
-    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe('Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n# Rating: Disliked\r\n');
+    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe(`${TAGS}# Rating: Disliked\r\n`);
+    setExpressionRating('Joy/Joy_001.jpg', 'meh');
+    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe(`${TAGS}# Rating: Meh\r\n`);
+    expect(buildExpressionIndex().photos.find(p => p.path === 'Joy/Joy_001.jpg')!.rating).toBe('meh');
     setExpressionRating('Joy/Joy_001.jpg', null);
-    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe('Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n');
+    expect(fs.readFileSync(sidecar('Joy/Joy_001.txt'), 'utf8')).toBe(TAGS);
   });
   it('creates a sidecar when there is none, and works in the inbox', () => {
     setExpressionRating('Joy/Joy_002.jpg', 'liked');

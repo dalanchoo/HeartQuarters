@@ -49,7 +49,7 @@ export interface ExpressionPhoto {
   assessedByThreeAIs?: boolean;
   /** True when the image file itself contains embedded Motion Photo / MicroVideo XMP metadata. */
   motionPhoto?: boolean;
-  /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked" or "# Rating: Disliked". */
+  /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked", "# Rating: Meh" or "# Rating: Disliked". */
   rating?: ExpressionRating;
   tags: Tag[];
 }
@@ -85,9 +85,9 @@ export function hasMotionPhotoHeader(file: string): boolean {
 
 export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
 
-export type ExpressionRating = 'liked' | 'disliked';
+export type ExpressionRating = 'liked' | 'meh' | 'disliked';
 /** The rating line starts with "#", so tag readers (and the AI assessment) leave it alone. */
-export const RATING_LINE = /^#\s*Rating:\s*(Liked|Disliked)\s*$/i;
+export const RATING_LINE = /^#\s*Rating:\s*(Liked|Meh|Disliked)\s*$/i;
 
 /** The last rating line in a sidecar wins; none means not rated. */
 export function parseRating(text: string): ExpressionRating | undefined {
