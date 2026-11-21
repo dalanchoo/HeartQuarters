@@ -36,7 +36,7 @@ button:focus-visible, .button-link:focus-visible, .action-menu > summary:focus-v
 button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 button.small { min-height: 24px; padding: 0.1rem 0.7rem; font-size: 0.9rem; text-transform: none; letter-spacing: 0; }
 button:has(> .youtube-icon) { display: inline-flex; align-items: center; gap: 0.35rem; }
-.youtube-icon { display: inline-block; vertical-align: middle; flex: none; }
+.youtube-icon { display: inline-block; vertical-align: middle; position: relative; top: 1px; flex: none; }
 
 /* Native dropdowns keep their keyboard and screen-reader behavior while matching the searchable pickers. */
 select {
@@ -382,7 +382,8 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .packaging-choice-field { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
 .packaging-choice { position: relative; min-width: 11rem; font-size: 0.9rem; }
 .packaging-choice > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 24px; padding: 0.1rem 0.7rem; border: 1px solid #b5bdc9; border-radius: 7px; background: #edf1f7; color: #273b58; box-shadow: 0 2px 0 #a8b1bf, 0 3px 6px #182b4618; cursor: pointer; font-weight: 600; }
-.packaging-choice > summary::before { content: none !important; }
+.packaging-choice > summary::marker { content: ''; }
+.packaging-choice > summary::-webkit-details-marker { display: none; }
 .packaging-choice > summary::after { content: '▾'; margin-left: auto; }
 .packaging-choice > summary:focus-visible { outline: 3px solid #508ee2; outline-offset: 2px; }
 .packaging-choice-menu { position: absolute; z-index: 10; top: calc(100% + 2px); left: 0; min-width: 100%; width: max-content; max-width: min(90vw, 25rem); padding: 0.2rem; border: 1px solid #b5bdc9; border-radius: 7px; background: var(--panel); box-shadow: 0 5px 12px #182b4630; }
@@ -812,14 +813,14 @@ textarea[readonly]:focus { outline: none; }
 .attribute-chip.disconfirmed { border: 1px solid #ce8580; background: #fff0ef; color: #952b26; }
 
 /* Consistent, visible disclosure indicators for expandable sections and trees. */
-details:not(.action-menu):not(.new-version):not(.quota-badge):not(.playlist-select details) > summary { list-style: none; }
-details:not(.action-menu):not(.new-version):not(.quota-badge):not(.playlist-select details) > summary::-webkit-details-marker { display: none; }
-details:not(.action-menu):not(.new-version):not(.quota-badge):not(.playlist-select details) > summary::before {
+details:not(.action-menu):not(.new-version):not(.quota-badge):not(.packaging-choice):not(.playlist-select details) > summary { list-style: none; }
+details:not(.action-menu):not(.new-version):not(.quota-badge):not(.packaging-choice):not(.playlist-select details) > summary::-webkit-details-marker { display: none; }
+details:not(.action-menu):not(.new-version):not(.quota-badge):not(.packaging-choice):not(.playlist-select details) > summary::before {
   content: '▶'; display: inline-block; flex: 0 0 1em; width: 1em; margin-right: 0.35rem;
   color: #626971; font-size: 0.85rem; line-height: 1; text-align: center; vertical-align: middle;
   transition: transform 0.15s;
 }
-details[open]:not(.action-menu):not(.new-version):not(.quota-badge):not(.playlist-select details) > summary::before { transform: rotate(90deg); }
+details[open]:not(.action-menu):not(.new-version):not(.quota-badge):not(.packaging-choice):not(.playlist-select details) > summary::before { transform: rotate(90deg); }
 details.page-section:not(.action-menu):not(.new-version):not(.playlist-select details) > summary::before { font-size: 1rem; }
 .compare-field > summary { grid-template-columns: 1rem minmax(8rem, 10rem) 1fr; }
 .tree-leaf { padding-left: 1.2rem; }
@@ -976,7 +977,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .quota-badge { position: relative; font-size: 0.8rem; color: var(--muted); margin-left: auto; }
 .quota-badge + .ai-controls { margin-left: 0; }
 .quota-badge > summary::before { content: none; }
-.quota-badge > summary { list-style: none; cursor: pointer; padding: 0.15rem 0.45rem; border-radius: 6px; white-space: nowrap; }
+.quota-badge > summary { display: flex; align-items: center; gap: 0.35rem; list-style: none; cursor: pointer; padding: 0.15rem 0.45rem; border-radius: 6px; white-space: nowrap; }
 .quota-badge > summary::-webkit-details-marker { display: none; }
 .quota-badge > summary:hover, .quota-badge[open] > summary { background: var(--accent-soft); }
 .quota-badge.quota-out > summary { color: #b42318; font-weight: 600; }
