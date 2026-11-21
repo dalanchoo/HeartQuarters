@@ -900,6 +900,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .script-rich-editor blockquote { margin: 0.4rem 0 0.6rem; padding-left: 0.8rem; border-left: 3px solid #c7d0dc; color: #4a5568; }
 .ai-writing-checker { margin-top: 0.35rem; }
 .ai-writing-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.youtube-open-link.button-link { min-width: 2.5rem; justify-content: center; padding: 0.1rem 0.4rem; }
 .ai-writing-badge { display: inline-flex; align-items: center; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; border: 1px solid; }
 .ai-writing-badge--ok { color: #14532d; background: #e8f8ed; border-color: #93cfa7; }
 .ai-writing-badge--warn { color: #7a3d00; background: #fff3da; border-color: #dca759; }

@@ -83,7 +83,7 @@ function SuggestionText({ text, suggestions, picked, onPick }: { text: string; s
  * Under a field: quick checks for common AI phrasing, and "Check for AI Writing", which asks the chosen AI for whole
  * sentences to rewrite. With `onReplace` (an editable field), a rewrite can be put straight into the field.
  */
-export function AiWritingChecker({ text, label, onReplace, suggestionKey }: { text: string; label: string; onReplace?: (next: string) => void | Promise<void>; suggestionKey?: string }) {
+export function AiWritingChecker({ text, label, onReplace, suggestionKey, action }: { text: string; label: string; onReplace?: (next: string) => void | Promise<void>; suggestionKey?: string; action?: ReactNode }) {
   // With an edit box above that underlines rewrites (it shares `suggestionKey`), the rewrites are shown there instead.
   const inBox = !!onReplace && !!suggestionKey;
   const [busy, setBusy] = useState(false);
@@ -112,7 +112,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey }: { te
     }
   };
 
-  if (!trimmed && !review && !error) return null;
+  if (!trimmed && !review && !error) return action ? <div className="ai-writing-checker"><div className="ai-writing-bar">{action}</div></div> : null;
 
   const use = async (i: number) => {
     const s = review?.suggestions[i];
@@ -162,13 +162,14 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey }: { te
           <span className="ai-writing-badge ai-writing-badge--ok">✓ No Common AI Tells</span>
         )}
         <button type="button" className="small" disabled={busy || !trimmed} onClick={() => void checkWithAi()}>
-          {busy ? 'Checking for AI Writing…' : 'Check for AI Writing'}
+          {busy ? 'Checking Writing…' : 'Check Writing'}
         </button>
         {review && (
           <button type="button" className="small" onClick={() => { setReview(null); if (suggestionKey) setFieldSuggestions(suggestionKey, []); }}>
             Hide Review
           </button>
         )}
+        {action}
       </div>
 
       {tells.length > 0 && (

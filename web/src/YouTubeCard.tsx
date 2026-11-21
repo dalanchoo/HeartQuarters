@@ -12,6 +12,7 @@ import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { ChoiceField } from './ChoiceField';
 import { fieldChoices, localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
+import { YouTubeOpenLink } from './YouTubeOpenLink';
 import { copyValuesMatch, metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo, sameComment } from './videoChecks';
 import type { CommentCheck } from '../../server/youtube-comment';
@@ -246,12 +247,8 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
           </div>
           {linked && job && (
             <div className="yt-linkbar-row">
-              <a className="button-link small" href={youtubeVideoUrl(job.videoId!, short)} target="_blank" rel="noopener noreferrer">
-                Open in YouTube ↗
-              </a>
-              <a className="button-link small" href={`https://studio.youtube.com/video/${encodeURIComponent(job.videoId!)}/edit`} target="_blank" rel="noopener noreferrer">
-                Open in YouTube Studio ↗
-              </a>
+              <YouTubeOpenLink href={youtubeVideoUrl(job.videoId!, short)} />
+              <YouTubeOpenLink href={`https://studio.youtube.com/video/${encodeURIComponent(job.videoId!)}/edit`} studio />
               <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
                 Reload from YouTube
               </button>
@@ -648,17 +645,12 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           const direction = youtubeCopyDirection(reverse, waiting, pulling);
           const state = direction ? 'Waiting to Apply' : !sync || !canCompare ? '' : remote === null ? (local === null ? '' : "YouTube doesn't report this") : diff?.same ? 'Same' : 'Different';
           const localPreview = <pre className="lvy-value">{local === null ? '(not provided)' : local ? shownView === 'diff' && diff ? <DiffText parts={diff.left} side="local" /> : <AiHighlightedText text={local} /> : '(empty)'}</pre>;
-          const fieldPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} /></> :
-            <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} savedValue={label.toLowerCase() === 'tags' ? sortTags(savedField?.value ?? '') : savedField?.value ?? ''} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} />
+          const action = label === 'Pinned Comment' && job ? <YouTubeOpenLink href={youtubeVideoUrl(job.videoId!, piece.kind === 'short')} /> : undefined;
+          const localPart = field ? (doc.locked ? <>{localPreview}<AiWritingChecker text={local ?? ''} label={label} action={action} /></> :
+            <EditableComparisonValue doc={doc} index={index} field={label.toLowerCase() === 'tags' ? { ...field, value: sortTags(field.value) } : field} current={localPreview} savedValue={label.toLowerCase() === 'tags' ? sortTags(savedField?.value ?? '') : savedField?.value ?? ''} edited={edited} copySelected={pulling} busy={busy} cancelCopy={() => { if (sync) saveToFile(label); }} undoEdit={async () => { if (originalDoc.text === null) throw new Error('The saved file is still loading.'); await doc.save(t => undoFieldEdit(t, originalDoc.text!, label)); }} action={action} />
           ) : (
-            <MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />
+            <><MissingField doc={busy ? { ...doc, locked: true } : doc} label={label} />{action}</>
           );
-          const localPart = label === 'Pinned Comment' && job ? <>
-            {fieldPart}
-            <div className="draft-use">
-              <a className="button-link small" href={youtubeVideoUrl(job.videoId!, piece.kind === 'short')} target="_blank" rel="noopener noreferrer">Open in YouTube ↗</a>
-            </div>
-          </> : fieldPart;
           const youtubePart = label.toLowerCase() === 'pinned comment' && linked && comment !== undefined ? (
             <CommentStatus comment={comment} local={local ?? ''} doc={busy ? { ...doc, locked: true } : doc} />
           ) : !sync ? (
@@ -684,7 +676,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
                     <pre className="lvy-value">
                       <DiffText parts={diff.left} side="local" />
                     </pre>
-                    <AiWritingChecker text={local} label={label} />
+                    <AiWritingChecker text={local} label={label} action={action} />
                   </div>
                   <div>{youtubePart}</div>
                 </div>
@@ -820,7 +812,7 @@ function WaitingBadge() {
 }
 
 /** Show either the saved value or the draft, without displaying two large text blocks at once. */
-export function EditableComparisonValue({ doc, index, field, current, savedValue, edited, copySelected, cancelCopy, undoEdit, onEdited, busy = false }: { doc: LoadedDoc; index: number; field: Field; current: ReactNode; savedValue: string; edited: boolean; copySelected: boolean; cancelCopy: () => void; undoEdit: () => Promise<void>; onEdited?: () => void; busy?: boolean }) {
+export function EditableComparisonValue({ doc, index, field, current, savedValue, edited, copySelected, cancelCopy, undoEdit, onEdited, busy = false, action }: { doc: LoadedDoc; index: number; field: Field; current: ReactNode; savedValue: string; edited: boolean; copySelected: boolean; cancelCopy: () => void; undoEdit: () => Promise<void>; onEdited?: () => void; busy?: boolean; action?: ReactNode }) {
   const [tab, setTab] = useState<'current' | 'edited'>('current');
   // After an AI writing check, show the Edited tab: that's where the rewrites are underlined and can be accepted.
   const rewrites = useFieldSuggestions(fieldKey(doc.file.path, field.label));
@@ -846,7 +838,7 @@ export function EditableComparisonValue({ doc, index, field, current, savedValue
         {undoError && <p className="error">{undoError}</p>}
       </>}
     </div>
-    <AiWritingChecker text={field.value} label={field.label} suggestionKey={fieldKey(doc.file.path, field.label)} onReplace={doc.locked || copySelected ? undefined : (next) => { onEdited?.(); return doc.save((text) => setFieldValue(text, index, next)); }} />
+    <AiWritingChecker text={field.value} label={field.label} suggestionKey={fieldKey(doc.file.path, field.label)} onReplace={doc.locked || copySelected ? undefined : (next) => { onEdited?.(); return doc.save((text) => setFieldValue(text, index, next)); }} action={action} />
   </div>;
 }
 
