@@ -246,6 +246,9 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
           </div>
           {linked && job && (
             <div className="yt-linkbar-row">
+              <a className="button-link small" href={youtubeVideoUrl(job.videoId!, short)} target="_blank" rel="noopener noreferrer">
+                Open in YouTube ↗
+              </a>
               <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job.videoId })))}>
                 Open in YouTube Studio ↗
               </button>
