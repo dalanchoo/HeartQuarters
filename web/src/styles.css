@@ -35,6 +35,8 @@ button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 0 0 #a8
 button:focus-visible, .button-link:focus-visible, .action-menu > summary:focus-visible, .new-version > summary:focus-visible { outline: 3px solid #508ee2; outline-offset: 2px; }
 button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 button.small { min-height: 24px; padding: 0.1rem 0.7rem; font-size: 0.9rem; text-transform: none; letter-spacing: 0; }
+button:has(> .youtube-icon) { display: inline-flex; align-items: center; gap: 0.35rem; }
+.youtube-icon { display: inline-block; vertical-align: middle; flex: none; }
 
 /* Native dropdowns keep their keyboard and screen-reader behavior while matching the searchable pickers. */
 select {
@@ -377,6 +379,15 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .comparison-row .field-input:not([readonly]) { border-color: #b5bdc9; background: var(--panel); }
 .version-field-compare > button { margin-left: .6rem; }
 .compare-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+.packaging-choice-field { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.packaging-choice { position: relative; min-width: 11rem; font-size: 0.9rem; }
+.packaging-choice > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 24px; padding: 0.1rem 0.7rem; border: 1px solid #b5bdc9; border-radius: 7px; background: #edf1f7; color: #273b58; box-shadow: 0 2px 0 #a8b1bf, 0 3px 6px #182b4618; cursor: pointer; font-weight: 600; }
+.packaging-choice > summary::before { content: none !important; }
+.packaging-choice > summary::after { content: '▾'; margin-left: auto; }
+.packaging-choice > summary:focus-visible { outline: 3px solid #508ee2; outline-offset: 2px; }
+.packaging-choice-menu { position: absolute; z-index: 10; top: calc(100% + 2px); left: 0; min-width: 100%; width: max-content; max-width: min(90vw, 25rem); padding: 0.2rem; border: 1px solid #b5bdc9; border-radius: 7px; background: var(--panel); box-shadow: 0 5px 12px #182b4630; }
+.packaging-choice-menu button { display: flex; align-items: center; width: 100%; gap: 0.4rem; padding: 0.35rem 0.55rem; border: 0; box-shadow: none; text-align: left; }
+.packaging-choice-menu button.selected { background: var(--accent-soft); }
 .compare-reversed > :first-child { order: 2; }
 .copy-direction-frame { border: 3px solid transparent; border-radius: 10px; padding: .45rem .6rem; margin: .35rem 0; }
 .copy-direction-frame.is-pending { border-color: #1f6feb; background: #eef4ff; }

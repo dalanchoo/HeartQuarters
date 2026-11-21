@@ -7,6 +7,26 @@ import { choiceOrder, comparisonSelection, DRAFT_SELECTION as DRAFT, orderedChoi
 import { draftImages, draftText, isCurrentChoice } from './draftPackaging';
 import { setPendingPackaging } from './pendingPackaging';
 import { LockSwitch } from './LockSwitch';
+import { YouTubeIcon } from './YouTubeOpenLink';
+
+export function PackagingChoice({ name, value, options, label, onChange }: { name: string; value: string; options: string[]; label: (value: string) => string; onChange: (value: string) => void }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const show = (choice: string) => choice === YOUTUBE ? <YouTubeIcon /> : label(choice);
+  return <details className="packaging-choice" ref={menu} onKeyDown={event => {
+    if (event.key === 'Escape') { menu.current!.open = false; menu.current!.querySelector('summary')?.focus(); }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault(); menu.current!.open = true;
+      const buttons = [...menu.current!.querySelectorAll<HTMLButtonElement>('.packaging-choice-menu button')];
+      const at = buttons.indexOf(event.target as HTMLButtonElement);
+      buttons[at < 0 ? (event.key === 'ArrowDown' ? 0 : buttons.length - 1) : (at + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    }
+  }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
+    <summary aria-label={`${name}: ${value === YOUTUBE ? 'YouTube' : label(value)}`}>{show(value)}</summary>
+    <div className="packaging-choice-menu">
+      {options.map(choice => <button key={choice} type="button" className={choice === value ? 'selected' : ''} aria-label={choice === YOUTUBE ? 'YouTube' : undefined} aria-current={choice === value ? 'true' : undefined} onClick={() => { onChange(choice); menu.current!.open = false; }}>{show(choice)}</button>)}
+    </div>
+  </details>;
+}
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
 export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, draftImage, setDraftImage, open, setOpen }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; draftImage: string; setDraftImage: (path: string) => void; open: boolean; setOpen: (open: boolean) => void }) {
@@ -46,7 +66,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const unlockedDoc = unlockedFile ? unlockedDocs.find(d => d.file.path === unlockedFile.path) : (!locked ? doc : undefined);
   const label = (value: string) => {
     if (value === DRAFT) return 'Draft (Generated Packaging)';
-    if (value === YOUTUBE) return '▶';
+    if (value === YOUTUBE) return 'YouTube';
     const v = versions.find(x => x.path === value);
     return v ? `${v.name} ${v.path === unlocked ? '🔓' : '🔒'}${v.path === version.path ? ' (Selected)' : ''}` : value;
   };
@@ -55,8 +75,8 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
 
   return <details className="yt-section" open={open} onToggle={e => setOpen(e.currentTarget.open)}><summary>View and Compare Packaging</summary>
     <div className="compare-columns">
-      <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value} aria-label={value === YOUTUBE ? 'YouTube' : undefined}>{label(value)}</option>)}</select></label>
-      <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value} aria-label={value === YOUTUBE ? 'YouTube' : undefined}>{label(value)}</option>)}</select></label>
+      <div className="packaging-choice-field"><span>First Selection</span><PackagingChoice name="First Selection" value={left} options={leftOptions} label={label} onChange={value => changeSelection('left', value)} /></div>
+      <div className="packaging-choice-field"><span>Compare With</span><PackagingChoice name="Compare With" value={right} options={['', ...rightChoices(left, order)]} label={value => value ? label(value) : 'None — View One'} onChange={value => changeSelection('right', value)} /></div>
     </div>
     {/* Which side is which, once; every version's column has a Lock/Unlock switch. Unlocking one selects it and locks the others. */}
     <div className={right ? 'compare-columns compare-names' : 'compare-names'}>
