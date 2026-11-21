@@ -606,8 +606,8 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
                 </button>
               )}
               {onRate && <span className="lb-rating" role="group" aria-label="Rating">
-                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => void saveRating('liked')}>👍</button>
-                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => void saveRating('disliked')}>👎</button>
+                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => void saveRating('liked')}><ThumbIcon /></button>
+                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => void saveRating('disliked')}><ThumbIcon down /></button>
               </span>}
               <strong>{photo.name}</strong>
               <span className="muted">{photo.category.split('/').join(' › ')}</span>
@@ -641,6 +641,14 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
       </div>
     </div>
   );
+}
+
+/** An outlined thumb in the same style as the star; it fills in when chosen (colour comes from the CSS). */
+function ThumbIcon({ down = false }: { down?: boolean }) {
+  return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style={down ? { transform: 'rotate(180deg)' } : undefined}>
+    <path d="M7 10v12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" fill="var(--thumb-fill, none)" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+  </svg>;
 }
 
 /** Show the current library reference without leaving the photo viewer. */

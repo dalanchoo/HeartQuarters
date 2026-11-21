@@ -576,10 +576,10 @@ body.expression-viewer-open .split > .content, body.expression-viewer-open .spli
 .lb-star:hover:not(:disabled) { border-color: #d97706; color: #b45309; background: #fef9c3; }
 .lb-star.is-starred { border-color: #eab308; background: #fef9c3; }
 .lb-rating, .lb-step { display: inline-flex; gap: 0.25rem; }
-.lb-thumb { width: 2rem; height: 2rem; min-height: 0; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); box-shadow: none; font-size: 1rem; line-height: 1; filter: grayscale(1); opacity: 0.8; }
-.lb-thumb:hover:not(:disabled) { filter: none; opacity: 1; }
-.lb-thumb.is-liked { filter: none; opacity: 1; border-color: #16a34a; background: #dcfce7; }
-.lb-thumb.is-disliked { filter: none; opacity: 1; border-color: #dc2626; background: #fee2e2; }
+.lb-thumb { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; min-height: 0; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text, #333); box-shadow: none; cursor: pointer; }
+.lb-thumb:hover:not(:disabled) { border-color: currentColor; }
+.lb-thumb.is-liked { color: #15803d; border-color: #16a34a; background: #dcfce7; --thumb-fill: #4ade80; }
+.lb-thumb.is-disliked { color: #b91c1c; border-color: #dc2626; background: #fee2e2; --thumb-fill: #f87171; }
 .lb-title .expression-assess { justify-self: start; max-width: 100%; }
 .tag { font-size: 0.8rem; padding: 0.15rem 0.55rem; border-radius: 99px; background: var(--bg);
        border: 1px dashed var(--line); }
