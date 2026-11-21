@@ -51,3 +51,17 @@ describe('expression ratings', () => {
     expect(() => setExpressionRating('Joy/Missing.jpg', 'liked')).toThrow();
   });
 });
+
+describe('the kept library list after a rating', () => {
+  it('updates the photo in place without re-reading the library', async () => {
+    const { clearExpressionIndex, expressionIndex } = await import('./expressions');
+    clearExpressionIndex();
+    const before = expressionIndex();
+    setExpressionRating('Joy/Joy_001.jpg', 'meh');
+    const after = expressionIndex();
+    expect(after.photos.find(p => p.path === 'Joy/Joy_001.jpg')!.rating).toBe('meh');
+    expect(after.categories).toBe(before.categories); // the same list, patched, not rebuilt
+    setExpressionRating('Joy/Joy_001.jpg', null);
+    expect(expressionIndex().photos.find(p => p.path === 'Joy/Joy_001.jpg')!.rating).toBeUndefined();
+  });
+});

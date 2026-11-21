@@ -132,13 +132,21 @@ export function ExpressionsPage() {
     if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
   };
   // Thumbs up / thumbs down, saved in the photo's sidecar. Clicking the same thumb again clears it.
-  const rate = async (photo: ExpressionPhoto, rating: Rating | null) => {
-    await postJson('/api/expressions/rating', { photo: photo.path, rating });
-    if (photo.category === '_Inbox') { refreshInbox(); return; }
-    const updated = await getJson<ExpressionIndex>('/api/expressions');
-    setIndex(updated);
-    const refreshed = updated.photos.find(p => p.path === photo.path);
-    if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
+  // The new rating shows at once; the sidecar is saved in the background. Saves go one at a time in click order, so
+  // quick clicks (Like, Meh, Dislike) always end with the last one. If a save fails, the real ratings are re-read.
+  const ratingQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const rate = (photo: ExpressionPhoto, rating: Rating | null): Promise<void> => {
+    const withRating = (p: ExpressionPhoto): ExpressionPhoto => { const { rating: _old, ...rest } = p; return rating ? { ...rest, rating } : rest; };
+    const apply = (list: ExpressionPhoto[]) => list.map(p => p.path === photo.path ? withRating(p) : p);
+    if (photo.category === '_Inbox') setInbox(apply);
+    else setIndex(current => current && { ...current, photos: apply(current.photos) });
+    setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: withRating(current.photo) } : current);
+    const save = ratingQueue.current.then(() => postJson('/api/expressions/rating', { photo: photo.path, rating }));
+    ratingQueue.current = save.catch(() => undefined);
+    return save.then(() => undefined, (e: unknown) => {
+      if (photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(setIndex, () => undefined);
+      throw e;
+    });
   };
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
@@ -485,13 +493,11 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
-  const [ratingBusy, setRatingBusy] = useState(false);
-  const saveRating = async (rating: Rating) => {
+  // No waiting: the page shows the new rating straight away and saves it in the background.
+  const saveRating = (rating: Rating) => {
     if (!onRate) return;
-    setRatingBusy(true); setConfirmError('');
-    try { await onRate(photo.rating === rating ? null : rating); }
-    catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
-    finally { setRatingBusy(false); }
+    setConfirmError('');
+    onRate(photo.rating === rating ? null : rating).catch((e: unknown) => setConfirmError(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`));
   };
   const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
   useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
@@ -635,9 +641,9 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
                 </button>
               )}
               {onRate && <span className="lb-rating" role="group" aria-label="Rating">
-                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => void saveRating('liked')}><ThumbIcon /></button>
-                <button type="button" className={`lb-thumb${photo.rating === 'meh' ? ' is-meh' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'meh'} title={photo.rating === 'meh' ? 'Meh (click to clear)' : 'Meh: Neither Like Nor Dislike'} onClick={() => void saveRating('meh')}><MehIcon /></button>
-                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => void saveRating('disliked')}><ThumbIcon down /></button>
+                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => saveRating('liked')}><ThumbIcon /></button>
+                <button type="button" className={`lb-thumb${photo.rating === 'meh' ? ' is-meh' : ''}`} aria-pressed={photo.rating === 'meh'} title={photo.rating === 'meh' ? 'Meh (click to clear)' : 'Meh: Neither Like Nor Dislike'} onClick={() => saveRating('meh')}><MehIcon /></button>
+                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => saveRating('disliked')}><ThumbIcon down /></button>
               </span>}
               <strong>{photo.name}</strong>
               <span className="muted">{photo.category.split('/').join(' › ')}</span>

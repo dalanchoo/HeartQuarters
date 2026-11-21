@@ -62,6 +62,17 @@ export interface ExpressionIndex {
 
 let cached: { at: number; index: ExpressionIndex } | null = null;
 export function clearExpressionIndex(): void { cached = null; }
+/**
+ * Changes one photo in the kept library list instead of throwing the list away, for small edits (like a rating) that
+ * change nothing else. Re-reading all photos from Drive takes about half a second.
+ */
+export function patchCachedPhoto(photoPath: string, patch: (photo: ExpressionPhoto) => ExpressionPhoto): void {
+  if (!cached) return;
+  const at = cached.index.photos.findIndex(photo => photo.path === photoPath);
+  if (at < 0) return;
+  const photos = cached.index.photos.slice(); photos[at] = patch(photos[at]);
+  cached = { at: cached.at, index: { ...cached.index, photos } };
+}
 
 const MOTION_HEADER_BYTES = 65_536;
 const motionBuf = Buffer.alloc(MOTION_HEADER_BYTES);

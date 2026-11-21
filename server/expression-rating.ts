@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { clearExpressionIndex, isExpressionPhoto, RATING_LINE, type ExpressionRating } from './expressions.js';
+import { isExpressionPhoto, patchCachedPhoto, RATING_LINE, type ExpressionRating } from './expressions.js';
 import { writable, writeFile } from './safe-files.js';
 
 /** Sets the rating, or removes it when `rating` is null. */
@@ -24,7 +24,8 @@ export function setExpressionRating(photoPath: string, rating: unknown): void {
   if (updated === text) return;
   if (!text && !updated) return;
   writeFile(sidecar, updated, undefined, 'expressions');
-  clearExpressionIndex();
+  // Only this photo's rating changed, so the kept library list is updated rather than re-read from Drive.
+  patchCachedPhoto(photoPath, photo => { const { rating: _old, ...rest } = photo; return rating ? { ...rest, rating } : rest; });
 }
 
 function label(rating: ExpressionRating): string { return rating === 'liked' ? 'Liked' : rating === 'meh' ? 'Meh' : 'Disliked'; }
