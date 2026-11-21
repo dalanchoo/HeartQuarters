@@ -47,6 +47,7 @@ function matches(photo: ExpressionPhoto, searchWords: string[]): boolean {
 
 export function ExpressionsPage() {
   const [index, setIndex] = useState<ExpressionIndex | null>(null);
+  const [photosLoaded, setPhotosLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
   const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>('library');
@@ -72,7 +73,7 @@ export function ExpressionsPage() {
   // The likeness photos picked last time come back after a reload.
   const [likenessChosen, setLikenessChosen] = useState<string[]>(() => { try { return readChosenLikeness(localStorage); } catch { return []; } });
   const chooseLikeness = (paths: string[]) => { setLikenessChosen(paths); try { saveChosenLikeness(localStorage, paths); } catch { /* only a convenience */ } };
-  useEffect(() => { if (index) setLikenessChosen(current => current.filter(path => index.photos.some(photo => photo.path === path))); }, [index]);
+  useEffect(() => { if (index && photosLoaded) setLikenessChosen(current => current.filter(path => index.photos.some(photo => photo.path === path))); }, [index, photosLoaded]);
   // A photo whose star, reference or rating is changed while those filters are on stays in view until the filters change.
   const [keptInView, setKeptInView] = useState<string[]>([]);
   const noteUnmarked = (photo: ExpressionPhoto) => setKeptInView(current => current.includes(photo.path) ? current : [...current, photo.path]);
@@ -182,7 +183,10 @@ export function ExpressionsPage() {
   }, []);
 
   useEffect(() => {
-    getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message));
+    // The categories come first (quick), so the left list and the filters show while the photos are still loading.
+    let photosArrived = false;
+    getJson<ExpressionIndex>('/api/expressions/categories').then(quick => { if (!photosArrived) setIndex(quick); }, () => undefined);
+    getJson<ExpressionIndex>('/api/expressions').then(full => { photosArrived = true; setIndex(full); setPhotosLoaded(true); }, (e) => setError(e.message));
     // Another tab's address isn't for this page: it stays as it was while hidden.
     const onHash = () => {
       if (!/^#Expressions(\/|$)/.test(location.hash)) return;
@@ -326,10 +330,11 @@ export function ExpressionsPage() {
         {reviewFolders !== 'all' && <p className="muted">{reviewFolders === 'missing' ? 'Shows photos with recorded expression guesses, but none matching the folder. Photos without expression guesses are not included.' : 'Shows photos where the folder expression and another expression have scores, and the other score is higher. Photos without comparable scores are not included.'} Other filters still apply. AI guesses can be wrong.</p>}
         {referenceError && <p className="error">{referenceError}</p>}
         <p className="muted">
-          {shown.length} photo{shown.length === 1 ? '' : 's'}
+          {photosLoaded ? `${shown.length} photo${shown.length === 1 ? '' : 's'}` : `${current.totalCount} photo${current.totalCount === 1 ? '' : 's'}`}
           {words.length > 0 && ` matching “${query.trim()}”`}
         </p>
 
+        {!photosLoaded && <p className="muted">Loading Photos…</p>}
         <LibraryGrid photos={shown} reviewFolders={reviewFolders} categoryNames={categoryNames} references={references} likeness={likeness} starDisabled={!referenceReady || referenceBusy} likenessBusy={likenessBusy} rootDir={index.rootDir} categories={index.categories} actions={gridActions} />
         </div>
       </section>

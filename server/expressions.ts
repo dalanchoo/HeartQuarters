@@ -193,7 +193,11 @@ export function isExpressionPhoto(photoPath: string): boolean {
   }
 }
 
-export function buildExpressionIndex(): ExpressionIndex {
+/**
+ * With `withPhotos` off, only the folders are read (no photo details, sidecars or file headers), which is fast.
+ * Each category still gets its photo counts, by counting the image files.
+ */
+export function buildExpressionIndex(withPhotos = true): ExpressionIndex {
   const root = config.expressionsDir;
   requireFolder(root, 'Expressions');
   const categories: ExpressionCategory[] = [];
@@ -227,6 +231,7 @@ export function buildExpressionIndex(): ExpressionIndex {
       if (base === `_${name}`) {
         category.reference = rel;
       } else if (!file.startsWith('_') && relPath) {
+        if (!withPhotos) { category.ownCount++; continue; }
         const full = path.join(dir, file);
         let stat: fs.Stats;
         try { stat = fs.statSync(full); } catch { continue; }
@@ -259,6 +264,11 @@ export function buildExpressionIndex(): ExpressionIndex {
   walk(root, '', null);
   categories.sort((a, b) => a.path.localeCompare(b.path));
   return { rootDir: root, categories, photos };
+}
+
+/** The categories and their counts, without the photos: quick enough to show the left list and the filters at once. */
+export function expressionCategories(): ExpressionIndex {
+  return buildExpressionIndex(false);
 }
 
 /** The whole library, re-read at most every 30 seconds. */

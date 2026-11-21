@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config';
-import { buildExpressionIndex, isExpressionPhoto, parseTags } from './expressions';
+import { buildExpressionIndex, expressionCategories, isExpressionPhoto, parseTags } from './expressions';
 import { makeTree, removeTree } from './testing';
 
 describe('parseTags', () => {
@@ -62,6 +62,13 @@ describe('buildExpressionIndex', () => {
       'Positive/Joy/Joy_002.webp',
       'Positive/Warmth/Warmth_001.png',
     ]);
+  });
+
+  it('lists the categories with the same counts but no photos, for a fast first screen', () => {
+    const quick = expressionCategories();
+    const full = buildExpressionIndex();
+    expect(quick.photos).toEqual([]);
+    expect(quick.categories).toEqual(full.categories);
   });
 
   it('changes the image revision when a different photo takes the same filename', () => {

@@ -15,7 +15,7 @@ import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersio
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
-import { expressionIndex, inboxExpressionPhotos } from './expressions.js';
+import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addIdea, addReference, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas.js';
@@ -272,6 +272,7 @@ app.get('/api/thumb', (req, res) => {
 app.get('/api/expressions', handle((_req, res) => {
   res.json(expressionIndex());
 }));
+app.get('/api/expressions/categories', handle((_req, res) => { res.json(expressionCategories()); }));
 app.get('/api/expressions/inbox', handle((_req, res) => { res.json(inboxExpressionPhotos()); }));
 app.post('/api/expressions/inbox/open', handle((_req, res) => { ensureExpressionInbox(); res.json({ ok: true }); }));
 app.post('/api/expressions/inbox/import', handle((req, res) => { res.json(importInboxPhoto(req.body?.name, req.body?.data, req.body?.ai)); }));
