@@ -135,7 +135,7 @@ function IdeaCard({ idea, busy, send, first, last }: {
           <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
           {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
           <button type="button" className="small" disabled={busy || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
-            {idea.processed ? 'Back to Unprocessed' : 'Mark Processed'}
+            {idea.processed ? 'Back to Raw' : 'Mark Processed'}
           </button>
           <span className="muted small-text">Changed {new Date(idea.updatedAt).toLocaleDateString()}</span>
           <span className="spacer" />
