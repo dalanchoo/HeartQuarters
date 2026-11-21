@@ -125,6 +125,8 @@ Automation levels:
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 | 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
+| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | Viewable and editable in the app, stored in Drive. Found with the 003 SDAM analysis: it treated John's best video as needing fixes and suggested Shorts and end screens that already exist, because it saw one video with no context. The Analysis tab should read this before advising. |
+| 22 | Analysis follow-up chat: ask questions about a finished analysis, get feedback on John's own video ideas, with vidIQ for what works on other channels | n/a | Needs #21. Part of #7c. |
 
 ### Plan for #20: thumbnail and title generator
 
@@ -202,7 +204,7 @@ rest into that same V01 later, once there's a transcript.
 | 10 | Cross-post pack for each Short: video + caption file per platform in one folder | Prep | For TikTok, Instagram, LinkedIn. |
 | 11 | Publish Shorts to YouTube | Auto | Same as #5. |
 | 12 | "Posted where" tracker for each Short | Auto | Recorded in `project.md`. Required for #13. |
-| 13 | Find standalone Shorts not yet on TikTok / Instagram and build packs for them | Prep | Uses #10 and #12. |
+| 13 | Find standalone Shorts not yet on TikTok / Instagram and build packs for them | Prep | Uses #10, #12 and #21. Look at every Short, judge which work without the longform, weigh their numbers (swipe-aways, watch time); John approves the list. Then post them: check whether the vidIQ connection (Instagram Reels, some TikTok) can do the posting before building our own. |
 | 14 | YouTube stats: pull analytics, show insights | Auto | YouTube Analytics API. |
 | 15 | Stats from other platforms | Prep | Probably by importing CSV exports. Their APIs are limited. |
 | 16 | Substack backups (posts + subscriber list) | Auto/Prep | Bring in the existing ChatGPT-written tools. The subscriber export may stay manual. |
