@@ -204,7 +204,9 @@ main { flex: 1; min-height: 0; }
 .piece-card[open] > summary { margin-bottom: 0.6rem; }
 /* Shorts in a video's Shorts list: closed, they're compact rows split by a line; open, a full card again. */
 .piece-card.short-row:not([open]) { background: transparent; border-width: 0 0 1px; border-radius: 0; margin-bottom: 0; padding: 0.3rem 0.4rem; }
-.piece-card.short-row > summary { align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+.piece-card.short-row > summary { display: grid; grid-template-columns: 1.3rem minmax(0, 32%) 5rem minmax(0, 1fr); align-items: center; gap: 0.6rem; }
+.piece-card.short-row > summary .piece-name { min-width: 0; }
+.piece-card.short-row > summary .piece-status { min-width: 0; }
 .piece-card.short-row[open] { margin: 0.4rem 0; }
 .page-section { margin-top: 1rem; }
 .page-section > summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }

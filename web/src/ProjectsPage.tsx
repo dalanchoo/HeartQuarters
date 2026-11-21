@@ -627,12 +627,12 @@ function rememberOpen(name: string, open: boolean) {
   }
 }
 
-/** "packaging V01" (whether it's exported shows in the steps bar beside it; a reel has no bar, so it says so here) */
+/** The current version (whether it's exported shows in the steps bar; a reel has no bar, so it says so here). */
 function pieceSummary(piece: Piece): string {
   return (
     (piece.kind === 'reel' ? (piece.exports.length > 0 ? '✓ exported · ' : 'not exported · ') : '') +
     (piece.packagingVersion
-      ? `packaging ${versionLabel(piece.packagingVersion)}` + (piece.versions.length > 1 ? ` (${piece.versions.length} versions)` : '')
+      ? versionLabel(piece.packagingVersion)
       : 'no packaging')
   );
 }
