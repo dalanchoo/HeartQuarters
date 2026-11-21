@@ -13,7 +13,7 @@ export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 export const IDEA_FORMATS = ['undecided', 'longform', 'short'] as const;
 export type IdeaFormat = (typeof IDEA_FORMATS)[number];
 /** The topic an idea belongs to. New and older ideas start Unassigned. */
-export const IDEA_CATEGORIES = ['unassigned', 'sdam', 'aphantasia', 'psychedelics', 'emotions', 'relationships', 'kink', 'healing', 'meaning', 'wisdom'] as const;
+export const IDEA_CATEGORIES = ['unassigned', 'sdam', 'aphantasia', 'psychedelics', 'emotions', 'relationships', 'kink', 'healing', 'meaning', 'wisdom', 'story'] as const;
 export type IdeaCategory = (typeof IDEA_CATEGORIES)[number];
 /** `processed` is false for a raw brain dump; true once John has turned it into a clear idea. Older ideas are unprocessed. */
 /** A link to a place or thing that informs the idea, with a note saying why it matters. */
