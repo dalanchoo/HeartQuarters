@@ -249,9 +249,9 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
               <a className="button-link small" href={youtubeVideoUrl(job.videoId!, short)} target="_blank" rel="noopener noreferrer">
                 Open in YouTube ↗
               </a>
-              <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio', { videoId: job.videoId })))}>
+              <a className="button-link small" href={`https://studio.youtube.com/video/${encodeURIComponent(job.videoId!)}/edit`} target="_blank" rel="noopener noreferrer">
                 Open in YouTube Studio ↗
-              </button>
+              </a>
               <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
                 Reload from YouTube
               </button>
@@ -281,9 +281,9 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
             .map((j) => (
               <p className="error" key={j.id}>
                 An earlier upload has an unknown result. Check YouTube Studio before uploading another copy.{' '}
-                <button className="small" onClick={() => void action(async () => void (await postJson('/api/youtube/studio')))}>
+                <a className="button-link small" href="https://studio.youtube.com/" target="_blank" rel="noopener noreferrer">
                   Open Studio
-                </button>{' '}
+                </a>{' '}
                 <button
                   className="small"
                   onClick={() =>

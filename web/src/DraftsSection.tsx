@@ -549,9 +549,9 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
               <div className="draft-use">
                 <CopyButton text={question} label="Copy Question" />
                 {research?.videoId && (
-                  <button className="small" onClick={() => { setError(''); void postJson('/api/youtube/studio', { videoId: research.videoId }).catch((e: Error) => setError(e.message)); }}>
+                  <a className="button-link small" href={`https://studio.youtube.com/video/${encodeURIComponent(research.videoId)}/edit`} target="_blank" rel="noopener noreferrer">
                     Open This Video in Studio ↗
-                  </button>
+                  </a>
                 )}
               </div>
             </details>

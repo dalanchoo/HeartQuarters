@@ -60,7 +60,6 @@ import { guard, sandboxHeaders } from './security.js';
 import { authorizationUrl, configureYoutube, disconnectYoutube, finishYoutubeAuth, youtubeStatus } from './youtube-auth.js';
 import { acknowledgeUpload, checkYoutubeVideos, downloadYoutubeThumbnail, existingYoutubeSettings, linkYoutubeVideo, startUpload, syncYoutubeSettings, uploadsFor, youtubeChannel, youtubePlaylists, type UploadInput, downloadYoutubeCaptions, removeExtraCaptions } from './youtube.js';
 import { subtitleFiles } from './youtube-captions.js';
-import { openYouTubeStudio } from './youtube-studio.js';
 import { videoOverview } from './video-overview.js';
 import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
@@ -132,11 +131,6 @@ app.get('/api/youtube/related', handle((req, res) => {
 }));
 app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.body as UploadInput)); }));
 app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
-app.post('/api/youtube/studio', (req, res) => {
-  try {
-    openYouTubeStudio(req.body?.videoId).then(() => res.json({ ok: true }), (e) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
-  } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : String(e) }); }
-});
 
 /** Runs a route handler and turns any error into a readable JSON message. */
 function handle(fn: (req: Request, res: Response) => void) {
