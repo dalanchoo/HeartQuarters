@@ -1051,3 +1051,15 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .video-stats-bar-track { height: 10px; }
 .video-stats-bar { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
 .video-stats-bar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* Ideas tab */
+.idea-add { display: flex; gap: 0.5rem; margin: 0.4rem 0 0.9rem; }
+.idea-add input { flex: 1; }
+.idea-card > summary { align-items: center; }
+.idea-card .idea-title { font-weight: 600; }
+.idea-card.finished .idea-title { color: var(--muted); font-weight: 400; }
+.idea-body { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; }
+.idea-body > label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+.idea-body > label > select { align-self: flex-start; }
+.idea-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.idea-actions .spacer { flex: 1; }
