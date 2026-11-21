@@ -22,6 +22,7 @@ import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMot
 import { groupExpressionAttributes } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
+import { ratingSearchWords } from './expressionRating';
 
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
@@ -35,7 +36,9 @@ function goTo(category: string) {
 }
 
 /** A photo matches when every search word appears in its name, category or tags. */
-function matches(photo: ExpressionPhoto, words: string[]): boolean {
+function matches(photo: ExpressionPhoto, searchWords: string[]): boolean {
+  const { matches: ratingMatches, rest: words } = ratingSearchWords(photo, searchWords);
+  if (!ratingMatches) return false;
   const haystack = [photo.name, photo.category, ...photo.tags.filter(t => !t.disconfirmed).map((t) => t.tag)].join(' ').toLowerCase();
   return words.every((w) => haystack.includes(w));
 }
@@ -128,6 +131,15 @@ export function ExpressionsPage() {
     const refreshed = updated.photos.find(p => p.path === newPath);
     if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
   };
+  // Thumbs up / thumbs down, saved in the photo's sidecar. Clicking the same thumb again clears it.
+  const rate = async (photo: ExpressionPhoto, rating: 'liked' | 'disliked' | null) => {
+    await postJson('/api/expressions/rating', { photo: photo.path, rating });
+    if (photo.category === '_Inbox') { refreshInbox(); return; }
+    const updated = await getJson<ExpressionIndex>('/api/expressions');
+    setIndex(updated);
+    const refreshed = updated.photos.find(p => p.path === photo.path);
+    if (refreshed) setPreview(current => current && !current.imageUrl && current.photo.path === photo.path ? { ...current, photo: refreshed } : current);
+  };
   const setReference = async (path: string, checked: boolean) => {
     const next = checked ? [...references, path] : references.filter((p) => p !== path);
     setReferenceBusy(true);
@@ -188,10 +200,12 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, [...(photoScope === 'reference' ? likeness : references), ...keptInView], { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+    return filterSelectablePhotos(index.photos, [...(photoScope === 'reference' ? likeness : references), ...keptInView], { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters, rating: libraryFilters.rating }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
   }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, photoScope, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
+  // An Inbox photo opened from the Inbox steps through the other Inbox photos.
+  const inboxPosition = preview && !preview.imageUrl && preview.photo.category === '_Inbox' && inbox.length > 1 ? inbox.findIndex(p => p.path === preview.photo.path) : -1;
 
   if (error) return <p className="error content">{error}</p>;
   if (!index || !current) return <p className="muted content">Loading…</p>;
@@ -296,7 +310,7 @@ export function ExpressionsPage() {
           {shown.map((p) => (
             <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
-              <span>{p.name}</span>
+              <span>{p.rating === 'liked' ? '👍 ' : p.rating === 'disliked' ? '👎 ' : ''}{p.name}</span>
             </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => { if (references.includes(p.path)) noteUnmarked(p); void setReference(p.path, !references.includes(p.path)); }}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => { if (likeness.includes(p.path)) noteUnmarked(p); void setLikenessPhoto(p.path, !likeness.includes(p.path)); }}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
               <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); reloadLikeness(); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
             </div>
@@ -315,6 +329,7 @@ export function ExpressionsPage() {
           referenceDisabled={likenessBusy}
           onToggleReference={() => void setLikenessPhoto(viewedPhoto.path, !likeness.includes(viewedPhoto.path))}
           onTagAction={changeTag}
+          onRate={rating => rate(viewedPhoto, rating)}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, (e) => setError(e.message)); }}
           onClose={() => setOpen(null)}
@@ -334,6 +349,9 @@ export function ExpressionsPage() {
           referenceDisabled={likenessBusy}
           onToggleReference={!preview.imageUrl && preview.photo.category !== '_Inbox' ? () => void setLikenessPhoto(preview.photo.path, !likeness.includes(preview.photo.path)) : undefined}
           onTagAction={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? changeTag : undefined}
+          onRate={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? rating => rate(preview.photo, rating) : undefined}
+          onPrev={inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition - 1 + inbox.length) % inbox.length] })}
+          onNext={inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition + 1) % inbox.length] })}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { if (preview.photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }}
           onClose={() => setPreview(null)}
@@ -438,11 +456,19 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, reference, referenceDisabled, onToggleReference, onClose, onPrev, onNext, onTagAction, onAssessmentStarted, onAssessmentDone }: {
-  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
+function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, reference, referenceDisabled, onToggleReference, onClose, onPrev, onNext, onTagAction, onRate, onAssessmentStarted, onAssessmentDone }: {
+  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onRate?: (rating: 'liked' | 'disliked' | null) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
+  const [ratingBusy, setRatingBusy] = useState(false);
+  const saveRating = async (rating: 'liked' | 'disliked') => {
+    if (!onRate) return;
+    setRatingBusy(true); setConfirmError('');
+    try { await onRate(photo.rating === rating ? null : rating); }
+    catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
+    finally { setRatingBusy(false); }
+  };
   const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
   useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
   useEffect(() => {
@@ -579,12 +605,17 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
                   </svg>
                 </button>
               )}
+              {onRate && <span className="lb-rating" role="group" aria-label="Rating">
+                <button type="button" className={`lb-thumb${photo.rating === 'liked' ? ' is-liked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'liked'} title={photo.rating === 'liked' ? 'Liked (click to clear)' : 'I Like This Photo'} onClick={() => void saveRating('liked')}>👍</button>
+                <button type="button" className={`lb-thumb${photo.rating === 'disliked' ? ' is-disliked' : ''}`} disabled={ratingBusy} aria-pressed={photo.rating === 'disliked'} title={photo.rating === 'disliked' ? 'Disliked (click to clear)' : "I Don't Like This Photo"} onClick={() => void saveRating('disliked')}>👎</button>
+              </span>}
               <strong>{photo.name}</strong>
               <span className="muted">{photo.category.split('/').join(' › ')}</span>
               {onToggleReference && <button type="button" className="small" disabled={referenceDisabled} aria-pressed={!!reference} title="Reference Photos show the AI what you look like when it generates images of you." onClick={onToggleReference}>{reference ? '✓ Reference Photo' : 'Make Reference Photo'}</button>}
             </div>
             {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
             {detailsExpanded && !imageUrl && <button type="button" className="small" onClick={() => void openInExplorer('expressions', photo.path)}>Select in Explorer</button>}
+            {(onPrev || onNext) && <span className="lb-step"><button type="button" className="small" disabled={!onPrev} onClick={onPrev} title="Previous Photo (←)">‹ Previous</button><button type="button" className="small" disabled={!onNext} onClick={onNext} title="Next Photo (→)">Next ›</button></span>}
             <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>
           <div id="expression-photo-details" hidden={!detailsExpanded}>

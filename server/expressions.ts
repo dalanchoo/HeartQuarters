@@ -49,6 +49,8 @@ export interface ExpressionPhoto {
   assessedByThreeAIs?: boolean;
   /** True when the image file itself contains embedded Motion Photo / MicroVideo XMP metadata. */
   motionPhoto?: boolean;
+  /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked" or "# Rating: Disliked". */
+  rating?: ExpressionRating;
   tags: Tag[];
 }
 
@@ -83,16 +85,31 @@ export function hasMotionPhotoHeader(file: string): boolean {
 
 export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
 
-function readSidecar(file: string): { tags: Tag[]; assessedByThreeAIs: boolean } {
+export type ExpressionRating = 'liked' | 'disliked';
+/** The rating line starts with "#", so tag readers (and the AI assessment) leave it alone. */
+export const RATING_LINE = /^#\s*Rating:\s*(Liked|Disliked)\s*$/i;
+
+/** The last rating line in a sidecar wins; none means not rated. */
+export function parseRating(text: string): ExpressionRating | undefined {
+  let rating: ExpressionRating | undefined;
+  for (const line of text.split(/\r?\n/)) { const match = RATING_LINE.exec(line.trim()); if (match) rating = match[1].toLowerCase() as ExpressionRating; }
+  return rating;
+}
+
+type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating };
+const NO_SIDECAR: SidecarInfo = { tags: [], assessedByThreeAIs: false };
+
+function readSidecar(file: string): SidecarInfo {
   try {
     const text = fs.readFileSync(file, 'utf8');
     const tags = parseTags(text);
     const assessedByThreeAIs =
       /(?:^|\n)#\s*AssessedWithAllThreeAIs\b/i.test(text) ||
       tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
-    return { tags, assessedByThreeAIs };
+    const rating = parseRating(text);
+    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}) };
   } catch {
-    return { tags: [], assessedByThreeAIs: false };
+    return NO_SIDECAR;
   }
 }
 
@@ -134,8 +151,8 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sameBase = images.filter(other => path.basename(other.name, path.extname(other.name)).toLowerCase() === base.toLowerCase());
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
-    const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : { tags: [], assessedByThreeAIs: false };
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}), tags: sidecarInfo.tags };
+    const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : NO_SIDECAR;
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -202,7 +219,7 @@ export function buildExpressionIndex(): ExpressionIndex {
         const full = path.join(dir, file);
         let stat: fs.Stats;
         try { stat = fs.statSync(full); } catch { continue; }
-        const sidecarInfo = files.has(`${base}.txt`) ? readSidecar(path.join(dir, `${base}.txt`)) : { tags: [], assessedByThreeAIs: false };
+        const sidecarInfo = files.has(`${base}.txt`) ? readSidecar(path.join(dir, `${base}.txt`)) : NO_SIDECAR;
         photos.push({
           path: rel,
           revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`,
@@ -210,6 +227,7 @@ export function buildExpressionIndex(): ExpressionIndex {
           category: relPath,
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
           ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}),
+          ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}),
           tags: sidecarInfo.tags,
         });
         category.ownCount++;

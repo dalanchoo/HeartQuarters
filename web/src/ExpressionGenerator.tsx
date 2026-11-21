@@ -14,7 +14,7 @@ export function LikenessPicker({ chosen, onChoose, references, photos, categorie
   const [scope, setScope] = useState<'starred' | 'all'>('starred'); const [filters, setFilters] = useState(emptyPhotoFilters);
   const [kept, setKept] = useState<string[]>([]);
   const toggleReference = (photo: ExpressionPhoto, on: boolean) => { onToggleStar(photo.path, on); if (!on) setKept(current => current.includes(photo.path) ? current : [...current, photo.path]); };
-  const visible = filterSelectablePhotos(photos, [...references, ...kept], { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters });
+  const visible = filterSelectablePhotos(photos, [...references, ...kept], { scope, category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters, rating: filters.rating });
   return <section className="expression-planning generation-likeness">
     <div className="generation-likeness-head">
       <h2>Likeness Photos <span className="muted small-text">({chosen.length} of 5 Selected)</span></h2>
