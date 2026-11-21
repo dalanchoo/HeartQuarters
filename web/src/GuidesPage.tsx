@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SidebarResizer } from './SidebarResizer';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getJson, getText, openInExplorer, type RootId } from './api';
@@ -55,6 +56,7 @@ export function GuidesPage() {
           </a>
         ))}
       </aside>
+      <SidebarResizer />
       <section className="content">
         {error && <p className="error">{error}</p>}
         {current && (

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { SidebarResizer } from './SidebarResizer';
 import {
   copyText,
   formatSize,
@@ -289,6 +290,7 @@ export function ProjectsPage() {
         {projects &&
           ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} search={search} />)}
       </aside>
+      <SidebarResizer />
       <section className="content" ref={contentRef}>
         {note && note.showId === (selected ?? '') && <NoteBox note={note} onDismiss={() => setNote(null)} />}
         {selected ? (

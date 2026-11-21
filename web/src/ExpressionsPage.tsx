@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { SidebarResizer } from './SidebarResizer';
 import {
   fileUrl,
   getJson,
@@ -256,6 +257,7 @@ export function ExpressionsPage() {
         />
         <CategoryTree path="" childrenOf={children} byPath={byPath} selected={current.path} />
       </aside>
+      {activeTab === 'library' && <SidebarResizer />}
 
       <section className="content">
         <div className="expression-tabs" role="tablist" aria-label="Expressions views" onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); const tabs = ['library', 'inbox', 'generation', 'shots'] as const; const next = e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[3] : tabs[(tabs.indexOf(activeTab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; switchTab(next); document.getElementById(`expression-${next}-tab`)?.focus(); }}>

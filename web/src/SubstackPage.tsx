@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SidebarResizer } from './SidebarResizer';
 import DOMPurify from 'dompurify';
 import {
   fileUrl,
@@ -59,6 +60,7 @@ export function SubstackPage() {
           </details>
         ))}
       </aside>
+      <SidebarResizer />
       <section className="content">
         {selected ? <PieceView id={selected} /> : <p className="muted">Pick a piece on the left.</p>}
       </section>
