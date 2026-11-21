@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { addIdea, deleteIdea, IDEAS_FILE, moveIdea, readIdeas, updateIdea } from './video-ideas';
+import { addIdea, addReference, deleteIdea, deleteReference, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas';
 
 let root: string;
 let saved: string;
@@ -52,6 +52,28 @@ describe('video ideas', () => {
     expect(() => updateIdea(idea.id, { processed: 'yes' })).toThrow('processed or unprocessed');
     fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, processed: undefined }] }));
     expect(readIdeas()[0].processed).toBe(false);
+  });
+
+  it('adds, edits, reorders and deletes references on one idea', () => {
+    const [idea] = addIdea('With links');
+    addReference(idea.id, { label: 'Study', url: 'https://example.com/a', note: 'First' });
+    const ideas = addReference(idea.id, { label: 'Video', url: 'http://example.com/b', note: '' });
+    const [a, b] = ideas[0].references;
+    expect(ideas[0].references.map(r => r.label)).toEqual(['Study', 'Video']);
+    expect(updateReference(idea.id, a.id, { note: 'Changed' })[0].references[0]).toMatchObject({ note: 'Changed', url: 'https://example.com/a' });
+    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.label)).toEqual(['Video', 'Study']);
+    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.label)).toEqual(['Video', 'Study']);
+    expect(deleteReference(idea.id, b.id)[0].references.map(r => r.label)).toEqual(['Study']);
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, references: undefined }] }));
+    expect(readIdeas()[0].references).toEqual([]);
+  });
+
+  it('only accepts web links for references', () => {
+    const [idea] = addIdea('Links');
+    expect(() => addReference(idea.id, { label: 'x', url: 'file:///C:/secret.txt' })).toThrow('https://');
+    expect(() => addReference(idea.id, { label: 'x', url: 'javascript:alert(1)' })).toThrow('https://');
+    expect(() => addReference(idea.id, { label: 'x', url: 'not a link' })).toThrow('https://');
+    expect(readIdeas()[0].references).toEqual([]);
   });
 
   it('moves ideas up and down and deletes one', () => {

@@ -13,10 +13,15 @@ export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 export const IDEA_FORMATS = ['longform', 'short'] as const;
 export type IdeaFormat = (typeof IDEA_FORMATS)[number];
 /** `processed` is false for a raw brain dump; true once John has turned it into a clear idea. Older ideas are unprocessed. */
-export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; processed: boolean; createdAt: string; updatedAt: string }
+/** A link to a place or thing that informs the idea. */
+export interface IdeaReference { id: string; label: string; url: string; note: string }
+export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; processed: boolean; references: IdeaReference[]; createdAt: string; updatedAt: string }
 
 const TITLE_MAX = 300;
 const NOTES_MAX = 20_000;
+const LABEL_MAX = 200;
+const URL_MAX = 2000;
+const REFERENCES_MAX = 200;
 
 function location() {
   return writable(safeResolve('projects', IDEAS_FILE));
@@ -26,6 +31,7 @@ function valid(idea: unknown): idea is VideoIdea {
   const i = idea as VideoIdea;
   return !!i && typeof i.id === 'string' && typeof i.title === 'string' && typeof i.notes === 'string'
     && IDEA_STATUSES.includes(i.status) && (i.format === undefined || IDEA_FORMATS.includes(i.format)) && (i.processed === undefined || typeof i.processed === 'boolean')
+    && (i.references === undefined || (Array.isArray(i.references) && i.references.every(r => !!r && typeof r.id === 'string' && typeof r.label === 'string' && typeof r.url === 'string' && typeof r.note === 'string')))
     && typeof i.createdAt === 'string' && typeof i.updatedAt === 'string';
 }
 
@@ -38,7 +44,7 @@ function load(): { ideas: VideoIdea[]; original: string | null } {
   catch { throw new Error('The ideas list could not be read. Nothing was changed.'); }
   if (data?.version !== 1 || !Array.isArray(data.ideas) || !data.ideas.every(valid)) throw new Error('The ideas list has an unexpected format. Nothing was changed.');
   // Ideas saved before the format and processed fields existed are longform and unprocessed.
-  const ideas = (data.ideas as VideoIdea[]).map(i => ({ ...i, format: i.format ?? 'longform', processed: i.processed ?? false }));
+  const ideas = (data.ideas as VideoIdea[]).map(i => ({ ...i, format: i.format ?? 'longform', processed: i.processed ?? false, references: i.references ?? [] }));
   return { ideas, original };
 }
 
@@ -68,7 +74,7 @@ export function addIdea(title: unknown, notes: unknown = ''): VideoIdea[] {
   const clean = text(title, TITLE_MAX, 'title').trim();
   if (!clean) throw new Error('Give the idea a title.');
   const { ideas, original } = load(); const now = new Date().toISOString();
-  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'longform', processed: false, createdAt: now, updatedAt: now });
+  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'longform', processed: false, references: [], createdAt: now, updatedAt: now });
   save(ideas, original); return ideas;
 }
 
@@ -109,5 +115,58 @@ export function moveIdea(id: unknown, step: unknown): VideoIdea[] {
 /** Remove one idea from the list. Only the list file changes. */
 export function deleteIdea(id: unknown): VideoIdea[] {
   const { ideas, original } = load(); ideas.splice(find(ideas, id), 1);
+  save(ideas, original); return ideas;
+}
+
+function referenceAt(idea: VideoIdea, referenceId: unknown): number {
+  const at = typeof referenceId === 'string' ? idea.references.findIndex(r => r.id === referenceId) : -1;
+  if (at < 0) throw new Error('That reference is no longer on the idea. Reload it and try again.');
+  return at;
+}
+
+/** Only web addresses, so a reference can't hold a file path or a script. */
+export function checkUrl(value: unknown): string {
+  const url = text(value, URL_MAX, 'link').trim();
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error('The link must be a full web address starting with https://.'); }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('The link must start with https:// or http://.');
+  return url;
+}
+
+/** Add a reference to the end of one idea's list. */
+export function addReference(ideaId: unknown, input: { label?: unknown; url?: unknown; note?: unknown }): VideoIdea[] {
+  const { ideas, original } = load(); const idea = ideas[find(ideas, ideaId)];
+  if (idea.references.length >= REFERENCES_MAX) throw new Error('This idea has too many references.');
+  idea.references.push({ id: randomUUID(), label: text(input.label ?? '', LABEL_MAX, 'label').trim(), url: checkUrl(input.url), note: text(input.note ?? '', NOTES_MAX, 'note') });
+  idea.updatedAt = new Date().toISOString();
+  save(ideas, original); return ideas;
+}
+
+/** Change one reference's label, link or note; leave out what isn't changing. */
+export function updateReference(ideaId: unknown, referenceId: unknown, changes: { label?: unknown; url?: unknown; note?: unknown }): VideoIdea[] {
+  const { ideas, original } = load(); const idea = ideas[find(ideas, ideaId)]; const ref = idea.references[referenceAt(idea, referenceId)];
+  if (changes.label !== undefined) ref.label = text(changes.label, LABEL_MAX, 'label').trim();
+  if (changes.url !== undefined) ref.url = checkUrl(changes.url);
+  if (changes.note !== undefined) ref.note = text(changes.note, NOTES_MAX, 'note');
+  idea.updatedAt = new Date().toISOString();
+  save(ideas, original); return ideas;
+}
+
+/** Move one reference up (-1) or down (+1) within its idea. */
+export function moveReference(ideaId: unknown, referenceId: unknown, step: unknown): VideoIdea[] {
+  if (step !== -1 && step !== 1) throw new Error('Choose up or down.');
+  const { ideas, original } = load(); const idea = ideas[find(ideas, ideaId)];
+  const at = referenceAt(idea, referenceId); const to = at + step;
+  if (to < 0 || to >= idea.references.length) return ideas;
+  [idea.references[at], idea.references[to]] = [idea.references[to], idea.references[at]];
+  idea.updatedAt = new Date().toISOString();
+  save(ideas, original); return ideas;
+}
+
+/** Remove one reference from its idea. */
+export function deleteReference(ideaId: unknown, referenceId: unknown): VideoIdea[] {
+  const { ideas, original } = load(); const idea = ideas[find(ideas, ideaId)];
+  idea.references.splice(referenceAt(idea, referenceId), 1);
+  idea.updatedAt = new Date().toISOString();
   save(ideas, original); return ideas;
 }

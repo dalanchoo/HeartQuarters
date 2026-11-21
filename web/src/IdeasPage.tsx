@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
-import type { IdeaFormat, IdeaStatus, VideoIdea } from '../../server/video-ideas';
+import type { IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
 // Raw brain dumps are Unprocessed; once turned into a clear idea they move to Processed.
@@ -110,7 +110,7 @@ function IdeaCard({ idea, busy, send, first, last }: {
     <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
-        <span className="muted small-text">{FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}</span>
+        <span className="muted small-text">{FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}</span>
       </summary>
       <div className="idea-body">
         <input className="idea-title-input" type="text" value={title} maxLength={300} aria-label="Title" onChange={(e) => setTitle(e.target.value)} />
@@ -123,6 +123,14 @@ function IdeaCard({ idea, busy, send, first, last }: {
           </select>
         </div>
         <textarea rows={3} aria-label="Notes" value={notes} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => setNotes(e.target.value)} />
+        <div className="idea-refs">
+          <div className="idea-refs-head">References</div>
+          {idea.references.map((ref, at) => (
+            <ReferenceRow key={ref.id} ideaId={idea.id} reference={ref} busy={busy} send={send}
+              first={at === 0} last={at === idea.references.length - 1} />
+          ))}
+          <AddReference ideaId={idea.id} busy={busy} send={send} />
+        </div>
         <div className="idea-actions">
           <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
           {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
@@ -137,5 +145,59 @@ function IdeaCard({ idea, busy, send, first, last }: {
         </div>
       </div>
     </details>
+  );
+}
+
+/** One link: label, web address and a note, with Save, Up, Down and Delete. */
+function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
+  ideaId: string; reference: IdeaReference; busy: boolean; first: boolean; last: boolean;
+  send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  const [label, setLabel] = useState(reference.label);
+  const [url, setUrl] = useState(reference.url);
+  const [note, setNote] = useState(reference.note);
+  useEffect(() => { setLabel(reference.label); setUrl(reference.url); setNote(reference.note); }, [reference.label, reference.url, reference.note]);
+  const changed = label !== reference.label || url !== reference.url || note !== reference.note;
+  const base = { id: ideaId, referenceId: reference.id };
+
+  const remove = () => {
+    if (!window.confirm(`Delete the link “${reference.label || reference.url}”?`)) return;
+    void send('/api/ideas/reference/delete', base);
+  };
+
+  return (
+    <div className="idea-ref">
+      <input type="text" aria-label="Link label" placeholder="Label" maxLength={200} value={label} onChange={(e) => setLabel(e.target.value)} />
+      <input type="url" aria-label="Link address" placeholder="https://…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <input type="text" aria-label="Link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="idea-ref-actions">
+        <button type="button" className="small" disabled={busy || !changed || !url.trim()} onClick={() => void send('/api/ideas/reference/update', { ...base, label, url, note })}>Save</button>
+        <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: -1 })}>Up</button>
+        <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: 1 })}>Down</button>
+        <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
+      </div>
+    </div>
+  );
+}
+
+/** A new link at the bottom of the list. */
+function AddReference({ ideaId, busy, send }: {
+  ideaId: string; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  const [label, setLabel] = useState('');
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const add = async () => {
+    if (await send('/api/ideas/reference/add', { id: ideaId, label, url, note })) { setLabel(''); setUrl(''); setNote(''); }
+  };
+  return (
+    <div className="idea-ref idea-ref-new">
+      <input type="text" aria-label="New link label" placeholder="Label" maxLength={200} value={label} onChange={(e) => setLabel(e.target.value)} />
+      <input type="url" aria-label="New link address" placeholder="https://…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <input type="text" aria-label="New link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="idea-ref-actions">
+        <button type="button" className="small" disabled={busy || !url.trim()} onClick={() => void add()}>Add Link</button>
+      </div>
+    </div>
   );
 }
