@@ -14,7 +14,7 @@ export const STATUS_LABELS: Record<IdeaStatus, string> = {
   dropped: 'Dropped',
 };
 const FINISHED: IdeaStatus[] = ['made', 'dropped'];
-export const CATEGORY_LABELS: Record<IdeaCategory, string> = { unassigned: 'Unassigned', sdam: 'SDAM', aphantasia: 'Aphantasia', psychedelics: 'Psychedelics' };
+export const CATEGORY_LABELS: Record<IdeaCategory, string> = { unassigned: 'Unassigned', sdam: 'SDAM', aphantasia: 'Aphantasia', psychedelics: 'Psychedelics', emotions: 'Emotions', relationships: 'Relationships', kink: 'Kink', healing: 'Healing', meaning: 'Meaning' };
 export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided', longform: 'Longform', short: 'Short' };
 
 export function IdeasPage() {
