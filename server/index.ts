@@ -15,6 +15,7 @@ import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersio
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
 import { assessmentJob, startAssessment } from './expression-assessment.js';
+import { slowRequestLogger, watchEngineStalls } from './slow-watch.js';
 import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
@@ -73,6 +74,8 @@ import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
 
 const app = express();
+app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
+watchEngineStalls();
 app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
