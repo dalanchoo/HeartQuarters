@@ -29,3 +29,5 @@ Instructions for any AI (or person) changing this code.
 - Use Title Case for interface labels, buttons and section headings, for example
   “Reference Photo” and “Generate an Expression With ChatGPT.” Ordinary
   explanatory sentences can use normal sentence case.
+- Make screens compact: little wasted vertical space, small gaps between rows and sections.
+- Use the big triangle (▶ / ▼) to open and close collapsible areas.

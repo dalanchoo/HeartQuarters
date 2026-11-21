@@ -69,14 +69,14 @@ export function IdeasPage() {
       {ideas && !ideas.length && <p className="muted">No ideas yet. Type one above.</p>}
 
       {ideas && (
-        <details className="page-section" open>
+        <details className="page-section idea-section" open>
           <summary>Raw <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
           {raw.length ? list(raw) : <p className="muted">Nothing left to process.</p>}
         </details>
       )}
 
       {ideas && (
-        <details className="page-section">
+        <details className="page-section idea-section">
           <summary>Processed <span className="muted">({done.length}) · turned into clear ideas</span></summary>
           {done.length ? list(done) : <p className="muted">No processed ideas yet.</p>}
         </details>
