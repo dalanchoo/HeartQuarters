@@ -36,13 +36,14 @@ describe('video ideas', () => {
     expect(() => addIdea('')).toThrow('title');
   });
 
-  it('sets an idea as longform or short, and treats older ideas without a format as longform', () => {
+  it('sets an idea as undecided, longform or short; older ideas without a format are undecided', () => {
     const [idea] = addIdea('Format test');
-    expect(idea.format).toBe('longform');
+    expect(idea.format).toBe('undecided');
     expect(updateIdea(idea.id, { format: 'short' })[0].format).toBe('short');
-    expect(() => updateIdea(idea.id, { format: 'reel' })).toThrow('longform or short');
+    expect(updateIdea(idea.id, { format: 'undecided' })[0].format).toBe('undecided');
+    expect(() => updateIdea(idea.id, { format: 'reel' })).toThrow('undecided, longform or short');
     fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, format: undefined }] }));
-    expect(readIdeas()[0].format).toBe('longform');
+    expect(readIdeas()[0].format).toBe('undecided');
   });
 
   it('marks ideas processed or unprocessed; older ideas are unprocessed', () => {

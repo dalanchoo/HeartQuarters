@@ -14,7 +14,7 @@ export const STATUS_LABELS: Record<IdeaStatus, string> = {
   dropped: 'Dropped',
 };
 const FINISHED: IdeaStatus[] = ['made', 'dropped'];
-export const FORMAT_LABELS: Record<IdeaFormat, string> = { longform: 'Longform', short: 'Short' };
+export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided', longform: 'Longform', short: 'Short' };
 
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);

@@ -9,8 +9,8 @@ export const IDEAS_FILE = 'Video Ideas.json';
 /** Where an idea is on its way to becoming a video. */
 export const IDEA_STATUSES = ['thinking', 'researching', 'packaged', 'filming', 'made', 'dropped'] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
-/** Whether the idea would be a longform video or a Short. Ideas saved before this field existed are longform. */
-export const IDEA_FORMATS = ['longform', 'short'] as const;
+/** Whether the idea would be a longform video or a Short. New ideas start Undecided, and so do ideas saved before this field existed. */
+export const IDEA_FORMATS = ['undecided', 'longform', 'short'] as const;
 export type IdeaFormat = (typeof IDEA_FORMATS)[number];
 /** `processed` is false for a raw brain dump; true once John has turned it into a clear idea. Older ideas are unprocessed. */
 /** A link to a place or thing that informs the idea, with a note saying why it matters. */
@@ -42,8 +42,8 @@ function load(): { ideas: VideoIdea[]; original: string | null } {
   try { data = JSON.parse(original.replace(/^﻿/, '')); }
   catch { throw new Error('The ideas list could not be read. Nothing was changed.'); }
   if (data?.version !== 1 || !Array.isArray(data.ideas) || !data.ideas.every(valid)) throw new Error('The ideas list has an unexpected format. Nothing was changed.');
-  // Ideas saved before the format and processed fields existed are longform and unprocessed.
-  const ideas = (data.ideas as VideoIdea[]).map(i => ({ ...i, format: i.format ?? 'longform', processed: i.processed ?? false, references: (i.references ?? []).map(r => ({ id: r.id, url: r.url, note: r.note })) }));
+  // Ideas saved before the format and processed fields existed are undecided and unprocessed.
+  const ideas = (data.ideas as VideoIdea[]).map(i => ({ ...i, format: i.format ?? 'undecided', processed: i.processed ?? false, references: (i.references ?? []).map(r => ({ id: r.id, url: r.url, note: r.note })) }));
   return { ideas, original };
 }
 
@@ -73,7 +73,7 @@ export function addIdea(title: unknown, notes: unknown = ''): VideoIdea[] {
   const clean = text(title, TITLE_MAX, 'title').trim();
   if (!clean) throw new Error('Give the idea a title.');
   const { ideas, original } = load(); const now = new Date().toISOString();
-  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'longform', processed: false, references: [], createdAt: now, updatedAt: now });
+  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'undecided', processed: false, references: [], createdAt: now, updatedAt: now });
   save(ideas, original); return ideas;
 }
 
@@ -91,7 +91,7 @@ export function updateIdea(id: unknown, changes: { title?: unknown; notes?: unkn
     idea.status = changes.status as IdeaStatus;
   }
   if (changes.format !== undefined) {
-    if (!IDEA_FORMATS.includes(changes.format as IdeaFormat)) throw new Error('Choose longform or short.');
+    if (!IDEA_FORMATS.includes(changes.format as IdeaFormat)) throw new Error('Choose undecided, longform or short.');
     idea.format = changes.format as IdeaFormat;
   }
   if (changes.processed !== undefined) {
