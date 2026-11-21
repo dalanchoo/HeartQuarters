@@ -3,6 +3,7 @@ import { getJson, postJson } from './api';
 import type { IdeaFormat, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
+// Raw brain dumps are Unprocessed; once turned into a clear idea they move to Processed.
 // The order is his: the top is what he'd make next.
 export const STATUS_LABELS: Record<IdeaStatus, string> = {
   thinking: 'Thinking About It',
@@ -38,8 +39,17 @@ export function IdeasPage() {
     if (await send('/api/ideas/add', { title })) setTitle('');
   };
 
-  const shown = (ideas ?? []).filter((idea) => showFinished || !FINISHED.includes(idea.status));
-  const hidden = (ideas?.length ?? 0) - shown.length;
+  const all = ideas ?? [];
+  const visible = (idea: VideoIdea) => showFinished || !FINISHED.includes(idea.status);
+  const raw = all.filter((idea) => !idea.processed && visible(idea));
+  const done = all.filter((idea) => idea.processed && visible(idea));
+  const hidden = all.filter((idea) => !visible(idea)).length;
+  const first = all[0]?.id;
+  const last = all[all.length - 1]?.id;
+
+  const list = (items: VideoIdea[]) => items.map((idea) => (
+    <IdeaCard key={idea.id} idea={idea} busy={busy} send={send} first={first === idea.id} last={last === idea.id} />
+  ));
 
   return (
     <div className="content wide">
@@ -56,10 +66,21 @@ export function IdeasPage() {
       </form>
 
       {ideas && !ideas.length && <p className="muted">No ideas yet. Type one above.</p>}
-      {shown.map((idea) => (
-        <IdeaCard key={idea.id} idea={idea} busy={busy} send={send}
-          first={ideas![0].id === idea.id} last={ideas![ideas!.length - 1].id === idea.id} />
-      ))}
+
+      {ideas && (
+        <details className="page-section" open>
+          <summary>Unprocessed <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
+          {raw.length ? list(raw) : <p className="muted">Nothing left to process.</p>}
+        </details>
+      )}
+
+      {ideas && (
+        <details className="page-section">
+          <summary>Processed <span className="muted">({done.length}) · turned into clear ideas</span></summary>
+          {done.length ? list(done) : <p className="muted">No processed ideas yet.</p>}
+        </details>
+      )}
+
       {(hidden > 0 || showFinished) && (
         <label className="small-label">
           <input type="checkbox" checked={showFinished} onChange={(e) => setShowFinished(e.target.checked)} />
@@ -105,6 +126,9 @@ function IdeaCard({ idea, busy, send, first, last }: {
         <div className="idea-actions">
           <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
           {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
+          <button type="button" className="small" disabled={busy || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
+            {idea.processed ? 'Back to Unprocessed' : 'Mark Processed'}
+          </button>
           <span className="muted small-text">Changed {new Date(idea.updatedAt).toLocaleDateString()}</span>
           <span className="spacer" />
           <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>

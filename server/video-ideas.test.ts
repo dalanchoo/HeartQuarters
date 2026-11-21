@@ -45,6 +45,15 @@ describe('video ideas', () => {
     expect(readIdeas()[0].format).toBe('longform');
   });
 
+  it('marks ideas processed or unprocessed; older ideas are unprocessed', () => {
+    const [idea] = addIdea('Raw dump');
+    expect(idea.processed).toBe(false);
+    expect(updateIdea(idea.id, { processed: true })[0].processed).toBe(true);
+    expect(() => updateIdea(idea.id, { processed: 'yes' })).toThrow('processed or unprocessed');
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, processed: undefined }] }));
+    expect(readIdeas()[0].processed).toBe(false);
+  });
+
   it('moves ideas up and down and deletes one', () => {
     addIdea('C'); addIdea('B'); const [a] = addIdea('A');
     expect(moveIdea(a.id, 1).map(i => i.title)).toEqual(['B', 'A', 'C']);
