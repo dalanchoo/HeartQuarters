@@ -32,8 +32,29 @@ async function request(fetcher: Fetch, token: string, url: string, init: Request
   if (parsed.protocol !== 'https:' || parsed.hostname !== 'youtubereporting.googleapis.com' || parsed.port || parsed.username || parsed.password) throw new Error('YouTube returned an unsafe reporting URL.');
   recordReportingUse();
   const response = await fetcher(url, { ...init, redirect: 'error', headers: { Authorization: `Bearer ${token}`, ...init.headers } });
-  if (!response.ok) throw new Error(`YouTube Reporting returned ${response.status}. Check the Reporting API and reconnect with analytics permission.`);
+  if (!response.ok) throw new Error(reportingError(response.status, await response.text().catch(() => '')));
   return response;
+}
+
+/**
+ * Turns Google's error reply into a message that says what to do. Google's own reason is kept, because a 403 can mean
+ * very different things: the Reporting API is turned off in the Google Cloud project, the sign-in lacks permission, ...
+ */
+export function reportingError(status: number, body: string): string {
+  let message = ''; let reason = ''; let activation = '';
+  try {
+    const error = (JSON.parse(body) as { error?: { message?: unknown; status?: unknown; errors?: { reason?: unknown }[]; details?: { reason?: unknown; metadata?: Record<string, unknown> }[] } }).error;
+    message = typeof error?.message === 'string' ? error.message : '';
+    const info = error?.details?.find(d => typeof d.reason === 'string');
+    reason = typeof info?.reason === 'string' ? info.reason : typeof error?.errors?.[0]?.reason === 'string' ? String(error.errors[0].reason) : typeof error?.status === 'string' ? error.status : '';
+    const url = info?.metadata?.activationUrl;
+    if (typeof url === 'string' && /^https:\/\/console\.(?:developers|cloud)\.google\.com\//.test(url)) activation = url;
+  } catch { /* not JSON: keep the plain status */ }
+  if (reason === 'SERVICE_DISABLED' || reason === 'accessNotConfigured' || /has not been used in project|is disabled/i.test(message))
+    return `The YouTube Reporting API is turned off in your Google Cloud project, so YouTube won't send impressions and CTR. Turn it on${activation ? ` at ${activation}` : ' in the Google Cloud console (APIs & Services → Library → YouTube Reporting API)'}, wait a few minutes, then download the stats again.`;
+  if (reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' || reason === 'insufficientPermissions' || /insufficient authentication scopes/i.test(message))
+    return 'The YouTube sign-in does not include analytics permission. Sign in to YouTube again in HeartQuarters, allow every permission it asks for, then download the stats again.';
+  return `YouTube Reporting returned ${status}${message ? `: ${message}` : ''}${reason && !message.includes(reason) ? ` (${reason})` : ''}.`;
 }
 
 /** Starts or reuses a channel-wide reach job, then reads the latest available daily reports. */
