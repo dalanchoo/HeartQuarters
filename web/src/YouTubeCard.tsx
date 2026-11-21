@@ -12,7 +12,7 @@ import { ComparisonRow, isLongComparisonField } from './ComparisonRow';
 import { ChoiceField } from './ChoiceField';
 import { fieldChoices, localBoolean, localValue, setLocalValue, SYNC_FIELDS, missingTagInOpening, youtubeValues, type SyncField } from './youtubePackaging';
 import { existingYoutubeJob, preferredYoutubeJob, rememberYoutubeJob, shouldLinkLongform, youtubeVideoUrl } from './youtubePanel';
-import { YouTubeOpenLink } from './YouTubeOpenLink';
+import { YouTubeIcon, YouTubeOpenLink } from './YouTubeOpenLink';
 import { copyValuesMatch, metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo, sameComment } from './videoChecks';
 import type { CommentCheck } from '../../server/youtube-comment';
@@ -173,8 +173,8 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
   const completed = jobs?.filter((j) => j.status === 'done' && j.videoId) ?? [];
   const signIn = (
     <>
-      <button className="small" disabled={busy} onClick={() => void action(async () => setConnectUrl((await postJson<{ url: string }>('/api/youtube/connect')).url))}>
-        Start YouTube Sign-In
+      <button className="small" aria-label="Start YouTube Sign-In" disabled={busy} onClick={() => void action(async () => setConnectUrl((await postJson<{ url: string }>('/api/youtube/connect')).url))}>
+        Start <YouTubeIcon /> Sign-In
       </button>{' '}
       {connectUrl && (
         <a href={connectUrl} target="_blank" rel="noreferrer">
@@ -249,8 +249,8 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
             <div className="yt-linkbar-row">
               <YouTubeOpenLink href={youtubeVideoUrl(job.videoId!, short)} />
               <YouTubeOpenLink href={`https://studio.youtube.com/video/${encodeURIComponent(job.videoId!)}/edit`} studio />
-              <button className="small" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
-                Reload from YouTube
+              <button className="small" aria-label="Reload from YouTube" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
+                Reload from <YouTubeIcon />
               </button>
             </div>
           )}
@@ -278,9 +278,7 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
             .map((j) => (
               <p className="error" key={j.id}>
                 An earlier upload has an unknown result. Check YouTube Studio before uploading another copy.{' '}
-                <a className="button-link small" href="https://studio.youtube.com/" target="_blank" rel="noopener noreferrer">
-                  Open Studio
-                </a>{' '}
+                <YouTubeOpenLink href="https://studio.youtube.com/" studio />{' '}
                 <button
                   className="small"
                   onClick={() =>
@@ -607,8 +605,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       <div className="lvy-head">
         {!display && <div className="view-switch" role="group" aria-label="What to show">
           {(['local', 'youtube', 'diff'] as View[]).map((v) => (
-            <button key={v} className={`small ${shownView === v ? 'active' : ''}`} disabled={!linked && v !== 'local'} onClick={() => chooseView(v)}>
-              {v === 'local' ? 'Local' : v === 'youtube' ? 'YouTube' : 'Differences'}
+            <button key={v} className={`small ${shownView === v ? 'active' : ''}`} aria-label={v === 'youtube' ? 'YouTube' : undefined} title={v === 'youtube' ? 'YouTube' : undefined} disabled={!linked && v !== 'local'} onClick={() => chooseView(v)}>
+              {v === 'local' ? 'Local' : v === 'youtube' ? <YouTubeIcon /> : 'Differences'}
             </button>
           ))}
         </div>}
@@ -712,8 +710,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         <summary>Captions {captionsCompared && <span className={`comparison-status ${captionsCompared.same ? 'comparison-same' : 'comparison-different'}`}>{captionsCompared.same ? '✓ Same' : `≠ Different (${!captionsCompared.wordsSame && !captionsCompared.timingSame ? 'Words and Timing' : !captionsCompared.wordsSame ? 'Words' : 'Timing'})`}</span>}{staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</summary>
         <div className="lvy-row-head">
           {linked && !ytCaptions && (
-            <button className="small" disabled={busy || out} onClick={downloadCaptions}>
-              Download YouTube Captions
+            <button className="small" aria-label="Download YouTube Captions" disabled={busy || out} onClick={downloadCaptions}>
+              Download <YouTubeIcon /> Captions
             </button>
           )}
           {linked && !ytCaptions && <span className="muted small-text">about 250 units</span>}
@@ -785,8 +783,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
             </details>
           ) : (
             <p className="muted small-text">
-              <button className="small" disabled={loading || out} onClick={() => void load()}>
-                Read from YouTube
+              <button className="small" aria-label="Read from YouTube" disabled={loading || out} onClick={() => void load()}>
+                Read from <YouTubeIcon />
               </button>{' '}
               to see its visibility and playlists and push changes ({units(readVideoCost(quota))}).
             </p>
@@ -965,7 +963,7 @@ function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }
   const synthetic = answer('Altered content');
   return (
     <details className="yt-section lvy-upload" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>Upload to YouTube</summary>
+      <summary aria-label="Upload to YouTube">Upload to <YouTubeIcon /></summary>
       <p className="small-text">Upload sends the title, description, tags and settings above, as they are in the file.</p>
       {!title.trim() && <p className="error small-text">The file has no title yet.</p>}
       {!synthetic && <p className="error small-text">Answer Altered content (Yes or No) in the file first.</p>}

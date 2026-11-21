@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getJson } from './api';
 import type { YoutubeQuota } from '../../server/youtube-quota';
+import { YouTubeIcon } from './YouTubeOpenLink';
 
 // YouTube's daily quota, as HeartQuarters counts it (see server/youtube-quota.ts), and what each button will cost.
 // Every request to /api/youtube/ fires "hq-youtube-used" (see api.ts), so the meter updates as soon as quota is spent.
@@ -42,7 +43,7 @@ export function QuotaBadge() {
   const out = quota.exhausted || quota.used >= quota.limit;
   return (
     <details className={`quota-badge${out ? ' quota-out' : ''}`}>
-      <summary title="YouTube quota today">YouTube {out ? 'Quota Used Up' : `${n(quota.used)} / ${n(quota.limit)}`}</summary>
+      <summary title="YouTube quota today" aria-label={`YouTube ${out ? 'Quota Used Up' : `${n(quota.used)} of ${n(quota.limit)} units used`}`}><YouTubeIcon /> {out ? 'Quota Used Up' : `${n(quota.used)} / ${n(quota.limit)}`}</summary>
       <div className="quota-badge-panel"><QuotaMeter /></div>
     </details>
   );

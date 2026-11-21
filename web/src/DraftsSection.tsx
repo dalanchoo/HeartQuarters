@@ -13,6 +13,7 @@ import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
 import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { expressionShotSuggestions } from './expressionShotSuggestions';
+import { YouTubeOpenLink } from './YouTubeOpenLink';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
@@ -549,9 +550,7 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
               <div className="draft-use">
                 <CopyButton text={question} label="Copy Question" />
                 {research?.videoId && (
-                  <a className="button-link small" href={`https://studio.youtube.com/video/${encodeURIComponent(research.videoId)}/edit`} target="_blank" rel="noopener noreferrer">
-                    Open This Video in Studio ↗
-                  </a>
+                  <YouTubeOpenLink href={`https://studio.youtube.com/video/${encodeURIComponent(research.videoId)}/edit`} studio />
                 )}
               </div>
             </details>

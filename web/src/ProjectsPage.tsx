@@ -25,6 +25,7 @@ import { quotaUsedUp, units, useYoutubeQuota } from './youtubeQuota';
 import { VersionNotes } from './VersionNotes';
 import { DraftsSection } from './DraftsSection';
 import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
+import { YouTubeIcon } from './YouTubeOpenLink';
 import { VideoPreview } from './VideoPreview';
 import { PackagingCompare } from './PackagingCompare';
 import { YOUTUBE_SELECTION } from './comparisonSelection';
@@ -251,11 +252,11 @@ export function ProjectsPage() {
         {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
         <div className="sidebar-filters">
           <label htmlFor="video-show">Show</label>
-          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different">Problems on YouTube</option><option value="no-comment">No Comment Posted</option><option value="clean-up">Can Clean Up</option></select>
+          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different" aria-label="Problems on YouTube">Problems on ▶</option><option value="no-comment">No Comment Posted</option><option value="clean-up">Can Clean Up</option></select>
           <label htmlFor="video-find">Find</label>
           <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
         </div>
-        <button className="small" title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking YouTube…' : 'Check Linked Videos on YouTube'}</button>
+        <button className="small" aria-label={scanning ? 'Checking YouTube' : 'Check Linked Videos on YouTube'} title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking…' : 'Check Linked Videos on'} <YouTubeIcon /></button>
         <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
         <ChannelAnalytics />
         {scan && <p className="status-legend" role="status">{scan}</p>}
@@ -806,7 +807,7 @@ function PieceCard({
       {piece.kind !== 'reel' && !piece.exports.length && <ExportFirst piece={piece} draft={draft ?? piece.name} />}
       {piece.kind !== 'reel' && (
         <details className="yt-section">
-          <summary>YouTube</summary>
+          <summary aria-label="YouTube" title="YouTube"><YouTubeIcon /></summary>
           <PieceStatus path={piece.path} details />
           <YouTubeLinkBar piece={piece} link={link} />
         </details>

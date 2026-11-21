@@ -46,7 +46,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const unlockedDoc = unlockedFile ? unlockedDocs.find(d => d.file.path === unlockedFile.path) : (!locked ? doc : undefined);
   const label = (value: string) => {
     if (value === DRAFT) return 'Draft (Generated Packaging)';
-    if (value === YOUTUBE) return 'YouTube';
+    if (value === YOUTUBE) return '▶';
     const v = versions.find(x => x.path === value);
     return v ? `${v.name} ${v.path === unlocked ? '🔓' : '🔒'}${v.path === version.path ? ' (Selected)' : ''}` : value;
   };
@@ -55,8 +55,8 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
 
   return <details className="yt-section" open={open} onToggle={e => setOpen(e.currentTarget.open)}><summary>View and Compare Packaging</summary>
     <div className="compare-columns">
-      <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
-      <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+      <label>First Selection <select value={left} onChange={e => changeSelection('left', e.target.value)}>{leftOptions.map(value => <option key={value} value={value} aria-label={value === YOUTUBE ? 'YouTube' : undefined}>{label(value)}</option>)}</select></label>
+      <label>Compare With <select value={right} onChange={e => changeSelection('right', e.target.value)}><option value="">None — View One</option>{rightChoices(left, order).map(value => <option key={value} value={value} aria-label={value === YOUTUBE ? 'YouTube' : undefined}>{label(value)}</option>)}</select></label>
     </div>
     {/* Which side is which, once; every version's column has a Lock/Unlock switch. Unlocking one selects it and locks the others. */}
     <div className={right ? 'compare-columns compare-names' : 'compare-names'}>
