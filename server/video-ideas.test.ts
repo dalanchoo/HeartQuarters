@@ -56,23 +56,23 @@ describe('video ideas', () => {
 
   it('adds, edits, reorders and deletes references on one idea', () => {
     const [idea] = addIdea('With links');
-    addReference(idea.id, { label: 'Study', url: 'https://example.com/a', note: 'First' });
-    const ideas = addReference(idea.id, { label: 'Video', url: 'http://example.com/b', note: '' });
+    addReference(idea.id, { url: 'https://example.com/a', note: 'Study' });
+    const ideas = addReference(idea.id, { url: 'http://example.com/b', note: 'Video' });
     const [a, b] = ideas[0].references;
-    expect(ideas[0].references.map(r => r.label)).toEqual(['Study', 'Video']);
-    expect(updateReference(idea.id, a.id, { note: 'Changed' })[0].references[0]).toMatchObject({ note: 'Changed', url: 'https://example.com/a' });
-    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.label)).toEqual(['Video', 'Study']);
-    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.label)).toEqual(['Video', 'Study']);
-    expect(deleteReference(idea.id, b.id)[0].references.map(r => r.label)).toEqual(['Study']);
+    expect(ideas[0].references.map(r => r.note)).toEqual(['Study', 'Video']);
+    expect(updateReference(idea.id, a.id, { note: 'Changed' })[0].references[0]).toEqual({ id: a.id, note: 'Changed', url: 'https://example.com/a' });
+    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.note)).toEqual(['Video', 'Changed']);
+    expect(moveReference(idea.id, b.id, -1)[0].references.map(r => r.note)).toEqual(['Video', 'Changed']);
+    expect(deleteReference(idea.id, b.id)[0].references.map(r => r.note)).toEqual(['Changed']);
     fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, references: undefined }] }));
     expect(readIdeas()[0].references).toEqual([]);
   });
 
   it('only accepts web links for references', () => {
     const [idea] = addIdea('Links');
-    expect(() => addReference(idea.id, { label: 'x', url: 'file:///C:/secret.txt' })).toThrow('https://');
-    expect(() => addReference(idea.id, { label: 'x', url: 'javascript:alert(1)' })).toThrow('https://');
-    expect(() => addReference(idea.id, { label: 'x', url: 'not a link' })).toThrow('https://');
+    expect(() => addReference(idea.id, { url: 'file:///C:/secret.txt' })).toThrow('https://');
+    expect(() => addReference(idea.id, { url: 'javascript:alert(1)' })).toThrow('https://');
+    expect(() => addReference(idea.id, { url: 'not a link' })).toThrow('https://');
     expect(readIdeas()[0].references).toEqual([]);
   });
 

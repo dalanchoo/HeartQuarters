@@ -1071,7 +1071,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 /* Ideas: references (links) */
 .idea-refs { display: flex; flex-direction: column; gap: 0.3rem; }
 .idea-refs-head { font-size: 0.85rem; color: var(--muted); }
-.idea-ref { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.5fr) auto; gap: 0.35rem; align-items: center; }
+.idea-ref { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto; gap: 0.35rem; align-items: center; }
 .idea-ref input { min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
 .idea-ref-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 .idea-ref-new { border-top: 1px dashed var(--line); padding-top: 0.3rem; }
