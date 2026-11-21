@@ -27,7 +27,7 @@ import { DraftsSection } from './DraftsSection';
 import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { YouTubeIcon } from './YouTubeOpenLink';
 import { VideoPreview } from './VideoPreview';
-import { PackagingCompare } from './PackagingCompare';
+import { PackagingChoice, PackagingCompare } from './PackagingCompare';
 import { YOUTUBE_SELECTION } from './comparisonSelection';
 import { hasPendingPackaging } from './pendingPackaging';
 import { ThumbnailImport } from './ThumbnailImport';
@@ -41,6 +41,9 @@ import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
 import { ChannelAnalytics } from './ChannelAnalytics';
 
 type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'different' | 'no-comment' | 'clean-up';
+const FILTER_LABELS: Record<Filter, string> = { all: 'All Videos', 'no-capcut': 'No CapCut Project', 'not-exported': 'Not Exported', 'no-metadata': 'Metadata Incomplete', 'no-thumbnail': 'No Thumbnail', 'not-uploaded': 'Not Uploaded', different: 'Problems on YouTube', 'no-comment': 'No Comment Posted', 'clean-up': 'Can Clean Up' };
+/** The Show menu's choices, drawn with the YouTube icon where YouTube is meant. */
+const showFilter = (value: string) => value === 'different' ? <>Problems on <YouTubeIcon /></> : FILTER_LABELS[value as Filter];
 const StatusContext = createContext<{ items: VideoOverview[]; checks: Record<string, YoutubeChecks>; focus: string | null; cleanup: CleanupStatus['pieces'] }>({ items: [], checks: {}, focus: null, cleanup: {} });
 function shortFocus(): string | null { const [, , piece] = location.hash.slice(1).split('/'); try { return piece ? decodeURIComponent(piece) : null; } catch { return null; } }
 /**
@@ -85,7 +88,7 @@ function CleanupBadge({ item }: { item: VideoOverview }) {
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   if (!item) return null;
   // The steps bar shows CapCut, Exported, Packaged and Uploaded; the pills after it are things to look at.
-  return <span className="status-badges"><VideoSteps item={item} />{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself.">On YouTube: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
+  return <span className="status-badges"><VideoSteps item={item} />{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself." aria-label={`On YouTube: ${checks.issues.join(', ')}`}>On <YouTubeIcon />: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
@@ -251,8 +254,8 @@ export function ProjectsPage() {
         </div>
         {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
         <div className="sidebar-filters">
-          <label htmlFor="video-show">Show</label>
-          <select id="video-show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}><option value="all">All Videos</option><option value="no-capcut">No CapCut Project</option><option value="not-exported">Not Exported</option><option value="no-metadata">Metadata Incomplete</option><option value="no-thumbnail">No Thumbnail</option><option value="not-uploaded">Not Uploaded</option><option value="different" aria-label="Problems on YouTube">Problems on ▶</option><option value="no-comment">No Comment Posted</option><option value="clean-up">Can Clean Up</option></select>
+          <span id="video-show-label">Show</span>
+          <PackagingChoice name="Show" value={filter} options={Object.keys(FILTER_LABELS)} label={value => FILTER_LABELS[value as Filter]} render={showFilter} onChange={value => setFilter(value as Filter)} />
           <label htmlFor="video-find">Find</label>
           <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
         </div>

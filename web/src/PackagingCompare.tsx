@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { PackagingVersion, Piece } from './api';
 import { lockDocs, usePackagingDocs, type LoadedDoc } from './PackagingDoc';
 import { LocalVsYouTube, type YoutubeLink } from './YouTubeCard';
@@ -9,9 +9,13 @@ import { setPendingPackaging } from './pendingPackaging';
 import { LockSwitch } from './LockSwitch';
 import { YouTubeIcon } from './YouTubeOpenLink';
 
-export function PackagingChoice({ name, value, options, label, onChange }: { name: string; value: string; options: string[]; label: (value: string) => string; onChange: (value: string) => void }) {
+/**
+ * A drop-down that can show pictures (a plain <select> can only show text). `label` is the spoken name of each choice;
+ * `render` (optional) draws it, for example with the YouTube icon.
+ */
+export function PackagingChoice({ name, value, options, label, onChange, render }: { name: string; value: string; options: string[]; label: (value: string) => string; onChange: (value: string) => void; render?: (value: string) => ReactNode }) {
   const menu = useRef<HTMLDetailsElement>(null);
-  const show = (choice: string) => choice === YOUTUBE ? <YouTubeIcon /> : label(choice);
+  const show = (choice: string) => render ? render(choice) : choice === YOUTUBE ? <YouTubeIcon /> : label(choice);
   return <details className="packaging-choice" ref={menu} onKeyDown={event => {
     if (event.key === 'Escape') { menu.current!.open = false; menu.current!.querySelector('summary')?.focus(); }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -21,9 +25,9 @@ export function PackagingChoice({ name, value, options, label, onChange }: { nam
       buttons[at < 0 ? (event.key === 'ArrowDown' ? 0 : buttons.length - 1) : (at + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
     }
   }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
-    <summary aria-label={`${name}: ${value === YOUTUBE ? 'YouTube' : label(value)}`}>{show(value)}</summary>
+    <summary aria-label={`${name}: ${value === YOUTUBE && !render ? 'YouTube' : label(value)}`}>{show(value)}</summary>
     <div className="packaging-choice-menu">
-      {options.map(choice => <button key={choice} type="button" className={choice === value ? 'selected' : ''} aria-label={choice === YOUTUBE ? 'YouTube' : undefined} aria-current={choice === value ? 'true' : undefined} onClick={() => { onChange(choice); menu.current!.open = false; }}>{show(choice)}</button>)}
+      {options.map(choice => <button key={choice} type="button" className={choice === value ? 'selected' : ''} aria-label={choice === YOUTUBE && !render ? 'YouTube' : render ? label(choice) : undefined} aria-current={choice === value ? 'true' : undefined} onClick={() => { onChange(choice); menu.current!.open = false; }}>{show(choice)}</button>)}
     </div>
   </details>;
 }
