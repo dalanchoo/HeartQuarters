@@ -8,6 +8,7 @@ import { uploadsFor } from './youtube.js';
 import { readYoutubeVideo } from './youtube-video.js';
 import { recordAnalyticsUse } from './youtube-quota.js';
 import { getReachData, type ReachData } from './youtube-reach.js';
+import { reachTotals, type ReachTotals } from './analytics-summary.js';
 
 export interface AnalyticsPeriod { name: string; start: string; end: string; complete: boolean }
 export interface AnalyticsReport { columns?: unknown[]; rows?: unknown[][] }
@@ -15,7 +16,8 @@ export interface AnalyticsSnapshot {
   videoId: string; publishedAt: string; downloadedAt: string;
   periods: { period: AnalyticsPeriod; statistics: AnalyticsReport; retention: AnalyticsReport | null; retentionError?: string }[];
   breakdowns?: { name: string; start: string; end: string; report: AnalyticsReport | null; error?: string }[];
-  reach?: ReachData | { status: 'unavailable'; note: string };
+  /** `totals` adds up all the days: impressions, and CTR weighted by impressions. */
+  reach?: (ReachData & { totals?: ReachTotals | null }) | { status: 'unavailable'; note: string };
 }
 
 /** YouTube reports use Pacific calendar days, not elapsed 24-hour periods. */
@@ -110,7 +112,7 @@ export async function downloadVideoAnalytics(piece: string, id: string) {
   if (typeof publishedAt !== 'string' || !Number.isFinite(Date.parse(publishedAt))) throw new Error('YouTube did not provide a publication date for this video.');
   const snapshot = await collectVideoAnalytics(job.videoId, publishedAt, token);
   if (!youtubeStatus().reportingAccess) snapshot.reach = { status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to retrieve impressions and CTR.' };
-  else try { snapshot.reach = await getReachData(token, job.videoId); } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
+  else try { const reach = await getReachData(token, job.videoId); snapshot.reach = { ...reach, totals: reachTotals(reach, job.videoId) }; } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
   const file = saveVideoAnalytics(piece, snapshot);
   const missing = snapshot.periods.filter(p => !p.retention || !p.retention.rows?.length).map(p => p.period.name);
   return { file, missingRetention: missing, emptyStatistics: snapshot.periods.filter(p => !p.statistics.rows?.length).map(p => p.period.name), unavailableBreakdowns: snapshot.breakdowns?.filter(item => !item.report || !item.report.rows?.length).map(item => item.name) ?? [], reach: snapshot.reach };

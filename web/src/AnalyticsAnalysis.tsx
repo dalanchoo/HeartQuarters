@@ -5,6 +5,7 @@ import { getJson, openInExplorer, postJson } from './api';
 import type { AnalysisJob } from '../../server/analytics-analysis';
 import { analyticsSummarySections } from './analyticsSummary';
 import { VideoAnalytics } from './VideoAnalytics';
+import { VideoStats } from './VideoStats';
 
 type Run = { id: string; claude: string | null; codex: string | null; gemini: string | null; recommendations: string | null; summary: string | null; job: AnalysisJob | null; summaryJob: { state: string; error?: string } | null };
 export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string; jobId?: string; refresh?: number }) {
@@ -28,7 +29,8 @@ export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string
     {piece && <VideoAnalytics key={jobId ?? 'unlinked'} piece={piece} id={jobId} onDownloaded={() => setTick(n => n + 1)} />}
     {!snapshots.length ? <p>Download stats first.</p> : <><div className="yt-linkbar-row" style={{ marginTop: '0.5rem' }}><select aria-label="Snapshot" value={selected} onChange={e => setSelected(e.target.value)}>{snapshots.map(name => <option key={name}>{name}</option>)}</select>
       <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>Analyze With All Three AIs</button></div>
-      <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p></>}
+      <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p>
+      {piece && selected && <VideoStats piece={piece} snapshot={selected} />}</>}
     {error && <p className="error" role="alert">{error}</p>}
     {runs.map((run, index) => <details className="yt-section" key={run.id} open={index === 0 ? true : undefined}><summary style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}><span>Analysis {runs.length - index} · Snapshot {selected} {run.job?.state === 'working' ? '· Running' : run.recommendations ? '· Complete' : '· Incomplete'}</span><button type="button" style={{ marginLeft: 'auto' }} onClick={event => { event.stopPropagation(); void openInExplorer('projects', `${piece ? `${piece}/` : ''}Analytics/${selected}/Analysis/${run.id}`); }}>Open Analysis Folder</button></summary>
       {run.job && <p className="small-text">Claude: {run.job.models.claude.state}; ChatGPT: {run.job.models.codex.state}; Gemini: {run.job.models.gemini.state}; Recommendations: {run.job.synthesis.state}.</p>}
