@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fileUrl,
   getJson,
@@ -203,7 +203,18 @@ export function ExpressionsPage() {
     return filterSelectablePhotos(index.photos, [...(photoScope === 'reference' ? likeness : references), ...keptInView], { scope: photoScope === 'all' ? 'all' : 'starred', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters, rating: libraryFilters.rating }).filter(p => matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
   }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, photoScope, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
+  const gridActions = useRef<GridActions>(null as unknown as GridActions);
+  gridActions.current = {
+    open: setOpen,
+    star: p => { if (references.includes(p.path)) noteUnmarked(p); void setReference(p.path, !references.includes(p.path)); },
+    reference: p => { if (likeness.includes(p.path)) noteUnmarked(p); void setLikenessPhoto(p.path, !likeness.includes(p.path)); },
+    changed: (message) => { setChangeMessage(message); reloadLikeness(); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); },
+  };
   const { photo: viewedPhoto, index: viewedIndex } = openPhotoSelection(index?.photos ?? [], shown, open);
+  // Fetch the previews either side of the open photo, so the next step shows a picture straight away.
+  const neighbours = viewedIndex < 0 || shown.length < 2 ? [] : [shown[(viewedIndex + 1) % shown.length], shown[(viewedIndex - 1 + shown.length) % shown.length]];
+  const neighbourKey = neighbours.map(p => `${p.path}|${p.revision ?? ''}`).join(' ');
+  useEffect(() => { for (const p of neighbours) new Image().src = thumbUrl('expressions', p.path, 800, p.revision); }, [neighbourKey]);
   // An Inbox photo opened from the Inbox steps through the other Inbox photos.
   const inboxPosition = preview && !preview.imageUrl && preview.photo.category === '_Inbox' && inbox.length > 1 ? inbox.findIndex(p => p.path === preview.photo.path) : -1;
 
@@ -306,16 +317,7 @@ export function ExpressionsPage() {
           {words.length > 0 && ` matching “${query.trim()}”`}
         </p>
 
-        <div className="photo-grid">
-          {shown.map((p) => (
-            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => setOpen(p.path)} title={p.name}>
-              <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
-              <span>{p.rating === 'liked' ? '👍 ' : p.rating === 'disliked' ? '👎 ' : ''}{p.name}</span>
-            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={!referenceReady || referenceBusy} aria-pressed={references.includes(p.path)} onClick={() => { if (references.includes(p.path)) noteUnmarked(p); void setReference(p.path, !references.includes(p.path)); }}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => { if (likeness.includes(p.path)) noteUnmarked(p); void setLikenessPhoto(p.path, !likeness.includes(p.path)); }}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
-              <PhotoActions photo={p} rootDir={index.rootDir} categories={index.categories} onChanged={(message) => { setChangeMessage(message); reloadLikeness(); void Promise.all([getJson<ExpressionIndex>('/api/expressions'), getJson<{ paths: string[] }>('/api/expression-references')]).then(([updated, refs]) => { setIndex(updated); setReferences(refs.paths); window.dispatchEvent(new Event('hq-starred-photos-changed')); try { saveReferences(localStorage, refs.paths); } catch { /* server copy is authoritative */ } }, (e) => setError(e.message)); }} />
-            </div>
-          ))}
-        </div>
+        <LibraryGrid photos={shown} reviewFolders={reviewFolders} categoryNames={categoryNames} references={references} likeness={likeness} starDisabled={!referenceReady || referenceBusy} likenessBusy={likenessBusy} rootDir={index.rootDir} categories={index.categories} actions={gridActions} />
         </div>
       </section>
 
@@ -360,6 +362,28 @@ export function ExpressionsPage() {
     </div>
   );
 }
+
+type GridActions = { open: (path: string) => void; star: (photo: ExpressionPhoto) => void; reference: (photo: ExpressionPhoto) => void; changed: (message: string) => void };
+/**
+ * The Library's tiles. Kept separate (and memo'd) so stepping through photos in the viewer doesn't redraw every tile:
+ * the actions come through a ref that always holds the page's latest handlers, so they never count as a change.
+ */
+const LibraryGrid = memo(function LibraryGrid({ photos: shown, reviewFolders, categoryNames, references, likeness, starDisabled, likenessBusy, rootDir, categories, actions }: {
+  photos: ExpressionPhoto[]; reviewFolders: FolderReviewMode | 'all'; categoryNames: ReturnType<typeof expressionCategoryNames>; references: string[]; likeness: string[]; starDisabled: boolean; likenessBusy: boolean; rootDir: string; categories: ExpressionCategory[]; actions: { current: GridActions };
+}) {
+  return (
+        <div className="photo-grid">
+          {shown.map((p) => (
+            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => actions.current.open(p.path)} title={p.name}>
+              <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
+              <span>{p.rating === 'liked' ? '👍 ' : p.rating === 'disliked' ? '👎 ' : ''}{p.name}</span>
+            </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}<button type="button" disabled={starDisabled} aria-pressed={references.includes(p.path)} onClick={() => actions.current.star(p)}>{references.includes(p.path) ? '★ Starred' : '☆ Star'}</button><button type="button" disabled={likenessBusy} aria-pressed={likeness.includes(p.path)} title="Reference Photos show the AI what you look like when it generates images of you." onClick={() => actions.current.reference(p)}>{likeness.includes(p.path) ? '✓ Reference Photo' : 'Make Reference Photo'}</button>
+              <PhotoActions photo={p} rootDir={rootDir} categories={categories} onChanged={message => actions.current.changed(message)} />
+            </div>
+          ))}
+        </div>
+  );
+});
 
 function CategoryTree({
   path,
@@ -501,6 +525,11 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
     if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight };
     setZoom(previous => clampZoom(typeof next === 'function' ? next(previous) : next, maximum));
   };
+  // The 800-pixel preview (small, already cached) shows at once; the full original (2-4 MB) is loaded only once you
+  // stay on a photo for a moment or zoom in, so stepping quickly through photos doesn't queue up big downloads.
+  const [fullSize, setFullSize] = useState(false);
+  useEffect(() => { setFullSize(false); const timer = setTimeout(() => setFullSize(true), 400); return () => clearTimeout(timer); }, [photo.path]);
+  useEffect(() => { if (zoom > 1) setFullSize(true); }, [zoom]);
   useEffect(() => { setZoom(1); setImageSize({ width: 0, height: 0 }); setConfirmError(''); setPendingTag(null); setNewFraming(''); setNewPose(''); setNewMorphology(''); center.current = null; }, [photo.path]);
   useEffect(() => {
     const el = viewport.current;
@@ -573,7 +602,7 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
           onPointerCancel={() => { drag.current = null; }}
           onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); }}>
           <div className="lb-image-canvas" style={{ width: Math.max(viewSize.width, imageSize.width * fit * zoom), height: Math.max(viewSize.height, imageSize.height * fit * zoom) }}>
-            <img className="lb-img" src={imageUrl ?? fileUrl('expressions', photo.path, photo.revision)} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: imageUrl ? undefined : `url("${thumbUrl('expressions', photo.path, 800, photo.revision)}")` }} alt={photo.name}
+            <img className="lb-img" src={imageUrl ?? (fullSize ? fileUrl('expressions', photo.path, photo.revision) : thumbUrl('expressions', photo.path, 800, photo.revision))} style={{ width: imageSize.width ? imageSize.width * fit * zoom : undefined, height: imageSize.height ? imageSize.height * fit * zoom : undefined, backgroundImage: imageUrl ? undefined : `url("${thumbUrl('expressions', photo.path, 800, photo.revision)}")` }} alt={photo.name}
               onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
               role="button" tabIndex={0} aria-label={zoom > 1 ? 'Return photo to fit' : 'View photo at full size'} draggable={false}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); changeZoom(zoom > 1 ? 1 : fit < 1 ? 1 / fit : 2); } }} />
