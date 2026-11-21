@@ -92,31 +92,25 @@ function IdeaCard({ idea, busy, send, first, last }: {
         <span className="muted small-text">{FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}</span>
       </summary>
       <div className="idea-body">
-        <label>Title
-          <input type="text" value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label>Format
-          <select value={idea.format} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, format: e.target.value })}>
+        <input className="idea-title-input" type="text" value={title} maxLength={300} aria-label="Title" onChange={(e) => setTitle(e.target.value)} />
+        <div className="idea-fields">
+          <select aria-label="Format" value={idea.format} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, format: e.target.value })}>
             {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
-        </label>
-        <label>Status
-          <select value={idea.status} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, status: e.target.value })}>
+          <select aria-label="Status" value={idea.status} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, status: e.target.value })}>
             {Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
-        </label>
-        <label>Notes
-          <textarea rows={6} value={notes} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => setNotes(e.target.value)} />
-        </label>
+        </div>
+        <textarea rows={3} aria-label="Notes" value={notes} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => setNotes(e.target.value)} />
         <div className="idea-actions">
-          <button type="button" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
-          {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo Changes</button>}
+          <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
+          {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
+          <span className="muted small-text">Changed {new Date(idea.updatedAt).toLocaleDateString()}</span>
           <span className="spacer" />
-          <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Move Up</button>
-          <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Move Down</button>
+          <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>
+          <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Down</button>
           <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
         </div>
-        <p className="muted small-text">Added {new Date(idea.createdAt).toLocaleDateString()}, last changed {new Date(idea.updatedAt).toLocaleDateString()}.</p>
       </div>
     </details>
   );
