@@ -11,7 +11,7 @@ const photo = 'Attitude/Disapproval/Disapproval_001.jpg';
 beforeEach(() => {
   tmp = makeTree({
     'Expressions/Attitude/Disapproval/Disapproval_001.jpg': 'photo',
-    'Expressions/Attitude/Disapproval/Disapproval_001.txt': 'Disapproval, 80%, CONFIRMED\r\nSkepticism, 90%, UNCONFIRMED, codex=90%\r\nSmile, 76%, CONFIRMED\r\n',
+    'Expressions/Attitude/Disapproval/Disapproval_001.txt': 'Disapproval, 80%, CONFIRMED\r\nSkepticism, 90%, UNCONFIRMED, codex=90%\r\nSmile, 76%, CONFIRMED\r\n# Motion: No\r\n',
     'Expressions/Attitude/Disapproval/Disapproval_001_extra.txt': 'extra',
     'Expressions/Attitude/Disapproval/Disapproval_004.png': 'other',
     'Expressions/Attitude/Disapproval/Disapproval_004.txt': 'other tags',
@@ -28,7 +28,7 @@ describe('confirming an expression folder', () => {
     const result = confirmExpressionFolder(photo, 'Skepticism', 90);
     expect(result.path).toBe('Attitude/Skepticism/Skepticism_002.jpg');
     const dir = path.join(tmp, 'Expressions/Attitude');
-    expect(fs.readFileSync(path.join(dir, 'Skepticism/Skepticism_002.txt'), 'utf8')).toBe('Disapproval, 80%, UNCONFIRMED\r\nSkepticism, 90%, CONFIRMED, codex=90%\r\nSmile, 76%, CONFIRMED\r\n');
+    expect(fs.readFileSync(path.join(dir, 'Skepticism/Skepticism_002.txt'), 'utf8')).toBe('Disapproval, 80%, UNCONFIRMED\r\nSkepticism, 90%, CONFIRMED, codex=90%\r\nSmile, 76%, CONFIRMED\r\n# Motion: No\r\n');
     expect(fs.readFileSync(path.join(dir, 'Skepticism/Skepticism_002_extra.txt'), 'utf8')).toBe('extra');
     expect(fs.readFileSync(path.join(dir, 'Disapproval/Disapproval_001.png'), 'utf8')).toBe('other');
     expect(readExpressionReferences().paths).toEqual([result.path, 'Attitude/Disapproval/Disapproval_001.png']);
@@ -36,15 +36,15 @@ describe('confirming an expression folder', () => {
   });
   it('confirms the existing folder without moving and clears other expression confirmations', () => {
     const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt');
-    fs.writeFileSync(file, 'Disapproval, 80%, UNCONFIRMED\nSkepticism, 90%, CONFIRMED\n');
+    fs.writeFileSync(file, 'Disapproval, 80%, UNCONFIRMED\nSkepticism, 90%, CONFIRMED\n# Motion: No\n');
     expect(confirmExpressionFolder(photo, 'Disapproval', 80).path).toBe(photo);
-    expect(fs.readFileSync(file, 'utf8')).toBe('Disapproval, 80%, CONFIRMED\nSkepticism, 90%, UNCONFIRMED\n');
+    expect(fs.readFileSync(file, 'utf8')).toBe('Disapproval, 80%, CONFIRMED\nSkepticism, 90%, UNCONFIRMED\n# Motion: No\n');
   });
   it('can confirm a previously disconfirmed expression and move the photo', () => {
     const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt');
-    fs.writeFileSync(file, 'Skepticism, 90%, DISCONFIRMED\n');
+    fs.writeFileSync(file, 'Skepticism, 90%, DISCONFIRMED\n# Motion: No\n');
     const result = confirmExpressionFolder(photo, 'Skepticism', 90);
-    expect(fs.readFileSync(path.join(tmp, 'Expressions/Attitude/Skepticism/Skepticism_002.txt'), 'utf8')).toBe('Skepticism, 90%, CONFIRMED\n');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Attitude/Skepticism/Skepticism_002.txt'), 'utf8')).toBe('Skepticism, 90%, CONFIRMED\n# Motion: No\n');
     expect(result.path).toBe('Attitude/Skepticism/Skepticism_002.jpg');
   });
   it('does not change files when the suggestion is stale or the folder name is ambiguous', () => {
@@ -57,9 +57,9 @@ describe('confirming an expression folder', () => {
   it('moves the photo into a category that also has sub-categories when its name is unique', () => {
     fs.mkdirSync(path.join(tmp, 'Expressions/Apprehension/Fear/Panic'), { recursive: true });
     const file = path.join(tmp, 'Expressions/Attitude/Disapproval/Disapproval_001.txt');
-    fs.writeFileSync(file, 'Fear, N/A, UNCONFIRMED\n');
+    fs.writeFileSync(file, 'Fear, N/A, UNCONFIRMED\n# Motion: No\n');
     const result = confirmExpressionFolder(photo, 'Fear', null);
     expect(result.path).toBe('Apprehension/Fear/Fear_001.jpg');
-    expect(fs.readFileSync(path.join(tmp, 'Expressions/Apprehension/Fear/Fear_001.txt'), 'utf8')).toBe('Fear, N/A, CONFIRMED\n');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Apprehension/Fear/Fear_001.txt'), 'utf8')).toBe('Fear, N/A, CONFIRMED\n# Motion: No\n');
   });
 });

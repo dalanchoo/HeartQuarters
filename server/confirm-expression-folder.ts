@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex, EXPRESSION_INBOX, findExpressionPhoto, parseTags } from './expressions.js';
+import { buildExpressionIndex, clearExpressionIndex, EXPRESSION_INBOX, findExpressionPhoto, hasMotionPhotoHeader, parseMotion, parseTags, withMotionLine } from './expressions.js';
 import { fileInboxPhoto } from './expression-inbox.js';
 import { applyExpressionChange, previewExpressionChange } from './expression-manage.js';
 import { writeFileSafely } from './files.js';
@@ -32,7 +32,9 @@ export function confirmExpressionFolder(photoPath: string, name: string, confide
       lines[i] = lines[i].replace(/CONFIRMED(?=\s*(?:,|$))/i, 'UNCONFIRMED');
     }
   }
-  const after = lines.join(''); const destination = destinations[0].path;
+  // The photo carries its Motion answer into the library: found now if the sidecar doesn't have it yet.
+  const joined = lines.join('');
+  const after = parseMotion(joined) === undefined && /\.(jpe?g|webp)$/i.test(photoPath) ? withMotionLine(joined, hasMotionPhotoHeader(safeResolve('expressions', photoPath))) : joined; const destination = destinations[0].path;
   if (photo.category === EXPRESSION_INBOX) return fileInboxPhoto(photoPath, destination, { before, after });
   if (destination === photo.category) { if (after !== before) writeFileSafely(sidecar, after); clearExpressionIndex(); return { path: photoPath }; }
   const plan = previewExpressionChange(photoPath, destination);

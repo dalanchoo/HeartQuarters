@@ -9,12 +9,12 @@ import { makeTree, removeTree } from './testing';
 
 let tmp: string; let original: string;
 beforeEach(() => {
-  tmp = makeTree({ 'Joy/Joy_001.jpg': 'photo', 'Joy/Joy_001.txt': 'Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n', 'Joy/Joy_002.jpg': 'photo', '_Inbox/New.jpg': 'photo' });
+  tmp = makeTree({ 'Joy/Joy_001.jpg': 'photo', 'Joy/Joy_001.txt': 'Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n# Motion: No\r\n', 'Joy/Joy_002.jpg': 'photo', '_Inbox/New.jpg': 'photo' });
   original = config.expressionsDir; config.expressionsDir = tmp;
 });
 afterEach(() => { config.expressionsDir = original; removeTree(tmp); });
 const sidecar = (name: string) => path.join(tmp, name);
-const TAGS = 'Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n';
+const TAGS = 'Smile, 88%, UNCONFIRMED\r\nJoy, N/A, CONFIRMED\r\n# Motion: No\r\n';
 
 describe('expression ratings', () => {
   it('adds, switches and removes the rating line without touching tags or line endings', () => {

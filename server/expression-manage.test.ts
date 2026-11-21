@@ -15,7 +15,7 @@ const choice = 'Video/Longform/Packaging/Drafts/Choice.json';
 beforeEach(() => {
   tmp = makeTree({
     'Expressions/Communication/Listening/Listening_002.jpg': 'bad photo',
-    'Expressions/Communication/Listening/Listening_002.txt': 'bad tags',
+    'Expressions/Communication/Listening/Listening_002.txt': 'bad tags\n# Motion: No\n',
     'Expressions/Communication/Listening/Listening_002_GPT.txt': 'bad extra',
     'Expressions/Communication/Listening/Listening_005.webp': 'good photo',
     'Expressions/Communication/Listening/Listening_005.txt': 'good tags',
@@ -68,7 +68,7 @@ describe('managing expression photos', () => {
     const plan = previewExpressionChange(a, 'Positive/Joy');
     expect(() => applyExpressionChange(a, 'Positive/Joy', plan.token, { before: 'stale sidecar', after: 'new tags' })).toThrow(/sidecar changed/i);
     expect(fs.readFileSync(path.join(tmp, 'Expressions', a), 'utf8')).toBe('bad photo');
-    expect(fs.readFileSync(path.join(tmp, 'Expressions/Communication/Listening/Listening_002.txt'), 'utf8')).toBe('bad tags');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions/Communication/Listening/Listening_002.txt'), 'utf8')).toBe('bad tags\n# Motion: No\n');
     expect(fs.readFileSync(path.join(tmp, 'Expressions', b), 'utf8')).toBe('good photo');
     expect(fs.existsSync(path.join(tmp, 'Expressions/Positive/Joy/Joy_002.jpg'))).toBe(false);
     expect(readExpressionReferences().paths).toEqual([a, b]);

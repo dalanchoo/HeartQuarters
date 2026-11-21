@@ -1,4 +1,5 @@
-// Reads the Expressions library (photos of John for thumbnails). Read-only.
+// Reads the Expressions library (photos of John for thumbnails). It changes nothing, except that a photo's tag file
+// gets one "# Motion: Yes" or "# Motion: No" line the first time the photo is listed without one.
 //
 // Layout it understands:
 //   Expressions\Cognitive\Thinking\Pondering\
@@ -12,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { requireFolder } from './projects.js';
+import { writeFile } from './safe-files.js';
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const CACHE_MS = 30_000;
@@ -98,6 +100,35 @@ export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
 
 export type ExpressionRating = 'liked' | 'meh' | 'disliked';
 /** The rating line starts with "#", so tag readers (and the AI assessment) leave it alone. */
+/** Whether the photo is a Google/Android Motion Photo, kept in the sidecar as "# Motion: Yes" or "# Motion: No". */
+export const MOTION_LINE = /^#\s*Motion:\s*(Yes|No)\s*$/i;
+export function parseMotion(text: string): boolean | undefined {
+  let motion: boolean | undefined;
+  for (const line of text.split(/\r?\n/)) { const match = MOTION_LINE.exec(line.trim()); if (match) motion = match[1].toLowerCase() === 'yes'; }
+  return motion;
+}
+/** The sidecar text with its Motion line set (added, or replaced if one is there). Nothing else changes. */
+export function withMotionLine(text: string, motion: boolean): string {
+  const newline = text.includes('\r\n') ? '\r\n' : '\n';
+  const kept = text.split(/(?<=\n)/).filter(line => line && !MOTION_LINE.test(line.trim())).join('');
+  return kept + (kept && !kept.endsWith('\n') ? newline : '') + `# Motion: ${motion ? 'Yes' : 'No'}${newline}`;
+}
+/**
+ * Is this photo a Motion Photo? The sidecar's Motion line answers it. Without one, the photo's own header is read
+ * (slow on the D: disk) and the answer is written into the sidecar, so it is only ever worked out once. Only an
+ * existing sidecar is written; a failed write is not an error, the answer is still right for now.
+ */
+export function motionOf(photoFile: string, sidecarFile: string | null, saved: boolean | undefined): boolean {
+  if (saved !== undefined) return saved;
+  if (!/\.(jpe?g|webp)$/i.test(photoFile)) return false;
+  const motion = hasMotionPhotoHeader(photoFile);
+  if (!sidecarFile) return motion;
+  try {
+    if (!fs.lstatSync(sidecarFile).isFile()) return motion;
+    writeFile(sidecarFile, withMotionLine(fs.readFileSync(sidecarFile, 'utf8'), motion), undefined, 'expressions');
+  } catch { /* the sidecar couldn't be written this time */ }
+  return motion;
+}
 export const RATING_LINE = /^#\s*Rating:\s*(Liked|Meh|Disliked)\s*$/i;
 
 /** The last rating line in a sidecar wins; none means not rated. */
@@ -107,7 +138,7 @@ export function parseRating(text: string): ExpressionRating | undefined {
   return rating;
 }
 
-type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating };
+type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating; motion?: boolean };
 const NO_SIDECAR: SidecarInfo = { tags: [], assessedByThreeAIs: false };
 
 function readSidecar(file: string): SidecarInfo {
@@ -118,7 +149,8 @@ function readSidecar(file: string): SidecarInfo {
       /(?:^|\n)#\s*AssessedWithAllThreeAIs\b/i.test(text) ||
       tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
     const rating = parseRating(text);
-    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}) };
+    const motion = parseMotion(text);
+    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}) };
   } catch {
     return NO_SIDECAR;
   }
@@ -163,7 +195,7 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
     const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : NO_SIDECAR;
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), tags: sidecarInfo.tags };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -242,7 +274,7 @@ export function buildExpressionIndex(withPhotos = true): ExpressionIndex {
           name: base,
           category: relPath,
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
-          ...(hasMotionPhotoHeader(full) ? { motionPhoto: true } : {}),
+          ...(motionOf(full, files.has(`${base}.txt`) ? path.join(dir, `${base}.txt`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}),
           ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}),
           tags: sidecarInfo.tags,
         });

@@ -7,7 +7,7 @@ import { buildExpressionIndex } from './expressions';
 import { makeTree, removeTree } from './testing';
 
 let root: string; let old: string;
-beforeEach(() => { root = makeTree({ 'Framing.txt': 'Framing guidance: a tight crop.', 'PoseGaze.txt': 'Pose guidance: gaze and head are independent.', 'Morphology.txt': 'Morphology guidance: specific beats general.', 'ExpressionCategories.txt': 'Expression guidance: do not invent labels.', 'Positive/Warmth/Warmth.txt': 'A kind expression', 'Positive/Warmth/Warmth_001.jpg': 'image', 'Positive/Warmth/Warmth_001.txt': 'Warmth, 80%, CONFIRMED\r\nSmile, 60%, UNCONFIRMED\r\nAIGenerated, N/A, CONFIRMED\r\n', 'Negative/Anger/Anger.txt': 'An angry expression' }); old = config.expressionsDir; config.expressionsDir = root; });
+beforeEach(() => { root = makeTree({ 'Framing.txt': 'Framing guidance: a tight crop.', 'PoseGaze.txt': 'Pose guidance: gaze and head are independent.', 'Morphology.txt': 'Morphology guidance: specific beats general.', 'ExpressionCategories.txt': 'Expression guidance: do not invent labels.', 'Positive/Warmth/Warmth.txt': 'A kind expression', 'Positive/Warmth/Warmth_001.jpg': 'image', 'Positive/Warmth/Warmth_001.txt': 'Warmth, 80%, CONFIRMED\r\nSmile, 60%, UNCONFIRMED\r\nAIGenerated, N/A, CONFIRMED\r\n# Motion: No\r\n', 'Negative/Anger/Anger.txt': 'An angry expression' }); old = config.expressionsDir; config.expressionsDir = root; });
 afterEach(() => { config.expressionsDir = old; removeTree(root); });
 describe('blind expression assessment', () => {
   it('includes vocabularies and definitions without the photo name, path or existing tags', () => {

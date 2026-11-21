@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config';
-import { buildExpressionIndex, expressionCategories, isExpressionPhoto, parseTags } from './expressions';
+import { buildExpressionIndex, expressionCategories, isExpressionPhoto, parseMotion, parseTags, withMotionLine } from './expressions';
 import { makeTree, removeTree } from './testing';
 
 describe('parseTags', () => {
@@ -168,5 +168,35 @@ describe('looking up one photo without scanning the library (code review #8)', (
     expect(isExpressionPhoto('Positive/Joy\\_Joy.png')).toBe(false);
     expect(isExpressionPhoto('Positive\\Joy\\Joy_001.jpg')).toBe(false);
     expect(isExpressionPhoto('')).toBe(false);
+  });
+});
+
+describe('the Motion line in a tag file', () => {
+  it('reads Yes and No, and nothing when there is no line', () => {
+    expect(parseMotion('Joy, 80%, CONFIRMED\n# Motion: Yes\n')).toBe(true);
+    expect(parseMotion('# motion:   No\r\n')).toBe(false);
+    expect(parseMotion('Joy, 80%, CONFIRMED\n')).toBeUndefined();
+  });
+  it('adds or replaces only that line and keeps the line endings', () => {
+    expect(withMotionLine('Joy, 80%, CONFIRMED\r\n# Rating: Liked\r\n', true)).toBe('Joy, 80%, CONFIRMED\r\n# Rating: Liked\r\n# Motion: Yes\r\n');
+    expect(withMotionLine('Joy, 80%, CONFIRMED\n# Motion: Yes\n', false)).toBe('Joy, 80%, CONFIRMED\n# Motion: No\n');
+    expect(withMotionLine('', false)).toBe('# Motion: No\n');
+  });
+  it('is not mistaken for a tag', () => {
+    expect(parseTags('Joy, 80%, CONFIRMED\n# Motion: Yes\n')).toHaveLength(1);
+  });
+  it('is worked out once from the photo, written to its tag file, and then read from there', () => {
+    const dir = makeTree({ 'Joy/Joy_001.jpg': 'GCamera:MotionPhoto="1"', 'Joy/Joy_001.txt': 'Joy, 80%, CONFIRMED\n', 'Joy/Joy_002.jpg': 'plain', 'Joy/Joy_002.txt': 'Joy, 70%, CONFIRMED\n', 'Joy/Joy_003.png': 'png' });
+    const saved = config.expressionsDir; config.expressionsDir = dir;
+    try {
+      const photos = buildExpressionIndex().photos;
+      expect(photos.filter(p => p.motionPhoto).map(p => p.path)).toEqual(['Joy/Joy_001.jpg']);
+      expect(fs.readFileSync(path.join(dir, 'Joy/Joy_001.txt'), 'utf8')).toBe('Joy, 80%, CONFIRMED\n# Motion: Yes\n');
+      expect(fs.readFileSync(path.join(dir, 'Joy/Joy_002.txt'), 'utf8')).toBe('Joy, 70%, CONFIRMED\n# Motion: No\n');
+      expect(fs.existsSync(path.join(dir, 'Joy/Joy_003.txt'))).toBe(false);
+      // The saved answer wins over the photo from now on, so the photo is not opened again.
+      fs.writeFileSync(path.join(dir, 'Joy/Joy_002.txt'), 'Joy, 70%, CONFIRMED\n# Motion: Yes\n');
+      expect(buildExpressionIndex().photos.find(p => p.path === 'Joy/Joy_002.jpg')?.motionPhoto).toBe(true);
+    } finally { config.expressionsDir = saved; removeTree(dir); }
   });
 });
