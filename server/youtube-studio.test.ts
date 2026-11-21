@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { chromePath, studioUrl } from './youtube-studio';
+import { chromePath, studioArgs, studioUrl } from './youtube-studio';
 
 describe('opening YouTube Studio', () => {
   it('builds only Studio URLs and rejects invalid video IDs', () => {
@@ -13,5 +13,11 @@ describe('opening YouTube Studio', () => {
     const expected = path.join('C:\\Users\\Test\\AppData\\Local', 'Google', 'Chrome', 'Application', 'chrome.exe');
     expect(chromePath({ PROGRAMFILES: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\Test\\AppData\\Local' }, (p) => p === expected)).toBe(expected);
     expect(() => chromePath({}, () => false)).toThrow(/could not be found/);
+  });
+  it('opens Studio in its own persistent Chrome profile', () => {
+    expect(studioArgs('Abc_123-xyz', { LOCALAPPDATA: 'C:\\Users\\Test\\AppData\\Local' })).toEqual([
+      `--user-data-dir=${path.join('C:\\Users\\Test\\AppData\\Local', 'HeartQuarters', 'YouTube Studio Chrome')}`,
+      'https://studio.youtube.com/video/Abc_123-xyz/edit',
+    ]);
   });
 });

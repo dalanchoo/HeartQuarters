@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 /** Only YouTube Studio destinations are accepted; callers cannot supply a URL. */
@@ -16,11 +17,16 @@ export function chromePath(env: NodeJS.ProcessEnv = process.env, exists = fs.exi
   return executable;
 }
 
+export function studioArgs(videoId: unknown, env: NodeJS.ProcessEnv = process.env): string[] {
+  const profile = path.join(env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'HeartQuarters', 'YouTube Studio Chrome');
+  return [`--user-data-dir=${profile}`, studioUrl(videoId)];
+}
+
 export function openYouTubeStudio(videoId: unknown): Promise<void> {
-  const url = studioUrl(videoId);
+  const args = studioArgs(videoId);
   const executable = chromePath();
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, [url], { detached: true, stdio: 'ignore', windowsHide: true });
+    const child = spawn(executable, args, { detached: true, stdio: 'ignore', windowsHide: true });
     child.once('error', () => reject(new Error('Chrome could not be opened. Please open YouTube Studio in Chrome yourself.')));
     child.once('spawn', () => { child.unref(); resolve(); });
   });
