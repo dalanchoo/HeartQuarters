@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
-import type { IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
+import type { IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
 // Raw brain dumps stay in Raw; once turned into a clear idea they move to Processed.
@@ -14,6 +14,7 @@ export const STATUS_LABELS: Record<IdeaStatus, string> = {
   dropped: 'Dropped',
 };
 const FINISHED: IdeaStatus[] = ['made', 'dropped'];
+export const CATEGORY_LABELS: Record<IdeaCategory, string> = { unassigned: 'Unassigned', sdam: 'SDAM', aphantasia: 'Aphantasia', psychedelics: 'Psychedelics' };
 export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided', longform: 'Longform', short: 'Short' };
 
 export function IdeasPage() {
@@ -110,13 +111,16 @@ function IdeaCard({ idea, busy, send, first, last }: {
     <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
-        <span className="muted small-text">{FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}</span>
+        <span className="muted small-text">{CATEGORY_LABELS[idea.category]} · {FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}</span>
       </summary>
       <div className="idea-body">
         <input className="idea-title-input" type="text" value={title} maxLength={300} aria-label="Title" onChange={(e) => setTitle(e.target.value)} />
         <div className="idea-fields">
           <select aria-label="Status" value={idea.status} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, status: e.target.value })}>
             {Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </select>
+          <select aria-label="Category" value={idea.category} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, category: e.target.value })}>
+            {Object.entries(CATEGORY_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
           <select aria-label="Format" value={idea.format} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, format: e.target.value })}>
             {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}

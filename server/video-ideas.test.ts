@@ -46,6 +46,15 @@ describe('video ideas', () => {
     expect(readIdeas()[0].format).toBe('undecided');
   });
 
+  it('sets a category; new and older ideas are Unassigned', () => {
+    const [idea] = addIdea('Topic');
+    expect(idea.category).toBe('unassigned');
+    expect(updateIdea(idea.id, { category: 'aphantasia' })[0].category).toBe('aphantasia');
+    expect(() => updateIdea(idea.id, { category: 'cooking' })).toThrow('valid category');
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, category: undefined }] }));
+    expect(readIdeas()[0].category).toBe('unassigned');
+  });
+
   it('marks ideas processed or unprocessed; older ideas are unprocessed', () => {
     const [idea] = addIdea('Raw dump');
     expect(idea.processed).toBe(false);
