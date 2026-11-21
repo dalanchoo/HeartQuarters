@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { openInExplorer, postJson, thumbUrl, type ExpressionPhoto } from './api';
 import { isAiExpression, isMotionExpression } from '../../server/expression-origin';
+import type { Rating } from './expressionRating';
+import { PhotoMarks } from './PhotoMarks';
 
-export function ExpressionInbox({ photos, onView, onRefresh }: { photos: ExpressionPhoto[]; onView: (photo: ExpressionPhoto) => void; onRefresh: () => void }) {
+export function ExpressionInbox({ photos, onView, onRefresh, onRate }: { photos: ExpressionPhoto[]; onView: (photo: ExpressionPhoto) => void; onRefresh: () => void; onRate: (photo: ExpressionPhoto, rating: Rating | null) => Promise<void> }) {
   const [ai, setAi] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   const run = async (fn: () => Promise<void>) => { setBusy(true); setMessage(''); try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const upload = (files: File[]) => void run(async () => {
@@ -30,6 +32,8 @@ export function ExpressionInbox({ photos, onView, onRefresh }: { photos: Express
     <div className="photo-grid">{photos.map(photo => {
       return <article className="expression-photo-choice" key={photo.path}>
         <button className="photo" onClick={() => onView(photo)}><img src={thumbUrl('expressions', photo.path, 360, photo.revision)} alt={photo.name} loading="lazy" /><span className="expression-inbox-caption"><span className="expression-inbox-name">{photo.name}</span><span className="expression-inbox-origin">{isAiExpression(photo) ? 'AI Image' : 'Not Marked as AI'}{isMotionExpression(photo) ? ' · Motion Image' : ''}</span></span></button>
+        {/* Inbox photos can be rated; Star and Reference Photo come once a photo is filed in the library. */}
+        <PhotoMarks small rating={photo.rating} onRate={rating => { onRate(photo, rating).catch((error: unknown) => setMessage(`The rating could not be saved: ${error instanceof Error ? error.message : String(error)}`)); }} />
         <div className="expression-inbox-actions">
         <button disabled={busy} onClick={() => { if (!window.confirm(`Move ${photo.name} and its sidecars to HeartQuarters Trash?`)) return; void run(async () => { await postJson('/api/expressions/inbox/trash', { photo: photo.path }); setMessage(`${photo.name} moved to HeartQuarters Trash.`); onRefresh(); }); }}>Move to Trash</button>
         <a className="button-link" href="https://www.photopea.com/" target="_blank" rel="noopener noreferrer" aria-disabled={busy} onClick={e => { if (busy) { e.preventDefault(); return; } void run(async () => { const copy = await postJson<{ path: string }>('/api/expressions/inbox/photopea-copy', { photo: photo.path }); setMessage(`Created ${copy.path}. Drag the selected file from File Explorer into Photopea.`); onRefresh(); }); }}>Prepare Copy for Photopea</a>

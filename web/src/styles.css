@@ -1010,3 +1010,4 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .expression-photo-choice > .photo-marks { margin-top: 0.35rem; }
 .photo-mark-filter-field { display: flex; flex-direction: column; gap: .25rem; }
 .generation-photo-actions { align-items: center; }
+.expression-inbox .expression-photo-choice > .photo-marks { margin: .4rem 0 .1rem; }
