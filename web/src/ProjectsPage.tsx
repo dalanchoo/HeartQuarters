@@ -72,13 +72,19 @@ function matchesFilter(item: VideoOverview, checks: Record<string, YoutubeChecks
  * Can Clean Up: Clean Up has files for this piece (for a longform, also Make Shorts' plan and graphs). Clean Up Blocked:
  * a CapCut project of the video links to a file that isn't there, so nothing can be listed until it's fixed.
  */
-function CleanupBadge({ item }: { item: VideoOverview }) {
-  const { cleanup } = useContext(StatusContext);
+function cleanupParts(item: VideoOverview, cleanup: CleanupStatus['pieces']): [string, NonNullable<CleanupStatus['pieces'][string]>][] {
   const parts: [string, NonNullable<CleanupStatus['pieces'][string]>][] = [];
   const own = cleanup[item.path];
   if (own) parts.push([item.kind === 'longform' ? 'Longform' : 'This Short', own]);
   const plan = item.kind === 'longform' ? cleanup[`${item.projectId}/Shorts`] : undefined;
   if (plan) parts.push(['Make Shorts', plan]);
+  return parts;
+}
+/** Whether CleanupBadge shows anything: missing links, or files Clean Up would move. */
+const hasCleanup = (parts: ReturnType<typeof cleanupParts>) => parts.some(([, p]) => p.missing > 0 || p.files > 0);
+function CleanupBadge({ item }: { item: VideoOverview }) {
+  const { cleanup } = useContext(StatusContext);
+  const parts = cleanupParts(item, cleanup);
   const missing = Math.max(0, ...parts.map(([, p]) => p.missing));
   if (missing) return <span className="status-pill status-review" title={`The CapCut projects have ${missing} missing ${missing === 1 ? 'link' : 'links'}. Fix ${missing === 1 ? 'it' : 'them'} in CapCut before cleaning up.`}>Clean Up Blocked</span>;
   const withFiles = parts.filter(([, p]) => p.files > 0);
@@ -93,18 +99,22 @@ function StatsPill({ stats }: { stats: NonNullable<VideoOverview['stats']> }) {
     stats.ctrPercent === null ? null : `${stats.ctrPercent.toFixed(1)}% CTR`].filter(Boolean);
   if (!parts.length) return null;
   const when = stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : stats.snapshot;
-  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Download Video Stats in Analysis to update.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
+  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Update Stats in the YouTube section to refresh.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
+  const { cleanup } = useContext(StatusContext);
   if (!item) return null;
-  // The steps bar shows CapCut, Exported, Packaged and Uploaded; the pills after it are things to look at.
-  return <span className="status-badges"><VideoSteps item={item} />{item.stats && <StatsPill stats={item.stats} />}{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself." aria-label={`On YouTube: ${checks.issues.join(', ')}`}>On <YouTubeIcon />: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>;
+  // First line: the steps bar (CapCut, Exported, Metadata, Thumbnail, Uploaded) and the latest views. Second line, only
+  // when there is something: smaller notes worth a look (missing metadata, problems on YouTube, files to clean up).
+  const notes = [item.metadataMissing.length > 0 && item.metadataMissing.length < 8, item.link === 'unknown', !!checks?.issues.length, !!checks?.unknown.length, hasCleanup(cleanupParts(item, cleanup))].some(Boolean);
+  return <span className="status-badges"><span className="status-main"><VideoSteps item={item} />{item.stats && <StatsPill stats={item.stats} />}</span>{notes && <span className="status-notes">{item.metadataMissing.length > 0 && item.metadataMissing.length < 8 && <span className="status-pill status-review" title="The newest packaging version's YouTube text is missing these. Add them in View and Compare Packaging.">Missing: {item.metadataMissing.join(', ')}</span>}{item.link === 'unknown' && <span className="status-pill status-unknown" title="The saved link status could not be determined.">YT Unknown</span>}{checks && checks.issues.length > 0 && <span className="status-pill status-review" title="Found by Check Linked Videos on YouTube: something to fix on YouTube itself." aria-label={`On YouTube: ${checks.issues.join(', ')}`}>On <YouTubeIcon />: {checks.issues.join(', ')}</span>}{checks && checks.unknown.length > 0 && <span className="status-pill status-unknown" title={`YouTube could not confirm: ${checks.unknown.join('; ')}`}>Check Incomplete</span>}<CleanupBadge item={item} /></span>}</span>;
 }
 function PieceStatus({ path, details = false }: { path: string; details?: boolean }) {
   const { items, checks } = useContext(StatusContext);
   const item = items.find((entry) => entry.path === path); if (!item) return null;
   const checked = checks[path];
-  return <span className="piece-status"><StatusBadges item={item} checks={checked} />{details && <span className="status-explanation">{item.localThumbnail ? 'Local thumbnail found' : 'No local thumbnail in latest version'}{checked ? ` · YouTube: ${checked.issues.length ? checked.issues.join(', ') : 'no checked issues'}${checked.unknown.length ? `; not confirmed: ${checked.unknown.join(', ')}` : ''}` : ' · YouTube details not checked yet'}</span>}</span>;
+  // In the YouTube section (details) the badges are already on the title just above, so only the explanation shows.
+  return <span className="piece-status">{!details && <StatusBadges item={item} checks={checked} />}{details && <span className="status-explanation">{item.localThumbnail ? 'Local thumbnail found' : 'No local thumbnail in latest version'}{checked ? ` · YouTube: ${checked.issues.length ? checked.issues.join(', ') : 'no checked issues'}${checked.unknown.length ? `; not confirmed: ${checked.unknown.join(', ')}` : ''}` : ' · YouTube details not checked yet'}</span>}</span>;
 }
 
 // The selected folder is kept in the address, e.g.

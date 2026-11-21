@@ -15,6 +15,8 @@ export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [tick, setTick] = useState(0);
+  // Update Stats in the YouTube section downloads stats too: show the new download here as well.
+  useEffect(() => { const downloaded = (e: Event) => { if ((e as CustomEvent).detail === piece) { setSelected(''); setTick(n => n + 1); } }; window.addEventListener('hq-video-stats-downloaded', downloaded); return () => window.removeEventListener('hq-video-stats-downloaded', downloaded); }, [piece]);
   useEffect(() => { let active = true; getJson<string[]>(`/api/youtube/analytics/snapshots?piece=${encodeURIComponent(piece)}`).then(list => { if (active) { setSnapshots(list); setSelected(current => list.includes(current) ? current : list[0] ?? ''); } }, (e: Error) => { if (active) setError(e.message); }); return () => { active = false; }; }, [piece, refresh, tick]);
   useEffect(() => {
     if (!selected) { setRuns([]); return; }
@@ -26,7 +28,7 @@ export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string
   const summarize = async (id: string) => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/summarize', { piece, snapshot: selected, id }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
   const running = runs.some(run => run.job?.state === 'working');
   return <details className="yt-section"><summary>Analysis</summary>
-    {piece && <VideoAnalytics key={jobId ?? 'unlinked'} piece={piece} id={jobId} onDownloaded={() => setTick(n => n + 1)} />}
+    {piece && <VideoAnalytics key={jobId ?? 'unlinked'} piece={piece} id={jobId} onDownloaded={() => { setSelected(''); setTick(n => n + 1); }} />}
     {!snapshots.length ? <p>Download stats first.</p> : <><div className="yt-linkbar-row" style={{ marginTop: '0.5rem' }}><select aria-label="Snapshot" value={selected} onChange={e => setSelected(e.target.value)}>{snapshots.map(name => <option key={name}>{name}</option>)}</select>
       <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>Analyze With All Three AIs</button></div>
       <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p>

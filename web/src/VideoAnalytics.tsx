@@ -14,6 +14,7 @@ export function VideoAnalytics({ piece, id, onDownloaded }: { piece: string; id?
     try {
       setResult(await postJson<Result>('/api/youtube/analytics/video', { piece, id }));
       onDownloaded?.();
+      window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece })); // the views on the title
     }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
