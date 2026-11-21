@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
-import type { IdeaStatus, VideoIdea } from '../../server/video-ideas';
+import type { IdeaFormat, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
 // The order is his: the top is what he'd make next.
@@ -13,6 +13,7 @@ export const STATUS_LABELS: Record<IdeaStatus, string> = {
   dropped: 'Dropped',
 };
 const FINISHED: IdeaStatus[] = ['made', 'dropped'];
+export const FORMAT_LABELS: Record<IdeaFormat, string> = { longform: 'Longform', short: 'Short' };
 
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);
@@ -88,11 +89,16 @@ function IdeaCard({ idea, busy, send, first, last }: {
     <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
-        <span className="muted small-text">{STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}</span>
+        <span className="muted small-text">{FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}</span>
       </summary>
       <div className="idea-body">
         <label>Title
           <input type="text" value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label>Format
+          <select value={idea.format} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, format: e.target.value })}>
+            {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </select>
         </label>
         <label>Status
           <select value={idea.status} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, status: e.target.value })}>

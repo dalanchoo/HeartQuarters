@@ -36,6 +36,15 @@ describe('video ideas', () => {
     expect(() => addIdea('')).toThrow('title');
   });
 
+  it('sets an idea as longform or short, and treats older ideas without a format as longform', () => {
+    const [idea] = addIdea('Format test');
+    expect(idea.format).toBe('longform');
+    expect(updateIdea(idea.id, { format: 'short' })[0].format).toBe('short');
+    expect(() => updateIdea(idea.id, { format: 'reel' })).toThrow('longform or short');
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, format: undefined }] }));
+    expect(readIdeas()[0].format).toBe('longform');
+  });
+
   it('moves ideas up and down and deletes one', () => {
     addIdea('C'); addIdea('B'); const [a] = addIdea('A');
     expect(moveIdea(a.id, 1).map(i => i.title)).toEqual(['B', 'A', 'C']);
