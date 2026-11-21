@@ -181,6 +181,9 @@ main { flex: 1; min-height: 0; }
 .video-step.on { background: #1d9e75; border-color: #1d9e75; color: #fff; }
 .video-steps.all-done .video-step.on { background: #3b6d11; border-color: #3b6d11; }
 .status-pill { display: inline-block; border-radius: 5px; padding: 0.1rem 0.35rem; font-size: 0.72rem; font-weight: 700; line-height: 1.3; white-space: nowrap; }
+/* The YouTube icon inside a badge: sized to the badge's small text and centred on it, so the badge keeps its height. */
+.status-pill:has(> .youtube-icon) { display: inline-flex; align-items: center; }
+.status-pill > .youtube-icon { top: 0; width: 1.45em; height: 1.45em; margin: -0.25em 0 -0.25em 0.3em; }
 .status-linked { background: #e0f3e6; color: #21673d; }
 .status-missing, .status-review { background: #fff0d5; color: #865000; }
 .status-unknown { background: #e9edf1; color: #4b5968; }
