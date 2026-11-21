@@ -1076,7 +1076,10 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-ref-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 .idea-ref-new { border-top: 1px dashed var(--line); padding-top: 0.3rem; }
 
-/* Ideas: compact Raw and Processed headers */
-.idea-section { margin-top: 0.5rem; }
-.idea-section > summary { font-size: 0.95rem; margin-bottom: 0.25rem; }
-.idea-section > summary .muted { font-size: 0.85rem; }
+/* Ideas: compact Raw and Processed headers and idea rows */
+.idea-section { margin: 0.3rem 0 0; }
+.idea-section > summary { font-size: 0.9rem; margin: 0; padding: 0.1rem 0; line-height: 1.2; }
+.idea-section > summary .muted { font-size: 0.8rem; }
+.idea-card { padding: 0.1rem 0.5rem; margin-bottom: 0.1rem; }
+.idea-card > summary { font-size: 0.88rem; line-height: 1.2; padding: 0.1rem 0; }
+.idea-card[open] > summary { margin-bottom: 0.3rem; }
