@@ -3,7 +3,7 @@ import { getJson, postJson } from './api';
 import type { IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
-// Raw brain dumps are Unprocessed; once turned into a clear idea they move to Processed.
+// Raw brain dumps stay in Raw; once turned into a clear idea they move to Processed.
 // The order is his: the top is what he'd make next.
 export const STATUS_LABELS: Record<IdeaStatus, string> = {
   thinking: 'Thinking About It',
@@ -69,7 +69,7 @@ export function IdeasPage() {
 
       {ideas && (
         <details className="page-section" open>
-          <summary>Unprocessed <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
+          <summary>Raw <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
           {raw.length ? list(raw) : <p className="muted">Nothing left to process.</p>}
         </details>
       )}
