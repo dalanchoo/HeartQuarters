@@ -1063,7 +1063,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-body { display: flex; flex-direction: column; gap: 0.4rem; padding-bottom: 0.3rem; }
 .idea-title-input { width: 100%; }
 .idea-fields { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.idea-fields select { min-height: 24px; font-size: 0.85rem; padding: 0.05rem 0.5rem; }
+.idea-fields select { min-height: 24px; font-size: 0.85rem; padding: 0.05rem 1.9rem 0.05rem 0.5rem; }
 .idea-body textarea { min-height: 0; font-size: 0.9rem; }
 .idea-actions { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
 .idea-actions .spacer { flex: 1; }
