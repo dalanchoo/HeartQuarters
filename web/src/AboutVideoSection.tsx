@@ -27,7 +27,7 @@ export function AboutVideoSection({ piece }: { piece: string }) {
     catch (e) { setError((e as Error).message); }
   };
 
-  const confirm = () => { if (profile) void save({ ...profile }); };
+  const confirm = () => { if (profile) void save({ ...profile, suggested: false }); };
   const summary = profile && [profile.suggested && 'guess', pairLabel(profile.topic, profile.topic2, TOPIC_LABELS), pairLabel(profile.angle, profile.angle2, ANGLE_LABELS)].filter(Boolean).join(' · ');
   return (
     <details className="yt-section">

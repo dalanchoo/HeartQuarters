@@ -71,7 +71,10 @@ export function suggestVideoProfile(piece: unknown, value: unknown, replaceSaved
   return true;
 }
 
-/** Save a profile. `keepSuggested` is for importing guesses; saves from the screens leave it off, which confirms the values. */
+/**
+ * Save a profile. `suggested` in the value is kept only when `keepSuggested` is true; without it the profile is saved as confirmed.
+ * The screens send the video's current `suggested` with an edit (so changing one dropdown confirms nothing) and `suggested: false` with Confirm.
+ */
 export function saveVideoProfile(piece: unknown, value: unknown, keepSuggested = false): VideoProfile {
   const given = (value ?? {}) as Partial<VideoProfile>;
   if (!TOPICS.includes(given.topic as Topic)) throw new Error('Choose a valid topic.');

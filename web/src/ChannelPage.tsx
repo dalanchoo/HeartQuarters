@@ -17,7 +17,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'subscribersGained', label: 'Subs Gained' },
 ];
 
-type ProfileChanges = Partial<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>;
+type ProfileChanges = Partial<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note' | 'suggested'>>;
 
 /** A main choice with a smaller second choice under it (the second reads "None" when empty). Both save straight away. */
 function PairCell<T extends string>({ video, labels, main, second, save }: { video: ChannelVideo; labels: Record<T, string>; main: 'topic' | 'angle'; second: 'topic2' | 'angle2'; save: (changes: ProfileChanges) => void }) {
@@ -57,6 +57,7 @@ export function ChannelPage() {
   const [topic, setTopic] = useState<'all' | Topic>('all');
   const [angle, setAngle] = useState<'all' | Angle>('all');
   const [unconfirmedOnly, setUnconfirmedOnly] = useState(false);
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set()); // edited or confirmed while Needs Confirming is ticked
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
 
@@ -72,8 +73,9 @@ export function ChannelPage() {
   const saveProfile = async (video: ChannelVideo, changes: ProfileChanges) => {
     setError(null);
     try {
-      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, topic2: video.topic2, angle: video.angle, angle2: video.angle2, note: video.note, ...changes });
+      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, topic2: video.topic2, angle: video.angle, angle2: video.angle2, note: video.note, suggested: video.suggested, ...changes });
       setData((d) => d && { ...d, videos: d.videos.map((v) => (v.id === video.id ? { ...v, ...saved } : v)) });
+      setTouched((t) => new Set(t).add(video.id));
     } catch (e) { setError((e as Error).message); }
   };
   const sortBy = (next: SortKey) => {
@@ -81,7 +83,7 @@ export function ChannelPage() {
     else { setKey(next); setDescending(next !== 'title'); }
   };
 
-  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, unconfirmedOnly }, key, descending) : [];
+  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, unconfirmedOnly, keep: touched }, key, descending) : [];
   const guesses = data?.videos.filter((v) => v.suggested).length ?? 0;
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
 
@@ -121,7 +123,7 @@ export function ChannelPage() {
             </label>
             <label className="idea-check">
               <span>Guesses</span>
-              <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => setUnconfirmedOnly(e.target.checked)} /> Needs Confirming ({guesses})</span>
+              <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => { setUnconfirmedOnly(e.target.checked); setTouched(new Set()); }} /> Needs Confirming ({guesses})</span>
             </label>
             <label className="idea-filter-text">Project, Title or Note
               <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => setText(e.target.value)} />
@@ -160,7 +162,7 @@ export function ChannelPage() {
                   <td><PairCell video={v} labels={TOPIC_LABELS} main="topic" second="topic2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><PairCell video={v} labels={ANGLE_LABELS} main="angle" second="angle2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
-                  <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, {})}>Confirm</button>}</td>
+                  <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, { suggested: false })}>Confirm</button>}</td>
                 </tr>
               ))}
             </tbody>

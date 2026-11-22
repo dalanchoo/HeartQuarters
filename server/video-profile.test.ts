@@ -92,3 +92,11 @@ it('a profile with no readable save time is never replaced by a cutoff', () => {
   expect(suggestVideoProfile(PIECE, { topic: 'kink', angle: 'wisdom', note: '', suggested: true }, '2099-01-01T00:00:00.000Z')).toBe(false);
   expect(readVideoProfile(PIECE).note).toBe('mine');
 });
+
+it('an edit that carries suggested keeps the profile a guess; only a save saying confirmed (or saying nothing) confirms it', () => {
+  suggestVideoProfile(PIECE, { topic: 'emotions', angle: 'story', note: '', suggested: true });
+  expect(saveVideoProfile(PIECE, { topic: 'healing', angle: 'story', note: '', suggested: true }, true).suggested).toBe(true);
+  expect(readVideoProfile(PIECE)).toMatchObject({ topic: 'healing', suggested: true });
+  expect(saveVideoProfile(PIECE, { topic: 'healing', angle: 'story', note: '', suggested: false }, true).suggested).toBe(false);
+  expect(saveVideoProfile(PIECE, { topic: 'healing', angle: 'story', note: '' }, true).suggested).toBe(false);
+});

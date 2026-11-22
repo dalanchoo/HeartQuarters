@@ -29,6 +29,13 @@ it('can show only the guesses still waiting to be confirmed', () => {
   expect(channelRows(guessed, { ...all, unconfirmedOnly: true }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
 });
 
+it('keeps a video you just confirmed in the Needs Confirming list until the list is asked for again', () => {
+  const guessed = [{ ...videos[0], suggested: true }, { ...videos[1], suggested: true }];
+  const confirmedA = [{ ...guessed[0], suggested: false }, guessed[1]];
+  expect(channelRows(confirmedA, { ...all, unconfirmedOnly: true }, 'publishedAt', true).map((v) => v.id)).toEqual(['b']);
+  expect(channelRows(confirmedA, { ...all, unconfirmedOnly: true, keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['b', 'a']);
+});
+
 it('sorts by date and by a number, high to low or low to high', () => {
   expect(channelRows(videos, all, 'publishedAt', true).map((v) => v.id)).toEqual(['d', 'c', 'b', 'a']);
   expect(channelRows(videos, all, 'views', true).map((v) => v.id)).toEqual(['b', 'd', 'a', 'c']);

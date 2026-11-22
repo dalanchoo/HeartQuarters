@@ -102,7 +102,7 @@ app.get('/api/channel/videos', handle((_req, res) => { res.json(readChannelVideo
 app.post('/api/youtube/captions/save', handle((req, res) => { res.json(saveYoutubeCaptions(req.body?.piece, req.body?.text)); }));
 app.get('/api/video-profile', handle((req, res) => { res.json(readVideoProfile(String(req.query.piece ?? ''))); }));
 app.post('/api/video-profile/suggest', handle((req, res) => { res.json({ saved: suggestVideoProfile(req.body?.piece, req.body, req.body?.replaceSavedBefore) }); }));
-app.post('/api/video-profile', handle((req, res) => { res.json(saveVideoProfile(req.body?.piece, req.body)); }));
+app.post('/api/video-profile', handle((req, res) => { res.json(saveVideoProfile(req.body?.piece, req.body, true)); }));
 app.post('/api/channel/videos/refresh', (_req, res) => {
   refreshChannelVideos().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
