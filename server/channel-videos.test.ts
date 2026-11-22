@@ -5,6 +5,7 @@ import { makeTree, removeTree } from './testing.js';
 
 vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
 vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }) }));
+vi.mock('./video-profile.js', () => ({ readVideoProfile: () => ({ topic: 'unassigned', angle: 'unassigned', note: '' }) }));
 let links = new Map<string, { piece: string; kind?: 'longform' | 'short' }>();
 vi.mock('./video-links.js', () => ({ videoLinks: () => links }));
 import { mergeChannelVideos, parseDuration, readChannelVideos, refreshChannelVideos } from './channel-videos.js';

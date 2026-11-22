@@ -70,6 +70,7 @@ import { downloadChannelAnalytics } from './channel-analytics.js';
 import { syncLinkFiles } from './link-sync.js';
 import { migrateReferenceFiles } from './expression-references.js';
 import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
+import { readVideoProfile, saveVideoProfile } from './video-profile.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
@@ -97,6 +98,8 @@ app.post('/api/youtube/analytics/channel', (_req, res) => {
   downloadChannelAnalytics().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.get('/api/channel/videos', handle((_req, res) => { res.json(readChannelVideos()); }));
+app.get('/api/video-profile', handle((req, res) => { res.json(readVideoProfile(String(req.query.piece ?? ''))); }));
+app.post('/api/video-profile', handle((req, res) => { res.json(saveVideoProfile(req.body?.piece, req.body)); }));
 app.post('/api/channel/videos/refresh', (_req, res) => {
   refreshChannelVideos().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });

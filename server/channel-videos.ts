@@ -6,6 +6,7 @@ import { appDir } from './config.js';
 import { pacificDate } from './analytics.js';
 import { youtubeAccessToken } from './youtube-auth.js';
 import { recordAnalyticsUse, youtubeFetch } from './youtube-quota.js';
+import { readVideoProfile, type VideoProfile } from './video-profile.js';
 import { videoLinks, type VideoLink } from './video-links.js';
 import { youtubeChannel } from './youtube.js';
 
@@ -24,6 +25,10 @@ export interface ChannelVideo {
   piece: string | null;
   /** Null when YouTube Analytics has no numbers for this video yet. */
   numbers: VideoNumbers | null;
+  /** John's own Topic, Angle and note, from About This Video.json in the piece folder. Empty when not linked. */
+  topic: VideoProfile['topic'];
+  angle: VideoProfile['angle'];
+  note: string;
 }
 export interface ChannelVideoList { channel: { id: string; title: string }; updatedAt: string; videos: ChannelVideo[] }
 
@@ -89,9 +94,9 @@ async function videoNumbers(token: string, ids: string[], now: Date): Promise<Ma
 }
 
 /** Work out a video's kind and project folder from the current links. */
-function resolveLink(v: ChannelVideo | (Detail & { numbers: VideoNumbers | null }), link: VideoLink | undefined): ChannelVideo {
+function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers'>, link: VideoLink | undefined): ChannelVideo {
   const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
-  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null };
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, angle: 'unassigned' as const, note: '' }) };
 }
 
 export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {

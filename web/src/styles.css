@@ -1097,3 +1097,10 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .channel-table th.num, .channel-table td.num { text-align: right; white-space: nowrap; }
 .channel-table th button.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; color: inherit; }
 .channel-table td.title { max-width: 28rem; }
+.channel-table select { min-height: 22px; font-size: 0.8rem; padding: 0 1.4rem 0 0.3rem; }
+.channel-table .channel-note { width: 14rem; font-size: 0.8rem; padding: 0.1rem 0.3rem; }
+.about-video { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-start; padding: 0.2rem 0 0.3rem; }
+.about-video > label { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.85rem; color: var(--muted); }
+.about-video select { min-height: 24px; font-size: 0.85rem; }
+.about-video .about-note { flex: 1; min-width: 16rem; }
+.about-video textarea { min-height: 0; font-size: 0.9rem; }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
-import type { ChannelVideoList } from '../../server/channel-videos';
+import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
+import type { Angle, Topic } from '../../server/video-profile';
+import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelRows, formatMinutes, type KindFilter, type SortKey } from './channelRows';
 
-// The Channel tab: every video on the YouTube channel with its lifetime numbers. Read-only for now.
-// The list is a saved copy; Refresh asks YouTube again.
+// The Channel tab: every video on the YouTube channel with its lifetime numbers, plus John's own Topic, Angle and note
+// for each video (the same record as About This Video in Video Projects, saved in that video's Drive folder). The list is a saved copy; Refresh asks YouTube again.
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'title', label: 'Title' },
   { key: 'publishedAt', label: 'Published' },
@@ -15,12 +17,26 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'subscribersGained', label: 'Subs Gained' },
 ];
 
+/** The note box for one video: saved when you leave it or press Enter. */
+function NoteBox({ video, save }: { video: ChannelVideo; save: (note: string) => void }) {
+  const [text, setText] = useState(video.note);
+  useEffect(() => setText(video.note), [video.note]);
+  return (
+    <input type="text" className="channel-note" value={text} maxLength={2000} disabled={!video.piece} placeholder={video.piece ? 'Add a note' : 'Link it first'}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => { if (text.trim() !== video.note) save(text); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+  );
+}
+
 export function ChannelPage() {
   const [data, setData] = useState<ChannelVideoList | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState<KindFilter>('all');
   const [text, setText] = useState('');
+  const [topic, setTopic] = useState<'all' | Topic>('all');
+  const [angle, setAngle] = useState<'all' | Angle>('all');
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
 
@@ -32,12 +48,20 @@ export function ChannelPage() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
+  /** Save one video's topic and note in its Drive folder, then show what the engine saved. */
+  const saveProfile = async (video: ChannelVideo, changes: Partial<Pick<ChannelVideo, 'topic' | 'angle' | 'note'>>) => {
+    setError(null);
+    try {
+      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'angle' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, angle: video.angle, note: video.note, ...changes });
+      setData((d) => d && { ...d, videos: d.videos.map((v) => (v.id === video.id ? { ...v, ...saved } : v)) });
+    } catch (e) { setError((e as Error).message); }
+  };
   const sortBy = (next: SortKey) => {
     if (next === key) setDescending(!descending);
     else { setKey(next); setDescending(next !== 'title'); }
   };
 
-  const rows = data ? channelRows(data.videos, kind, text, key, descending) : [];
+  const rows = data ? channelRows(data.videos, { kind, topic, angle, text }, key, descending) : [];
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
 
   return (
@@ -52,7 +76,7 @@ export function ChannelPage() {
         <>
           <p className="muted">
             {data.channel.title}: {count('longform')} longform, {count('short')} Shorts. Updated {new Date(data.updatedAt).toLocaleString()}.
-            Lifetime numbers; “–” means YouTube has none yet. Kinds marked “?” are guessed from length.
+            Lifetime numbers; “–” means YouTube has none yet. Kinds marked “?” are guessed from length. Topics and notes are saved in each video's Drive folder.
           </p>
           <div className="idea-filters">
             <label>Kind
@@ -62,8 +86,20 @@ export function ChannelPage() {
                 <option value="short">Shorts</option>
               </select>
             </label>
-            <label className="idea-filter-text">Title
-              <input type="search" value={text} placeholder="Search titles" onChange={(e) => setText(e.target.value)} />
+            <label>Topic
+              <select value={topic} onChange={(e) => setTopic(e.target.value as 'all' | Topic)}>
+                <option value="all">All Topics</option>
+                {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
+            <label>Angle
+              <select value={angle} onChange={(e) => setAngle(e.target.value as 'all' | Angle)}>
+                <option value="all">All Angles</option>
+                {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
+            <label className="idea-filter-text">Title or Note
+              <input type="search" value={text} placeholder="Search titles and notes" onChange={(e) => setText(e.target.value)} />
             </label>
           </div>
           <table className="channel-table">
@@ -75,6 +111,9 @@ export function ChannelPage() {
                     <button type="button" className="link" onClick={() => sortBy(c.key)}>{c.label}{c.key === key ? (descending ? ' ▼' : ' ▲') : ''}</button>
                   </th>
                 ))}
+                <th>Topic</th>
+                <th>Angle</th>
+                <th>Note</th>
                 <th>Project</th>
               </tr>
             </thead>
@@ -89,6 +128,17 @@ export function ChannelPage() {
                   <td className="num">{v.numbers ? `${v.numbers.averageViewPercentage.toFixed(1)}%` : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.likes.toLocaleString() : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.subscribersGained.toLocaleString() : '–'}</td>
+                  <td>
+                    <select value={v.topic} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { topic: e.target.value as Topic })}>
+                      {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={v.angle} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { angle: e.target.value as Angle })}>
+                      {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                  </td>
+                  <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
                   <td className="muted">{v.piece ?? 'Not Linked'}</td>
                 </tr>
               ))}

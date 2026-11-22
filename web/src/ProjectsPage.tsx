@@ -15,6 +15,7 @@ import {
 import { ManageButtons } from './ManageFolder';
 import { CleanUp } from './CleanUp';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
+import { AboutVideoSection } from './AboutVideoSection';
 import { ScriptSection } from './ScriptSection';
 import { ShortsPlanCard } from './ShortsPlan';
 import { VideoSteps } from './VideoSteps';
@@ -824,9 +825,9 @@ function PieceCard({
     setDocsLoads((n) => n + 1);
     onChanged?.();
   };
-  // Every card has 9 collapsible sections, top to bottom:
-  // 1. YouTube, 2. Script, 3. Versions (open by default), 4. Generate Video, 5. Generate Packaging,
-  // 6. View and Compare Packaging, 7. Analysis, 8. Other Platforms, 9. Clean Up.
+  // Every card has 10 collapsible sections, top to bottom:
+  // 1. YouTube, 2. About This Video, 3. Script, 4. Versions (open by default), 5. Generate Video, 6. Generate Packaging,
+  // 7. View and Compare Packaging, 8. Analysis, 9. Other Platforms, 10. Clean Up.
   const contents = (
     <>
       {piece.kind !== 'reel' && !piece.exports.length && <ExportFirst piece={piece} draft={draft ?? piece.name} />}
@@ -837,6 +838,7 @@ function PieceCard({
           <YouTubeLinkBar piece={piece} link={link} />
         </details>
       )}
+      {piece.kind !== 'reel' && <AboutVideoSection key={`about-${piece.path}`} piece={piece.path} />}
       {piece.kind !== 'reel' && <ScriptSection key={`script-${piece.path}`} piece={piece.path} onSaved={reloadDocs} />}
 
       <details className="yt-section" open>
