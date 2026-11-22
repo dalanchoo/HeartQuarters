@@ -404,6 +404,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const [staged, setStaged] = useState<RowKey[]>([]);
   const [fromYoutube, setFromYoutube] = useState<SyncField[]>([]);
   const [youtubeThumbnail, setYoutubeThumbnail] = useState(false);
+  const [youtubeCaptions, setYoutubeCaptions] = useState(false);
   const localBaseline = useRef<string | null>(null);
   const [privacy, setPrivacy] = useState<YoutubeVideoSettings['privacy']>('private');
   const [playlists, setPlaylists] = useState<string[]>([]);
@@ -439,15 +440,15 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
     if (link.reloads === seenReloads.current) return;
     seenReloads.current = link.reloads;
     if (!data) return;
-    if ((staged.length || fromYoutube.length || youtubeThumbnail) && !window.confirm('Reloading from YouTube clears the selected YouTube changes. Continue?')) return;
-    setFromYoutube([]); setYoutubeThumbnail(false); localBaseline.current = null;
+    if ((staged.length || fromYoutube.length || youtubeThumbnail || youtubeCaptions) && !window.confirm('Reloading from YouTube clears the selected YouTube changes. Continue?')) return;
+    setFromYoutube([]); setYoutubeThumbnail(false); setYoutubeCaptions(false); localBaseline.current = null;
     void load(true);
   }, [link.reloads]);
 
   const fields = doc.fields ?? [];
   const text = doc.text ?? '';
   const online = data ? youtubeValues(data.video) : null;
-  const stage = (key: RowKey) => { setStaged((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key])); if (isSync(key)) setFromYoutube(items => items.filter(item => item !== key)); if (key === 'Thumbnail') setYoutubeThumbnail(false); };
+  const stage = (key: RowKey) => { setStaged((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key])); if (isSync(key)) setFromYoutube(items => items.filter(item => item !== key)); if (key === 'Thumbnail') setYoutubeThumbnail(false); if (key === 'Captions') setYoutubeCaptions(false); };
 
   // The local thumbnail: this version's Thumbnail/Thumbnail.png (or .jpg), else its first image.
   const localThumb = covers.find((c) => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name)) ?? covers.find((c) => /\.(png|jpe?g)$/i.test(c.name));
@@ -472,8 +473,18 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
     setBusy(true);
     setError('');
     getJson<typeof ytCaptions>(`/api/youtube/captions?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}`)
-      .then(setYtCaptions, (e: Error) => setError(e.message))
+      .then((captions) => { setYtCaptions(captions); setYoutubeCaptions(false); }, (e: Error) => setError(e.message))
       .finally(() => setBusy(false));
+  };
+  // Copy captions down from YouTube: chosen here like the other rows, done by Apply Changes with the version unlocked.
+  // It writes Subtitles\<number>-captions.srt (as YouTube sent it) and -captions.txt (the words).
+  const saveCaptionsDown = () => { setYoutubeCaptions((value) => !value); setStaged((items) => items.filter((item) => item !== 'Captions')); };
+  /** Reads the Subtitles folder again (after a copy down) and shows the .srt that was written, if any. */
+  const reloadSubtitles = async (select?: string) => {
+    const list = await getJson<FileChoice[]>(`/api/youtube/subtitles?piece=${encodeURIComponent(piece.path)}`);
+    const chosen = select && list.some((s) => s.path === select) ? select : defaultSubtitle(list);
+    setSubtitles(list); setSubtitle(chosen);
+    setLocalCaptions(chosen ? await getText('projects', chosen).catch(() => null) : null);
   };
   const captionsCompared = localCaptions !== null && ytCaptions?.text != null ? compareCaptions(localCaptions, ytCaptions.text) : null;
   // Another caption track in HeartQuarters' language (the copy Studio's Edit Subtitles makes) can show instead of ours.
@@ -560,11 +571,11 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const saveToFile = (field: SyncField) => { if (!canSelectIncomingCopy(draft.changes.some(label => label.toLowerCase() === field.toLowerCase()), fromYoutube.includes(field))) return; if (localBaseline.current === null) localBaseline.current = originalDoc.text; setFromYoutube(items => items.includes(field) ? items.filter(item => item !== field) : [...items, field]); setStaged(items => items.filter(item => item !== field)); };
   const saveThumbnail = () => { setYoutubeThumbnail(value => !value); setStaged(items => items.filter(item => item !== 'Thumbnail')); };
 
-  const dirty = draft.pending || fromYoutube.length > 0 || youtubeThumbnail || pending.length > 0;
+  const dirty = draft.pending || fromYoutube.length > 0 || youtubeThumbnail || youtubeCaptions || pending.length > 0;
   useEffect(() => { onDirty?.(dirty); return () => onDirty?.(false); }, [dirty, onDirty]);
   const applyChanges = async () => {
-    if ((draft.pending || fromYoutube.length || youtubeThumbnail) && originalDoc.locked) return;
-    setBusy(true); setError(''); setMessage(''); let localSaved = false;
+    if ((draft.pending || fromYoutube.length || youtubeThumbnail || youtubeCaptions) && originalDoc.locked) return;
+    setBusy(true); setError(''); setMessage(''); let localSaved = false; let captionsNote = '';
     try {
       if (staged.some(isSync) && (await getText('projects', originalDoc.file.path)) !== originalDoc.text) throw new Error('The local source file changed. Reload and compare it before applying.');
       if (fromYoutube.length || youtubeThumbnail) {
@@ -582,10 +593,18 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         await postJson('/api/youtube/download-thumbnail', { piece: piece.path, id: job.id, version });
         localSaved = true; setYoutubeThumbnail(false); onChanged?.();
       }
+      if (youtubeCaptions) {
+        if (!ytCaptions?.text) throw new Error('Download the YouTube captions first.');
+        const result = await postJson<{ written: { name: string; path: string; replaced: boolean }[] }>('/api/youtube/captions/save', { piece: piece.path, text: ytCaptions.text });
+        localSaved = true; setYoutubeCaptions(false);
+        captionsNote = `Copied the captions from YouTube into Subtitles: ${result.written.map((f) => `${f.name}${f.replaced ? ' (replaced)' : ''}`).join(' and ')}.`;
+        await reloadSubtitles(result.written.find((f) => f.name.endsWith('.srt'))?.path);
+      }
       if (pending.length) {
         const success = await push();
         if (!success && localSaved) setMessage('Local changes were saved. Check the YouTube error above.');
-      } else setMessage('Changes applied to the local version.');
+        else if (captionsNote) setMessage(captionsNote);
+      } else setMessage(captionsNote || 'Changes applied to the local version.');
     } catch (e) { setError(`${localSaved ? 'Some local changes were saved. ' : 'No changes were applied. '}${e instanceof Error ? e.message : String(e)}`); }
     finally { setBusy(false); }
   };
@@ -720,16 +739,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           the same words shown at the same times; copying is offered only when they differ. */}
       <details className="yt-section lvy-captions-section">
         <summary>Captions {captionsCompared && <span className={`comparison-status ${captionsCompared.same ? 'comparison-same' : 'comparison-different'}`}>{captionsCompared.same ? '✓ Same' : `≠ Different (${!captionsCompared.wordsSame && !captionsCompared.timingSame ? 'Words and Timing' : !captionsCompared.wordsSame ? 'Words' : 'Timing'})`}</span>}{staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</summary>
-        <div className="lvy-row-head">
-          {linked && !ytCaptions && (
-            <button className="small" aria-label="Download YouTube Captions" disabled={busy || out} onClick={downloadCaptions}>
-              Download <YouTubeIcon /> Captions
-            </button>
-          )}
-          {linked && !ytCaptions && <span className="muted small-text">about 250 units</span>}
-        </div>
-        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Captions'), false) : null}>
-        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), false), !!(canCompare && ytCaptions && subtitle && !busy && (!captionsCompared || !captionsCompared.same)), false, () => stage('Captions'), () => undefined, false)}
+        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Captions'), youtubeCaptions) : null}>
+        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), youtubeCaptions), !!(canCompare && ytCaptions && subtitle && !busy && (!captionsCompared || !captionsCompared.same)), !!(canCompare && ytCaptions?.text && !busy && !out && !doc.locked && (!captionsCompared || !captionsCompared.same)), () => stage('Captions'), saveCaptionsDown)}
         {columns(
           subtitles.length ? (
             <>
@@ -765,7 +776,17 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
               <p className="muted small-text">YouTube has no captions for this video.</p>
             )
           ) : (
-            <p className="muted small-text">Not downloaded. Use Download YouTube Captions to compare them; until then they aren't pushed.</p>
+            <>
+              <p className="muted small-text">Not downloaded. Download them to compare and to copy them into Subtitles; until then they aren't pushed or copied.</p>
+              {linked && (
+                <p>
+                  <button className="small" aria-label="Download YouTube Captions" disabled={busy || out} onClick={downloadCaptions}>
+                    Download <YouTubeIcon /> Captions
+                  </button>{' '}
+                  <span className="muted small-text">about 250 units</span>
+                </p>
+              )}
+            </>
           ),
           false,
         )}
@@ -808,11 +829,12 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
           {draft.changes.filter(label => !fromYoutube.some(field => field.toLowerCase() === label.toLowerCase())).map(label => <li key={`edit-${label}`}>Save Edited {label} to {versionName ?? 'Local Version'}</li>)}
           {fromYoutube.map(label => <li key={`pull-${label}`}>Copy {label} From YouTube to {versionName ?? 'Local Version'}{draft.changes.some(field => field.toLowerCase() === label.toLowerCase()) ? ' (replaces the edit)' : ''}</li>)}
           {youtubeThumbnail && <li>Copy Thumbnail From YouTube to {versionName ?? 'Local Version'}</li>}
+          {youtubeCaptions && <li>Copy Captions From YouTube to Subtitles (.srt and .txt)</li>}
           {pending.map(p => <li key={`push-${p}`}>Send to YouTube: {p}</li>)}
         </ul></> : <span className="muted small-text">No Changes Selected.</span>}
       </div>
-      <button disabled={busy || !dirty || (!!pending.length && (out || !data || !link.status?.captionAccess)) || (!!(draft.pending || fromYoutube.length || youtubeThumbnail) && !!originalDoc.locked)} onClick={() => void applyChanges()}>Apply Changes</button>{' '}
-      <button disabled={busy || !dirty} onClick={() => { draft.discard(); setFromYoutube([]); setYoutubeThumbnail(false); setStaged([]); localBaseline.current = null; if (data) { setPrivacy(data.video.privacy); setPlaylists(data.selected); } setMessage('Changes discarded.'); }}>Discard Changes</button>{pending.length > 0 && <span className="muted small-text"> {units(pushCost)}</span>}
+      <button disabled={busy || !dirty || (!!pending.length && (out || !data || !link.status?.captionAccess)) || (!!(draft.pending || fromYoutube.length || youtubeThumbnail || youtubeCaptions) && !!originalDoc.locked)} onClick={() => void applyChanges()}>Apply Changes</button>{' '}
+      <button disabled={busy || !dirty} onClick={() => { draft.discard(); setFromYoutube([]); setYoutubeThumbnail(false); setYoutubeCaptions(false); setStaged([]); localBaseline.current = null; if (data) { setPrivacy(data.video.privacy); setPlaylists(data.selected); } setMessage('Changes discarded.'); }}>Discard Changes</button>{pending.length > 0 && <span className="muted small-text"> {units(pushCost)}</span>}
     </div>
   );
 }

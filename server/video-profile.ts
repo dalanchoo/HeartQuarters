@@ -28,7 +28,7 @@ function profileFile(piece: string): string | null {
 }
 
 /** Only a real piece folder of a video project can have a profile, never any other folder in Drive. */
-function requirePiece(piece: unknown): string {
+export function requirePiece(piece: unknown): string {
   if (typeof piece !== 'string' || !listProjectVideos().some(({ video }) => video.pieces.some((p) => p.path === piece))) throw new Error('Choose a video from Video Projects.');
   return piece;
 }
