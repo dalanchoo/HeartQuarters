@@ -736,12 +736,13 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         </CopyDirectionFrame>
       </div>
 
-      {/* Captions: YouTube's are downloaded only when asked; without them, they can't be compared or pushed. Same means
+      {/* Captions: YouTube's are downloaded only when asked (about 250 units). Without them there is nothing to compare, so
+          sending yours is still offered but replaces YouTube's unseen; copying down needs the download. Same means
           the same words shown at the same times; copying is offered only when they differ. */}
       <details className="yt-section lvy-captions-section">
         <summary>Captions {captionsCompared && <span className={`comparison-status ${captionsCompared.same ? 'comparison-same' : 'comparison-different'}`}>{captionsCompared.same ? '✓ Same' : `≠ Different (${!captionsCompared.wordsSame && !captionsCompared.timingSame ? 'Words and Timing' : !captionsCompared.wordsSame ? 'Words' : 'Timing'})`}</span>}{staged.includes('Captions') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</summary>
         <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Captions'), youtubeCaptions) : null}>
-        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), youtubeCaptions), !!(canCompare && ytCaptions && subtitle && !busy && (!captionsCompared || !captionsCompared.same)), !!(canCompare && ytCaptions?.text && !busy && !out && !doc.locked && (!captionsCompared || !captionsCompared.same)), () => stage('Captions'), saveCaptionsDown)}
+        {showCopyActions && shownView === 'diff' && directionControls(youtubeCopyDirection(reverse, staged.includes('Captions'), youtubeCaptions), !!(canCompare && subtitle && !busy && (!captionsCompared || !captionsCompared.same)), !!(canCompare && ytCaptions?.text && !busy && !out && !doc.locked && (!captionsCompared || !captionsCompared.same)), () => stage('Captions'), saveCaptionsDown)}
         {columns(
           subtitles.length ? (
             <>
@@ -778,7 +779,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
             )
           ) : (
             <>
-              <p className="muted small-text">Not downloaded. Download them to compare and to copy them into Subtitles; until then they aren't pushed or copied.</p>
+              <p className="muted small-text">Not downloaded. Download them to see them, compare them, or copy them into Subtitles. You can still send yours without downloading, but it then replaces whatever captions YouTube has without you seeing them.</p>
               {linked && (
                 <p>
                   <button className="small" aria-label="Download YouTube Captions" disabled={busy || out} onClick={downloadCaptions}>
