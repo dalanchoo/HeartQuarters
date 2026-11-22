@@ -12,13 +12,15 @@ export function rowName(v: Pick<ChannelVideo, 'piece' | 'title'>): string {
 export type SortKey = 'publishedAt' | 'title' | 'views' | 'minutesWatched' | 'averageViewPercentage' | 'likes' | 'subscribersGained';
 export type KindFilter = 'all' | 'longform' | 'short';
 
-export interface RowFilters { kind: KindFilter; topic: 'all' | Topic; angle: 'all' | Angle; text: string; unconfirmedOnly?: boolean; /** Videos edited or confirmed this visit: they stay in the Needs Confirming list until it is ticked again, so the row doesn't jump away. */ keep?: ReadonlySet<string> }
+export interface RowFilters { kind: KindFilter; topic: 'all' | Topic; angle: 'all' | Angle; text: string; unconfirmedOnly?: boolean; /** Videos edited or confirmed since the filters last changed: they stay listed whatever the filters say, so the row doesn't jump away. */ keep?: ReadonlySet<string> }
 
 /** Filter by kind, topic, angle and text (folder name, YouTube title or note), then sort. Videos without numbers always go last when sorting by a number. */
 export function channelRows(videos: ChannelVideo[], filters: RowFilters, key: SortKey, descending: boolean): ChannelVideo[] {
   const needle = filters.text.trim().toLocaleLowerCase();
-  const shown = videos.filter((v) => (filters.kind === 'all' || v.kind === filters.kind) && (filters.topic === 'all' || v.topic === filters.topic || v.topic2 === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle || v.angle2 === filters.angle) && (!filters.unconfirmedOnly || v.suggested || !!filters.keep?.has(v.id))
-    && (!needle || `${rowName(v)} ${v.title} ${v.note}`.toLocaleLowerCase().includes(needle)));
+  const matches = (v: ChannelVideo) => (filters.kind === 'all' || v.kind === filters.kind) && (filters.topic === 'all' || v.topic === filters.topic || v.topic2 === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle || v.angle2 === filters.angle) && (!filters.unconfirmedOnly || v.suggested)
+    && (!needle || `${rowName(v)} ${v.title} ${v.note}`.toLocaleLowerCase().includes(needle));
+  // A video you just edited or confirmed stays on screen whatever the filters say, so the row doesn't jump away under you.
+  const shown = videos.filter((v) => matches(v) || !!filters.keep?.has(v.id));
   const sign = descending ? -1 : 1;
   return [...shown].sort((a, b) => {
     if (key === 'publishedAt') return sign * a.publishedAt.localeCompare(b.publishedAt);

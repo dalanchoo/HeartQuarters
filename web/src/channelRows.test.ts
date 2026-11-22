@@ -36,6 +36,14 @@ it('keeps a video you just confirmed in the Needs Confirming list until the list
   expect(channelRows(confirmedA, { ...all, unconfirmedOnly: true, keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['b', 'a']);
 });
 
+it('keeps an edited video on screen even when its new values no longer match the Topic, Angle, Kind or search filters', () => {
+  const edited = [{ ...videos[0], topic: 'relationships' as const, suggested: true }, { ...videos[3], topic: 'sdam' as const }];
+  const filters = { ...all, topic: 'sdam' as const };
+  expect(channelRows(edited, filters, 'publishedAt', true).map((v) => v.id)).toEqual(['d']);
+  expect(channelRows(edited, { ...filters, keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['d', 'a']);
+  expect(channelRows(edited, { ...all, kind: 'short', keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
+});
+
 it('sorts by date and by a number, high to low or low to high', () => {
   expect(channelRows(videos, all, 'publishedAt', true).map((v) => v.id)).toEqual(['d', 'c', 'b', 'a']);
   expect(channelRows(videos, all, 'views', true).map((v) => v.id)).toEqual(['b', 'd', 'a', 'c']);

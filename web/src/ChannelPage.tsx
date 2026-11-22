@@ -103,20 +103,20 @@ export function ChannelPage() {
           </p>
           <div className="idea-filters">
             <label>Kind
-              <select value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
+              <select value={kind} onChange={(e) => { setKind(e.target.value as KindFilter); setTouched(new Set()); }}>
                 <option value="all">All Videos</option>
                 <option value="longform">Longform</option>
                 <option value="short">Shorts</option>
               </select>
             </label>
             <label>Topic
-              <select value={topic} onChange={(e) => setTopic(e.target.value as 'all' | Topic)}>
+              <select value={topic} onChange={(e) => { setTopic(e.target.value as 'all' | Topic); setTouched(new Set()); }}>
                 <option value="all">All Topics</option>
                 {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
             </label>
             <label>Angle
-              <select value={angle} onChange={(e) => setAngle(e.target.value as 'all' | Angle)}>
+              <select value={angle} onChange={(e) => { setAngle(e.target.value as 'all' | Angle); setTouched(new Set()); }}>
                 <option value="all">All Angles</option>
                 {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
@@ -126,7 +126,7 @@ export function ChannelPage() {
               <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => { setUnconfirmedOnly(e.target.checked); setTouched(new Set()); }} /> Needs Confirming ({guesses})</span>
             </label>
             <label className="idea-filter-text">Project, Title or Note
-              <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => setText(e.target.value)} />
+              <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => { setText(e.target.value); setTouched(new Set()); }} />
             </label>
           </div>
           <table className="channel-table">
