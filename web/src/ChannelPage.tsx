@@ -65,7 +65,7 @@ export function ChannelPage() {
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
 
   return (
-    <div className="content wide">
+    <div className="content channel-page">
       <div className="page-head">
         <h1>Channel</h1>
         <button type="button" className="small" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh From YouTube'}</button>
@@ -108,7 +108,7 @@ export function ChannelPage() {
                 <th>Kind</th>
                 {COLUMNS.map((c) => (
                   <th key={c.key} className={c.key === 'title' ? '' : 'num'}>
-                    <button type="button" className="link" onClick={() => sortBy(c.key)}>{c.label}{c.key === key ? (descending ? ' ▼' : ' ▲') : ''}</button>
+                    <button type="button" className="sort" onClick={() => sortBy(c.key)}>{c.label}{c.key === key ? (descending ? ' ▼' : ' ▲') : ''}</button>
                   </th>
                 ))}
                 <th>Topic</th>
@@ -139,7 +139,7 @@ export function ChannelPage() {
                     </select>
                   </td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
-                  <td className="muted">{v.piece ?? 'Not Linked'}</td>
+                  <td className="muted project" title={v.piece ?? ''}>{v.piece ?? 'Not Linked'}</td>
                 </tr>
               ))}
             </tbody>
