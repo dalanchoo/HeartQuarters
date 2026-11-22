@@ -19,6 +19,28 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'subscribersGained', label: 'Subs Gained' },
 ];
 
+export function ChannelTableHead({ sortKey, descending, sortBy }: { sortKey: SortKey; descending: boolean; sortBy: (key: SortKey) => void }) {
+  return (
+    <thead>
+      <tr>
+        <th>Kind</th>
+        {COLUMNS.map(({ key, label }) => {
+          const direction = key === sortKey ? (descending ? 'descending' : 'ascending') : undefined;
+          return (
+            <th key={key} className={key === 'title' ? '' : 'num'} aria-sort={direction}>
+              <button type="button" className="sort" onClick={() => sortBy(key)}>
+                {label}<span className="sort-icon" aria-hidden="true">{direction ? (descending ? '▼' : '▲') : '↕'}</span>
+              </button>
+            </th>
+          );
+        })}
+        <th>Topic</th>
+        <th>Angle</th>
+      </tr>
+    </thead>
+  );
+}
+
 type ProfileChanges = Partial<VideoProfile>;
 
 /** A main choice with a smaller second choice under it (the second reads "None" when empty). Both save straight away. */
@@ -47,6 +69,28 @@ function NoteBox({ video, save }: { video: ChannelVideo; save: (note: string) =>
       onChange={(e) => setText(e.target.value)}
       onBlur={() => { if (text.trim() !== video.note) save(text); }}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+  );
+}
+
+export function ChannelProjectCell({ video, saveNote }: { video: ChannelVideo; saveNote: (note: string) => void }) {
+  const name = rowName(video);
+  return (
+    <td className="title">
+      <div className="channel-project">
+        <div>
+          {video.piece ? <a href={videoProjectsHash(video.piece)} title={`Open in Video Projects. On YouTube: ${video.title}`}>{name}</a> :
+            <span title="Not linked to a project folder yet">{video.title} <span className="muted">(Not Linked)</span></span>}
+          {video.privacy !== 'public' && <span className="muted"> ({video.privacy})</span>}
+          {' '}<a className="yt-link" href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer" title="Opens YouTube in a new tab. Watching there adds to this video's view count.">YouTube ↗</a>
+        </div>
+        <details className="channel-project-details">
+          <summary aria-label={`Details for ${name}`} title="Video Details" />
+          <div className="channel-project-fields">
+            <label>Note <NoteBox video={video} save={saveNote} /></label>
+          </div>
+        </details>
+      </div>
+    </td>
   );
 }
 
@@ -127,28 +171,12 @@ export function ChannelPage() {
             </label>
           </div>
           <table className="channel-table">
-            <thead>
-              <tr>
-                <th>Kind</th>
-                {COLUMNS.map((c) => (
-                  <th key={c.key} className={c.key === 'title' ? '' : 'num'}>
-                    <button type="button" className="sort" onClick={() => sortBy(c.key)}>{c.label}{c.key === key ? (descending ? ' ▼' : ' ▲') : ''}</button>
-                  </th>
-                ))}
-                <th>Topic</th>
-                <th>Angle</th>
-                <th>Note</th>
-              </tr>
-            </thead>
+            <ChannelTableHead sortKey={key} descending={descending} sortBy={sortBy} />
             <tbody>
               {rows.map((v) => (
                 <tr key={v.id}>
                   <td>{v.kind === 'short' ? 'Short' : 'Longform'}{v.kindGuessed ? ' ?' : ''}</td>
-                  <td className="title">
-                    {v.piece ? <a href={videoProjectsHash(v.piece)} title={`Open in Video Projects. On YouTube: ${v.title}`}>{rowName(v)}</a> : <span title="Not linked to a project folder yet">{v.title} <span className="muted">(Not Linked)</span></span>}
-                    {v.privacy !== 'public' && <span className="muted"> ({v.privacy})</span>}
-                    {' '}<a className="yt-link" href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" title="Opens YouTube in a new tab. Watching there adds to this video's view count.">YouTube ↗</a>
-                  </td>
+                  <ChannelProjectCell video={v} saveNote={(note) => void saveProfile(v, { note })} />
                   <td className="num">{v.publishedAt.slice(0, 10)}</td>
                   <td className="num">{v.numbers ? v.numbers.views.toLocaleString() : '–'}</td>
                   <td className="num">{v.traffic?.searchViews?.toLocaleString() ?? '–'}</td>
@@ -159,7 +187,6 @@ export function ChannelPage() {
                   <td className="num">{v.numbers ? v.numbers.subscribersGained.toLocaleString() : '–'}</td>
                   <td><PairCell video={v} labels={TOPIC_LABELS} main="topic" second="topic2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><PairCell video={v} labels={ANGLE_LABELS} main="angle" second="angle2" save={(changes) => void saveProfile(v, changes)} /></td>
-                  <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
                 </tr>
               ))}
             </tbody>
