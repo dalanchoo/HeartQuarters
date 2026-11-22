@@ -68,6 +68,7 @@ import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
 import { downloadChannelAnalytics } from './channel-analytics.js';
 import { syncLinkFiles } from './link-sync.js';
+import { migrateReferenceFiles } from './expression-references.js';
 import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { readScript, saveScript } from './script.js';
@@ -687,6 +688,7 @@ const url = `http://127.0.0.1:${port}`;
 app.listen(port, '127.0.0.1', () => {
   console.log(`HeartQuarters is running at ${url}`);
   console.log('Close this window (or press Ctrl+C) to stop it.');
+  try { const n = migrateReferenceFiles(); if (n) console.log(`Reference photo lists: copied ${n} to Drive.`); } catch (e) { console.log(`Reference photo lists not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
   try {
     const { written, restored } = syncLinkFiles();
     if (written || restored) console.log(`YouTube links: saved ${written} to Drive, restored ${restored} from Drive.`);

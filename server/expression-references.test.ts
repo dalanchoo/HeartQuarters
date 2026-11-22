@@ -22,7 +22,7 @@ describe('expression reference storage', () => {
   it('starts Reference Photos as a copy of the stars once, then keeps the two lists apart', () => {
     saveExpressionReferences(['Neutral/a.jpg', 'Neutral/b.jpg'], true);
     expect(readLikenessReferences()).toEqual(['Neutral/a.jpg', 'Neutral/b.jpg']);
-    expect(fs.existsSync(path.join(tmp, 'data', 'likeness-references.json'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'data', 'Expression Reference Photos.json'))).toBe(true);
     saveLikenessReferences(['Neutral/b.jpg']);
     saveExpressionReferences(['Neutral/a.jpg', 'Neutral/b.jpg', 'Neutral/c.jpg'], false);
     expect(readLikenessReferences()).toEqual(['Neutral/b.jpg']);
