@@ -3,12 +3,12 @@ import { getJson, postJson } from './api';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
 import type { Angle, Topic } from '../../server/video-profile';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
-import { channelRows, formatMinutes, type KindFilter, type SortKey } from './channelRows';
+import { channelRows, formatMinutes, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
 
 // The Channel tab: every video on the YouTube channel with its lifetime numbers, plus John's own Topic, Angle and note
 // for each video (the same record as About This Video in Video Projects, saved in that video's Drive folder). The list is a saved copy; Refresh asks YouTube again.
 const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: 'title', label: 'Title' },
+  { key: 'title', label: 'Project' },
   { key: 'publishedAt', label: 'Published' },
   { key: 'views', label: 'Views' },
   { key: 'minutesWatched', label: 'Watch Time' },
@@ -104,8 +104,8 @@ export function ChannelPage() {
               <span>Guesses</span>
               <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => setUnconfirmedOnly(e.target.checked)} /> Needs Confirming ({guesses})</span>
             </label>
-            <label className="idea-filter-text">Title or Note
-              <input type="search" value={text} placeholder="Search titles and notes" onChange={(e) => setText(e.target.value)} />
+            <label className="idea-filter-text">Project, Title or Note
+              <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => setText(e.target.value)} />
             </label>
           </div>
           <table className="channel-table">
@@ -121,14 +121,17 @@ export function ChannelPage() {
                 <th>Angle</th>
                 <th>Note</th>
                 <th></th>
-                <th>Project</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((v) => (
                 <tr key={v.id}>
                   <td>{v.kind === 'short' ? 'Short' : 'Longform'}{v.kindGuessed ? ' ?' : ''}</td>
-                  <td className="title"><a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer">{v.title}</a>{v.privacy !== 'public' && <span className="muted"> ({v.privacy})</span>}</td>
+                  <td className="title">
+                    {v.piece ? <a href={videoProjectsHash(v.piece)} title={`Open in Video Projects. On YouTube: ${v.title}`}>{rowName(v)}</a> : <span title="Not linked to a project folder yet">{v.title} <span className="muted">(Not Linked)</span></span>}
+                    {v.privacy !== 'public' && <span className="muted"> ({v.privacy})</span>}
+                    {' '}<a className="yt-link" href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" title="Opens YouTube in a new tab. Watching there adds to this video's view count.">YouTube ↗</a>
+                  </td>
                   <td className="num">{v.publishedAt.slice(0, 10)}</td>
                   <td className="num">{v.numbers ? v.numbers.views.toLocaleString() : '–'}</td>
                   <td className="num">{v.numbers ? formatMinutes(v.numbers.minutesWatched) : '–'}</td>
@@ -147,7 +150,6 @@ export function ChannelPage() {
                   </td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
                   <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, {})}>Confirm</button>}</td>
-                  <td className="muted project" title={v.piece ?? ''}>{v.piece ?? 'Not Linked'}</td>
                 </tr>
               ))}
             </tbody>

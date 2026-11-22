@@ -1113,3 +1113,4 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .about-guess { margin: 0.2rem 0; display: flex; gap: 0.5rem; align-items: center; }
 .idea-filters .idea-check { font-size: 0.85rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.15rem; }
 .idea-filters .idea-check input { vertical-align: middle; }
+.channel-table .yt-link { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
