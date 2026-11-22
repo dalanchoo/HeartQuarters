@@ -3,7 +3,7 @@ import type { ChannelVideo } from '../../server/channel-videos';
 import { channelRows, formatMinutes, rowName, videoProjectsHash } from './channelRows';
 
 const video = (id: string, kind: 'longform' | 'short', views: number | null, publishedAt: string, title = `Video ${id}`, topic: ChannelVideo['topic'] = 'unassigned', note = '', angle: ChannelVideo['angle'] = 'unassigned'): ChannelVideo => ({
-  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, topic2: 'unassigned', angle, angle2: 'unassigned', note, suggested: false,
+  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, topic2: 'unassigned', angle, angle2: 'unassigned', note,
   numbers: views === null ? null : { views, minutesWatched: 1, averageViewDuration: 1, averageViewPercentage: 1, likes: 0, subscribersGained: 0 },
 });
 const videos = [video('a', 'longform', 10, '2026-01-01'), video('b', 'short', 50, '2026-02-01'), video('c', 'longform', null, '2026-03-01', 'Aphantasia Story'), video('d', 'longform', 30, '2026-04-01', 'Video d', 'sdam', 'my best video', 'story')];
@@ -24,20 +24,8 @@ it('filters by angle', () => {
   expect(channelRows(videos, { ...all, angle: 'wisdom' }, 'publishedAt', true)).toEqual([]);
 });
 
-it('can show only the guesses still waiting to be confirmed', () => {
-  const guessed = [{ ...videos[0], suggested: true }, videos[1]];
-  expect(channelRows(guessed, { ...all, unconfirmedOnly: true }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
-});
-
-it('keeps a video you just confirmed in the Needs Confirming list until the list is asked for again', () => {
-  const guessed = [{ ...videos[0], suggested: true }, { ...videos[1], suggested: true }];
-  const confirmedA = [{ ...guessed[0], suggested: false }, guessed[1]];
-  expect(channelRows(confirmedA, { ...all, unconfirmedOnly: true }, 'publishedAt', true).map((v) => v.id)).toEqual(['b']);
-  expect(channelRows(confirmedA, { ...all, unconfirmedOnly: true, keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['b', 'a']);
-});
-
 it('keeps an edited video on screen even when its new values no longer match the Topic, Angle, Kind or search filters', () => {
-  const edited = [{ ...videos[0], topic: 'relationships' as const, suggested: true }, { ...videos[3], topic: 'sdam' as const }];
+  const edited = [{ ...videos[0], topic: 'relationships' as const }, { ...videos[3], topic: 'sdam' as const }];
   const filters = { ...all, topic: 'sdam' as const };
   expect(channelRows(edited, filters, 'publishedAt', true).map((v) => v.id)).toEqual(['d']);
   expect(channelRows(edited, { ...filters, keep: new Set(['a']) }, 'publishedAt', true).map((v) => v.id)).toEqual(['d', 'a']);

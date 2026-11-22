@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
-import type { Angle, Topic } from '../../server/video-profile';
+import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelRows, formatMinutes, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
 
@@ -17,7 +17,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'subscribersGained', label: 'Subs Gained' },
 ];
 
-type ProfileChanges = Partial<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note' | 'suggested'>>;
+type ProfileChanges = Partial<VideoProfile>;
 
 /** A main choice with a smaller second choice under it (the second reads "None" when empty). Both save straight away. */
 function PairCell<T extends string>({ video, labels, main, second, save }: { video: ChannelVideo; labels: Record<T, string>; main: 'topic' | 'angle'; second: 'topic2' | 'angle2'; save: (changes: ProfileChanges) => void }) {
@@ -26,10 +26,10 @@ function PairCell<T extends string>({ video, labels, main, second, save }: { vid
   const choose = (field: 'topic' | 'topic2' | 'angle' | 'angle2') => (e: { target: { value: string } }) => save({ [field]: e.target.value } as ProfileChanges);
   return (
     <div className="pair">
-      <select className={video.suggested ? 'guess' : ''} value={video[main]} disabled={off} title={tip} onChange={choose(main)}>
+      <select value={video[main]} disabled={off} title={tip} onChange={choose(main)}>
         {Object.entries<string>(labels).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
       </select>
-      <select className={`second${video.suggested ? ' guess' : ''}`} value={video[second]} disabled={off} title={tip || 'Optional second choice'} onChange={choose(second)}>
+      <select className="second" value={video[second]} disabled={off} title={tip || 'Optional second choice'} onChange={choose(second)}>
         {Object.entries<string>(labels).map(([id, label]) => <option key={id} value={id}>{id === 'unassigned' ? 'None' : label}</option>)}
       </select>
     </div>
@@ -56,8 +56,7 @@ export function ChannelPage() {
   const [text, setText] = useState('');
   const [topic, setTopic] = useState<'all' | Topic>('all');
   const [angle, setAngle] = useState<'all' | Angle>('all');
-  const [unconfirmedOnly, setUnconfirmedOnly] = useState(false);
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set()); // edited or confirmed while Needs Confirming is ticked
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
 
@@ -73,7 +72,7 @@ export function ChannelPage() {
   const saveProfile = async (video: ChannelVideo, changes: ProfileChanges) => {
     setError(null);
     try {
-      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, topic2: video.topic2, angle: video.angle, angle2: video.angle2, note: video.note, suggested: video.suggested, ...changes });
+      const saved = await postJson<VideoProfile>('/api/video-profile', { piece: video.piece, topic: video.topic, topic2: video.topic2, angle: video.angle, angle2: video.angle2, note: video.note, ...changes });
       setData((d) => d && { ...d, videos: d.videos.map((v) => (v.id === video.id ? { ...v, ...saved } : v)) });
       setTouched((t) => new Set(t).add(video.id));
     } catch (e) { setError((e as Error).message); }
@@ -83,8 +82,7 @@ export function ChannelPage() {
     else { setKey(next); setDescending(next !== 'title'); }
   };
 
-  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, unconfirmedOnly, keep: touched }, key, descending) : [];
-  const guesses = data?.videos.filter((v) => v.suggested).length ?? 0;
+  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, keep: touched }, key, descending) : [];
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
 
   return (
@@ -121,10 +119,6 @@ export function ChannelPage() {
                 {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
             </label>
-            <label className="idea-check">
-              <span>Guesses</span>
-              <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => { setUnconfirmedOnly(e.target.checked); setTouched(new Set()); }} /> Needs Confirming ({guesses})</span>
-            </label>
             <label className="idea-filter-text">Project, Title or Note
               <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => { setText(e.target.value); setTouched(new Set()); }} />
             </label>
@@ -141,7 +135,6 @@ export function ChannelPage() {
                 <th>Topic</th>
                 <th>Angle</th>
                 <th>Note</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -162,7 +155,6 @@ export function ChannelPage() {
                   <td><PairCell video={v} labels={TOPIC_LABELS} main="topic" second="topic2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><PairCell video={v} labels={ANGLE_LABELS} main="angle" second="angle2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
-                  <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, { suggested: false })}>Confirm</button>}</td>
                 </tr>
               ))}
             </tbody>

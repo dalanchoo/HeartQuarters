@@ -13,10 +13,9 @@ export const TOPICS = ['unassigned', 'communication', 'sdam', 'aphantasia', 'psy
 export const ANGLES = ['unassigned', 'story', 'wisdom', 'explainer'] as const;
 export type Topic = (typeof TOPICS)[number];
 export type Angle = (typeof ANGLES)[number];
-/** `suggested` is true while Topic and Angle are only a guess waiting for John; any save from the app clears it. */
 /** `topic` and `angle` are the main ones; `topic2` and `angle2` are an optional second one ('unassigned' means none). */
-export interface VideoProfile { topic: Topic; topic2: Topic; angle: Angle; angle2: Angle; note: string; suggested: boolean }
-const EMPTY: VideoProfile = { topic: 'unassigned', topic2: 'unassigned', angle: 'unassigned', angle2: 'unassigned', note: '', suggested: false };
+export interface VideoProfile { topic: Topic; topic2: Topic; angle: Angle; angle2: Angle; note: string }
+const EMPTY: VideoProfile = { topic: 'unassigned', topic2: 'unassigned', angle: 'unassigned', angle2: 'unassigned', note: '' };
 
 /** The profile file for a piece, or null when the piece folder doesn't exist. */
 function profileFile(piece: string): string | null {
@@ -44,38 +43,11 @@ export function readVideoProfile(piece: string): VideoProfile {
       angle: ANGLES.includes(saved.angle as Angle) ? saved.angle as Angle : 'unassigned',
       angle2: ANGLES.includes(saved.angle2 as Angle) ? saved.angle2 as Angle : 'unassigned',
       note: typeof saved.note === 'string' ? saved.note.slice(0, MAX_NOTE) : '',
-      suggested: saved.suggested === true,
     };
   } catch { return EMPTY; } // no file yet, or one we can't read
 }
 
-/** When a profile file was last saved (its updatedAt), or '' if it can't be read. */
-function savedAt(file: string): string {
-  try { const saved = JSON.parse(readText(file)) as { updatedAt?: unknown }; return typeof saved.updatedAt === 'string' ? saved.updatedAt : ''; } catch { return ''; }
-}
-
-/**
- * Save a guess. It may replace an earlier guess, but never anything John saved or confirmed. A caller that knows an earlier
- * import saved values John never saw as guesses can pass `replaceSavedBefore` (an ISO time): a profile saved before that time
- * may then be replaced too. Anything saved at or after it, or with no readable time, is left alone. Returns whether it saved.
- */
-export function suggestVideoProfile(piece: unknown, value: unknown, replaceSavedBefore?: unknown): boolean {
-  const checked = requirePiece(piece);
-  const file = profileFile(checked);
-  if (!file) throw new Error('That video has no folder.');
-  if (fs.existsSync(file) && !readVideoProfile(checked).suggested) {
-    const at = savedAt(file);
-    if (typeof replaceSavedBefore !== 'string' || !at || at >= replaceSavedBefore) return false;
-  }
-  saveVideoProfile(checked, value, true);
-  return true;
-}
-
-/**
- * Save a profile. `suggested` in the value is kept only when `keepSuggested` is true; without it the profile is saved as confirmed.
- * The screens send the video's current `suggested` with an edit (so changing one dropdown confirms nothing) and `suggested: false` with Confirm.
- */
-export function saveVideoProfile(piece: unknown, value: unknown, keepSuggested = false): VideoProfile {
+export function saveVideoProfile(piece: unknown, value: unknown): VideoProfile {
   const given = (value ?? {}) as Partial<VideoProfile>;
   if (!TOPICS.includes(given.topic as Topic)) throw new Error('Choose a valid topic.');
   if (!ANGLES.includes(given.angle as Angle)) throw new Error('Choose a valid angle.');
@@ -92,7 +64,7 @@ export function saveVideoProfile(piece: unknown, value: unknown, keepSuggested =
   const profile: VideoProfile = {
     topic: given.topic as Topic, topic2: topic2 === given.topic ? 'unassigned' : topic2 as Topic,
     angle: given.angle as Angle, angle2: angle2 === given.angle ? 'unassigned' : angle2 as Angle,
-    note: given.note.trim(), suggested: keepSuggested && given.suggested === true,
+    note: given.note.trim(),
   };
   writeFile(file, JSON.stringify({ ...profile, updatedAt: new Date().toISOString() }, null, 2) + '\n');
   return profile;

@@ -105,7 +105,7 @@ Automation levels:
   with its own conversation for John's notes. "Regenerate" moves that short to
   the trash and makes it again from a fresh copy, to try changed instructions.
 - Channel tab (2026-11-21): every video on the channel (30 longform, 209 Shorts) with lifetime numbers, sortable, with filters for
-  Kind, Topic, Angle, text and Needs Confirming. Each name links to that video's card in Video Projects (so checking a video
+  Kind, Topic, Angle and text. Each name links to that video's card in Video Projects (so checking a video
   adds no YouTube view), with a small separate YouTube link. The list is a cache in `data\channel-video-list.json` that Refresh From YouTube
   rebuilds. Code: `server/channel-videos.ts`, `web/src/ChannelPage.tsx`.
 - One shared answer to "which YouTube video is this folder" (`server/video-links.ts`), kept in Drive as `YouTube Link.txt` in each piece's
@@ -115,8 +115,7 @@ Automation levels:
 - About This Video: a section on every video card in Video Projects, and the same record on the Channel tab. A main and a second Topic, a main and
   a second Angle, and a note, saved as `About This Video.json` in the video's folder. Topics: Communication, SDAM, Aphantasia, Psychedelics,
   Emotions, Relationships, Kink, Healing, Meaning. Angles: My Story, Wisdom, Explainer. All 239 videos were classified from their transcripts
-  and descriptions and confirmed by John. Guesses show amber with a Confirm button; editing a guess never confirms it, only Confirm does; a row
-  you edit stays on screen until a filter changes. Ordering convention (data only, not enforced by the app): Psychedelics first when present,
+  and descriptions and reviewed by John. A row you edit stays on screen until a filter changes. Ordering convention (data only, not enforced by the app): Psychedelics first when present,
   otherwise SDAM first. Code: `server/video-profile.ts`, `web/src/AboutVideoSection.tsx`.
 - Captions: every video has `<number>-captions.srt` and `.txt` in `Subtitles\`. Twelve mis-numbered sets were renamed, and 196 old YouTube `.vtt`
   files were moved to `D:\HeartQuarters Trash`. The Captions row works like the other rows: No Copy, send to YouTube (no download needed
@@ -149,14 +148,14 @@ Automation levels:
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 | 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
-| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | **Partly done (2026-11-22).** Done: all 239 videos with numbers, Topic and Angle (main and second), notes, links to Video Projects, Needs Confirming. Left: search vs browse, which Shorts came from which longform, end screen and playlist tickboxes, the button that writes the background into one file, and making the Analysis tab read that file first. See the handoff section below. Found with the 003 SDAM analysis: it treated John's best video as needing fixes and suggested Shorts and end screens that already exist, because it saw one video with no context. |
+| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | **Partly done (2026-11-22).** Done: all 239 videos with numbers, Topic and Angle (main and second), notes and links to Video Projects. Left: search vs browse, which Shorts came from which longform, end screen and playlist tickboxes, the button that writes the background into one file, and making the Analysis tab read that file first. See the handoff section below. Found with the 003 SDAM analysis: it treated John's best video as needing fixes and suggested Shorts and end screens that already exist, because it saw one video with no context. |
 | 22 | Analysis follow-up chat: ask questions about a finished analysis, get feedback on John's own video ideas, with vidIQ for what works on other channels | n/a | Needs the background file from #21 (the part still left). Part of #7c. |
 
 ### Video analysis and recommendation phase: what is left (handoff, 2026-11-22)
 
 **Goal:** give every analysis and recommendation the channel's background first, so advice stops treating each video on its own.
 Then build the smarter tools on top: a follow-up chat, a Shorts picker, and the idea, brainstorm and packaging flow.
-Decided: the AI proposes each video's Topic and Angle and John confirms (done for all 239 existing videos).
+The initial Topic and Angle review is complete for the existing videos.
 
 **Still to do, in order**
 1. Finish the Channel tab (#21): search vs browse for each video; which Shorts came from which longform (the data is partly in each
@@ -169,11 +168,10 @@ Decided: the AI proposes each video's Topic and Angle and John confirms (done fo
 5. Ideas, research, brainstorm, packaging: the research step (what worked for John and for others: vidIQ, Reddit, other channels),
    a brainstorm chat for a chosen idea, and a small packaging skill for the title and thumbnail before filming. The Ideas tab still
    has its own old category list; decide whether to move it to Topic and Angle.
-6. A rule for new videos: when one is linked, the AI proposes a Topic and Angle for John to confirm.
 
 **Loose ends needing John's decision**
 - A note for `999-2026-01` about its sped-up pauses.
-- Confirm the Topic guess for the Protein Bar video (`999-2025-01`: Psychedelics, My Story).
+- Review the Topic and Angle for the Protein Bar video (`999-2025-01`: Psychedelics, My Story).
 - Check the shot reference pictures in Expressions, then clear the old copies in `data\shot-references`. Also the old 2026-11-12 files in `data\`
   (`channel-videos.json`, `list-channel-videos.ts`, `link-matches.json`, `link-matches-apply.mjs`, `packaging-split-plan.txt`), only with John's OK.
 - Upload the 239 `.srt` files to YouTube, spread over several days (each send costs several hundred quota units).
