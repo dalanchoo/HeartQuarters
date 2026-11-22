@@ -7,30 +7,36 @@ import { readLongformUrl } from './shorts.js';
 import { linkedVideos } from './youtube.js';
 import { youtubeVideoId } from './youtube-video.js';
 
-export interface VideoLink { piece: string; kind?: 'longform' | 'short' }
+export interface VideoLink { piece: string; kind?: 'longform' | 'short'; sourceLongformPiece?: string }
 
 /** YouTube video id -> the project piece folder it belongs to (and that piece's kind, when its folder is known). */
 export function videoLinks(): Map<string, VideoLink> {
-  const kinds = new Map<string, 'longform' | 'short'>();
-  const videos: string[] = [];
+  const pieces = new Map<string, VideoLink>();
+  let projects: ReturnType<typeof listProjectVideos> = [];
   try {
-    for (const { video } of listProjectVideos()) {
-      videos.push(video.path);
-      for (const p of video.pieces) kinds.set(p.path, p.kind === 'longform' ? 'longform' : 'short');
+    projects = listProjectVideos();
+    for (const { video } of projects) {
+      const longform = video.pieces.find((p) => p.kind === 'longform');
+      for (const p of video.pieces) {
+        const link: VideoLink = { piece: p.path, kind: p.kind === 'longform' ? 'longform' : 'short' };
+        if (p.kind === 'short' && longform) link.sourceLongformPiece = longform.path;
+        pieces.set(p.path, link);
+      }
     }
   } catch { /* Drive not running: kinds are guessed from length instead */ }
 
   const links = new Map<string, VideoLink>();
   const linkedPieces = new Set<string>();
   for (const { piece, videoId } of linkedVideos()) {
-    links.set(videoId, { piece, kind: kinds.get(piece) });
+    links.set(videoId, pieces.get(piece) ?? { piece });
     linkedPieces.add(piece);
   }
   // A longform with no upload record may still have its address in the Drive file.
-  for (const video of videos) {
-    const piece = path.posix.join(video, 'Longform');
-    if (linkedPieces.has(piece)) continue;
-    try { links.set(youtubeVideoId(readLongformUrl(video)), { piece, kind: 'longform' }); } catch { /* no usable address */ }
+  for (const { video } of projects) {
+    const oldPiece = path.posix.join(video.path, 'Longform');
+    const piece = video.pieces.find((p) => p.kind === 'longform')?.path ?? oldPiece;
+    if (linkedPieces.has(piece) || linkedPieces.has(oldPiece)) continue;
+    try { links.set(youtubeVideoId(readLongformUrl(video.path)), { piece, kind: 'longform' }); } catch { /* no usable address */ }
   }
   return links;
 }

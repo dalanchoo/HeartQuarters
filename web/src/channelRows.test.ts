@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { ChannelVideo } from '../../server/channel-videos';
-import { channelRows, formatMinutes, rowName, videoProjectsHash } from './channelRows';
+import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash } from './channelRows';
 
 const video = (id: string, kind: 'longform' | 'short', views: number | null, publishedAt: string, title = `Video ${id}`, topic: ChannelVideo['topic'] = 'unassigned', note = '', angle: ChannelVideo['angle'] = 'unassigned'): ChannelVideo => ({
   id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, topic2: 'unassigned', angle, angle2: 'unassigned', note,
@@ -12,6 +12,25 @@ const all = { kind: 'all', topic: 'all', angle: 'all', text: '' } as const;
 it('filters by kind and by title text', () => {
   expect(channelRows(videos, { ...all, kind: 'short' }, 'publishedAt', true).map((v) => v.id)).toEqual(['b']);
   expect(channelRows(videos, { ...all, text: ' aphantasia ' }, 'publishedAt', true).map((v) => v.id)).toEqual(['c']);
+});
+
+it('filters for standalone Shorts and keeps them in the general Shorts filter', () => {
+  const withSources = [
+    { ...videos[0], fromLongform: 'standalone' },
+    { ...videos[1], fromLongform: 'standalone' },
+    { ...videos[1], id: 'e', fromLongform: '022 - Worth Telling Them/Longform' },
+    { ...videos[1], id: 'f', fromLongform: null },
+  ];
+  const standalone = channelRows(withSources, { ...all, kind: 'standalone' }, 'title', false);
+  expect(standalone.map(v => v.id)).toEqual(['b']);
+  expect(standalone.map(channelKindLabel)).toEqual(['Standalone']);
+  expect(channelRows(withSources, { ...all, kind: 'short' }, 'title', false).map(v => v.id)).toEqual(['b', 'e', 'f']);
+  expect(channelKindLabel(videos[0])).toBe('Longform');
+  expect(channelKindLabel({ ...videos[1], kindGuessed: true })).toBe('Short ?');
+});
+
+it('formats the longform label from the project folder', () => {
+  expect(longformLabel('022 - Worth Telling Them/Longform')).toBe('# 022-Worth Telling Them');
 });
 
 it('filters by topic and finds words in the note', () => {

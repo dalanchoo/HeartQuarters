@@ -3,7 +3,7 @@ import { getJson, postJson } from './api';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
 import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
-import { channelRows, formatMinutes, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
+import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
 
 // The Channel tab: every video on the YouTube channel with its lifetime numbers, plus John's own Topic, Angle and note
 // for each video (the same record as About This Video in Video Projects, saved in that video's Drive folder). The list is a saved copy; Refresh asks YouTube again.
@@ -74,6 +74,7 @@ function NoteBox({ video, save }: { video: ChannelVideo; save: (note: string) =>
 
 export function ChannelProjectCell({ video, saveNote }: { video: ChannelVideo; saveNote: (note: string) => void }) {
   const name = rowName(video);
+  const source = video.fromLongform;
   return (
     <td className="title">
       <div className="channel-project">
@@ -83,6 +84,11 @@ export function ChannelProjectCell({ video, saveNote }: { video: ChannelVideo; s
           {video.privacy !== 'public' && <span className="muted"> ({video.privacy})</span>}
           {' '}<a className="yt-link" href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer" title="Opens YouTube in a new tab. Watching there adds to this video's view count.">YouTube ↗</a>
         </div>
+        {video.kind === 'short' && source !== 'standalone' && (
+          <div className="channel-parent">
+            {source ? <>From <a href={videoProjectsHash(source)}>{longformLabel(source)}</a></> : 'Source Unknown'}
+          </div>
+        )}
         <details className="channel-project-details">
           <summary aria-label={`Details for ${name}`} title="Video Details" />
           <div className="channel-project-fields">
@@ -152,6 +158,7 @@ export function ChannelPage() {
                 <option value="all">All Videos</option>
                 <option value="longform">Longform</option>
                 <option value="short">Shorts</option>
+                <option value="standalone">Standalone</option>
               </select>
             </label>
             <label>Topic
@@ -175,7 +182,7 @@ export function ChannelPage() {
             <tbody>
               {rows.map((v) => (
                 <tr key={v.id}>
-                  <td>{v.kind === 'short' ? 'Short' : 'Longform'}{v.kindGuessed ? ' ?' : ''}</td>
+                  <td>{channelKindLabel(v)}</td>
                   <ChannelProjectCell video={v} saveNote={(note) => void saveProfile(v, { note })} />
                   <td className="num">{v.publishedAt.slice(0, 10)}</td>
                   <td className="num">{v.numbers ? v.numbers.views.toLocaleString() : '–'}</td>

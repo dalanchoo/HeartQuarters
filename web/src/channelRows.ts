@@ -9,15 +9,32 @@ export function rowName(v: Pick<ChannelVideo, 'piece' | 'title'>): string {
   return parts.at(-1) ?? v.title;
 }
 
+export function longformLabel(piece: string): string {
+  const name = rowName({ piece, title: piece });
+  return `# ${name.replace(/^(\d+[A-Z]?)\s+[-–]\s+/i, '$1-')}`;
+}
+
 export type SortKey = 'publishedAt' | 'title' | 'views' | 'searchViews' | 'browseViews' | 'minutesWatched' | 'averageViewPercentage' | 'likes' | 'subscribersGained';
-export type KindFilter = 'all' | 'longform' | 'short';
+export type KindFilter = 'all' | 'longform' | 'short' | 'standalone';
+
+function isStandaloneShort(video: ChannelVideo): boolean {
+  return video.kind === 'short' && video.fromLongform === 'standalone';
+}
+
+export function channelKindLabel(video: ChannelVideo): string {
+  const label = isStandaloneShort(video) ? 'Standalone' : video.kind === 'short' ? 'Short' : 'Longform';
+  return video.kindGuessed ? `${label} ?` : label;
+}
 
 export interface RowFilters { kind: KindFilter; topic: 'all' | Topic; angle: 'all' | Angle; text: string; /** Videos edited since the filters last changed stay listed so the row doesn't jump away. */ keep?: ReadonlySet<string> }
 
 /** Filter by kind, topic, angle and text (folder name, YouTube title or note), then sort. Videos without numbers always go last when sorting by a number. */
 export function channelRows(videos: ChannelVideo[], filters: RowFilters, key: SortKey, descending: boolean): ChannelVideo[] {
   const needle = filters.text.trim().toLocaleLowerCase();
-  const matches = (v: ChannelVideo) => (filters.kind === 'all' || v.kind === filters.kind) && (filters.topic === 'all' || v.topic === filters.topic || v.topic2 === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle || v.angle2 === filters.angle)
+  const matchesKind = (v: ChannelVideo) => filters.kind === 'standalone'
+    ? isStandaloneShort(v)
+    : filters.kind === 'all' || v.kind === filters.kind;
+  const matches = (v: ChannelVideo) => matchesKind(v) && (filters.topic === 'all' || v.topic === filters.topic || v.topic2 === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle || v.angle2 === filters.angle)
     && (!needle || `${rowName(v)} ${v.title} ${v.note}`.toLocaleLowerCase().includes(needle));
   const shown = videos.filter((v) => matches(v) || !!filters.keep?.has(v.id));
   const sign = descending ? -1 : 1;

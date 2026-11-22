@@ -14,9 +14,9 @@ import { videoLinks } from './video-links.js';
 
 beforeEach(() => { records = []; urlFiles = {}; });
 
-it('uses upload records, with the kind of the piece folder', () => {
+it('uses the project grouping to identify the source even without a longform YouTube link', () => {
   records = [{ piece: '016 - Ocean/Shorts/S01', videoId: 'shortid' }];
-  expect(videoLinks().get('shortid')).toEqual({ piece: '016 - Ocean/Shorts/S01', kind: 'short' });
+  expect(videoLinks().get('shortid')).toEqual({ piece: '016 - Ocean/Shorts/S01', kind: 'short', sourceLongformPiece: '016 - Ocean/Longform' });
 });
 
 it('finds a longform from the Drive file when it has no upload record', () => {

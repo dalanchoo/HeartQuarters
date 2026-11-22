@@ -1104,6 +1104,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .channel-table th .sort:focus-visible { outline: 2px solid #508ee2; outline-offset: 2px; }
 .channel-table td.title { white-space: normal; overflow-wrap: anywhere; min-width: 12rem; max-width: 22rem; }
 .channel-table .channel-project { position: relative; padding-inline-start: 1.3rem; }
+.channel-table .channel-parent { font-size: 0.75rem; color: var(--muted); }
 .channel-table .channel-project-details > summary { position: absolute; inset: 0 auto auto 0; display: block; list-style: none; cursor: pointer; width: 1.15rem; text-align: center; color: var(--muted); }
 .channel-table .channel-project-details > summary::-webkit-details-marker { display: none; }
 .channel-table .channel-project-details > summary::before { content: '▶'; }
