@@ -67,6 +67,7 @@ import { videoOverview } from './video-overview.js';
 import { youtubeQuota } from './youtube-quota.js';
 import { downloadVideoAnalytics } from './analytics.js';
 import { downloadChannelAnalytics } from './channel-analytics.js';
+import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
 import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
@@ -92,6 +93,10 @@ app.post('/api/youtube/analytics/video', (req, res) => {
 });
 app.post('/api/youtube/analytics/channel', (_req, res) => {
   downloadChannelAnalytics().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.get('/api/channel/videos', handle((_req, res) => { res.json(readChannelVideos()); }));
+app.post('/api/channel/videos/refresh', (_req, res) => {
+  refreshChannelVideos().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.get('/api/youtube/analytics/snapshots', handle((req, res) => { res.json(analyticsSnapshots(String(req.query.piece ?? ''))); }));
 app.get('/api/youtube/analytics/analysis', handle((req, res) => { res.json(analyticsAnalysis(String(req.query.piece ?? ''), String(req.query.snapshot ?? ''))); }));

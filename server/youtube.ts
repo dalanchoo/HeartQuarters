@@ -38,6 +38,16 @@ export function uploadsFor(piece: string): UploadJob[] {
   });
   return entries.sort((a, b) => b.order - a.order).map((e) => e.job);
 }
+/** Every finished upload or link, as the project piece folder and its YouTube video id. */
+export function linkedVideos(): { piece: string; videoId: string }[] {
+  if (!fs.existsSync(jobsDir())) return [];
+  return fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8')) as UploadJob;
+      return j.status === 'done' && j.videoId ? [{ piece: j.piece, videoId: j.videoId }] : [];
+    } catch { return []; }
+  });
+}
 /** A piece (or file) path inside a folder: the folder itself or anything under it. */
 const inFolder = (p: string | undefined, folder: string) => !!p && (p === folder || p.startsWith(`${folder}/`));
 
