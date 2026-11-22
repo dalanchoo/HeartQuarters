@@ -4,16 +4,15 @@ import path from 'node:path';
 import { makeTree, removeTree } from './testing.js';
 
 vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
-vi.mock('./youtube.js', () => ({
-  youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }),
-  linkedVideos: () => [{ piece: '001 - Linked/Shorts/Clip', videoId: 'b' }, { piece: 'Gone/Missing', videoId: 'c' }],
-}));
-vi.mock('./projects.js', () => ({ listProjectVideos: () => [{ projectId: 'x', video: { name: 'x', path: 'x', pieces: [{ kind: 'short', path: '001 - Linked/Shorts/Clip' }] } }] }));
+vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }) }));
+let links = new Map<string, { piece: string; kind?: 'longform' | 'short' }>();
+vi.mock('./video-links.js', () => ({ videoLinks: () => links }));
 import { mergeChannelVideos, parseDuration, readChannelVideos, refreshChannelVideos } from './channel-videos.js';
 
 let root: string;
 beforeEach(() => {
   root = makeTree({});
+  links = new Map([['b', { piece: '001 - Linked/Shorts/Clip', kind: 'short' }], ['c', { piece: 'Gone/Missing' }]]);
   process.env.HQ_CHANNEL_VIDEOS_FILE = path.join(root, 'channel-videos.json');
   const video = (id: string, duration: string, date: string) => ({ id, snippet: { title: `Video ${id}`, publishedAt: date }, contentDetails: { duration }, status: { privacyStatus: 'public' } });
   vi.stubGlobal('fetch', async (input: string | URL) => {
@@ -66,6 +65,13 @@ it('saves a copy that opens without asking YouTube, and returns nothing before t
 it('ignores a saved file in some other format instead of showing it', () => {
   fs.writeFileSync(process.env.HQ_CHANNEL_VIDEOS_FILE!, JSON.stringify([{ id: 'x', title: 'old script output' }]));
   expect(readChannelVideos()).toBeNull();
+});
+
+it('works links out when the list is opened, so a link made after the refresh shows straight away', async () => {
+  await refreshChannelVideos();
+  expect(readChannelVideos()?.videos.find((v) => v.id === 'a')?.piece).toBeNull();
+  links.set('a', { piece: '002 - New/Longform', kind: 'longform' });
+  expect(readChannelVideos()?.videos.find((v) => v.id === 'a')).toMatchObject({ piece: '002 - New/Longform', kindGuessed: false });
 });
 
 it('keeps a linked video as longform when its project piece says so, even if it is short', () => {

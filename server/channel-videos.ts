@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir } from './config.js';
 import { pacificDate } from './analytics.js';
-import { listProjectVideos } from './projects.js';
 import { youtubeAccessToken } from './youtube-auth.js';
 import { recordAnalyticsUse, youtubeFetch } from './youtube-quota.js';
-import { linkedVideos, youtubeChannel } from './youtube.js';
+import { videoLinks, type VideoLink } from './video-links.js';
+import { youtubeChannel } from './youtube.js';
 
 const FIRST_DATE = '2008-07-01';
 const METRICS = ['views', 'estimatedMinutesWatched', 'averageViewDuration', 'averageViewPercentage', 'likes', 'subscribersGained'] as const;
@@ -88,28 +88,21 @@ async function videoNumbers(token: string, ids: string[], now: Date): Promise<Ma
   return result;
 }
 
-/** What each linked video is, by video id: its project piece folder and whether that piece is a Short. */
-function linkedKinds(): Map<string, { piece: string; kind?: 'longform' | 'short' }> {
-  let pieceKinds = new Map<string, 'longform' | 'short'>();
-  try {
-    for (const { video } of listProjectVideos()) for (const p of video.pieces) pieceKinds.set(p.path, p.kind === 'longform' ? 'longform' : 'short');
-  } catch { pieceKinds = new Map(); } // Drive not running: fall back to guessing from length
-  return new Map(linkedVideos().map(({ piece, videoId }) => [videoId, { piece, kind: pieceKinds.get(piece) }]));
+/** Work out a video's kind and project folder from the current links. */
+function resolveLink(v: ChannelVideo | (Detail & { numbers: VideoNumbers | null }), link: VideoLink | undefined): ChannelVideo {
+  const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null };
 }
 
-export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, { piece: string; kind?: 'longform' | 'short' }>): ChannelVideo[] {
-  return details.map((d) => {
-    const link = links.get(d.id);
-    const kind = link?.kind ?? (d.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
-    return { ...d, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, numbers: numbers.get(d.id) ?? null };
-  }).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {
+  return details.map((d) => resolveLink({ ...d, numbers: numbers.get(d.id) ?? null }, links.get(d.id))).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
 export async function collectChannelVideos(channel: { id: string; title: string }, now = new Date()): Promise<ChannelVideoList> {
   const token = await youtubeAccessToken();
   const ids = await uploadIds(token);
   const [details, numbers] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now)]);
-  return { channel, updatedAt: now.toISOString(), videos: mergeChannelVideos(details, numbers, linkedKinds()) };
+  return { channel, updatedAt: now.toISOString(), videos: mergeChannelVideos(details, numbers, videoLinks()) };
 }
 
 const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 'data', 'channel-video-list.json');
@@ -117,7 +110,9 @@ const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 
 export function readChannelVideos(): ChannelVideoList | null {
   try {
     const saved = JSON.parse(fs.readFileSync(savedFile(), 'utf8')) as ChannelVideoList;
-    return Array.isArray(saved?.videos) ? saved : null; // anything else isn't ours
+    if (!Array.isArray(saved?.videos)) return null; // anything else isn't ours
+    const links = videoLinks(); // links are worked out now, so a link made after the refresh shows straight away
+    return { ...saved, videos: saved.videos.map((v) => resolveLink(v, links.get(v.id))) };
   } catch { return null; }
 }
 
