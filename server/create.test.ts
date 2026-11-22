@@ -118,6 +118,13 @@ describe('createVideoFolder', () => {
     expect(exists('999 - Shorts', String(YEAR), `999-${YEAR}-23 - New`, 'Raw')).toBe(true);
   });
 
+  it("makes a standalone short in the year folder its name says, even when that is not this year", async () => {
+    const r = await createVideoFolder('standalone', '', '999-2025-01 - Protein Bar');
+    expect(r.showId).toBe('999 - Shorts/2025/999-2025-01 - Protein Bar');
+    expect(exists('999 - Shorts', '2025', '999-2025-01 - Protein Bar', 'Raw')).toBe(true);
+    expect(exists('999 - Shorts', String(YEAR), '999-2025-01 - Protein Bar')).toBe(false);
+  });
+
   it('never overwrites an existing folder', async () => {
     const marker = path.join(projects(), '022 - Worth Telling Them', 'Longform', 'Exports', 'keep.mp4');
     fs.writeFileSync(marker, 'mine');

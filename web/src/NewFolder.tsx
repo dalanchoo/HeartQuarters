@@ -22,7 +22,7 @@ function whereItGoes(kind: NewKind, parent: string, name: string, seriesPart?: s
         ? [parent, n, 'Longform']
         : kind === 'short'
           ? [parent, 'Shorts', n]
-          : ['999 - Shorts', String(new Date().getFullYear()), n];
+          : ['999 - Shorts', /^999-(\d{4})-/.exec(n)?.[1] ?? String(new Date().getFullYear()), n]; // the year in the name, like the engine
   return ['Video Projects', ...parts].join(' › ').replaceAll('/', ' › ');
 }
 

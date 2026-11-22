@@ -158,7 +158,8 @@ export async function createVideoFolder(
   const source = copyDraft ? checkDraftName(copyDraft) : '';
   checkParent(kind, parentId);
   templateDir(kind); // check before making anything
-  const year = String(new Date().getFullYear());
+  // A standalone short goes in the year folder its own name says (999-2025-01 -> 2025), so an older video can be added; otherwise this year's.
+  const year = /^999-(\d{4})-/.exec(name)?.[1] ?? String(new Date().getFullYear());
 
   let folderId: string;
   let showId: string;
