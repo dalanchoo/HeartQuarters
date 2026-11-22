@@ -37,6 +37,7 @@ export function ChannelPage() {
   const [text, setText] = useState('');
   const [topic, setTopic] = useState<'all' | Topic>('all');
   const [angle, setAngle] = useState<'all' | Angle>('all');
+  const [unconfirmedOnly, setUnconfirmedOnly] = useState(false);
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
 
@@ -61,7 +62,8 @@ export function ChannelPage() {
     else { setKey(next); setDescending(next !== 'title'); }
   };
 
-  const rows = data ? channelRows(data.videos, { kind, topic, angle, text }, key, descending) : [];
+  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, unconfirmedOnly }, key, descending) : [];
+  const guesses = data?.videos.filter((v) => v.suggested).length ?? 0;
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
 
   return (
@@ -98,6 +100,10 @@ export function ChannelPage() {
                 {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
             </label>
+            <label className="idea-check">
+              <span>Guesses</span>
+              <span><input type="checkbox" checked={unconfirmedOnly} onChange={(e) => setUnconfirmedOnly(e.target.checked)} /> Needs Confirming ({guesses})</span>
+            </label>
             <label className="idea-filter-text">Title or Note
               <input type="search" value={text} placeholder="Search titles and notes" onChange={(e) => setText(e.target.value)} />
             </label>
@@ -114,12 +120,11 @@ export function ChannelPage() {
                 <th>Topic</th>
                 <th>Angle</th>
                 <th>Note</th>
+                <th></th>
                 <th>Project</th>
               </tr>
             </thead>
-            {/* A new key makes React build the body afresh when a filter or the sort changes. Without it, after the list had
-                been emptied and refilled, removing rows left five old ones stuck on screen (found on the Channel tab, 2026-11-21). */}
-            <tbody key={[kind, topic, angle, text.trim(), key, descending].join('|')}>
+            <tbody>
               {rows.map((v) => (
                 <tr key={v.id}>
                   <td>{v.kind === 'short' ? 'Short' : 'Longform'}{v.kindGuessed ? ' ?' : ''}</td>
@@ -131,16 +136,17 @@ export function ChannelPage() {
                   <td className="num">{v.numbers ? v.numbers.likes.toLocaleString() : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.subscribersGained.toLocaleString() : '–'}</td>
                   <td>
-                    <select value={v.topic} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { topic: e.target.value as Topic })}>
+                    <select className={v.suggested ? 'guess' : ''} value={v.topic} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { topic: e.target.value as Topic })}>
                       {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                     </select>
                   </td>
                   <td>
-                    <select value={v.angle} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { angle: e.target.value as Angle })}>
+                    <select className={v.suggested ? 'guess' : ''} value={v.angle} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { angle: e.target.value as Angle })}>
                       {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                     </select>
                   </td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
+                  <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, {})}>Confirm</button>}</td>
                   <td className="muted project" title={v.piece ?? ''}>{v.piece ?? 'Not Linked'}</td>
                 </tr>
               ))}

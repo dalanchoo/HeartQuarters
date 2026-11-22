@@ -1109,3 +1109,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .about-video select { min-height: 24px; font-size: 0.85rem; }
 .about-video .about-note { flex: 1; min-width: 16rem; }
 .about-video textarea { min-height: 0; font-size: 0.9rem; }
+.channel-table select.guess { border-color: #c9962b; background: #fff7e3; font-style: italic; }
+.about-guess { margin: 0.2rem 0; display: flex; gap: 0.5rem; align-items: center; }
+.idea-filters .idea-check { font-size: 0.85rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.15rem; }
+.idea-filters .idea-check input { vertical-align: middle; }

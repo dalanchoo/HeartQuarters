@@ -29,6 +29,8 @@ export interface ChannelVideo {
   topic: VideoProfile['topic'];
   angle: VideoProfile['angle'];
   note: string;
+  /** True while Topic and Angle are a guess John hasn't confirmed. */
+  suggested: boolean;
 }
 export interface ChannelVideoList { channel: { id: string; title: string }; updatedAt: string; videos: ChannelVideo[] }
 
@@ -58,7 +60,7 @@ async function uploadIds(token: string): Promise<string[]> {
     const params = new URLSearchParams({ part: 'contentDetails', playlistId: playlist, maxResults: '50' });
     if (page) params.set('pageToken', page);
     const data = await getJson<{ items?: { contentDetails: { videoId: string } }[]; nextPageToken?: string }>(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`, token, 'list your videos');
-    for (const item of data.items ?? []) ids.push(item.contentDetails.videoId);
+    for (const item of data.items ?? []) if (!ids.includes(item.contentDetails.videoId)) ids.push(item.contentDetails.videoId); // YouTube can list a video twice across pages
     page = data.nextPageToken ?? '';
   } while (page);
   return ids;
@@ -96,7 +98,7 @@ async function videoNumbers(token: string, ids: string[], now: Date): Promise<Ma
 /** Work out a video's kind and project folder from the current links. */
 function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers'>, link: VideoLink | undefined): ChannelVideo {
   const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
-  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, angle: 'unassigned' as const, note: '' }) };
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, angle: 'unassigned' as const, note: '', suggested: false }) };
 }
 
 export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {
@@ -117,7 +119,8 @@ export function readChannelVideos(): ChannelVideoList | null {
     const saved = JSON.parse(fs.readFileSync(savedFile(), 'utf8')) as ChannelVideoList;
     if (!Array.isArray(saved?.videos)) return null; // anything else isn't ours
     const links = videoLinks(); // links are worked out now, so a link made after the refresh shows straight away
-    return { ...saved, videos: saved.videos.map((v) => resolveLink(v, links.get(v.id))) };
+    const seen = new Set<string>(); // lists saved before duplicates were removed may still hold a video twice
+    return { ...saved, videos: saved.videos.filter((v) => !seen.has(v.id) && seen.add(v.id)).map((v) => resolveLink(v, links.get(v.id))) };
   } catch { return null; }
 }
 

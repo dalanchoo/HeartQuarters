@@ -3,7 +3,7 @@ import type { ChannelVideo } from '../../server/channel-videos';
 import { channelRows, formatMinutes } from './channelRows';
 
 const video = (id: string, kind: 'longform' | 'short', views: number | null, publishedAt: string, title = `Video ${id}`, topic: ChannelVideo['topic'] = 'unassigned', note = '', angle: ChannelVideo['angle'] = 'unassigned'): ChannelVideo => ({
-  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, angle, note,
+  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, angle, note, suggested: false,
   numbers: views === null ? null : { views, minutesWatched: 1, averageViewDuration: 1, averageViewPercentage: 1, likes: 0, subscribersGained: 0 },
 });
 const videos = [video('a', 'longform', 10, '2026-01-01'), video('b', 'short', 50, '2026-02-01'), video('c', 'longform', null, '2026-03-01', 'Aphantasia Story'), video('d', 'longform', 30, '2026-04-01', 'Video d', 'sdam', 'my best video', 'story')];
@@ -22,6 +22,11 @@ it('filters by topic and finds words in the note', () => {
 it('filters by angle', () => {
   expect(channelRows(videos, { ...all, angle: 'story' }, 'publishedAt', true).map((v) => v.id)).toEqual(['d']);
   expect(channelRows(videos, { ...all, angle: 'wisdom' }, 'publishedAt', true)).toEqual([]);
+});
+
+it('can show only the guesses still waiting to be confirmed', () => {
+  const guessed = [{ ...videos[0], suggested: true }, videos[1]];
+  expect(channelRows(guessed, { ...all, unconfirmedOnly: true }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
 });
 
 it('sorts by date and by a number, high to low or low to high', () => {

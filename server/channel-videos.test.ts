@@ -5,7 +5,7 @@ import { makeTree, removeTree } from './testing.js';
 
 vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
 vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }) }));
-vi.mock('./video-profile.js', () => ({ readVideoProfile: () => ({ topic: 'unassigned', angle: 'unassigned', note: '' }) }));
+vi.mock('./video-profile.js', () => ({ readVideoProfile: () => ({ topic: 'unassigned', angle: 'unassigned', note: '', suggested: false }) }));
 let links = new Map<string, { piece: string; kind?: 'longform' | 'short' }>();
 vi.mock('./video-links.js', () => ({ videoLinks: () => links }));
 import { mergeChannelVideos, parseDuration, readChannelVideos, refreshChannelVideos } from './channel-videos.js';
@@ -20,7 +20,7 @@ beforeEach(() => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/channels')) return Response.json({ items: [{ contentDetails: { relatedPlaylists: { uploads: 'UU1' } } }] });
     if (url.pathname.endsWith('/playlistItems')) {
-      return url.searchParams.get('pageToken') ? Response.json({ items: [{ contentDetails: { videoId: 'c' } }, { contentDetails: { videoId: 'd' } }] })
+      return url.searchParams.get('pageToken') ? Response.json({ items: [{ contentDetails: { videoId: 'b' } }, { contentDetails: { videoId: 'c' } }, { contentDetails: { videoId: 'd' } }] })
         : Response.json({ items: [{ contentDetails: { videoId: 'a' } }, { contentDetails: { videoId: 'b' } }], nextPageToken: 'page2' });
     }
     if (url.pathname.endsWith('/videos')) return Response.json({ items: [video('a', 'PT12M30S', '2026-01-01T00:00:00Z'), video('b', 'PT45S', '2026-03-01T00:00:00Z'), video('c', 'PT2M10S', '2026-02-01T00:00:00Z'), video('d', 'PT1H1M1S', '2026-04-01T00:00:00Z')] });
@@ -78,4 +78,13 @@ it('works links out when the list is opened, so a link made after the refresh sh
 it('keeps a linked video as longform when its project piece says so, even if it is short', () => {
   const [v] = mergeChannelVideos([{ id: 'x', title: 't', publishedAt: '2026-01-01', seconds: 30, privacy: 'public' }], new Map(), new Map([['x', { piece: 'p', kind: 'longform' as const }]]));
   expect(v.kind).toBe('longform');
+});
+
+it('lists a video once even when YouTube repeats it across pages, and cleans up an older saved list that holds a repeat', async () => {
+  const list = await refreshChannelVideos();
+  expect(list.videos.map((v) => v.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  const saved = JSON.parse(fs.readFileSync(process.env.HQ_CHANNEL_VIDEOS_FILE!, 'utf8'));
+  saved.videos.push(saved.videos[0]);
+  fs.writeFileSync(process.env.HQ_CHANNEL_VIDEOS_FILE!, JSON.stringify(saved));
+  expect(readChannelVideos()?.videos).toHaveLength(4);
 });

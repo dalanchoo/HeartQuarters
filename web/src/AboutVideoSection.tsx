@@ -22,11 +22,15 @@ export function AboutVideoSection({ piece }: { piece: string }) {
     catch (e) { setError((e as Error).message); }
   };
 
-  const summary = profile && [profile.topic !== 'unassigned' && TOPIC_LABELS[profile.topic], profile.angle !== 'unassigned' && ANGLE_LABELS[profile.angle]].filter(Boolean).join(' · ');
+  const confirm = () => { if (profile) void save({ ...profile }); };
+  const summary = profile && [profile.suggested && 'guess', profile.topic !== 'unassigned' && TOPIC_LABELS[profile.topic], profile.angle !== 'unassigned' && ANGLE_LABELS[profile.angle]].filter(Boolean).join(' · ');
   return (
     <details className="yt-section">
       <summary>About This Video{summary ? <span className="muted"> · {summary}</span> : null}</summary>
       {error && <p className="error">{error}</p>}
+      {profile?.suggested && (
+        <p className="muted about-guess">Topic and Angle are Claude's guess. Change them, or <button type="button" className="small" onClick={confirm}>Confirm</button></p>
+      )}
       {profile && (
         <div className="about-video">
           <label>Topic
