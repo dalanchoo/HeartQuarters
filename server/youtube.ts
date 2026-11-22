@@ -12,6 +12,7 @@ import { readYoutubeVideo, updateYoutubeVideo, youtubeCaptionTracks, youtubeVide
 import { fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 import { youtubeFetch } from './youtube-quota.js';
+import { saveLinkFile } from './link-files.js';
 
 /** The largest thumbnail YouTube takes from a computer (50 MB since September 2026), for uploads and pushes alike. */
 export const MAX_THUMBNAIL_BYTES = 50_000_000;
@@ -38,15 +39,29 @@ export function uploadsFor(piece: string): UploadJob[] {
   });
   return entries.sort((a, b) => b.order - a.order).map((e) => e.job);
 }
-/** Every finished upload or link, as the project piece folder and its YouTube video id. */
+/** Every finished upload or link: the project piece folder and its YouTube video id, oldest first. */
 export function linkedVideos(): { piece: string; videoId: string }[] {
   if (!fs.existsSync(jobsDir())) return [];
   return fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8')) as UploadJob;
-      return j.status === 'done' && j.videoId ? [{ piece: j.piece, videoId: j.videoId }] : [];
+      const file = path.join(jobsDir(), f);
+      const j = JSON.parse(fs.readFileSync(file, 'utf8')) as UploadJob;
+      if (j.status !== 'done' || !j.videoId) return [];
+      return [{ piece: j.piece, videoId: j.videoId, order: (j.createdAt ? Date.parse(j.createdAt) : NaN) || fs.statSync(file).mtimeMs }];
     } catch { return []; }
-  });
+  }).sort((a, b) => a.order - b.order).map(({ piece, videoId }) => ({ piece, videoId }));
+}
+
+/** Make a finished-link record from a piece's Drive link file (used when data/ was lost). Does nothing if one already exists. */
+export function restoreLinkRecord(piece: string, videoId: string): void {
+  if (uploadsFor(piece).some((j) => j.videoId === videoId && j.status === 'done')) return;
+  const job: UploadJob = { id: randomUUID(), piece, video: '', status: 'done', videoId, sent: 0, total: 0, createdAt: new Date().toISOString() };
+  record(job); jobs.set(job.id, job);
+}
+
+/** Keep the piece's Drive link file in step with its newest link. A failure here must never fail the link or upload itself. */
+function saveLinkFileQuietly(piece: string, videoId: string) {
+  try { saveLinkFile(piece, videoId, true); } catch (e) { console.warn(`Could not save YouTube Link.txt for ${piece}: ${e instanceof Error ? e.message : String(e)}`); }
 }
 /** A piece (or file) path inside a folder: the folder itself or anything under it. */
 const inFolder = (p: string | undefined, folder: string) => !!p && (p === folder || p.startsWith(`${folder}/`));
@@ -149,7 +164,7 @@ export async function linkYoutubeVideo(piece: string, value: unknown): Promise<U
   const [video, channel] = await Promise.all([readYoutubeVideo(await youtubeAccessToken(), videoId), youtubeChannel()]);
   if (video.resource.snippet?.channelId !== channel.id) throw new Error('That video is not on the connected YouTube channel.');
   const job: UploadJob = { id: randomUUID(), piece, video: '', status: 'done', videoId, sent: 0, total: 0, createdAt: new Date().toISOString() };
-  record(job); jobs.set(job.id, job); return job;
+  record(job); jobs.set(job.id, job); saveLinkFileQuietly(piece, videoId); return job;
 }
 
 async function playlistSnapshot(token: string, videoId: string) {
@@ -391,4 +406,5 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
     catch (e) { job.subtitleStatus = 'error'; job.subtitleError = e instanceof Error ? e.message : String(e); }
   }
   job.status = 'done'; record(job);
+  if (job.videoId) saveLinkFileQuietly(job.piece, job.videoId);
 }
