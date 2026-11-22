@@ -20,7 +20,7 @@ import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addIdea, addReference, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas.js';
-import { copyShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
+import { copyShotReferenceToInbox, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -688,6 +688,7 @@ const url = `http://127.0.0.1:${port}`;
 app.listen(port, '127.0.0.1', () => {
   console.log(`HeartQuarters is running at ${url}`);
   console.log('Close this window (or press Ctrl+C) to stop it.');
+  try { const n = migrateShotReferences(); if (n) console.log(`Shot reference pictures: copied ${n} files to Drive.`); } catch (e) { console.log(`Shot reference pictures not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
   try { const n = migrateReferenceFiles(); if (n) console.log(`Reference photo lists: copied ${n} to Drive.`); } catch (e) { console.log(`Reference photo lists not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
   try {
     const { written, restored } = syncLinkFiles();

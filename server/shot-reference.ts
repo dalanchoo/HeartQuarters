@@ -1,26 +1,52 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { appDir, safeResolve } from './config.js';
+import { appDir, isInside, rootDir, safeResolve } from './config.js';
 import { buildExpressionIndex } from './expressions.js';
 import { expressionPrompt, imageFormat, type Options } from './expression-generation.js';
 import { readLikenessReferences } from './expression-references.js';
 import { readShotList, type ExpressionShot } from './expression-shot-list.js';
 import { makeImage, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
+import { writable } from './safe-files.js';
 import { copyAiImageToInbox } from './expression-inbox.js';
 
 /**
  * AI pictures of what a Shot List look should be, so John can see the target before photographing it.
- * Every picture is kept (reference-001.png, reference-002.jpg, …) on this computer in
- * data/shot-references/<shot id>/, never in the Expressions library. `pictures` lists them newest first.
+ * Every picture is kept (reference-001.png, reference-002.jpg, …) in Drive, in the Expressions folder
+ * _ShotReferences\<shot id>\ (the leading "_" keeps the library from treating it as a category). `pictures` lists them
+ * newest first. They used to be in data/shot-references; the first read copies those across.
  */
 export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[] };
 const PICTURE = /^reference(?:-(\d{3}))?\.(png|jpg|webp)$/;
 
-const root = () => process.env.HQ_SHOT_REFERENCES ?? path.join(appDir, 'data', 'shot-references');
+export const SHOT_REFERENCES_FOLDER = '_ShotReferences';
+const root = () => process.env.HQ_SHOT_REFERENCES ?? path.join(rootDir('expressions'), SHOT_REFERENCES_FOLDER);
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
-const folder = (shotId: string) => { if (!UUID.test(shotId)) throw new Error('Choose a valid shot.'); return path.join(root(), shotId); };
+/** Inside the library every path is checked again (no shortcuts or junctions) before it is read or changed. */
+const checked = (p: string) => isInside(path.resolve(rootDir('expressions')), path.resolve(p)) ? writable(p, 'expressions') : p;
+const folder = (shotId: string) => { if (!UUID.test(shotId)) throw new Error('Choose a valid shot.'); return checked(path.join(root(), shotId)); };
+
+/** Copy pictures and job files from the old data folder into Drive, once. Never replaces a file already in Drive. */
+export function migrateShotReferences(): number {
+  if (process.env.HQ_SHOT_REFERENCES) return 0; // a test or custom location: nothing to move
+  const from = path.join(process.env.HQ_LEGACY_DATA_DIR ?? path.join(appDir, 'data'), 'shot-references');
+  if (!fs.existsSync(from)) return 0;
+  let copied = 0;
+  for (const shot of fs.readdirSync(from, { withFileTypes: true })) {
+    if (!shot.isDirectory() || !UUID.test(shot.name)) continue;
+    for (const file of fs.readdirSync(path.join(from, shot.name), { withFileTypes: true })) {
+      if (!file.isFile() || !(PICTURE.test(file.name) || file.name === 'job.json')) continue;
+      const to = path.join(folder(shot.name), file.name);
+      try {
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(path.join(from, shot.name, file.name), to, fs.constants.COPYFILE_EXCL);
+        copied++;
+      } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    }
+  }
+  return copied;
+}
 const running = new Set<string>();
 
 const FRAMINGS = ['HeadShoulders', 'UpperBody', 'CloseUp'];
@@ -67,6 +93,7 @@ const saveJob = ({ pictures: _computed, ...job }: ShotReference) => writeFileSaf
 /** Every shot's reference picture status, keyed by shot id. */
 export function shotReferences(): Record<string, ShotReference> {
   const result: Record<string, ShotReference> = {};
+  migrateShotReferences();
   if (!fs.existsSync(root())) return result;
   for (const entry of fs.readdirSync(root(), { withFileTypes: true })) {
     if (!entry.isDirectory() || !UUID.test(entry.name)) continue;
