@@ -49,12 +49,24 @@ export function readVideoProfile(piece: string): VideoProfile {
   } catch { return EMPTY; } // no file yet, or one we can't read
 }
 
-/** Save a guess. It may replace an earlier guess, but never anything John saved or confirmed. Returns whether it saved. */
-export function suggestVideoProfile(piece: unknown, value: unknown): boolean {
+/** When a profile file was last saved (its updatedAt), or '' if it can't be read. */
+function savedAt(file: string): string {
+  try { const saved = JSON.parse(readText(file)) as { updatedAt?: unknown }; return typeof saved.updatedAt === 'string' ? saved.updatedAt : ''; } catch { return ''; }
+}
+
+/**
+ * Save a guess. It may replace an earlier guess, but never anything John saved or confirmed. A caller that knows an earlier
+ * import saved values John never saw as guesses can pass `replaceSavedBefore` (an ISO time): a profile saved before that time
+ * may then be replaced too. Anything saved at or after it, or with no readable time, is left alone. Returns whether it saved.
+ */
+export function suggestVideoProfile(piece: unknown, value: unknown, replaceSavedBefore?: unknown): boolean {
   const checked = requirePiece(piece);
   const file = profileFile(checked);
   if (!file) throw new Error('That video has no folder.');
-  if (fs.existsSync(file) && !readVideoProfile(checked).suggested) return false;
+  if (fs.existsSync(file) && !readVideoProfile(checked).suggested) {
+    const at = savedAt(file);
+    if (typeof replaceSavedBefore !== 'string' || !at || at >= replaceSavedBefore) return false;
+  }
   saveVideoProfile(checked, value, true);
   return true;
 }

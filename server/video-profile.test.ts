@@ -73,3 +73,22 @@ it('a new guess may replace an older guess, but never a profile John saved or co
   expect(suggestVideoProfile(PIECE, { topic: 'kink', angle: 'wisdom', note: '', suggested: true })).toBe(false);
   expect(readVideoProfile(PIECE)).toEqual({ ...empty, topic: 'sdam', angle: 'story', note: 'mine' });
 });
+
+it('a guess can replace an older import only when the caller names a cutoff, and never anything saved at or after it', () => {
+  saveVideoProfile(PIECE, { topic: 'emotions', angle: 'story', note: '' });
+  const file = path.join(root, PIECE, PROFILE_FILE);
+  const stamped = (at: string) => fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), updatedAt: at }));
+  stamped('2026-11-22T02:32:00.000Z');
+  const guess = { topic: 'emotions', topic2: 'healing', angle: 'story', note: '', suggested: true };
+  expect(suggestVideoProfile(PIECE, guess)).toBe(false); // no cutoff: a saved profile is left alone
+  expect(suggestVideoProfile(PIECE, guess, '2026-11-22T02:00:00.000Z')).toBe(false); // saved after the cutoff
+  expect(suggestVideoProfile(PIECE, guess, '2026-11-22T02:32:00.000Z')).toBe(false); // saved exactly at it
+  expect(suggestVideoProfile(PIECE, guess, '2026-11-22T03:00:00.000Z')).toBe(true);
+  expect(readVideoProfile(PIECE)).toEqual({ ...empty, topic: 'emotions', topic2: 'healing', angle: 'story', suggested: true });
+});
+
+it('a profile with no readable save time is never replaced by a cutoff', () => {
+  fs.writeFileSync(path.join(root, PIECE, PROFILE_FILE), JSON.stringify({ topic: 'sdam', angle: 'story', note: 'mine' }));
+  expect(suggestVideoProfile(PIECE, { topic: 'kink', angle: 'wisdom', note: '', suggested: true }, '2099-01-01T00:00:00.000Z')).toBe(false);
+  expect(readVideoProfile(PIECE).note).toBe('mine');
+});
