@@ -38,6 +38,17 @@ it('sorts by date and by a number, high to low or low to high', () => {
   expect(channelRows(videos, all, 'views', false).map((v) => v.id)).toEqual(['a', 'd', 'b', 'c']);
 });
 
+it('sorts both traffic columns and puts unavailable counts after reported zeroes', () => {
+  const withTraffic = [
+    { ...videos[0], traffic: { searchViews: 0, browseViews: 12 } },
+    { ...videos[1], traffic: { searchViews: 8, browseViews: 0 } },
+    videos[2],
+  ];
+  expect(channelRows(withTraffic, all, 'searchViews', true).map(v => v.id)).toEqual(['b', 'a', 'c']);
+  expect(channelRows(withTraffic, all, 'browseViews', true).map(v => v.id)).toEqual(['a', 'b', 'c']);
+  expect(channelRows(withTraffic, all, 'browseViews', false).map(v => v.id)).toEqual(['b', 'a', 'c']);
+});
+
 it('shows watch time in minutes or hours', () => {
   expect(formatMinutes(45.4)).toBe('45 min');
   expect(formatMinutes(90)).toBe('1.5 h');

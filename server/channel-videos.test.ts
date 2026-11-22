@@ -8,11 +8,17 @@ vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id'
 vi.mock('./video-profile.js', () => ({ readVideoProfile: () => ({ topic: 'unassigned', topic2: 'unassigned', angle: 'unassigned', angle2: 'unassigned', note: '' }) }));
 let links = new Map<string, { piece: string; kind?: 'longform' | 'short' }>();
 vi.mock('./video-links.js', () => ({ videoLinks: () => links }));
-import { mergeChannelVideos, parseDuration, readChannelVideos, refreshChannelVideos } from './channel-videos.js';
+import { collectChannelVideos, mergeChannelVideos, parseDuration, readChannelVideos, refreshChannelVideos } from './channel-videos.js';
 
 let root: string;
+let extraIds: string[];
+let trafficBatches: string[][];
+let trafficStatus: number;
 beforeEach(() => {
   root = makeTree({});
+  extraIds = [];
+  trafficBatches = [];
+  trafficStatus = 200;
   links = new Map([['b', { piece: '001 - Linked/Shorts/Clip', kind: 'short' }], ['c', { piece: 'Gone/Missing' }]]);
   process.env.HQ_CHANNEL_VIDEOS_FILE = path.join(root, 'channel-videos.json');
   const video = (id: string, duration: string, date: string) => ({ id, snippet: { title: `Video ${id}`, publishedAt: date }, contentDetails: { duration }, status: { privacyStatus: 'public' } });
@@ -20,10 +26,23 @@ beforeEach(() => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/channels')) return Response.json({ items: [{ contentDetails: { relatedPlaylists: { uploads: 'UU1' } } }] });
     if (url.pathname.endsWith('/playlistItems')) {
-      return url.searchParams.get('pageToken') ? Response.json({ items: [{ contentDetails: { videoId: 'b' } }, { contentDetails: { videoId: 'c' } }, { contentDetails: { videoId: 'd' } }] })
+      return url.searchParams.get('pageToken') ? Response.json({ items: ['b', 'c', 'd', ...extraIds].map(videoId => ({ contentDetails: { videoId } })) })
         : Response.json({ items: [{ contentDetails: { videoId: 'a' } }, { contentDetails: { videoId: 'b' } }], nextPageToken: 'page2' });
     }
-    if (url.pathname.endsWith('/videos')) return Response.json({ items: [video('a', 'PT12M30S', '2026-01-01T00:00:00Z'), video('b', 'PT45S', '2026-03-01T00:00:00Z'), video('c', 'PT2M10S', '2026-02-01T00:00:00Z'), video('d', 'PT1H1M1S', '2026-04-01T00:00:00Z')] });
+    if (url.pathname.endsWith('/videos')) return Response.json({ items: [video('a', 'PT12M30S', '2026-01-01T00:00:00Z'), video('b', 'PT45S', '2026-03-01T00:00:00Z'), video('c', 'PT2M10S', '2026-02-01T00:00:00Z'), video('d', 'PT1H1M1S', '2026-04-01T00:00:00Z'), ...extraIds.map(id => video(id, 'PT45S', '2026-04-01T00:00:00Z'))] });
+    const dimensions = url.searchParams.get('dimensions');
+    if (dimensions?.includes('insightTrafficSourceType')) {
+      const filter = url.searchParams.get('filters') ?? '';
+      expect(filter).toMatch(/^video==/);
+      expect(url.searchParams.get('metrics')).toBe('views');
+      const ids = filter.slice('video=='.length).split(',');
+      trafficBatches.push(ids);
+      if (trafficStatus !== 200) return new Response(null, { status: trafficStatus });
+      const rows = [['a', 'YT_SEARCH', 25], ['b', 'SUBSCRIBER', 5], ['a', 'SUBSCRIBER', 0], ['a', 'SHORTS', 15], ['c', 'YT_SEARCH', 2], ['h', 'SUBSCRIBER', 3]];
+      const matching = rows.filter(([id]) => ids.includes(String(id)));
+      expect(dimensions).toBe(ids.length === 1 ? 'insightTrafficSourceType' : 'video,insightTrafficSourceType');
+      return Response.json({ rows: ids.length === 1 ? matching.map(row => row.slice(1)) : matching });
+    }
     // Analytics: no numbers yet for video d
     return Response.json({ columnHeaders: [{ name: 'video' }, { name: 'views' }, { name: 'estimatedMinutesWatched' }, { name: 'averageViewDuration' }, { name: 'averageViewPercentage' }, { name: 'likes' }, { name: 'subscribersGained' }], rows: [['a', 100, 50, 30, 40.5, 7, 2], ['b', 9, 1, 20, 80, 0, 0]] });
   });
@@ -46,6 +65,42 @@ it('lists every video across pages, newest first, with numbers merged in', async
 it('marks a video with no analytics yet as having no numbers, not zero', async () => {
   const list = await refreshChannelVideos();
   expect(list.videos.find((v) => v.id === 'd')?.numbers).toBeNull();
+});
+
+it('keeps reported search and browse counts, including zero, in the saved list', async () => {
+  await refreshChannelVideos();
+  const byId = Object.fromEntries(readChannelVideos()!.videos.map((v) => [v.id, v]));
+  expect(byId.a.traffic).toEqual({ searchViews: 25, browseViews: 0 });
+  expect(byId.b.traffic).toEqual({ browseViews: 5 });
+  expect(byId.c.traffic).toEqual({ searchViews: 2 });
+  expect(byId.d.traffic).toBeUndefined();
+});
+
+it('splits lifetime traffic requests to stay within YouTube’s video-day limit', async () => {
+  extraIds = ['e', 'f', 'g', 'h'];
+  const list = await collectChannelVideos({ id: 'channel-id', title: 'Heart Mind Fusion' }, new Date('2026-11-22T12:00:00Z'));
+  expect(trafficBatches).toEqual([['a', 'b', 'c', 'd', 'e', 'f', 'g'], ['h']]);
+  expect(list.videos.find(v => v.id === 'h')?.traffic).toEqual({ browseViews: 3 });
+});
+
+it('keeps the previous saved list if the traffic request fails', async () => {
+  await refreshChannelVideos();
+  const file = process.env.HQ_CHANNEL_VIDEOS_FILE!;
+  const saved = fs.readFileSync(file, 'utf8');
+  trafficStatus = 503;
+  await expect(refreshChannelVideos()).rejects.toThrow('could not load your search and browse views');
+  expect(fs.readFileSync(file, 'utf8')).toBe(saved);
+});
+
+it('opens an older saved list before search and browse views have been fetched', async () => {
+  await refreshChannelVideos();
+  const file = process.env.HQ_CHANNEL_VIDEOS_FILE!;
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const video of saved.videos) delete video.traffic;
+  fs.writeFileSync(file, JSON.stringify(saved));
+  const video = readChannelVideos()?.videos.find((v) => v.id === 'a');
+  expect(video?.numbers?.views).toBe(100);
+  expect(video?.traffic).toBeUndefined();
 });
 
 it('uses the project folder for linked videos and guesses from length for the rest', async () => {

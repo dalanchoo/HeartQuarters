@@ -9,7 +9,7 @@ export function rowName(v: Pick<ChannelVideo, 'piece' | 'title'>): string {
   return parts.at(-1) ?? v.title;
 }
 
-export type SortKey = 'publishedAt' | 'title' | 'views' | 'minutesWatched' | 'averageViewPercentage' | 'likes' | 'subscribersGained';
+export type SortKey = 'publishedAt' | 'title' | 'views' | 'searchViews' | 'browseViews' | 'minutesWatched' | 'averageViewPercentage' | 'likes' | 'subscribersGained';
 export type KindFilter = 'all' | 'longform' | 'short';
 
 export interface RowFilters { kind: KindFilter; topic: 'all' | Topic; angle: 'all' | Angle; text: string; /** Videos edited since the filters last changed stay listed so the row doesn't jump away. */ keep?: ReadonlySet<string> }
@@ -24,7 +24,9 @@ export function channelRows(videos: ChannelVideo[], filters: RowFilters, key: So
   return [...shown].sort((a, b) => {
     if (key === 'publishedAt') return sign * a.publishedAt.localeCompare(b.publishedAt);
     if (key === 'title') return sign * rowName(a).localeCompare(rowName(b));
-    const x = a.numbers?.[key]; const y = b.numbers?.[key];
+    const traffic = key === 'searchViews' || key === 'browseViews';
+    const x = traffic ? a.traffic?.[key] : a.numbers?.[key];
+    const y = traffic ? b.traffic?.[key] : b.numbers?.[key];
     if (x === undefined && y === undefined) return 0;
     if (x === undefined) return 1;
     if (y === undefined) return -1;

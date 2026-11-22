@@ -11,6 +11,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'title', label: 'Project' },
   { key: 'publishedAt', label: 'Published' },
   { key: 'views', label: 'Views' },
+  { key: 'searchViews', label: 'Search Views' },
+  { key: 'browseViews', label: 'Browse Views' },
   { key: 'minutesWatched', label: 'Watch Time' },
   { key: 'averageViewPercentage', label: 'Avg % Viewed' },
   { key: 'likes', label: 'Likes' },
@@ -97,7 +99,8 @@ export function ChannelPage() {
         <>
           <p className="muted">
             {data.channel.title}: {count('longform')} longform, {count('short')} Shorts. Updated {new Date(data.updatedAt).toLocaleString()}.
-            Lifetime numbers; “–” means YouTube has none yet. Kinds marked “?” are guessed from length. Topics and notes are saved in each video's Drive folder.
+            Lifetime numbers. “–” means no count is available. Refresh to load Search and Browse Views on older lists.
+            Kinds marked “?” are guessed from length. Topics and notes are saved in each video's Drive folder.
           </p>
           <div className="idea-filters">
             <label>Kind
@@ -148,6 +151,8 @@ export function ChannelPage() {
                   </td>
                   <td className="num">{v.publishedAt.slice(0, 10)}</td>
                   <td className="num">{v.numbers ? v.numbers.views.toLocaleString() : '–'}</td>
+                  <td className="num">{v.traffic?.searchViews?.toLocaleString() ?? '–'}</td>
+                  <td className="num">{v.traffic?.browseViews?.toLocaleString() ?? '–'}</td>
                   <td className="num">{v.numbers ? formatMinutes(v.numbers.minutesWatched) : '–'}</td>
                   <td className="num">{v.numbers ? `${v.numbers.averageViewPercentage.toFixed(1)}%` : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.likes.toLocaleString() : '–'}</td>

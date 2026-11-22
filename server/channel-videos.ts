@@ -16,6 +16,7 @@ const METRICS = ['views', 'estimatedMinutesWatched', 'averageViewDuration', 'ave
 const SHORT_MAX_SECONDS = 180;
 
 export interface VideoNumbers { views: number; minutesWatched: number; averageViewDuration: number; averageViewPercentage: number; likes: number; subscribersGained: number }
+interface TrafficViews { searchViews?: number; browseViews?: number }
 export interface ChannelVideo {
   id: string; title: string; publishedAt: string; seconds: number; privacy: string;
   kind: 'longform' | 'short';
@@ -25,6 +26,8 @@ export interface ChannelVideo {
   piece: string | null;
   /** Null when YouTube Analytics has no numbers for this video yet. */
   numbers: VideoNumbers | null;
+  /** Counts that YouTube reported. Older saved lists have no traffic counts. */
+  traffic?: TrafficViews;
   /** John's own Topic, Angle and note, from About This Video.json in the piece folder. Empty when not linked. */
   topic: VideoProfile['topic'];
   topic2: VideoProfile['topic2'];
@@ -95,10 +98,39 @@ async function videoNumbers(token: string, ids: string[], now: Date): Promise<Ma
   return result;
 }
 
+async function videoTrafficViews(token: string, ids: string[], now: Date): Promise<Map<string, TrafficViews>> {
+  const result = new Map<string, TrafficViews>();
+  const endDate = pacificDate(now);
+  const days = (Date.parse(endDate) - Date.parse(FIRST_DATE)) / 86_400_000 + 1;
+  // YouTube limits traffic reports to 50,000 video-days per request.
+  const batchSize = Math.max(1, Math.min(500, Math.floor(50_000 / days)));
+  for (const batch of chunks(ids, batchSize)) {
+    const singleId = batch.length === 1 ? batch[0] : undefined;
+    const params = new URLSearchParams({
+      ids: 'channel==MINE', startDate: FIRST_DATE, endDate, metrics: 'views',
+      dimensions: singleId ? 'insightTrafficSourceType' : 'video,insightTrafficSourceType',
+      filters: `video==${batch.join(',')}`,
+    });
+    recordAnalyticsUse();
+    const res = await fetch(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`YouTube Analytics could not load your search and browse views (${res.status}). Try refreshing again.`);
+    const { rows = [] } = await res.json() as { rows?: (string | number)[][] };
+    for (const row of rows) {
+      const [id, source, views] = singleId ? [singleId, ...row] : row;
+      const field = source === 'YT_SEARCH' ? 'searchViews' : source === 'SUBSCRIBER' ? 'browseViews' : undefined;
+      if (!field || typeof id !== 'string' || typeof views !== 'number' || !Number.isFinite(views)) continue;
+      const traffic = result.get(id) ?? {};
+      traffic[field] = views;
+      result.set(id, traffic);
+    }
+  }
+  return result;
+}
+
 /** Work out a video's kind and project folder from the current links. */
-function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers'>, link: VideoLink | undefined): ChannelVideo {
+function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers' | 'traffic'>, link: VideoLink | undefined): ChannelVideo {
   const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
-  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, topic2: 'unassigned' as const, angle: 'unassigned' as const, angle2: 'unassigned' as const, note: '' }) };
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, traffic: v.traffic, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, topic2: 'unassigned' as const, angle: 'unassigned' as const, angle2: 'unassigned' as const, note: '' }) };
 }
 
 export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {
@@ -108,8 +140,9 @@ export function mergeChannelVideos(details: Detail[], numbers: Map<string, Video
 export async function collectChannelVideos(channel: { id: string; title: string }, now = new Date()): Promise<ChannelVideoList> {
   const token = await youtubeAccessToken();
   const ids = await uploadIds(token);
-  const [details, numbers] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now)]);
-  return { channel, updatedAt: now.toISOString(), videos: mergeChannelVideos(details, numbers, videoLinks()) };
+  const [details, numbers, traffic] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now), videoTrafficViews(token, ids, now)]);
+  const videos = mergeChannelVideos(details, numbers, videoLinks()).map((video) => ({ ...video, traffic: traffic.get(video.id) }));
+  return { channel, updatedAt: now.toISOString(), videos };
 }
 
 const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 'data', 'channel-video-list.json');
