@@ -1114,3 +1114,6 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-filters .idea-check { font-size: 0.85rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.15rem; }
 .idea-filters .idea-check input { vertical-align: middle; }
 .channel-table .yt-link { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.channel-table .pair { display: flex; flex-direction: column; gap: 2px; }
+.channel-table .pair select.second { font-size: 0.72rem; min-height: 18px; color: var(--muted); }
+.about-video { max-width: 44rem; }

@@ -17,6 +17,25 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'subscribersGained', label: 'Subs Gained' },
 ];
 
+type ProfileChanges = Partial<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>;
+
+/** A main choice with a smaller second choice under it (the second reads "None" when empty). Both save straight away. */
+function PairCell<T extends string>({ video, labels, main, second, save }: { video: ChannelVideo; labels: Record<T, string>; main: 'topic' | 'angle'; second: 'topic2' | 'angle2'; save: (changes: ProfileChanges) => void }) {
+  const off = !video.piece;
+  const tip = off ? 'Link this video in Video Projects first' : '';
+  const choose = (field: 'topic' | 'topic2' | 'angle' | 'angle2') => (e: { target: { value: string } }) => save({ [field]: e.target.value } as ProfileChanges);
+  return (
+    <div className="pair">
+      <select className={video.suggested ? 'guess' : ''} value={video[main]} disabled={off} title={tip} onChange={choose(main)}>
+        {Object.entries<string>(labels).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+      </select>
+      <select className={`second${video.suggested ? ' guess' : ''}`} value={video[second]} disabled={off} title={tip || 'Optional second choice'} onChange={choose(second)}>
+        {Object.entries<string>(labels).map(([id, label]) => <option key={id} value={id}>{id === 'unassigned' ? 'None' : label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 /** The note box for one video: saved when you leave it or press Enter. */
 function NoteBox({ video, save }: { video: ChannelVideo; save: (note: string) => void }) {
   const [text, setText] = useState(video.note);
@@ -50,10 +69,10 @@ export function ChannelPage() {
     finally { setBusy(false); }
   };
   /** Save one video's topic and note in its Drive folder, then show what the engine saved. */
-  const saveProfile = async (video: ChannelVideo, changes: Partial<Pick<ChannelVideo, 'topic' | 'angle' | 'note'>>) => {
+  const saveProfile = async (video: ChannelVideo, changes: ProfileChanges) => {
     setError(null);
     try {
-      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'angle' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, angle: video.angle, note: video.note, ...changes });
+      const saved = await postJson<Pick<ChannelVideo, 'topic' | 'topic2' | 'angle' | 'angle2' | 'note'>>('/api/video-profile', { piece: video.piece, topic: video.topic, topic2: video.topic2, angle: video.angle, angle2: video.angle2, note: video.note, ...changes });
       setData((d) => d && { ...d, videos: d.videos.map((v) => (v.id === video.id ? { ...v, ...saved } : v)) });
     } catch (e) { setError((e as Error).message); }
   };
@@ -138,16 +157,8 @@ export function ChannelPage() {
                   <td className="num">{v.numbers ? `${v.numbers.averageViewPercentage.toFixed(1)}%` : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.likes.toLocaleString() : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.subscribersGained.toLocaleString() : '–'}</td>
-                  <td>
-                    <select className={v.suggested ? 'guess' : ''} value={v.topic} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { topic: e.target.value as Topic })}>
-                      {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    <select className={v.suggested ? 'guess' : ''} value={v.angle} disabled={!v.piece} title={v.piece ? '' : 'Link this video in Video Projects first'} onChange={(e) => void saveProfile(v, { angle: e.target.value as Angle })}>
-                      {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                    </select>
-                  </td>
+                  <td><PairCell video={v} labels={TOPIC_LABELS} main="topic" second="topic2" save={(changes) => void saveProfile(v, changes)} /></td>
+                  <td><PairCell video={v} labels={ANGLE_LABELS} main="angle" second="angle2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><NoteBox video={v} save={(n) => void saveProfile(v, { note: n })} /></td>
                   <td>{v.suggested && <button type="button" className="small" title="Claude's guess: keep Topic and Angle as they are" onClick={() => void saveProfile(v, {})}>Confirm</button>}</td>
                 </tr>

@@ -27,7 +27,9 @@ export interface ChannelVideo {
   numbers: VideoNumbers | null;
   /** John's own Topic, Angle and note, from About This Video.json in the piece folder. Empty when not linked. */
   topic: VideoProfile['topic'];
+  topic2: VideoProfile['topic2'];
   angle: VideoProfile['angle'];
+  angle2: VideoProfile['angle2'];
   note: string;
   /** True while Topic and Angle are a guess John hasn't confirmed. */
   suggested: boolean;
@@ -98,7 +100,7 @@ async function videoNumbers(token: string, ids: string[], now: Date): Promise<Ma
 /** Work out a video's kind and project folder from the current links. */
 function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers'>, link: VideoLink | undefined): ChannelVideo {
   const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
-  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, angle: 'unassigned' as const, note: '', suggested: false }) };
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, topic2: 'unassigned' as const, angle: 'unassigned' as const, angle2: 'unassigned' as const, note: '', suggested: false }) };
 }
 
 export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {

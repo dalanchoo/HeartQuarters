@@ -17,7 +17,7 @@ export interface RowFilters { kind: KindFilter; topic: 'all' | Topic; angle: 'al
 /** Filter by kind, topic, angle and text (folder name, YouTube title or note), then sort. Videos without numbers always go last when sorting by a number. */
 export function channelRows(videos: ChannelVideo[], filters: RowFilters, key: SortKey, descending: boolean): ChannelVideo[] {
   const needle = filters.text.trim().toLocaleLowerCase();
-  const shown = videos.filter((v) => (filters.kind === 'all' || v.kind === filters.kind) && (filters.topic === 'all' || v.topic === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle) && (!filters.unconfirmedOnly || v.suggested)
+  const shown = videos.filter((v) => (filters.kind === 'all' || v.kind === filters.kind) && (filters.topic === 'all' || v.topic === filters.topic || v.topic2 === filters.topic) && (filters.angle === 'all' || v.angle === filters.angle || v.angle2 === filters.angle) && (!filters.unconfirmedOnly || v.suggested)
     && (!needle || `${rowName(v)} ${v.title} ${v.note}`.toLocaleLowerCase().includes(needle)));
   const sign = descending ? -1 : 1;
   return [...shown].sort((a, b) => {

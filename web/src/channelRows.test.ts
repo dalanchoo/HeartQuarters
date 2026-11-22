@@ -3,7 +3,7 @@ import type { ChannelVideo } from '../../server/channel-videos';
 import { channelRows, formatMinutes, rowName, videoProjectsHash } from './channelRows';
 
 const video = (id: string, kind: 'longform' | 'short', views: number | null, publishedAt: string, title = `Video ${id}`, topic: ChannelVideo['topic'] = 'unassigned', note = '', angle: ChannelVideo['angle'] = 'unassigned'): ChannelVideo => ({
-  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, angle, note, suggested: false,
+  id, title, publishedAt, seconds: 60, privacy: 'public', kind, kindGuessed: false, piece: null, topic, topic2: 'unassigned', angle, angle2: 'unassigned', note, suggested: false,
   numbers: views === null ? null : { views, minutesWatched: 1, averageViewDuration: 1, averageViewPercentage: 1, likes: 0, subscribersGained: 0 },
 });
 const videos = [video('a', 'longform', 10, '2026-01-01'), video('b', 'short', 50, '2026-02-01'), video('c', 'longform', null, '2026-03-01', 'Aphantasia Story'), video('d', 'longform', 30, '2026-04-01', 'Video d', 'sdam', 'my best video', 'story')];
@@ -56,4 +56,12 @@ it('names a video by its Video Projects folder, and finds it by that name or by 
   const linked = [{ ...video('z', 'short', 5, '2026-05-01', 'I Felt I Failed to Protect Her'), piece: '021 - Every Thought Is Cut In Half/Shorts/021_S06 - I Felt Irresponsible' }];
   expect(channelRows(linked, { ...all, text: 'irresponsible' }, 'publishedAt', true)).toHaveLength(1);
   expect(channelRows(linked, { ...all, text: 'failed to protect' }, 'publishedAt', true)).toHaveLength(1);
+});
+
+it('finds a video by its second Topic or second Angle as well as its main one', () => {
+  const two = [{ ...videos[0], topic: 'sdam' as const, topic2: 'communication' as const, angle: 'story' as const, angle2: 'explainer' as const }, videos[1]];
+  expect(channelRows(two, { ...all, topic: 'sdam' }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
+  expect(channelRows(two, { ...all, topic: 'communication' }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
+  expect(channelRows(two, { ...all, angle: 'explainer' }, 'publishedAt', true).map((v) => v.id)).toEqual(['a']);
+  expect(channelRows(two, { ...all, topic: 'kink' }, 'publishedAt', true)).toEqual([]);
 });

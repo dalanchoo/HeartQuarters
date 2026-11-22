@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
 import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
-import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
+import { ANGLE_LABELS, TOPIC_LABELS, pairLabel } from './videoProfile';
 
-// "About This Video": John's own Topic (what it is about), Angle (what kind of video it is) and a note.
+/** The choices for a Topic or Angle. For the second one, "Unassigned" reads as "None". */
+function Options({ labels, second }: { labels: Record<string, string>; second?: boolean }) {
+  return <>{Object.entries(labels).map(([id, label]) => <option key={id} value={id}>{second && id === 'unassigned' ? 'None' : label}</option>)}</>;
+}
+
+// "About This Video": John's own Topic and Angle (each with an optional second one) and a note.
 // Saved in the video's Drive folder; the Channel tab shows and edits the same record.
 export function AboutVideoSection({ piece }: { piece: string }) {
   const [profile, setProfile] = useState<VideoProfile | null>(null);
@@ -23,7 +28,7 @@ export function AboutVideoSection({ piece }: { piece: string }) {
   };
 
   const confirm = () => { if (profile) void save({ ...profile }); };
-  const summary = profile && [profile.suggested && 'guess', profile.topic !== 'unassigned' && TOPIC_LABELS[profile.topic], profile.angle !== 'unassigned' && ANGLE_LABELS[profile.angle]].filter(Boolean).join(' · ');
+  const summary = profile && [profile.suggested && 'guess', pairLabel(profile.topic, profile.topic2, TOPIC_LABELS), pairLabel(profile.angle, profile.angle2, ANGLE_LABELS)].filter(Boolean).join(' · ');
   return (
     <details className="yt-section">
       <summary>About This Video{summary ? <span className="muted"> · {summary}</span> : null}</summary>
@@ -34,14 +39,16 @@ export function AboutVideoSection({ piece }: { piece: string }) {
       {profile && (
         <div className="about-video">
           <label>Topic
-            <select value={profile.topic} onChange={(e) => void save({ ...profile, topic: e.target.value as Topic })}>
-              {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-            </select>
+            <select value={profile.topic} onChange={(e) => void save({ ...profile, topic: e.target.value as Topic })}><Options labels={TOPIC_LABELS} /></select>
+          </label>
+          <label>Second Topic
+            <select value={profile.topic2} onChange={(e) => void save({ ...profile, topic2: e.target.value as Topic })}><Options labels={TOPIC_LABELS} second /></select>
           </label>
           <label>Angle
-            <select value={profile.angle} onChange={(e) => void save({ ...profile, angle: e.target.value as Angle })}>
-              {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-            </select>
+            <select value={profile.angle} onChange={(e) => void save({ ...profile, angle: e.target.value as Angle })}><Options labels={ANGLE_LABELS} /></select>
+          </label>
+          <label>Second Angle
+            <select value={profile.angle2} onChange={(e) => void save({ ...profile, angle2: e.target.value as Angle })}><Options labels={ANGLE_LABELS} second /></select>
           </label>
           <label className="about-note">Notes
             <textarea rows={3} value={note} maxLength={2000} placeholder="For example: my best video, or I dislike this thumbnail"
