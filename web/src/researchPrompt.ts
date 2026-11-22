@@ -17,6 +17,21 @@ export interface ResearchFacts {
   source?: { kind: 'transcript' | 'script'; text: string };
 }
 
+/**
+ * How the tools must format their answer. Their copy button turns tables, score badges, video cards and links into text
+ * with the spaces and line breaks gone ("TitleScoreI Read...97"), so the answer has to be plain text from the start.
+ */
+const PLAIN_TEXT_RULES = [
+  'Format your answer as plain text only, because I will copy it with a copy button and the AI that reads it cannot see formatting:',
+  '- no tables, cards, badges, buttons, icons, emoji or clickable links;',
+  '- put every item on its own line, with a blank line between pairs and between sections, and end every pair and every section with a line containing only ---;',
+  '- write every video as its full title in quotation marks, followed by its numbers in words, for example: "Title" (76,660 views, 12x its channel median);',
+  '- write every score, keyword and number as ordinary text, for example: Title: "..." Score: 97 out of 100; keyword: memory, search volume: high;',
+  '- write every timestamp as plain digits, like 1:35, never as a link;',
+  '- label each part clearly (Pair 1, Pair 2, My Choice, Description, Tags, Hashtags, Chapters, Pinned Comment) and write the description, tags, hashtags and pinned comment exactly as I would paste them, with no commentary inside them;',
+  '- put any notes or warnings of your own in a separate section at the very end called Notes.',
+].join('\n');
+
 /** The question for vidIQ and Ask Studio: what the video is, then what to suggest and how, honest to the video. */
 export function researchQuestion(f: ResearchFacts): string {
   const kind = f.short ? 'YouTube Short' : 'YouTube video';
@@ -33,6 +48,8 @@ export function researchQuestion(f: ResearchFacts): string {
     "- why someone who doesn't know me would click, and what backs that up (search terms, or similar videos that did well).",
     '',
     'Then say which pair you would choose and why. Suggest a description, comma-separated tags, hashtags, and a pinned comment. For longform, suggest chapters only if you have reliable timestamps; otherwise say you cannot determine them. Every suggestion must be true to what actually happens in the video; do not invent details or timestamps.',
+    '',
+    PLAIN_TEXT_RULES,
     ...(!f.url && f.source?.text.trim()
       ? ['', f.source.kind === 'transcript' ? `The ${f.short ? "Short's" : "video's"} transcript:` : `The ${f.short ? "Short's" : "video's"} script (the recording may differ):`, f.source.text.trim()]
       : []),
