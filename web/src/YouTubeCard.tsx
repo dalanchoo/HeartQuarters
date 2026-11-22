@@ -23,6 +23,7 @@ import { useStagedDoc } from './useStagedDoc';
 import { AiHighlightedText, AiWritingChecker, renderTextWithAiTells } from './AiWritingChecker';
 import { findAiTellSpans } from './aiWritingCheck';
 import { CopyDirectionControls, CopyDirectionFrame, youtubeCopyDirection, type CopyDirection } from './CopyDirection';
+import { sameThumbnail } from './youtubeThumbnail';
 import { canSelectIncomingCopy } from './stagedPackaging';
 
 // A video's YouTube metadata in one place (John, 2026-11-14): the link to YouTube sits on the card's status line, and
@@ -582,7 +583,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         if (!job || !online || !data) throw new Error('YouTube data is not available. Reload and try again.');
         const current = await cachedYoutube<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`, true);
         for (const field of fromYoutube) if (youtubeValues(current.video)[field] !== online[field]) throw new Error(`YouTube's ${field} changed. Reload and compare again.`);
-        if (youtubeThumbnail && current.video.thumbnail !== data.video.thumbnail) throw new Error('The YouTube thumbnail changed. Reload and compare again.');
+        if (youtubeThumbnail && !sameThumbnail(current.video.thumbnail, data.video.thumbnail)) throw new Error('The YouTube thumbnail changed. Reload and compare again.');
       }
       if (draft.pending || fromYoutube.length) {
         await draft.apply(fromYoutube.length ? text => fromYoutube.reduce((result, field) => setLocalValue(result, field, online![field]!), text) : undefined, localBaseline.current ?? undefined);
