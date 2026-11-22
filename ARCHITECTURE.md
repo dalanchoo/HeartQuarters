@@ -38,13 +38,16 @@ see your projects, edit metadata, watch videos, and run jobs
 | Substack writing | `D:\Google Drive\HeartMind\Writing\<My Journey / My Reflections / My Wisdom>\<piece>\` with `Drafts\*.docx` and `Substack Metadata\Preview.png` |
 | Expressions library (thumbnail photos) | `D:\Google Drive\HeartMind\Assets\Expressions\<Category>\<Sub>\` with `<Name>.txt` (definition), `_<Name>.png` (reference), photos + `<photo>.txt` tags |
 | Expression shot list | `D:\Google Drive\HeartMind\Assets\Expressions\Expression Shot List.json`; suggested looks, their video sources, and whether they have been photographed |
+| Expression reference photo lists | `...\Assets\Expressions\Expression Starred Photos.json` (stars) and `Expression Reference Photos.json` (photos that show the AI what John looks like) |
+| Shot reference pictures | `...\Assets\Expressions\_ShotReferences\<shot id>\` (AI target-look pictures and their job file) |
+| Which YouTube video a piece is | `<piece folder>\YouTube Link.txt` (one line, the video address). The upload records in `data\youtube-uploads` are rebuilt from it when the engine starts. |
 | Expression inbox | `D:\Google Drive\HeartMind\Assets\Expressions\_Inbox\`; photos and sidecars awaiting assessment and classification |
 | Photo previews (cache) | `C:\Dev\HeartQuarters\data\thumbs` (made by FFmpeg; safe to delete) |
 | Downloaded Substack archive | `HMF_SYS\Generated\Substack` (made by SubstackDownloader.py; not shown in the app yet) |
 | Tools (standalone Python scripts the Tools tab runs) | `D:\Google Drive\HeartMind\HMF_SYS\Tools\` |
 | Things deleted in the app | `D:\HeartQuarters Trash`, outside Drive so it isn't synced. Keep it on the same drive as Drive: deleting moves folders by renaming them. |
 | HeartQuarters code | `C:\Dev\HeartQuarters` (Git), outside Drive |
-| App cache / database (later) | `C:\Dev\HeartQuarters\data\` (ignored by Git; can be deleted) |
+| App cache and working files | `C:\Dev\HeartQuarters\data\` (ignored by Git; see the rule below: deleting it must lose nothing) |
 | Per-machine settings | `C:\Dev\HeartQuarters\config.json` (made from `config.example.json`) |
 
 **The skills stay in Drive** (`HMF_SYS\Skills`), not in Git: they are part of
@@ -112,6 +115,13 @@ He picks one at the top of the app; the choice is kept in `data/ai-choice.json`.
 
 - **Nothing important lives only in the app.** Metadata stays in the Packaging
   files in Drive.
+- **The `data\` folder must always be safe to delete.** It may hold only things the
+  app can rebuild (photo previews, AI scratch folders, the YouTube quota count,
+  the Channel tab's saved list, upload records rebuilt from `YouTube Link.txt`) or
+  that are disposable (unaccepted expression drafts, thumbnail reviews, the AI
+  choice). Anything John chose, linked or would mind losing goes in Drive. A new
+  feature that saves something must say which of the two it is, and if it is the
+  second, store it in Drive and add a test that deletes `data\` and loses nothing.
 - **Never overwrite or delete originals.** The app only reads, except where a
   feature is explicitly about writing (and then it writes new files or asks).
 - **Git is for code only.** Media stays in Drive.
