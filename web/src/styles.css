@@ -1090,3 +1090,10 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-filters select { min-height: 24px; font-size: 0.85rem; }
 .idea-filters .idea-filter-text { flex: 1; min-width: 12rem; }
 .idea-filters .idea-filter-text input { width: 100%; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
+
+/* Channel tab: compact table of every video */
+.channel-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.channel-table th, .channel-table td { padding: 0.1rem 0.4rem; border-bottom: 1px solid var(--line); text-align: left; line-height: 1.25; }
+.channel-table th.num, .channel-table td.num { text-align: right; white-space: nowrap; }
+.channel-table th button.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; color: inherit; }
+.channel-table td.title { max-width: 28rem; }

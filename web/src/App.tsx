@@ -5,6 +5,7 @@ import { postJson } from './api';
 
 // A page load starts with no old AI conversations (John, 2026-11-12). Done once here, not on every tab change.
 void postJson('/api/conversations/forget').catch(() => {});
+import { ChannelPage } from './ChannelPage';
 import { IdeasPage } from './IdeasPage';
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
@@ -28,6 +29,7 @@ function cleanPaste(event: ClipboardEvent<HTMLDivElement>) {
 // Each tab has an id (used in the address, e.g. #Videos) and a label.
 const TABS = [
   { id: 'Ideas', label: 'Ideas' },
+  { id: 'Channel', label: 'Channel' },
   { id: 'Videos', label: 'Video Projects' },
   { id: 'Substack', label: 'Substack' },
   { id: 'Expressions', label: 'Expressions' },
@@ -131,7 +133,8 @@ export function App() {
       <main>
         <ErrorBoundary>
           {page('Ideas', <IdeasPage />)}
-          {page('Videos', <ProjectsPage />)}
+          {page('Channel', <ChannelPage />)}
+          {page('Videos',<ProjectsPage />)}
           {page('Substack', <SubstackPage />)}
           {page('Expressions', <ExpressionsPage />)}
           {page('Guides', <GuidesPage />)}

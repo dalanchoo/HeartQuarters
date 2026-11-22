@@ -112,10 +112,13 @@ export async function collectChannelVideos(channel: { id: string; title: string 
   return { channel, updatedAt: now.toISOString(), videos: mergeChannelVideos(details, numbers, linkedKinds()) };
 }
 
-const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 'data', 'channel-videos.json');
+const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 'data', 'channel-video-list.json');
 
 export function readChannelVideos(): ChannelVideoList | null {
-  try { return JSON.parse(fs.readFileSync(savedFile(), 'utf8')) as ChannelVideoList; } catch { return null; }
+  try {
+    const saved = JSON.parse(fs.readFileSync(savedFile(), 'utf8')) as ChannelVideoList;
+    return Array.isArray(saved?.videos) ? saved : null; // anything else isn't ours
+  } catch { return null; }
 }
 
 export async function refreshChannelVideos(): Promise<ChannelVideoList> {

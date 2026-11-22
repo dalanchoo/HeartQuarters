@@ -63,6 +63,11 @@ it('saves a copy that opens without asking YouTube, and returns nothing before t
   expect(readChannelVideos()?.channel.title).toBe('Heart Mind Fusion');
 });
 
+it('ignores a saved file in some other format instead of showing it', () => {
+  fs.writeFileSync(process.env.HQ_CHANNEL_VIDEOS_FILE!, JSON.stringify([{ id: 'x', title: 'old script output' }]));
+  expect(readChannelVideos()).toBeNull();
+});
+
 it('keeps a linked video as longform when its project piece says so, even if it is short', () => {
   const [v] = mergeChannelVideos([{ id: 'x', title: 't', publishedAt: '2026-01-01', seconds: 30, privacy: 'public' }], new Map(), new Map([['x', { piece: 'p', kind: 'longform' as const }]]));
   expect(v.kind).toBe('longform');
