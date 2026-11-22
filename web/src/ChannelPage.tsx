@@ -117,7 +117,9 @@ export function ChannelPage() {
                 <th>Project</th>
               </tr>
             </thead>
-            <tbody>
+            {/* A new key makes React build the body afresh when a filter or the sort changes. Without it, after the list had
+                been emptied and refilled, removing rows left five old ones stuck on screen (found on the Channel tab, 2026-11-21). */}
+            <tbody key={[kind, topic, angle, text.trim(), key, descending].join('|')}>
               {rows.map((v) => (
                 <tr key={v.id}>
                   <td>{v.kind === 'short' ? 'Short' : 'Longform'}{v.kindGuessed ? ' ?' : ''}</td>
