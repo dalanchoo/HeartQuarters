@@ -24,7 +24,7 @@ export interface ResearchFacts {
 const PLAIN_TEXT_RULES = [
   'Format your answer as plain text only, because I will copy it with a copy button and the AI that reads it cannot see formatting:',
   '- no tables, cards, badges, buttons, icons, emoji or clickable links;',
-  '- put every item on its own line, with a blank line between pairs and between sections, and end every pair and every section with a line containing only ---;',
+  '- put every item on its own line, with a blank line between pairs and between sections, and end every pair and every section with a line containing only the words === END OF SECTION ===;',
   '- write every video as its full title in quotation marks, followed by its numbers in words, for example: "Title" (76,660 views, 12x its channel median);',
   '- write every score, keyword and number as ordinary text, for example: Title: "..." Score: 97 out of 100; keyword: memory, search volume: high;',
   '- write every timestamp as plain digits, like 1:35, never as a link;',

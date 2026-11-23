@@ -19,7 +19,7 @@ describe('the research question for vidIQ and Ask Studio', () => {
     const q = researchQuestion({ title: 'T', about: '', short: false, source: { kind: 'transcript', text: 'Hello' } });
     expect(q).toContain('Format your answer as plain text only');
     expect(q).toContain('no tables, cards, badges');
-    expect(q).toContain('a line containing only ---');
+    expect(q).toContain('=== END OF SECTION ===');
     expect(q.indexOf('plain text only')).toBeLessThan(q.indexOf("video's transcript:"));
   });
   it("adds the transcript (or script) while it isn't on YouTube, and leaves it out once it is", () => {
