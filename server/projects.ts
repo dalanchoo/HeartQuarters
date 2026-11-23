@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { readable } from './safe-files.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -202,19 +203,25 @@ function subfolders(dir: string): string[] {
   }
 }
 
-function filesIn(dir: string, exts: Set<string>): FileRef[] {
+function filesIn(dir: string, exts: Set<string>, checkFile = (file: string) => file): FileRef[] {
   try {
     return fs
       .readdirSync(dir, { withFileTypes: true })
       .filter((d) => d.isFile() && exts.has(path.extname(d.name).toLowerCase()))
       .map((d) => {
         const full = path.join(dir, d.name);
-        const st = fs.statSync(full);
+        const st = fs.statSync(checkFile(full));
         return { name: d.name, path: rel(full), size: st.size, modified: Math.round(st.mtimeMs) };
       });
   } catch {
     return [];
   }
+}
+
+export function projectExports(piece: string): FileRef[] {
+  try {
+    return filesIn(safeResolve('projects', path.join(piece, 'Exports')), VIDEO_EXTS, readable);
+  } catch { return []; }
 }
 
 /**

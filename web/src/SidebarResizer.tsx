@@ -35,15 +35,39 @@ export function restoreSidebarWidth() {
 
 export function SidebarResizer() {
   const handle = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; width: number } | null>(null);
+  const drag = useRef<{ x: number; width: number; pointerId: number } | null>(null);
   const setAria = (w: number) => handle.current?.setAttribute('aria-valuenow', String(w));
-  useEffect(() => { setAria(current()); }, []);
+  useEffect(() => {
+    setAria(current());
+    const move = (event: PointerEvent) => {
+      const active = drag.current;
+      if (active?.pointerId === event.pointerId) setAria(apply(active.width + event.clientX - active.x, false));
+    };
+    const stop = (event: PointerEvent) => {
+      if (drag.current?.pointerId !== event.pointerId) return;
+      drag.current = null;
+      document.body.classList.remove('is-resizing-sidebar');
+      if (event.type === 'pointerup') apply(current(), true);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      if (drag.current) document.body.classList.remove('is-resizing-sidebar');
+    };
+  }, []);
   return <div ref={handle} className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the left column" aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX} tabIndex={0}
     title="Drag to make the left column wider or narrower. Double-click for the standard width."
-    onPointerDown={e => { if (e.button !== 0) return; e.preventDefault(); drag.current = { x: e.clientX, width: current() }; e.currentTarget.setPointerCapture(e.pointerId); document.body.classList.add('is-resizing-sidebar'); }}
-    onPointerMove={e => { const d = drag.current; if (d) setAria(apply(d.width + e.clientX - d.x, false)); }}
-    onPointerUp={() => { if (!drag.current) return; drag.current = null; document.body.classList.remove('is-resizing-sidebar'); apply(current(), true); }}
-    onPointerCancel={() => { drag.current = null; document.body.classList.remove('is-resizing-sidebar'); }}
+    onPointerDown={e => {
+      if (e.button !== 0 || drag.current) return;
+      e.preventDefault();
+      drag.current = { x: e.clientX, width: current(), pointerId: e.pointerId };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      document.body.classList.add('is-resizing-sidebar');
+    }}
     onDoubleClick={() => setAria(apply(SIDEBAR_DEFAULT, true))}
     onKeyDown={e => { const step = e.shiftKey ? 50 : 10; if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setAria(apply(current() + (e.key === 'ArrowRight' ? step : -step), true)); } }}
   />;

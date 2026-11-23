@@ -8,6 +8,8 @@ import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, v
 import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ReachSetup } from './ReachSetup';
+import { SidebarResizer } from './SidebarResizer';
+import { VideoPreview } from './VideoPreview';
 
 type Overview = NonNullable<ReturnType<typeof channelOverview>>;
 const videoHash = (id: string) => `#Channel/Video/${encodeURIComponent(id)}`;
@@ -72,6 +74,7 @@ export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; i
           aria-current={video.id === openId ? 'page' : undefined} title={video.title}>{rowName(video)}</a>)}
       </nav>
     </aside>
+    <SidebarResizer />
     <div className="channel-video-detail">
       {openId ? <ChannelVideoView key={openId} id={openId} video={selected} /> : matching.length > 0
         ? <p className="muted">{filters.topic === 'all' ? 'Choose a video from the list.' : `Choose a video about ${TOPIC_LABELS[filters.topic]} from the list.`}</p>
@@ -112,13 +115,20 @@ function ChannelVideoView({ id, video }: { id: string; video?: ChannelVideo }) {
     return () => { active = false; };
   }, [id, video?.piece]);
   const piece = detail?.piece ?? video?.piece;
+  const thumbnail = video?.thumbnail && /^https:\/\/i\.ytimg\.com\//.test(video.thumbnail) ? video.thumbnail : undefined;
+  const poster = thumbnail && video ? { src: thumbnail, alt: `Published thumbnail for ${video.title}` } : undefined;
   return <section className="channel-video-view">
     <div className="yt-linkbar-row"><h2>{rowName({ piece: piece ?? null, title: video?.title ?? 'Video Detail' })}</h2>
       {piece && <a href={videoProjectsHash(piece)}>Open in Video Projects ↗</a>}
+      <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">Watch on YouTube ↗</a>
     </div>
-    <details className="yt-section">
+    <details className="yt-section" open>
       <summary>Published Packaging</summary>
-      {video ? <><p>{video.title}</p>{video.thumbnail && /^https:\/\/i\.ytimg\.com\//.test(video.thumbnail) && <img className="channel-published-thumbnail" src={video.thumbnail} alt={`Published thumbnail for ${video.title}`} />}</> : <p className="muted">Refresh YouTube Data to show the published title and thumbnail.</p>}
+      {video ? <p>{video.title}</p> : <p className="muted">Refresh YouTube Data to show the published title and thumbnail.</p>}
+      {(poster || !!detail?.exports.length) && <div className={`channel-video-preview${video?.kind === 'short' ? ' channel-video-preview--short' : ''}`}>
+        <VideoPreview exports={detail?.exports ?? []} covers={[]} poster={poster} />
+      </div>}
+      {detail && !detail.exports.length && <p className="muted small-text">No local video export is available.</p>}
     </details>
     <details className="yt-section">
       <summary>{detail?.transcript?.source === 'script' ? 'Script' : 'Transcript'}</summary>

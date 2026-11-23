@@ -30,16 +30,20 @@ const short: ChannelVideo = {
 it('shows a searchable list with the same filters as Overview and waits for a video selection', () => {
   const html = renderToStaticMarkup(createElement(ChannelVideoBrowser, { videos: [short] }));
   expect(html).toContain('type="search"');
+  expect(html).toContain('role="separator"');
   expect(html).toMatch(/<nav[^>]+aria-label="Matching Videos"[^>]*>.*href="#Channel\/Video\/short"[^>]*>Short One<\/a>/);
   expect(html).toContain('Choose a video from the list.');
   for (const label of ['Longform', 'Shorts', 'Standalone', 'All Topics', 'All Angles']) expect(html).toContain(`>${label}</option>`);
 });
 
 it('marks the selected video in the list and opens its details from a deep link', () => {
-  const selected = { ...short, id: 'abcdefghijk' };
+  const selected = { ...short, id: 'abcdefghijk', thumbnail: 'https://i.ytimg.com/example.jpg' };
   const html = renderToStaticMarkup(createElement(ChannelVideoBrowser, { videos: [selected], id: selected.id }));
   expect(html).toMatch(/href="#Channel\/Video\/abcdefghijk" aria-current="page"/);
   expect(html).toContain('<h2>Short One</h2>');
+  expect(html).toContain('https://www.youtube.com/watch?v=abcdefghijk');
+  expect(html).toMatch(/<details[^>]+open=""><summary>Published Packaging<\/summary>.*<img class="video-preview-cover"/);
+  expect(html.match(/<img class="video-preview-cover"/g)).toHaveLength(1);
 });
 
 it('links to the parent project and keeps the note in collapsed details', () => {

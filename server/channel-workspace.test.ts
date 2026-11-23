@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { channelOverview, channelVideoDetail, refreshChannelWorkspace } from './channel-workspace.js';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
@@ -25,6 +27,8 @@ beforeEach(() => {
       ] },
     }),
     'Video/Longform/Subtitles/Captions.srt': 'A local transcript.',
+    'Video/Longform/Exports/Video.mp4': 'example',
+    'Video/Longform/Exports/Notes.txt': 'Ignore this file.',
   });
   previous = config.videoProjectsDir;
   config.videoProjectsDir = root;
@@ -51,8 +55,22 @@ it('shows channel totals and each video’s own reported reach window', () => {
   expect(overview?.videoReach.lmnopqrstuv).toMatchObject({ impressions: 30, ctrPercent: 10 });
 });
 
-it('finds the local transcript by linked video and checks the requested ID', async () => {
-  await expect(channelVideoDetail('abcdefghijk')).resolves.toEqual({ piece: 'Video/Longform', transcript: { source: 'transcript', text: 'A local transcript.' } });
-  await expect(channelVideoDetail('lmnopqrstuv')).resolves.toEqual({ piece: null, transcript: null });
+it('finds playable exports and the transcript by linked video and checks the requested ID', async () => {
+  await expect(channelVideoDetail('abcdefghijk')).resolves.toEqual({
+    piece: 'Video/Longform',
+    exports: [{ name: 'Video.mp4', path: 'Video/Longform/Exports/Video.mp4', size: 7, modified: expect.any(Number) }],
+    transcript: { source: 'transcript', text: 'A local transcript.' },
+  });
+  await expect(channelVideoDetail('lmnopqrstuv')).resolves.toEqual({ piece: null, exports: [], transcript: null });
   await expect(channelVideoDetail('../not-a-video')).rejects.toThrow('Choose a YouTube video');
+});
+
+it('leaves playback unavailable when the Exports folder points outside Video Projects', async () => {
+  const outside = makeTree({ 'Outside.mp4': 'outside' });
+  const exports = path.join(root, 'Video/Longform/Exports');
+  fs.renameSync(exports, path.join(root, 'Video/Longform/Previous Exports'));
+  try {
+    fs.symlinkSync(outside, exports, 'junction');
+    await expect(channelVideoDetail('abcdefghijk')).resolves.toMatchObject({ exports: [] });
+  } finally { removeTree(outside); }
 });

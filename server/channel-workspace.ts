@@ -3,6 +3,7 @@ import { readAnalysisTranscript } from './analytics-context.js';
 import { reachTotals, summarizeSnapshot, type ReachTotals } from './analytics-summary.js';
 import { downloadChannelAnalytics, type ChannelSnapshot } from './channel-analytics.js';
 import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
+import { projectExports } from './projects.js';
 import { videoLinks } from './video-links.js';
 import type { ReachData } from './youtube-reach.js';
 
@@ -55,7 +56,7 @@ function linkedPiece(videoId: string) {
 
 export async function channelVideoDetail(videoId: string) {
   const piece = linkedPiece(videoId);
-  return { piece, transcript: piece ? await readAnalysisTranscript(piece) : null };
+  return { piece, exports: piece ? projectExports(piece) : [], transcript: piece ? await readAnalysisTranscript(piece) : null };
 }
 
 export async function startChannelVideoAnalysis(videoId: string) {

@@ -33,7 +33,9 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   transcripts, and packaging for up to three linked videos it shortlists.
   Video Projects links to Channel from a linked video's YouTube card.
   Video Detail filters a visible list and clears the selection when it falls
-  outside the results.
+  outside the results. The list uses the shared sidebar width and linked
+  videos can play their local exports in place from the Published Packaging
+  thumbnail.
   Research is reserved for vidIQ, Ask Studio, Reddit, and news. Keep outside
   demand distinct from what Heart Mind Fusion's own viewers watch.
 - **Video Projects gives Shorts their source.** A Short clipped from a
