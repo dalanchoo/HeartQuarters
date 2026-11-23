@@ -1,13 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
+import { analyticsAnalysis, analyticsSnapshots, prepareVideoSnapshot, startAnalyticsAnalysis, startAnalyticsSummary, videoSnapshotNames } from './analytics-analysis.js';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
 import type { AskAi } from './brief.js';
 import { readChannelVideos } from './channel-videos.js';
+import { downloadLinkedVideoAnalytics } from './analytics.js';
 
 vi.mock('./channel-videos.js', () => ({ readChannelVideos: vi.fn(() => null) }));
+vi.mock('./analytics.js', () => ({ downloadLinkedVideoAnalytics: vi.fn() }));
 vi.mock('./video-links.js', () => ({
   videoLinks: () => new Map([
     ['abcdefghijk', { piece: '022 - Worth Telling Them/Longform' }],
@@ -53,6 +55,57 @@ describe('analytics analysis', () => {
       expect(fs.readFileSync(path.join(root, 'Analytics/2026-11-18/Analysis', job.id, file), 'utf8'))
         .toBe('Repackage 022 - Worth Telling Them.\n');
     }
+  });
+
+  it('gives channel synthesis and summary the shortlisted video’s retention, transcript and packaging', async () => {
+    const piece = '022 - Worth Telling Them/Longform';
+    const videoId = 'abcdefghijk';
+    const stats = path.join(root, 'Analytics/2026-11-18/Stats.json');
+    fs.writeFileSync(stats, JSON.stringify({ downloadedAt: '2026-11-18', channel: { id: 'own' }, reports: [] }));
+    const catalog = {
+      channel: { id: 'own', title: 'Heart Mind Fusion' }, updatedAt: '2026-11-23', videos: [{
+        id: videoId, title: 'Published title', publishedAt: '2026-10-01', seconds: 400, privacy: 'public',
+        piece, kind: 'longform' as const, kindGuessed: false, topic: 'sdam' as const, topic2: 'unassigned' as const,
+        angle: 'story' as const, angle2: 'unassigned' as const, note: '', numbers: null,
+      }],
+    };
+    vi.mocked(readChannelVideos).mockReturnValueOnce(catalog);
+    for (const [relative, content] of [
+      ['Analytics/2026-11-18/Stats.json', JSON.stringify({ videoId, downloadedAt: new Date().toISOString(), periods: [{ retention: { rows: [[0.1, 0.4]] } }] })],
+      ['Subtitles/subs.srt', 'Timed opening line'],
+      ['Packaging/V01/YouTube.md', 'Local title'],
+    ]) {
+      const file = path.join(root, piece, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, content);
+    }
+    let reads = 0;
+    const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async (_ai, prompt, cwd) => {
+      if (!prompt.includes('its listed files')) return `Repackage the video.\nEvidence IDs: ${videoId}, lmnopqrstuv`;
+      expect(JSON.parse(fs.readFileSync(path.join(cwd, 'Evidence.json'), 'utf8'))).toMatchObject([{ id: videoId, publishedTitle: 'Published title' }]);
+      expect(fs.readFileSync(path.join(cwd, `Evidence-${videoId}-Stats.json`), 'utf8')).toContain('[[0.1,0.4]]');
+      expect(fs.readFileSync(path.join(cwd, `Evidence-${videoId}-Transcript.srt`), 'utf8')).toBe('Timed opening line');
+      expect(fs.readFileSync(path.join(cwd, `Evidence-${videoId}-Packaging-YouTube.md`), 'utf8')).toBe('Local title');
+      reads++;
+      return 'Repackage the video.';
+    });
+    await finished;
+    expect(job.state).toBe('done');
+    expect(reads).toBe(2);
+    expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ evidenceIds: [videoId], claude: 'Repackage the video.\n' });
+  });
+
+  it('reuses recent stats for the selected YouTube ID and combines concurrent downloads for another ID', async () => {
+    const piece = 'Video/Longform';
+    const file = path.join(root, piece, 'Analytics/2026-11-18/Stats.json');
+    fs.writeFileSync(file, JSON.stringify({ videoId: 'abcdefghijk', downloadedAt: new Date().toISOString(), periods: [] }));
+    const download = vi.mocked(downloadLinkedVideoAnalytics);
+    download.mockClear();
+    download.mockResolvedValueOnce({ file: `${piece}/Analytics/2026-11-23/Stats.json`, missingRetention: [], emptyStatistics: [], unavailableBreakdowns: [], reach: { status: 'unavailable', note: 'No reach reports.' } });
+    await expect(prepareVideoSnapshot(piece, 'abcdefghijk')).resolves.toBe('2026-11-18');
+    expect(videoSnapshotNames(piece, 'lmnopqrstuv')).toEqual([]);
+    await expect(Promise.all([prepareVideoSnapshot(piece, 'lmnopqrstuv'), prepareVideoSnapshot(piece, 'lmnopqrstuv')])).resolves.toEqual(['2026-11-23', '2026-11-23']);
+    expect(download).toHaveBeenCalledTimes(1);
   });
 
   it('resolves known IDs in saved reports while preserving watch links and the original file', async () => {

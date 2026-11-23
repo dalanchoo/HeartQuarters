@@ -29,6 +29,7 @@ const short: ChannelVideo = {
 
 it('links to the parent project and keeps the note in collapsed details', () => {
   const html = renderToStaticMarkup(createElement(ChannelProjectCell, { video: short, saveNote: () => {} }));
+  expect(html).toContain('href="#Channel/Video/short"');
   expect(html).toContain('From <a href="#Videos/005%20-%20Series%2F005A%20-%20Parent"># 005A-Parent</a>');
   const [visible, details] = html.split('<details class="channel-project-details">');
   expect(visible).not.toContain('Keep this note');
@@ -63,7 +64,7 @@ it('explains missing, pending, and unavailable reports in the longform details',
   const markup = (endScreens?: EndScreenData) => renderToStaticMarkup(createElement(ChannelProjectCell, {
     video, endScreens, saveNote: () => {},
   })).split('<details')[1];
-  expect(markup()).toContain('Click Refresh From YouTube to load end screen activity.');
+  expect(markup()).toContain('Click Refresh YouTube Data to load end screen activity.');
   expect(markup({ status: 'pending', note: 'YouTube is preparing end screen data.' })).toContain('YouTube is preparing end screen data.');
   expect(markup({ status: 'unavailable', note: 'YouTube could not load the report.' })).toContain('YouTube could not load the report.');
 });

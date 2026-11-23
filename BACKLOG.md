@@ -26,14 +26,14 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   across the whole catalog using views, watch time, search and browse
   traffic, impressions and CTR, and retention curves where available.
   Use existing Topic and Angle values and treat missing counts as unknown.
-- **Build on the existing Analysis tab.** Channel Analytics now gives its
-  reviewers the saved Channel catalog and asks them to rank what to make or
-  change. Reports identify linked videos by their exact Video Projects name.
-  Use per-video retention and packaging to investigate shortlisted
-  candidates. Then bring in fresh outside evidence from vidIQ or Ask Studio,
-  relevant Reddit threads, and news. Keep outside demand distinct from
-  what Heart Mind Fusion's own viewers watch. The Video Projects left pane
-  has separate collapsible sections for Channel Analytics and Videos.
+- **Channel is the home for analytics.** Overview refreshes the catalog and
+  channel snapshot together. What to Make Next and Video Detail share the
+  existing saved reports. Detailed analysis reuses stats from the last 24
+  hours or downloads them as needed. The channel review pulls retention,
+  transcripts, and packaging for up to three linked videos it shortlists.
+  Video Projects links to Channel from a linked video's YouTube card.
+  Research is reserved for vidIQ, Ask Studio, Reddit, and news. Keep outside
+  demand distinct from what Heart Mind Fusion's own viewers watch.
 - **Video Projects gives Shorts their source.** A Short clipped from a
   longform follows the project grouping. `999 - Shorts` are standalone
   projects. The later cross-post picker should judge whether any Short works
@@ -181,7 +181,7 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 | 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
-| 21 | Use the whole YouTube catalog to decide what to make or change next | Auto | **Partly done (2026-11-23).** Channel shows the catalog, performance, search and browse views, project links, topics, angles, and Shorts sources. Channel Analytics now uses that catalog in its recommendations. Next: compare recent momentum, add retention context for candidates, and research outside demand. |
+| 21 | Use the whole YouTube catalog to decide what to make or change next | Auto | **Partly done (2026-11-23).** Channel brings the catalog, channel snapshots, recommendations, and individual video evidence together. Next: compare recent momentum and research outside demand. |
 | 22 | Analysis follow-up chat: ask questions about a finished analysis and get feedback on John's own video ideas | n/a | Build on the recommendations and research in #21. Part of #7c. |
 
 ### Video analysis and recommendation phase: what is left (handoff, 2026-11-22)
@@ -190,9 +190,9 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 and timely outside demand. Use the existing Topic and Angle review.
 
 **Still to do, in order**
-1. Try **Find What to Make Next** in Channel Analytics (#21). Compare recent
-   performance over the same period, and pull per-video retention and packaging
-   automatically when investigating a candidate.
+1. Try **Refresh YouTube Data**, **What to Make Next**, and **Video Detail** in
+   Channel (#21). Compare recent performance over the same period when the
+   reports support it.
 2. Add research on the leading topics using vidIQ or Ask Studio where connected,
    plus relevant Reddit discussions and news. Bring sources and dates into the
    recommendations. Topic and Angle filters in Video Projects are later.

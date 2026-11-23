@@ -33,7 +33,9 @@ export type { RootId };
 
 /** After any request that may have spent YouTube quota, the quota meter re-reads the count (see youtubeQuota.tsx). */
 function afterYoutube(url: string) {
-  if (url.startsWith('/api/youtube/') && !url.startsWith('/api/youtube/quota')) window.dispatchEvent(new Event('hq-youtube-used'));
+  if ((url.startsWith('/api/youtube/') && !url.startsWith('/api/youtube/quota')) || url === '/api/channel/refresh' || url === '/api/channel/video-analysis') {
+    window.dispatchEvent(new Event('hq-youtube-used'));
+  }
 }
 
 async function parseJson(res: Response): Promise<Record<string, unknown>> {

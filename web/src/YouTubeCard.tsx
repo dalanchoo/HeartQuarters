@@ -165,7 +165,6 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
   const [connectUrl, setConnectUrl] = useState('');
   const [clientId, setClientId] = useState('');
   const [secret, setSecret] = useState('');
-  const [statsMessage, setStatsMessage] = useState('');
   const short = piece.kind === 'short';
   useEffect(() => setUrl(job?.videoId ? youtubeVideoUrl(job.videoId, short) : ''), [job?.id, job?.videoId, short]);
   const quota = useYoutubeQuota();
@@ -254,17 +253,7 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
               <button className="small" aria-label="Reload from YouTube" disabled={busy || out} onClick={link.reload} title="Reads this video's settings from YouTube again">
                 Reload from <YouTubeIcon />
               </button>
-              {/* Downloads a new Stats.json (the same as Download Video Stats in Analysis); the views on the title update. */}
-              <button className="small" disabled={busy || out} title="Downloads this video's latest stats from YouTube: about 1 Data API unit + 11 Analytics units. Details are in Analysis below." onClick={() => void action(async () => {
-                setStatsMessage('');
-                const result = await postJson<{ file: string }>('/api/youtube/analytics/video', { piece: piece.path, id: job.id });
-                window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece.path }));
-                window.dispatchEvent(new CustomEvent('hq-video-stats-downloaded', { detail: piece.path }));
-                setStatsMessage(`Stats updated (${result.file.split('/').slice(-2, -1)[0]}). Open Analysis below for the details.`);
-              })}>
-                Update Stats
-              </button>
-              {statsMessage && <span className="muted small-text" role="status">{statsMessage}</span>}
+              <a className="button-link small" href={`#Channel/Video/${encodeURIComponent(job.videoId!)}`}>Open in Channel ↗</a>
             </div>
           )}
           {!status.captionAccess && (

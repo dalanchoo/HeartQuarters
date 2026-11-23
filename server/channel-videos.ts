@@ -22,6 +22,7 @@ export interface VideoNumbers { views: number; minutesWatched: number; averageVi
 interface TrafficViews { searchViews?: number; browseViews?: number }
 export interface ChannelVideo {
   id: string; title: string; publishedAt: string; seconds: number; privacy: string;
+  thumbnail?: string;
   kind: 'longform' | 'short';
   /** True when the kind is a guess from the video's length (the video isn't linked to a project). */
   kindGuessed: boolean;
@@ -81,13 +82,13 @@ async function uploadIds(token: string): Promise<string[]> {
   return ids;
 }
 
-type Detail = { id: string; title: string; publishedAt: string; seconds: number; privacy: string };
+type Detail = { id: string; title: string; publishedAt: string; seconds: number; privacy: string; thumbnail?: string };
 async function videoDetails(token: string, ids: string[]): Promise<Detail[]> {
   const out: Detail[] = [];
   for (const batch of chunks(ids, 50)) {
     const params = new URLSearchParams({ part: 'snippet,contentDetails,status', id: batch.join(',') });
-    const data = await getJson<{ items?: { id: string; snippet: { title: string; publishedAt: string }; contentDetails: { duration: string }; status?: { privacyStatus?: string } }[] }>(`https://www.googleapis.com/youtube/v3/videos?${params}`, token, 'read your videos');
-    for (const v of data.items ?? []) out.push({ id: v.id, title: v.snippet.title, publishedAt: v.snippet.publishedAt, seconds: parseDuration(v.contentDetails.duration), privacy: v.status?.privacyStatus ?? 'unknown' });
+    const data = await getJson<{ items?: { id: string; snippet: { title: string; publishedAt: string; thumbnails?: Record<string, {url?: string}> }; contentDetails: { duration: string }; status?: { privacyStatus?: string } }[] }>(`https://www.googleapis.com/youtube/v3/videos?${params}`, token, 'read your videos');
+    for (const v of data.items ?? []) out.push({ id: v.id, title: v.snippet.title, publishedAt: v.snippet.publishedAt, seconds: parseDuration(v.contentDetails.duration), privacy: v.status?.privacyStatus ?? 'unknown', thumbnail: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url });
   }
   return out;
 }
@@ -147,12 +148,12 @@ async function videoTrafficViews(token: string, ids: string[], now: Date): Promi
 }
 
 /** Work out a video's kind and project folder from the current links. */
-function resolveLink(v: Pick<ChannelVideo, 'id' | 'title' | 'publishedAt' | 'seconds' | 'privacy' | 'numbers' | 'traffic'>, link: VideoLink | undefined): ChannelVideo {
+function resolveLink(v: Detail & Pick<ChannelVideo, 'numbers' | 'traffic'>, link: VideoLink | undefined): ChannelVideo {
   const kind = link?.kind ?? (v.seconds <= SHORT_MAX_SECONDS ? 'short' : 'longform');
   const fromLongform = link?.kind === 'short'
     ? link.piece.startsWith(`${STANDALONE_GROUP}/`) ? 'standalone' : link.sourceLongformPiece ?? null
     : undefined;
-  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, numbers: v.numbers, traffic: v.traffic, fromLongform, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, topic2: 'unassigned' as const, angle: 'unassigned' as const, angle2: 'unassigned' as const, note: '' }) };
+  return { id: v.id, title: v.title, publishedAt: v.publishedAt, seconds: v.seconds, privacy: v.privacy, thumbnail: v.thumbnail, numbers: v.numbers, traffic: v.traffic, fromLongform, kind, kindGuessed: !link?.kind, piece: link?.piece ?? null, ...(link ? readVideoProfile(link.piece) : { topic: 'unassigned' as const, topic2: 'unassigned' as const, angle: 'unassigned' as const, angle2: 'unassigned' as const, note: '' }) };
 }
 
 export function mergeChannelVideos(details: Detail[], numbers: Map<string, VideoNumbers>, links: Map<string, VideoLink>): ChannelVideo[] {

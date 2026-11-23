@@ -4,7 +4,7 @@ import type { YoutubeQuota } from '../../server/youtube-quota';
 import { YouTubeIcon } from './YouTubeOpenLink';
 
 // YouTube's daily quota, as HeartQuarters counts it (see server/youtube-quota.ts), and what each button will cost.
-// Every request to /api/youtube/ fires "hq-youtube-used" (see api.ts), so the meter updates as soon as quota is spent.
+// Requests that can spend YouTube quota fire "hq-youtube-used" (see api.ts).
 
 export const QUOTA_MESSAGE = 'Out of YouTube quota for today. More at midnight Pacific time.';
 

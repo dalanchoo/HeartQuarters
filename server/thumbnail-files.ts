@@ -99,9 +99,9 @@ export async function firstWorkingThumbnail(urls: string[], now = Date.now()): P
 }
 
 /** Fetch only a YouTube image URL returned by YouTube, without following redirects. */
-export async function fetchYoutubeThumbnail(url: string): Promise<Buffer> {
+export async function fetchYoutubeThumbnail(url: string, signal?: AbortSignal): Promise<Buffer> {
   const parsed = youtubeImageUrl(url);
-  const res = await fetch(parsed, { redirect: 'error' });
+  const res = await fetch(parsed, { redirect: 'error', ...(signal ? { signal } : {}) });
   if (!res.ok || !res.body) throw new Error('Could not download the thumbnail from YouTube.');
   const reader = res.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
   try { while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > MAX_IMAGE) throw new Error('The YouTube image is larger than 2 MB.'); chunks.push(value); } }

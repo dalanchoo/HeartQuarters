@@ -985,7 +985,18 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .sidebar-filters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.4rem 0.5rem; margin: 0.4rem 0 0.6rem; font-size: 0.85rem; }
 .sidebar-filters > label { text-align: right; }
 .sidebar-filters select, .sidebar-filters input { width: 100%; min-width: 0; box-sizing: border-box; }
-.channel-analytics > summary, .sidebar-videos > summary { padding: 0.3rem 0; }
+.sidebar-videos > summary { padding: 0.3rem 0; }
+.channel-nav { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); margin-bottom: 0.65rem; }
+.channel-nav a { padding: 0.25rem 0.6rem; text-decoration: none; color: var(--text); }
+.channel-nav a[aria-current] { color: var(--accent); background: var(--accent-soft); border-radius: 5px 5px 0 0; font-weight: 600; }
+.channel-performance { margin-bottom: 0.65rem; }
+.channel-performance h2, .channel-video-view h2 { font-size: 1.05rem; margin: 0; }
+.channel-metrics { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.4rem 0; }
+.channel-metrics dt { color: var(--muted); font-size: 0.85rem; }
+.channel-metrics dd { font-weight: 600; font-size: 1.2rem; margin: 0; }
+.channel-video-view { margin-top: 0.55rem; }
+.channel-video-view .raw { max-height: 20rem; overflow: auto; }
+.channel-published-thumbnail { width: min(100%, 320px); display: block; border-radius: 5px; }
 /* The YouTube quota in the title bar, with its details folded away. */
 .quota-badge { position: relative; font-size: 0.8rem; color: var(--muted); margin-left: auto; }
 .quota-badge + .ai-controls { margin-left: 0; }

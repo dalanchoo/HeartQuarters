@@ -14,7 +14,6 @@ import {
 } from './api';
 import { ManageButtons } from './ManageFolder';
 import { CleanUp } from './CleanUp';
-import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { AboutVideoSection } from './AboutVideoSection';
 import { ScriptSection } from './ScriptSection';
 import { ShortsPlanCard } from './ShortsPlan';
@@ -40,7 +39,6 @@ import { checkYoutubeVideo } from './videoChecks';
 import type { CommentCheck } from '../../server/youtube-comment';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { matchesProjectSearch, matchesVideoSearch } from './videoSearch';
-import { ChannelAnalytics } from './ChannelAnalytics';
 
 type Filter = 'all' | 'no-capcut' | 'not-exported' | 'no-metadata' | 'no-thumbnail' | 'not-uploaded' | 'different' | 'no-comment' | 'clean-up';
 const FILTER_LABELS: Record<Filter, string> = { all: 'All Videos', 'no-capcut': 'No CapCut Project', 'not-exported': 'Not Exported', 'no-metadata': 'Metadata Incomplete', 'no-thumbnail': 'No Thumbnail', 'not-uploaded': 'Not Uploaded', different: 'Problems on YouTube', 'no-comment': 'No Comment Posted', 'clean-up': 'Can Clean Up' };
@@ -101,7 +99,7 @@ function StatsPill({ stats }: { stats: NonNullable<VideoOverview['stats']> }) {
     stats.ctrPercent === null ? null : `${stats.ctrPercent.toFixed(1)}% CTR`].filter(Boolean);
   if (!parts.length) return null;
   const when = stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : stats.snapshot;
-  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Update Stats in the YouTube section to refresh.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
+  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Open this video in Channel for analysis.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   const { cleanup } = useContext(StatusContext);
@@ -270,7 +268,6 @@ export function ProjectsPage() {
   return (
     <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><div className="split">
       <aside className="sidebar">
-        <ChannelAnalytics />
         <details className="sidebar-section sidebar-videos" open>
           <summary>Videos</summary>
           <div className="sidebar-actions">
@@ -913,7 +910,6 @@ function PieceCard({
           <PackagingDocsWide docs={docs} />
         </details>
       )}
-      {piece.kind !== 'reel' && <AnalyticsAnalysis key={`analysis-${piece.path}`} piece={piece.path} jobId={link.status?.connected && link.job?.status === 'done' ? link.job.id : undefined} />}
       <PackagingOtherPlatforms docs={docs} />
       {piece.kind !== 'reel' && <CleanUp piece={piece.path} onDone={onChanged} />}
     </>

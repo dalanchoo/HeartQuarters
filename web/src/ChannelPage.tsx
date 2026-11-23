@@ -5,6 +5,61 @@ import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
 import type { EndScreenData, EndScreenElement } from '../../server/youtube-end-screens';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
+import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
+import { AnalyticsAnalysis } from './AnalyticsAnalysis';
+import { ReachSetup } from './ReachSetup';
+
+type Overview = NonNullable<ReturnType<typeof channelOverview>>;
+const videoHash = (id: string) => `#Channel/Video/${encodeURIComponent(id)}`;
+
+function ChannelPerformance({ overview }: { overview: Overview }) {
+  const [periodName, setPeriodName] = useState('Last 28 Days');
+  const period = overview.periods.find(item => item.name === periodName) ?? overview.periods[0];
+  return <section className="channel-performance">
+    <div className="yt-linkbar-row">
+      <h2>Channel Performance</h2>
+      <select aria-label="Channel Performance Period" value={period?.name ?? ''} onChange={e => setPeriodName(e.target.value)}>
+        {overview.periods.map(item => <option key={item.name}>{item.name}</option>)}
+      </select>
+      <span className="muted small-text">{period && `${period.start} to ${period.end} · `}Updated {new Date(overview.downloadedAt).toLocaleString()}</span>
+    </div>
+    <dl className="channel-metrics">
+      <div><dt>Views</dt><dd>{period?.views?.toLocaleString() ?? '–'}</dd></div>
+      <div><dt>Watch Time</dt><dd>{period?.watchHours == null ? '–' : formatMinutes(period.watchHours * 60)}</dd></div>
+      <div><dt>Impressions</dt><dd>{overview.reach?.impressions.toLocaleString() ?? '–'}</dd></div>
+      <div><dt>Thumbnail CTR</dt><dd>{overview.reach?.ctrPercent == null ? '–' : `${overview.reach.ctrPercent.toFixed(1)}%`}</dd></div>
+    </dl>
+    <p className="muted small-text">{overview.reach ? `Reach reports cover ${overview.reach.from.slice(0, 10)} to ${overview.reach.to.slice(0, 10)}. The period picker applies to views and watch time.${overview.reachTruncated ? ' Some reach rows are missing.' : ''}` : overview.reachNote}</p>
+  </section>;
+}
+
+function ChannelVideoView({ id, video }: { id: string; video?: ChannelVideo }) {
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof channelVideoDetail>>>();
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    getJson<NonNullable<typeof detail>>(`/api/channel/video?id=${encodeURIComponent(id)}`).then(result => {
+      if (active) setDetail(result);
+    }, (e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [id, video?.piece]);
+  const piece = detail?.piece ?? video?.piece;
+  return <section className="channel-video-view">
+    <div className="yt-linkbar-row"><h2>{rowName({ piece: piece ?? null, title: video?.title ?? 'Video Detail' })}</h2>
+      {piece && <a href={videoProjectsHash(piece)}>Open in Video Projects ↗</a>}
+    </div>
+    <details className="yt-section">
+      <summary>Published Packaging</summary>
+      {video ? <><p>{video.title}</p>{video.thumbnail && /^https:\/\/i\.ytimg\.com\//.test(video.thumbnail) && <img className="channel-published-thumbnail" src={video.thumbnail} alt={`Published thumbnail for ${video.title}`} />}</> : <p className="muted">Refresh YouTube Data to show the published title and thumbnail.</p>}
+    </details>
+    <details className="yt-section">
+      <summary>{detail?.transcript?.source === 'script' ? 'Script' : 'Transcript'}</summary>
+      {detail?.transcript ? <pre className="raw">{detail.transcript.text}</pre> : <p className="muted">{detail ? 'No local transcript or script is available.' : error ? 'The transcript could not be loaded.' : 'Loading transcript…'}</p>}
+    </details>
+    {error && <p className="error" role="alert">{error}</p>}
+    {piece ? <AnalyticsAnalysis key={piece} piece={piece} videoId={id} /> : detail && <p>Link this video in Video Projects to run a detailed analysis.</p>}
+  </section>;
+}
 
 // The Channel tab: every video on the YouTube channel with its lifetime numbers, plus John's own Topic, Angle and note
 // for each video (the same record as About This Video in Video Projects, saved in that video's Drive folder). The list is a saved copy; Refresh asks YouTube again.
@@ -35,6 +90,8 @@ export function ChannelTableHead({ sortKey, descending, sortBy }: { sortKey: Sor
             </th>
           );
         })}
+        <th className="num">Impressions</th>
+        <th className="num">Thumbnail CTR</th>
         <th>Topic</th>
         <th>Angle</th>
       </tr>
@@ -98,13 +155,13 @@ export function ChannelProjectCell({ video, saveNote, endScreens }: {
   const source = video.fromLongform;
   const elements = endScreens?.status === 'ready' ? endScreens.videos[video.id] ?? [] : undefined;
   const endScreenNote = elements ? 'No activity reported for this period.'
-    : endScreens?.note ?? 'Click Refresh From YouTube to load end screen activity.';
+    : endScreens?.note ?? 'Click Refresh YouTube Data to load end screen activity.';
   return (
     <td className="title">
       <div className="channel-project">
         <div>
-          {video.piece ? <a href={videoProjectsHash(video.piece)} title={`Open in Video Projects. On YouTube: ${video.title}`}>{name}</a> :
-            <span title="Not linked to a project folder yet">{video.title} <span className="muted">(Not Linked)</span></span>}
+          <a href={videoHash(video.id)} title={`Open Video Detail. On YouTube: ${video.title}`}>{name}</a>
+          {!video.piece && <span className="muted"> (Not Linked)</span>}
           {video.privacy !== 'public' && <span className="muted"> ({video.privacy})</span>}
           {' '}<a className="yt-link" href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer" title="Opens YouTube in a new tab. Watching there adds to this video's view count.">YouTube ↗</a>
         </div>
@@ -129,6 +186,9 @@ export function ChannelPage() {
   const [data, setData] = useState<ChannelVideoList | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [address, setAddress] = useState(() => location.hash);
   const [kind, setKind] = useState<KindFilter>('all');
   const [text, setText] = useState('');
   const [topic, setTopic] = useState<'all' | Topic>('all');
@@ -138,10 +198,23 @@ export function ChannelPage() {
   const [descending, setDescending] = useState(true);
 
   useEffect(() => { getJson<ChannelVideoList | null>('/api/channel/videos').then(setData, (e: Error) => setError(e.message)); }, []);
+  useEffect(() => {
+    getJson<Overview | null>('/api/channel/overview').then(setOverview, (e: Error) => setError(e.message));
+  }, [refreshCount]);
+  useEffect(() => {
+    const sync = () => { if (location.hash.split('/')[0] === '#Channel') setAddress(location.hash); };
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
 
   const refresh = async () => {
     setBusy(true); setError(null);
-    try { setData(await postJson<ChannelVideoList>('/api/channel/videos/refresh')); }
+    try {
+      const result = await postJson<Awaited<ReturnType<typeof refreshChannelWorkspace>>>('/api/channel/refresh');
+      setData(result.catalog);
+      setRefreshCount(n => n + 1);
+      if (result.errors.length) setError(result.errors.join(' '));
+    }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -161,15 +234,40 @@ export function ChannelPage() {
 
   const rows = data ? channelRows(data.videos, { kind, topic, angle, text, keep: touched }, key, descending) : [];
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
+  const [, section, id] = address.split('/');
+  const view = section === 'Recommendations' || section === 'Video' || section === 'Research' ? section : 'Overview';
+  const selectedVideo = data?.videos.find(video => video.id === id);
+  const reach = (data && overview?.channelId === data.channel.id) ? overview : null;
 
   return (
     <div className="content channel-page">
       <div className="page-head">
         <h1>Channel</h1>
-        <button type="button" className="small" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh From YouTube'}</button>
+        <button type="button" className="small" disabled={busy} onClick={() => void refresh()}>{busy ? 'Refreshing YouTube Data…' : 'Refresh YouTube Data'}</button>
       </div>
-      {error && <p className="error">{error}</p>}
-      {data === null && <p className="muted">Nothing saved yet. Press Refresh From YouTube to load your videos.</p>}
+      <nav className="channel-nav" aria-label="Channel Views">
+        <a href="#Channel" aria-current={view === 'Overview' ? 'page' : undefined}>Overview</a>
+        <a href="#Channel/Recommendations" aria-current={view === 'Recommendations' ? 'page' : undefined}>What to Make Next</a>
+        <a href={id && view === 'Video' ? videoHash(id) : '#Channel/Video'} aria-current={view === 'Video' ? 'page' : undefined}>Video Detail</a>
+        <a href="#Channel/Research" aria-current={view === 'Research' ? 'page' : undefined}>Research</a>
+      </nav>
+      {error && <p className="error" role="alert">{error}</p>}
+      {view === 'Recommendations' && <AnalyticsAnalysis piece="" refresh={refreshCount} evidenceName={(id) => {
+        const video = data?.videos.find(video => video.id === id);
+        return video && rowName(video);
+      }} />}
+      {view === 'Video' && <>
+        <label>Video <select value={selectedVideo?.id ?? ''} onChange={e => { location.hash = e.target.value ? videoHash(e.target.value) : '#Channel/Video'; }}>
+          <option value="">Choose a Video</option>
+          {data?.videos.map(video => <option key={video.id} value={video.id}>{rowName(video)}</option>)}
+        </select></label>
+        {id && /^[\w-]{11}$/.test(id) && <ChannelVideoView key={id} id={id} video={selectedVideo} />}
+      </>}
+      {view === 'Research' && <section><h2>Research Sources</h2><p className="muted">Planned sources include vidIQ, Ask Studio, Reddit, and news.</p></section>}
+      {view === 'Overview' && <>
+      {overview && (!data || reach) && <ChannelPerformance overview={overview} />}
+      <ReachSetup />
+      {data === null && <p className="muted">Use Refresh YouTube Data to load your videos.</p>}
       {data && (
         <>
           <p className="muted">
@@ -230,6 +328,8 @@ export function ChannelPage() {
                   <td className="num">{v.numbers ? `${v.numbers.averageViewPercentage.toFixed(1)}%` : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.likes.toLocaleString() : '–'}</td>
                   <td className="num">{v.numbers ? v.numbers.subscribersGained.toLocaleString() : '–'}</td>
+                  <td className="num">{reach?.videoReach[v.id]?.impressions.toLocaleString() ?? '–'}</td>
+                  <td className="num">{reach?.videoReach[v.id]?.ctrPercent == null ? '–' : `${reach.videoReach[v.id]!.ctrPercent!.toFixed(1)}%`}</td>
                   <td><PairCell video={v} labels={TOPIC_LABELS} main="topic" second="topic2" save={(changes) => void saveProfile(v, changes)} /></td>
                   <td><PairCell video={v} labels={ANGLE_LABELS} main="angle" second="angle2" save={(changes) => void saveProfile(v, changes)} /></td>
                 </tr>
@@ -239,6 +339,7 @@ export function ChannelPage() {
           {!rows.length && <p className="muted">No videos match.</p>}
         </>
       )}
+      </>}
     </div>
   );
 }

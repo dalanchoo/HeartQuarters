@@ -14,6 +14,7 @@ export interface AnalyticsPeriod { name: string; start: string; end: string; com
 export interface AnalyticsReport { columns?: unknown[]; rows?: unknown[][] }
 export interface AnalyticsSnapshot {
   videoId: string; publishedAt: string; downloadedAt: string;
+  published?: { title: string; thumbnail: string | null };
   periods: { period: AnalyticsPeriod; statistics: AnalyticsReport; retention: AnalyticsReport | null; retentionError?: string }[];
   breakdowns?: { name: string; start: string; end: string; report: AnalyticsReport | null; error?: string }[];
   /** `totals` adds up all the days: impressions, and CTR weighted by impressions. */
@@ -106,13 +107,23 @@ export function saveVideoAnalytics(piece: string, snapshot: AnalyticsSnapshot): 
 export async function downloadVideoAnalytics(piece: string, id: string) {
   const job = uploadsFor(piece).find(item => item.id === id && item.status === 'done' && item.videoId);
   if (!job?.videoId) throw new Error('Link this video to YouTube first.');
+  return downloadLinkedVideoAnalytics(piece, job.videoId);
+}
+
+export async function downloadLinkedVideoAnalytics(piece: string, videoId: string, channelReach?: ReachData) {
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw new Error('Invalid YouTube video ID.');
   const token = await youtubeAccessToken();
-  const { resource } = await readYoutubeVideo(token, job.videoId);
+  const { resource, settings } = await readYoutubeVideo(token, videoId);
   const publishedAt = resource.snippet?.publishedAt;
   if (typeof publishedAt !== 'string' || !Number.isFinite(Date.parse(publishedAt))) throw new Error('YouTube did not provide a publication date for this video.');
-  const snapshot = await collectVideoAnalytics(job.videoId, publishedAt, token);
-  if (!youtubeStatus().reportingAccess) snapshot.reach = { status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to retrieve impressions and CTR.' };
-  else try { const reach = await getReachData(token, job.videoId); snapshot.reach = { ...reach, totals: reachTotals(reach, job.videoId) }; } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
+  const snapshot = await collectVideoAnalytics(videoId, publishedAt, token);
+  if (settings) snapshot.published = { title: settings.title, thumbnail: settings.thumbnail };
+  if (channelReach) {
+    const days = channelReach.days.map(day => ({ ...day, rows: day.rows.filter(row => row.video_id === videoId) }));
+    const reach = { ...channelReach, days };
+    snapshot.reach = { ...reach, totals: reachTotals(reach, videoId) };
+  } else if (!youtubeStatus().reportingAccess) snapshot.reach = { status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to retrieve impressions and CTR.' };
+  else try { const reach = await getReachData(token, videoId); snapshot.reach = { ...reach, totals: reachTotals(reach, videoId) }; } catch (error) { snapshot.reach = { status: 'unavailable', note: error instanceof Error ? error.message : String(error) }; }
   const file = saveVideoAnalytics(piece, snapshot);
   const missing = snapshot.periods.filter(p => !p.retention || !p.retention.rows?.length).map(p => p.period.name);
   return { file, missingRetention: missing, emptyStatistics: snapshot.periods.filter(p => !p.statistics.rows?.length).map(p => p.period.name), unavailableBreakdowns: snapshot.breakdowns?.filter(item => !item.report || !item.report.rows?.length).map(item => item.name) ?? [], reach: snapshot.reach };

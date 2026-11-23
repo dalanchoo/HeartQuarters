@@ -72,7 +72,8 @@ import { migrateReferenceFiles } from './expression-references.js';
 import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
 import { readVideoProfile, saveVideoProfile } from './video-profile.js';
 import { saveYoutubeCaptions } from './caption-save.js';
-import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary } from './analytics-analysis.js';
+import { analyticsAnalysis, analyticsSnapshots, startAnalyticsAnalysis, startAnalyticsSummary, videoSnapshotNames } from './analytics-analysis.js';
+import { channelOverview, channelVideoDetail, refreshChannelWorkspace, startChannelVideoAnalysis } from './channel-workspace.js';
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
@@ -99,13 +100,26 @@ app.post('/api/youtube/analytics/channel', (_req, res) => {
   downloadChannelAnalytics().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.get('/api/channel/videos', handle((_req, res) => { res.json(readChannelVideos()); }));
+app.get('/api/channel/overview', handle((_req, res) => { res.json(channelOverview()); }));
+app.get('/api/channel/video', (req, res) => {
+  channelVideoDetail(String(req.query.id ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/refresh', (_req, res) => {
+  refreshChannelWorkspace().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/video-analysis', (req, res) => {
+  startChannelVideoAnalysis(String(req.body?.videoId ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
 app.post('/api/youtube/captions/save', handle((req, res) => { res.json(saveYoutubeCaptions(req.body?.piece, req.body?.text)); }));
 app.get('/api/video-profile', handle((req, res) => { res.json(readVideoProfile(String(req.query.piece ?? ''))); }));
 app.post('/api/video-profile', handle((req, res) => { res.json(saveVideoProfile(req.body?.piece, req.body)); }));
 app.post('/api/channel/videos/refresh', (_req, res) => {
   refreshChannelVideos().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
-app.get('/api/youtube/analytics/snapshots', handle((req, res) => { res.json(analyticsSnapshots(String(req.query.piece ?? ''))); }));
+app.get('/api/youtube/analytics/snapshots', handle((req, res) => {
+  const piece = String(req.query.piece ?? '');
+  res.json(piece && typeof req.query.videoId === 'string' ? videoSnapshotNames(piece, req.query.videoId) : analyticsSnapshots(piece));
+}));
 app.get('/api/youtube/analytics/analysis', handle((req, res) => { res.json(analyticsAnalysis(String(req.query.piece ?? ''), String(req.query.snapshot ?? ''))); }));
 app.post('/api/youtube/analytics/analyze', handle((req, res) => { res.json(startAnalyticsAnalysis(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? ''), undefined, req.body?.reach).job); }));
 app.post('/api/youtube/analytics/summarize', handle((req, res) => { res.json(startAnalyticsSummary(String(req.body?.piece ?? ''), String(req.body?.snapshot ?? ''), String(req.body?.id ?? '')).step); }));
