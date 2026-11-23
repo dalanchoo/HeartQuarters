@@ -7,6 +7,7 @@ import { safeResolve } from './config.js';
 import { readable, readText } from './safe-files.js';
 import { fetchYoutubeThumbnail } from './thumbnail-files.js';
 import { readScript } from './script.js';
+import { captionPlainText } from './caption-save.js';
 const exec = promisify(execFile);
 
 function files(piece: string, subfolder: string, matches: RegExp): { path: string; name: string; modified: number }[] {
@@ -18,12 +19,43 @@ function files(piece: string, subfolder: string, matches: RegExp): { path: strin
 }
 
 function latestTranscript(piece: string) {
-  return files(piece, 'Subtitles', /\.(srt|vtt)$/i)[0] ?? files(piece, 'Subtitles', /-captions\.txt$/i)[0];
+  const plain = files(piece, 'Subtitles', /\.txt$/i);
+  return files(piece, 'Subtitles', /\.(srt|vtt)$/i)[0] ?? plain.find(file => /-captions\.txt$/i.test(file.name)) ?? plain[0];
+}
+
+function readableParagraphs(text: string): string {
+  const sentences = new Intl.Segmenter('en', { granularity: 'sentence' });
+  return text.split(/\r?\n[ \t]*\r?\n/).map(paragraph => {
+    const clean = paragraph.trim();
+    if (clean.length <= 450) return clean;
+    const paragraphs: string[] = [];
+    let current = '';
+    for (const { segment } of sentences.segment(clean)) {
+      if (current.length >= 300) {
+        paragraphs.push(current.trim());
+        current = '';
+      }
+      current += segment;
+    }
+    paragraphs.push(current.trim());
+    return paragraphs.join('\n\n');
+  }).filter(Boolean).join('\n\n');
 }
 
 export async function readAnalysisTranscript(piece: string): Promise<{ text: string; source: 'transcript' | 'script' } | null> {
-  const transcript = latestTranscript(piece);
-  if (transcript && fs.statSync(readable(transcript.path)).size <= 2_000_000) return { text: readText(transcript.path), source: 'transcript' };
+  const filesInSubtitles = files(piece, 'Subtitles', /\.(txt|srt|vtt)$/i);
+  const ordered = [
+    ...filesInSubtitles.filter(file => /-captions\.txt$/i.test(file.name)),
+    ...filesInSubtitles.filter(file => /\.txt$/i.test(file.name) && !/-captions\.txt$/i.test(file.name)),
+    ...filesInSubtitles.filter(file => /\.(srt|vtt)$/i.test(file.name)),
+  ];
+  for (const file of ordered) {
+    if (fs.statSync(readable(file.path)).size > 2_000_000) continue;
+    const raw = readText(file.path).replace(/^\uFEFF/, '');
+    const text = /\.txt$/i.test(file.name) ? raw : captionPlainText(raw)
+      .replace(/<\/?(?:b|i|u|s|font|c|v|lang)(?=[\s.>])[^>]*>|<\d[\d:.,]*>/gi, '');
+    if (text.trim()) return { text: readableParagraphs(text), source: 'transcript' };
+  }
   const script = await readScript(piece);
   return script.text.trim() ? { text: script.text.slice(0, 500_000), source: 'script' } : null;
 }
@@ -63,7 +95,7 @@ export async function videoContext(piece: string, work: string, published?: { ti
   } else {
     try {
       const script = await readAnalysisTranscript(piece);
-      if (script) {
+      if (script?.source === 'script') {
         fs.writeFileSync(path.join(work, 'Script.txt'), script.text, { flag: 'wx' });
         lines.push('Script.txt is the local script. It may differ from what was said in the video and has no verified timings.');
       } else lines.push('No local transcript or script found.');
