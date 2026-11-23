@@ -10,6 +10,7 @@ import { readExpressionReferences } from './expression-references.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { expressionIndex, type ExpressionPhoto } from './expressions.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefPick } from './projects.js';
+import { readable, readText, writeFile } from './safe-files.js';
 import { thumbnail } from './thumbs.js';
 
 export const RANKING_FILE = 'Photo Ranking.json';
@@ -40,23 +41,25 @@ export function pickCategories(expression: string): string[] {
 }
 
 /**
- * The photos to look at: the starred ones that fit the pair's categories first, then the rest of those categories in
- * order, then the other starred photos, up to MAX_CANDIDATES.
+ * Look at eligible category photos and starred photos, giving likes priority before applying the cap.
  */
 export function rankingCandidates(photos: ExpressionPhoto[], categories: string[], starred: string[]): { photo: ExpressionPhoto; starred: boolean }[] {
   const inCategory = (p: ExpressionPhoto, c: string) => p.category.toLowerCase() === c.toLowerCase() || p.category.toLowerCase().startsWith(c.toLowerCase() + '/');
   const stars = new Set(starred);
   const order: ExpressionPhoto[] = [];
   const add = (p: ExpressionPhoto) => {
-    if (!order.includes(p)) order.push(p);
+    if (p.rating !== 'disliked' && !order.includes(p)) order.push(p);
   };
   for (const c of categories) photos.filter((p) => inCategory(p, c) && stars.has(p.path)).forEach(add);
   for (const c of categories) photos.filter((p) => inCategory(p, c)).forEach(add);
   photos.filter((p) => stars.has(p.path)).forEach(add);
+  order.sort((a, b) => Number(b.rating === 'liked') - Number(a.rating === 'liked'));
   return order.slice(0, MAX_CANDIDATES).map((photo) => ({ photo, starred: stars.has(photo.path) }));
 }
 
-export function rankingPrompt(pick: BriefPick, short: boolean, list: { file: string; photo: string; category: string; starred: boolean }[], skill: string): string {
+type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; rating?: ExpressionPhoto['rating'] };
+
+export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhoto[], skill: string): string {
   return [
     `Choose the best photos of John for a Heart Mind Fusion ${short ? 'Short cover' : 'thumbnail'}. First read the skill "${skill}", especially "John's face" and the gaze and expression rules.`,
     [
@@ -67,7 +70,8 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: { file: str
       `- Background and layout: ${pick.background}`,
     ].join('\n'),
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
-    list.map((c) => `- ${c.file}: ${c.photo} (${c.category}${c.starred ? ', starred' : ''})`).join('\n'),
+    'Liked and Meh are John’s own ratings. Give a liked photo a boost when it fits the pair. Meh and unrated photos are also usable.',
+    list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
     `Rank the ${TOP} that would make the strongest ${short ? 'cover' : 'thumbnail'} for this pair, best first: the expression that fits the title, reads at phone size, looks like John at his most natural, and gazes toward the centre or the camera rather than out of the frame. Prefer variety among the ${TOP} when photos are close.`,
     "Don't create or change any file. Reply with only this JSON, nothing before or after it, using the library paths exactly as listed:",
     '{"ranked":[{"photo":"Category/Sub/Name.jpg","why":"one sentence"}]}',
@@ -110,7 +114,9 @@ function draftsOf(piece: string): string {
 /** The saved ranking for a piece, or null. */
 export function readRanking(piece: string): PhotoRanking | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(draftsOf(piece), RANKING_FILE), 'utf8')) as PhotoRanking;
+    const ranking = JSON.parse(readText(path.join(draftsOf(piece), RANKING_FILE))) as PhotoRanking;
+    const disliked = new Set(expressionIndex().photos.filter(photo => photo.rating === 'disliked').map(photo => photo.path));
+    return { ...ranking, ranked: ranking.ranked.filter(({ photo }) => !disliked.has(photo)) };
   } catch {
     return null;
   }
@@ -128,12 +134,12 @@ export function startRanking(piece: string, deps: RankingDeps = {}): { job: Rank
   const ask = deps.ask ?? askAi;
   const drafts = draftsOf(piece);
   if (jobs.get(piece)?.state === 'working') throw new Error('Claude is already looking at the photos for this video.');
-  const choice = readChoice(path.join(drafts, CHOICE_FILE));
+  const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   const photos = (deps.photos ?? (() => expressionIndex().photos))();
   const starred = (deps.starred ?? (() => readExpressionReferences().paths))();
   const candidates = rankingCandidates(photos, pickCategories(choice.pick.expression), starred);
-  if (!candidates.length) throw new Error("There are no photos in this pair's categories and no starred photos to look at.");
+  if (!candidates.length) throw new Error("No eligible photos were found in this pair's categories or among your starred photos. Thumbs-down photos are excluded.");
   const job: RankingJob = { piece, state: 'working', looked: candidates.length };
   jobs.set(piece, job);
   const small = deps.small ?? ((full: string) => thumbnail(full, 512));
@@ -141,17 +147,17 @@ export function startRanking(piece: string, deps: RankingDeps = {}): { job: Rank
     const root = process.env.VITEST ? path.join(os.tmpdir(), 'hq-ranking-tests') : path.join(appDir, 'data', 'photo-ranking');
     const work = path.join(root, `${Date.now()}`);
     fs.mkdirSync(work, { recursive: true });
-    const list: { file: string; photo: string; category: string; starred: boolean }[] = [];
+    const list: RankingPhoto[] = [];
     for (const [i, c] of candidates.entries()) {
       const file = `${String(i + 1).padStart(2, '0')}.jpg`;
       fs.copyFileSync(await small(resolveExpressionPhoto(c.photo.path)), path.join(work, file));
-      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred });
+      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred, rating: c.photo.rating });
     }
     const skill = path.join(config.skillsDir, 'HMF_Skills', 'thumbnails-and-titles', 'SKILL.md');
     const short = /(^|\/)Shorts\//i.test(piece) || /^999 - Shorts\//i.test(piece);
     const ranked = rankingFromAnswer(await ask('claude', rankingPrompt(choice.pick, short, list, skill), work), list.map((l) => l.photo));
     const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, looked: list.length, at: new Date().toISOString() };
-    fs.writeFileSync(path.join(drafts, RANKING_FILE), JSON.stringify(ranking, null, 2) + '\n');
+    writeFile(path.join(drafts, RANKING_FILE), JSON.stringify(ranking, null, 2) + '\n');
     fs.rmSync(work, { recursive: true, force: true });
   })().then(
     () => {

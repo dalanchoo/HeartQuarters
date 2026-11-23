@@ -4,8 +4,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { MAX_CANDIDATES, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
-import type { ExpressionPhoto } from './expressions';
+import { MAX_CANDIDATES, RANKING_FILE, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
+import { setExpressionRating } from './expression-rating';
+import { clearExpressionIndex, type ExpressionPhoto } from './expressions';
 import type { AskAi } from './brief';
 
 const PIECE = '022 - V/Shorts/022_S07 - Somebody Knows Me';
@@ -16,7 +17,10 @@ const PHOTOS = [photo('Positive/Warmth/Warm_001.jpg'), photo('Positive/Warmth/Wa
 let tmp: string;
 let old: { projects: string; expressions: string };
 beforeEach(() => {
-  tmp = makeTree({ [`Videos/${PIECE}/Packaging/Drafts/Brief.md`]: '# Brief', 'Expressions/x.jpg': 'x' });
+  tmp = makeTree({
+    [`Videos/${PIECE}/Packaging/Drafts/Brief.md`]: '# Brief',
+    ...Object.fromEntries(PHOTOS.map(({ path }) => [`Expressions/${path}`, 'fake photo'])),
+  });
   old = { projects: config.videoProjectsDir, expressions: config.expressionsDir };
   config.videoProjectsDir = path.join(tmp, 'Videos');
   config.expressionsDir = path.join(tmp, 'Expressions');
@@ -24,6 +28,7 @@ beforeEach(() => {
 afterEach(() => {
   config.videoProjectsDir = old.projects;
   config.expressionsDir = old.expressions;
+  clearExpressionIndex();
   removeTree(tmp);
 });
 const choose = () => fs.writeFileSync(path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', 'Choice.json'), JSON.stringify({ pick: PICK, index: 0, photo: null }));
@@ -47,9 +52,15 @@ describe('which photos Claude looks at', () => {
       ['Composure/Calm/Calm_004.jpg', true],
     ]);
   });
-  it(`looks at no more than ${MAX_CANDIDATES}`, () => {
+  it('excludes a disliked star and gives likes priority before applying the cap', () => {
     const many = Array.from({ length: 60 }, (_, i) => photo(`Positive/Warmth/W_${i}.jpg`));
-    expect(rankingCandidates(many, ['Positive/Warmth'], [])).toHaveLength(MAX_CANDIDATES);
+    many[0].rating = 'disliked';
+    many[1].rating = 'meh';
+    many[59].rating = 'liked';
+    const list = rankingCandidates(many, ['Positive/Warmth'], [many[0].path]);
+    expect(list).toHaveLength(MAX_CANDIDATES);
+    expect(list.slice(0, 3).map(c => c.photo)).toEqual([many[59], many[1], many[2]]);
+    expect(list.map(c => c.photo)).not.toContain(many[0]);
   });
 });
 
@@ -67,6 +78,9 @@ describe("reading Claude's ranking", () => {
 describe('ranking the photos for the chosen pair', () => {
   it('shows Claude small copies with their names, and saves the top five for that pair', async () => {
     choose();
+    setExpressionRating(PHOTOS[0].path, 'liked');
+    setExpressionRating(PHOTOS[1].path, 'disliked');
+    setExpressionRating(PHOTOS[2].path, 'meh');
     let seen = '';
     let files: string[] = [];
     const ask: AskAi = async (_ai, prompt, cwd) => {
@@ -74,19 +88,35 @@ describe('ranking the photos for the chosen pair', () => {
       files = fs.readdirSync(cwd).sort();
       return '{"ranked":[{"photo":"Empathy/Compassion/Compassion_002.jpg","why":"kind and a bit sheepish"},{"photo":"Positive/Warmth/Warm_001.jpg","why":"warm"}]}';
     };
-    const { job, finished } = startRanking(PIECE, { ask, photos: () => PHOTOS, starred: () => ['Positive/Warmth/Warm_001.jpg'], small });
-    expect(job).toMatchObject({ state: 'working', looked: 3 });
+    const { job, finished } = startRanking(PIECE, { ask, starred: () => [PHOTOS[0].path, PHOTOS[1].path], small });
+    expect(job).toMatchObject({ state: 'working', looked: 2 });
     await finished;
     expect(job.state).toBe('done');
-    expect(files).toEqual(['01.jpg', '02.jpg', '03.jpg']);
-    expect(seen).toContain('- 01.jpg: Positive/Warmth/Warm_001.jpg (Positive > Warmth, starred)');
+    expect(files).toEqual(['01.jpg', '02.jpg']);
+    expect(seen).toContain('- 01.jpg: Positive/Warmth/Warm_001.jpg (Positive > Warmth, starred, liked)');
+    expect(seen).toContain('- 02.jpg: Empathy/Compassion/Compassion_002.jpg (Empathy > Compassion, meh)');
+    expect(seen).not.toContain(PHOTOS[1].path);
     expect(seen).toContain("Title: \"They Know Me. I Don't Know Who They Are.\"");
     const saved = readRanking(PIECE)!;
-    expect(saved).toMatchObject({ title: PICK.title, looked: 3 });
+    expect(saved).toMatchObject({ title: PICK.title, looked: 2 });
     expect(saved.ranked).toEqual([
       { photo: 'Empathy/Compassion/Compassion_002.jpg', why: 'kind and a bit sheepish' },
       { photo: 'Positive/Warmth/Warm_001.jpg', why: 'warm' },
     ]);
+  });
+  it('updates saved recommendations when ratings change without rewriting the saved ranking', () => {
+    const file = path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', RANKING_FILE);
+    const ranked = PHOTOS.slice(0, 2).map(photo => ({ photo: photo.path, why: 'warm' }));
+    const saved = JSON.stringify({ title: PICK.title, thumbnailText: PICK.thumbnailText, looked: 2, ranked });
+    fs.writeFileSync(file, saved);
+    expect(readRanking(PIECE)?.ranked).toEqual(ranked);
+    setExpressionRating(PHOTOS[0].path, 'disliked');
+    expect(readRanking(PIECE)?.ranked).toEqual([ranked[1]]);
+    setExpressionRating(PHOTOS[1].path, 'disliked');
+    expect(readRanking(PIECE)?.ranked).toEqual([]);
+    setExpressionRating(PHOTOS[0].path, 'meh');
+    expect(readRanking(PIECE)?.ranked).toEqual([ranked[0]]);
+    expect(fs.readFileSync(file, 'utf8')).toBe(saved);
   });
   it('needs a chosen pair, and records a failure', async () => {
     expect(() => startRanking(PIECE, { photos: () => PHOTOS, starred: () => [], small })).toThrow(/Choose one of the top 3/);

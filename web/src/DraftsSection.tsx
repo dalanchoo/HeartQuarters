@@ -308,7 +308,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           <strong>Best Photos for This Pair</strong>{' '}
           {ranked && <span className="muted">· Claude looked at {ranked.looked} photos from the suggested categories and your starred photos</span>}
           {ranked && !rankingNow && (
-            <button className="small" onClick={rank} title="Claude looks at the photos again, including any you've added or starred since">
+            <button className="small" onClick={rank} title="Claude looks at the photos again using your current ratings and stars">
               Rank Again
             </button>
           )}
@@ -322,6 +322,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           </p>
         )}
+        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">The saved ranking has no eligible photos. Use Rank Again to look for other options.</p>}
         {ranked && library && (
           <div className="photo-grid">
             {ranked.ranked.map((r, i) => {
