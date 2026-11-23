@@ -262,3 +262,12 @@ describe('missingMetadata', () => {
     expect(missingMetadata('Just some notes')).toHaveLength(8);
   });
 });
+
+describe('a pinned comment with its own label-like lines', () => {
+  it('keeps "Register here:" inside the Pinned Comment instead of making it a field', () => {
+    const text = 'Title:\nT\n\nPinned Comment:\nHello\n\nRegister here:\nhttps://example.com\n\nVideo language:\nen-US\n';
+    const fields = parseFields(text)!;
+    expect(fields.map(f => f.label)).toEqual(['Title', 'Pinned Comment', 'Video language']);
+    expect(fields[1].value).toBe('Hello\n\nRegister here:\nhttps://example.com');
+  });
+});

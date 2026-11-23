@@ -98,7 +98,8 @@ function fieldSpans(lines: string[]): { label: string; from: number; to: number 
     const label = labelOf(line);
     if (!label) return;
     const current = spans[spans.length - 1];
-    if (current?.label.toLowerCase() === 'description' && !AFTER_DESCRIPTION.has(label.toLowerCase())) return;
+    // Free-writing fields (a description, a pinned comment) can hold lines like "Register here:"; only a real field label ends them.
+    if (current && ['description', 'pinned comment', 'comment'].includes(current.label.toLowerCase()) && !AFTER_DESCRIPTION.has(label.toLowerCase())) return;
     if (current) current.to = i;
     spans.push({ label, from: i + 1, to: lines.length });
   });
