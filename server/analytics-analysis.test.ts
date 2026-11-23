@@ -139,10 +139,26 @@ describe('analytics analysis', () => {
     const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async ai => { calls.push(ai); if (ai === 'gemini') throw new Error('Unavailable'); return ai; });
     await finished;
     expect(calls).toHaveLength(3); expect(job.state).toBe('failed'); expect(job.models.gemini.error).toBe('Unavailable');
-    expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ claude: 'claude\n', codex: 'codex\n', gemini: null, recommendations: null });
+    expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ claude: 'claude\n', codex: 'codex\n', gemini: null, recommendations: null, failure: 'Independent review (Gemini) failed.\n' });
+    expect(fs.readFileSync(path.join(root, 'Analytics/2026-11-18/Analysis', job.id, 'Failure.txt'), 'utf8'))
+      .toBe('Independent review (Gemini) failed.\n');
     const { finished: summary } = startAnalyticsSummary('', '2026-11-18', job.id, async () => 'A short summary');
     await summary;
     expect(analyticsAnalysis('', '2026-11-18')[0].summary).toBe('A short summary\n');
+  });
+
+  it('finishes a channel analysis without a screen polling it', async () => {
+    let finishReviews!: (text: string) => void;
+    const response = new Promise<string>(resolve => { finishReviews = resolve; });
+    const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async () => response);
+    expect(analyticsAnalysis('', '2026-11-18')[0].job?.state).toBe('working');
+
+    finishReviews('Saved result');
+    await finished;
+
+    expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({
+      id: job.id, job: { state: 'done' }, recommendations: 'Saved result\n', summary: 'Saved result\n', failure: null,
+    });
   });
   it('rejects paths outside the snapshots', () => {
     expect(() => startAnalyticsAnalysis('../outside', '2026-11-18')).toThrow();

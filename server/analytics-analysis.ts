@@ -3,13 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { safeResolve } from './config.js';
-import { type AiId } from './ai.js';
+import { AI_NAMES, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { askReadOnlyImage } from './expression-assessment.js';
 import { videoContext } from './analytics-context.js';
 import { readChannelVideos, type ChannelVideoList } from './channel-videos.js';
 import { videoLinks } from './video-links.js';
-import { readText, readable, writable, writeFile } from './safe-files.js';
+import { makeFolder, readText, readable, writable, writeFile } from './safe-files.js';
 import { downloadLinkedVideoAnalytics, type AnalyticsSnapshot } from './analytics.js';
 import type { ChannelSnapshot } from './channel-analytics.js';
 import type { ReachData } from './youtube-reach.js';
@@ -178,7 +178,7 @@ export function analyticsAnalysis(piece: string, snapshot: string) {
       try { evidenceIds = (JSON.parse(evidence) as { id: string }[]).map(item => item.id).filter(id => /^[\w-]{11}$/.test(id)); }
       catch { /* Earlier runs can have no readable evidence index. */ }
     }
-    return { id: entry.name, claude: read(FILES.claude), codex: read(FILES.codex), gemini: read(FILES.gemini), recommendations: read('Recommendations.md'), summary: read('Summary.md'), evidenceIds, job: jobs.get(entry.name) ?? null, summaryJob: summaryJobs.get(entry.name) ?? null };
+    return { id: entry.name, claude: read(FILES.claude), codex: read(FILES.codex), gemini: read(FILES.gemini), recommendations: read('Recommendations.md'), summary: read('Summary.md'), evidenceIds, job: jobs.get(entry.name) ?? null, failure: read('Failure.txt', false), summaryJob: summaryJobs.get(entry.name) ?? null };
   }) : [];
   return runs;
 }
@@ -194,16 +194,15 @@ export function startAnalyticsAnalysis(piece: string, snapshot: string, ask: Ask
   const base = snapshotDir(piece, snapshot);
   const stats = checkedFile(`${base}/Stats.json`);
   if (fs.statSync(stats).size > 5_000_000) throw new Error('Snapshot is too large to analyze.');
-  const bytes = fs.readFileSync(stats);
+  const bytes = fs.readFileSync(readable(stats));
   if (bytes.length > 5_000_000) throw new Error('Snapshot is too large to analyze.');
   const data: unknown = JSON.parse(bytes.toString('utf8'));
   if (!data || typeof data !== 'object' || !('downloadedAt' in data) || (!('periods' in data) && !('reports' in data))) throw new Error('This is not a recognized analytics snapshot.');
   if ([...jobs.values()].some(job => job.snapshot === `${piece}/${snapshot}` && job.state === 'working')) throw new Error('Analysis is already running for this snapshot.');
   const parent = safeResolve('projects', `${base}/Analysis`);
   if (fs.existsSync(parent) && !fs.lstatSync(parent).isDirectory()) throw new Error('Analysis must be a real folder.');
-  fs.mkdirSync(parent, { recursive: true });
   const id = randomUUID(); const relative = `${base}/Analysis/${id}`;
-  const folder = safeResolve('projects', relative); fs.mkdirSync(folder);
+  makeFolder(safeResolve('projects', relative));
   const job: AnalysisJob = { id, snapshot: `${piece}/${snapshot}`, state: 'working', models: { claude: { state: 'waiting' }, codex: { state: 'waiting' }, gemini: { state: 'waiting' } }, synthesis: { state: 'waiting' } };
   jobs.set(id, job);
   const channel = 'channel' in data ? data.channel : undefined;
@@ -264,7 +263,15 @@ export function startAnalyticsAnalysis(piece: string, snapshot: string, ask: Ask
       await startAnalyticsSummary(piece, snapshot, id, ask).finished;
     } catch (error) { job.synthesis.state = 'failed'; job.synthesis.error = error instanceof Error ? error.message : String(error); job.state = 'failed'; }
     finally { try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* Temporary copy only. */ } }
-  })().catch(error => { job.state = 'failed'; job.synthesis.state = 'failed'; job.synthesis.error = error instanceof Error ? error.message : String(error); });
+  })().catch(error => { job.state = 'failed'; job.synthesis.state = 'failed'; job.synthesis.error = error instanceof Error ? error.message : String(error); })
+    .then(() => {
+      if (job.state !== 'failed') return;
+      const failedModels = MODELS.filter(ai => job.models[ai].state === 'failed').map(ai => AI_NAMES[ai]);
+      const stage = failedModels.length ? `Independent review (${failedModels.join(', ')})` :
+        job.models.claude.state === 'waiting' ? 'Analysis preparation' : 'Combining recommendations';
+      try { writeFile(safeResolve('projects', `${relative}/Failure.txt`), `${stage} failed.\n`, { flag: 'wx' }); }
+      catch (error) { console.warn('Could not save the analysis failure stage.', error); }
+    });
   return { job, finished };
 }
 

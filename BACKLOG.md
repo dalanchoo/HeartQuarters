@@ -38,6 +38,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   thumbnail.
   Research is reserved for vidIQ, Ask Studio, Reddit, and news. Keep outside
   demand distinct from what Heart Mind Fusion's own viewers watch.
+  Analyses run in the engine while you browse other tabs. Incomplete runs
+  explain how to start again and show the failed stage when it was recorded.
 - **Video Projects gives Shorts their source.** A Short clipped from a
   longform follows the project grouping. `999 - Shorts` are standalone
   projects. The later cross-post picker should judge whether any Short works
