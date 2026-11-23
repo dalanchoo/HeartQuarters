@@ -30,7 +30,7 @@ export function AnalyticsAnalysis({ piece, jobId, refresh = 0 }: { piece: string
   return <details className="yt-section"><summary>Analysis</summary>
     {piece && <VideoAnalytics key={jobId ?? 'unlinked'} piece={piece} id={jobId} onDownloaded={() => { setSelected(''); setTick(n => n + 1); }} />}
     {!snapshots.length ? <p>Download stats first.</p> : <><div className="yt-linkbar-row" style={{ marginTop: '0.5rem' }}><select aria-label="Snapshot" value={selected} onChange={e => setSelected(e.target.value)}>{snapshots.map(name => <option key={name}>{name}</option>)}</select>
-      <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>Analyze With All Three AIs</button></div>
+      <button type="button" disabled={!selected || starting || running} onClick={() => void start()}>{piece ? 'Analyze With All Three AIs' : 'Find What to Make Next'}</button></div>
       <p className="muted small-text">Claude, ChatGPT, and Gemini review independently; Claude then combines their findings and writes a short summary. This uses your AI subscriptions and may take several minutes.</p>
       {piece && selected && <VideoStats piece={piece} snapshot={selected} />}</>}
     {error && <p className="error" role="alert">{error}</p>}

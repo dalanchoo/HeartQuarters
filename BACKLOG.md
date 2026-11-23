@@ -22,22 +22,26 @@ script, video, packaging, and retention to investigate specific ideas. Explain
 what the evidence supports, what is missing, and where judgment is involved.
 John wants to discuss the recommendations and get feedback on ideas of his own.
 
-- **Channel is the shared background.** It should cover the whole catalog,
-  including SDAM, psychedelics, relationships, and emotional growth. Include
-  performance, search and browse traffic, John's notes, existing Shorts,
-  playlists, and end screen activity. Treat missing counts as unknown.
-- **Build on the existing Analysis tab.** Give it the channel background
-  before it advises on a specific video. Use the same background for a
-  channel-wide review that proposes options John can compare and discuss.
+- **Start with the channel's own evidence.** Compare longform and Shorts
+  across the whole catalog using views, watch time, search and browse
+  traffic, impressions and CTR, and retention curves where available.
+  Use existing Topic and Angle values and treat missing counts as unknown.
+- **Build on the existing Analysis tab.** Channel Analytics now gives its
+  reviewers the saved Channel catalog and asks them to rank what to make or
+  change. Reports identify linked videos by their exact Video Projects name.
+  Use per-video retention and packaging to investigate shortlisted
+  candidates. Then bring in fresh outside evidence from vidIQ or Ask Studio,
+  relevant Reddit threads, and news. Keep outside demand distinct from
+  what Heart Mind Fusion's own viewers watch.
 - **Video Projects gives Shorts their source.** A Short clipped from a
   longform follows the project grouping. `999 - Shorts` are standalone
   projects. The later cross-post picker should judge whether any Short works
   without the longform, including a Short that came from one.
-- **End screens need details.** Capture what the elements are, their
-  destinations when known, and their impressions and clicks. The recent
-  activity report is implemented. Exact destinations and playlist membership
-  and activity are still open, followed by the shared background file and
-  connecting it to Analysis. See the [detailed handoff](#video-analysis-and-recommendation-phase-what-is-left-handoff-2026-11-22).
+- **Skip manual data entry for this workflow.** Exact end screen destinations
+  and playlist enrichment are parked. Existing end screen activity is available
+  as secondary evidence. The Nov 23 refresh returned one reporting day and no
+  activity rows, so live clicks are still unverified.
+  See the [detailed handoff](#video-analysis-and-recommendation-phase-what-is-left-handoff-2026-11-22).
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
 
 ---
@@ -176,21 +180,22 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 | 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
-| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | **Partly done (2026-11-22).** Channel shows the video list, numbers, Topic and Angle, notes, links to Video Projects, search and browse views, Shorts sources, and recent end screen activity. Left: end screen destinations, playlist membership and activity, the channel background file, and having Analysis read it first. |
-| 22 | Analysis follow-up chat: ask questions about a finished analysis, get feedback on John's own video ideas, with vidIQ for what works on other channels | n/a | Needs the background file from #21 (the part still left). Part of #7c. |
+| 21 | Use the whole YouTube catalog to decide what to make or change next | Auto | **Partly done (2026-11-23).** Channel shows the catalog, performance, search and browse views, project links, topics, angles, and Shorts sources. Channel Analytics now uses that catalog in its recommendations. Next: compare recent momentum, add retention context for candidates, and research outside demand. |
+| 22 | Analysis follow-up chat: ask questions about a finished analysis and get feedback on John's own video ideas | n/a | Build on the recommendations and research in #21. Part of #7c. |
 
 ### Video analysis and recommendation phase: what is left (handoff, 2026-11-22)
 
-**Goal:** give every analysis and recommendation the channel's background first, so advice stops treating each video on its own.
-Then build the smarter tools on top: a follow-up chat, a Shorts picker, and the idea, brainstorm and packaging flow.
-The initial Topic and Angle review is complete for the existing videos.
+**Goal:** recommend what to make or change next using the channel's performance
+and timely outside demand. Use the existing Topic and Angle review.
 
 **Still to do, in order**
-1. Finish the Channel tab (#21). The end screen report supplies recent impressions and clicks by element. The destination video or playlist
-   still needs to come from Studio separately. Pull playlist membership and activity from YouTube. Then write the channel background into
-   one file and **make the Analysis tab read that file first**.
-2. Filters by Topic and Angle in the Video Projects sidebar (John called this a later step).
-3. Analysis follow-up chat (#22), with vidIQ for other channels. Needs step 1.
+1. Try **Find What to Make Next** in Channel Analytics (#21). Compare recent
+   performance over the same period, and pull per-video retention and packaging
+   automatically when investigating a candidate.
+2. Add research on the leading topics using vidIQ or Ask Studio where connected,
+   plus relevant Reddit discussions and news. Bring sources and dates into the
+   recommendations. Topic and Angle filters in Video Projects are later.
+3. Add Analysis follow-up chat (#22) for questions about results and John's ideas.
 4. Shorts picker (#13): judge which Shorts work on their own from swipe-away and watch time; John approves the list. Check whether vidIQ can
    already post to Instagram and TikTok before building anything. Needs #10 (cross-post pack) and #12 ("posted where" tracker).
 5. Ideas, research, brainstorm, packaging: the research step (what worked for John and for others: vidIQ, Reddit, other channels),
