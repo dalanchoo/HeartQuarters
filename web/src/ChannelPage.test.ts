@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { ChannelProjectCell, ChannelTableHead } from './ChannelPage';
+import { ChannelProjectCell, ChannelTableHead, ChannelVideoBrowser } from './ChannelPage';
 import type { ChannelVideo } from '../../server/channel-videos';
 import type { EndScreenData } from '../../server/youtube-end-screens';
 import type { SortKey } from './channelRows';
@@ -26,6 +26,21 @@ const short: ChannelVideo = {
   topic: 'unassigned', topic2: 'unassigned', angle: 'unassigned', angle2: 'unassigned', note: 'Keep this note',
   fromLongform: '005 - Series/005A - Parent/Longform',
 };
+
+it('shows a searchable list with the same filters as Overview and waits for a video selection', () => {
+  const html = renderToStaticMarkup(createElement(ChannelVideoBrowser, { videos: [short] }));
+  expect(html).toContain('type="search"');
+  expect(html).toMatch(/<nav[^>]+aria-label="Matching Videos"[^>]*>.*href="#Channel\/Video\/short"[^>]*>Short One<\/a>/);
+  expect(html).toContain('Choose a video from the list.');
+  for (const label of ['Longform', 'Shorts', 'Standalone', 'All Topics', 'All Angles']) expect(html).toContain(`>${label}</option>`);
+});
+
+it('marks the selected video in the list and opens its details from a deep link', () => {
+  const selected = { ...short, id: 'abcdefghijk' };
+  const html = renderToStaticMarkup(createElement(ChannelVideoBrowser, { videos: [selected], id: selected.id }));
+  expect(html).toMatch(/href="#Channel\/Video\/abcdefghijk" aria-current="page"/);
+  expect(html).toContain('<h2>Short One</h2>');
+});
 
 it('links to the parent project and keeps the note in collapsed details', () => {
   const html = renderToStaticMarkup(createElement(ChannelProjectCell, { video: short, saveNote: () => {} }));

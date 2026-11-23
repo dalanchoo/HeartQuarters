@@ -995,7 +995,21 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .channel-metrics dt { color: var(--muted); font-size: 0.85rem; }
 .channel-metrics dd { font-weight: 600; font-size: 1.2rem; margin: 0; }
 .channel-video-view { margin-top: 0.55rem; }
-.channel-video-view .raw { max-height: 20rem; overflow: auto; }
+.channel-video-browser { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: 1rem; }
+.channel-video-sidebar { min-width: 0; align-self: start; border-right: 1px solid var(--line); padding-right: 0.75rem; }
+.channel-video-search { display: grid; gap: 0.15rem; font-size: 0.85rem; color: var(--muted); }
+.channel-video-search input { width: 100%; min-width: 0; }
+.channel-video-sidebar p { margin: 0.25rem 0; }
+.channel-video-list { max-height: min(64vh, 45rem); overflow-y: auto; }
+.channel-video-list a { overflow-wrap: anywhere; }
+.channel-video-detail { min-width: 0; }
+@media (max-width: 660px) {
+  .channel-video-browser { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  .channel-video-sidebar { border-right: 0; padding-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 0.4rem; }
+  .channel-video-list { max-height: 14rem; }
+}
+.channel-transcript { max-height: 20rem; overflow: auto; max-width: 75ch; padding: 0.2rem 0.65rem; }
+.channel-transcript p { margin: 0.45rem 0; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
 .channel-published-thumbnail { width: min(100%, 320px); display: block; border-radius: 5px; }
 /* The YouTube quota in the title bar, with its details folded away. */
 .quota-badge { position: relative; font-size: 0.8rem; color: var(--muted); margin-left: auto; }

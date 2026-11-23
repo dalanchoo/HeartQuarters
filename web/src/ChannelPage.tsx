@@ -4,13 +4,81 @@ import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos
 import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
 import type { EndScreenData, EndScreenElement } from '../../server/youtube-end-screens';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
-import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
+import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type RowFilters, type SortKey } from './channelRows';
 import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ReachSetup } from './ReachSetup';
 
 type Overview = NonNullable<ReturnType<typeof channelOverview>>;
 const videoHash = (id: string) => `#Channel/Video/${encodeURIComponent(id)}`;
+type VideoFacets = Pick<RowFilters, 'kind' | 'topic' | 'angle'>;
+const allVideoFacets: VideoFacets = { kind: 'all', topic: 'all', angle: 'all' };
+
+function VideoFacetControls({ filters, onChange }: { filters: VideoFacets; onChange: (filters: VideoFacets) => void }) {
+  return <>
+    <label>Kind
+      <select value={filters.kind} onChange={e => onChange({ ...filters, kind: e.target.value as VideoFacets['kind'] })}>
+        <option value="all">All Videos</option>
+        <option value="longform">Longform</option>
+        <option value="short">Shorts</option>
+        <option value="standalone">Standalone</option>
+      </select>
+    </label>
+    <label>Topic
+      <select value={filters.topic} onChange={e => onChange({ ...filters, topic: e.target.value as VideoFacets['topic'] })}>
+        <option value="all">All Topics</option>
+        {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+      </select>
+    </label>
+    <label>Angle
+      <select value={filters.angle} onChange={e => onChange({ ...filters, angle: e.target.value as VideoFacets['angle'] })}>
+        <option value="all">All Angles</option>
+        {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+      </select>
+    </label>
+  </>;
+}
+
+const allVideoResults = { ...allVideoFacets, text: '' };
+
+export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; id?: string }) {
+  const [filters, setFilters] = useState(allVideoResults);
+  const catalog = videos ?? [];
+  const matching = channelRows(catalog, filters, 'publishedAt', true);
+  const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
+  const selected = matching.find(video => video.id === id);
+  const openId = id && /^[\w-]{11}$/.test(id) && (!filtering || selected) ? id : undefined;
+  const applyFilters = (next: typeof allVideoResults) => {
+    setFilters(next);
+    if (openId && !channelRows(selected ? [selected] : [], next, 'publishedAt', true).length) {
+      window.location.replace('#Channel/Video');
+    }
+  };
+
+  return <div className="channel-video-browser">
+    <aside aria-label="Video Browser" className="channel-video-sidebar">
+      <label className="channel-video-search">Find a Video
+        <input type="search" value={filters.text} placeholder="Project name or YouTube title" onChange={e => applyFilters({ ...filters, text: e.target.value })} />
+      </label>
+      <div className="idea-filters">
+        <VideoFacetControls filters={filters} onChange={next => applyFilters({ ...next, text: filters.text })} />
+        {filtering && <button type="button" className="small" onClick={() => applyFilters(allVideoResults)}>Clear Filters</button>}
+      </div>
+      <p className="muted small-text" role="status">
+        {videos ? `${matching.length} ${filtering ? 'Matching ' : ''}${matching.length === 1 ? 'Video' : 'Videos'}` : 'Use Refresh YouTube Data to load the video list.'}
+      </p>
+      <nav aria-label="Matching Videos" className="channel-video-list">
+        {matching.map(video => <a className={`project-link${video.id === openId ? ' active' : ''}`} key={video.id} href={videoHash(video.id)}
+          aria-current={video.id === openId ? 'page' : undefined} title={video.title}>{rowName(video)}</a>)}
+      </nav>
+    </aside>
+    <div className="channel-video-detail">
+      {openId ? <ChannelVideoView key={openId} id={openId} video={selected} /> : matching.length > 0
+        ? <p className="muted">{filters.topic === 'all' ? 'Choose a video from the list.' : `Choose a video about ${TOPIC_LABELS[filters.topic]} from the list.`}</p>
+        : filtering && <p className="muted">No videos match these filters.</p>}
+    </div>
+  </div>;
+}
 
 function ChannelPerformance({ overview }: { overview: Overview }) {
   const [periodName, setPeriodName] = useState('Last 28 Days');
@@ -54,7 +122,7 @@ function ChannelVideoView({ id, video }: { id: string; video?: ChannelVideo }) {
     </details>
     <details className="yt-section">
       <summary>{detail?.transcript?.source === 'script' ? 'Script' : 'Transcript'}</summary>
-      {detail?.transcript ? <pre className="raw">{detail.transcript.text}</pre> : <p className="muted">{detail ? 'No local transcript or script is available.' : error ? 'The transcript could not be loaded.' : 'Loading transcript…'}</p>}
+      {detail?.transcript ? <div className="channel-transcript">{detail.transcript.text.split(/\r?\n[ \t]*\r?\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div> : <p className="muted">{detail ? 'No local transcript or script is available.' : error ? 'The transcript could not be loaded.' : 'Loading transcript…'}</p>}
     </details>
     {error && <p className="error" role="alert">{error}</p>}
     {piece ? <AnalyticsAnalysis key={piece} piece={piece} videoId={id} /> : detail && <p>Link this video in Video Projects to run a detailed analysis.</p>}
@@ -189,10 +257,8 @@ export function ChannelPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
   const [address, setAddress] = useState(() => location.hash);
-  const [kind, setKind] = useState<KindFilter>('all');
+  const [filters, setFilters] = useState(allVideoFacets);
   const [text, setText] = useState('');
-  const [topic, setTopic] = useState<'all' | Topic>('all');
-  const [angle, setAngle] = useState<'all' | Angle>('all');
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
@@ -232,11 +298,10 @@ export function ChannelPage() {
     else { setKey(next); setDescending(next !== 'title'); }
   };
 
-  const rows = data ? channelRows(data.videos, { kind, topic, angle, text, keep: touched }, key, descending) : [];
+  const rows = data ? channelRows(data.videos, { ...filters, text, keep: touched }, key, descending) : [];
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
   const [, section, id] = address.split('/');
   const view = section === 'Recommendations' || section === 'Video' || section === 'Research' ? section : 'Overview';
-  const selectedVideo = data?.videos.find(video => video.id === id);
   const reach = (data && overview?.channelId === data.channel.id) ? overview : null;
 
   return (
@@ -256,13 +321,7 @@ export function ChannelPage() {
         const video = data?.videos.find(video => video.id === id);
         return video && rowName(video);
       }} />}
-      {view === 'Video' && <>
-        <label>Video <select value={selectedVideo?.id ?? ''} onChange={e => { location.hash = e.target.value ? videoHash(e.target.value) : '#Channel/Video'; }}>
-          <option value="">Choose a Video</option>
-          {data?.videos.map(video => <option key={video.id} value={video.id}>{rowName(video)}</option>)}
-        </select></label>
-        {id && /^[\w-]{11}$/.test(id) && <ChannelVideoView key={id} id={id} video={selectedVideo} />}
-      </>}
+      {view === 'Video' && <ChannelVideoBrowser videos={data?.videos} id={id} />}
       {view === 'Research' && <section><h2>Research Sources</h2><p className="muted">Planned sources include vidIQ, Ask Studio, Reddit, and news.</p></section>}
       {view === 'Overview' && <>
       {overview && (!data || reach) && <ChannelPerformance overview={overview} />}
@@ -289,26 +348,7 @@ export function ChannelPage() {
             </p>
           )}
           <div className="idea-filters">
-            <label>Kind
-              <select value={kind} onChange={(e) => { setKind(e.target.value as KindFilter); setTouched(new Set()); }}>
-                <option value="all">All Videos</option>
-                <option value="longform">Longform</option>
-                <option value="short">Shorts</option>
-                <option value="standalone">Standalone</option>
-              </select>
-            </label>
-            <label>Topic
-              <select value={topic} onChange={(e) => { setTopic(e.target.value as 'all' | Topic); setTouched(new Set()); }}>
-                <option value="all">All Topics</option>
-                {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-              </select>
-            </label>
-            <label>Angle
-              <select value={angle} onChange={(e) => { setAngle(e.target.value as 'all' | Angle); setTouched(new Set()); }}>
-                <option value="all">All Angles</option>
-                {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-              </select>
-            </label>
+            <VideoFacetControls filters={filters} onChange={next => { setFilters(next); setTouched(new Set()); }} />
             <label className="idea-filter-text">Project, Title or Note
               <input type="search" value={text} placeholder="Search project names, YouTube titles and notes" onChange={(e) => { setText(e.target.value); setTouched(new Set()); }} />
             </label>
