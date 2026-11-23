@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
-import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
@@ -237,7 +237,7 @@ export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
   }
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
     return fs.readFileSync(answer, 'utf8');
   }
   const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };

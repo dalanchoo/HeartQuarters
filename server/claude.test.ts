@@ -135,6 +135,8 @@ describe('Codex', () => {
     expect(later.slice(0, 3)).toEqual(['exec', 'resume', 'abc']);
     for (const args of [first, later]) {
       expect(args).toContain('sandbox_mode="workspace-write"');
+      // Never Fast mode, which uses ChatGPT credits faster.
+      expect(args).toContain('service_tier="standard"');
       expect(args).toContain('sandbox_workspace_write.writable_roots=["D:\\\\Google Drive\\\\Video","D:\\\\Drafts"]');
       expect(args[args.length - 1]).toBe('hi');
     }

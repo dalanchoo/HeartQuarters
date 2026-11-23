@@ -96,6 +96,12 @@ export function aiModelArgs(ai: AiId): string[] {
   return ai === 'codex' ? ['-c', `model=${JSON.stringify(model)}`] : ['--model', model];
 }
 
+/**
+ * Settings for every ChatGPT (Codex) call: the normal speed tier, because John's own Codex settings may have Fast
+ * mode on, which uses credits faster. Put first so a chosen model can follow it.
+ */
+export const CODEX_STANDARD_TIER = ['-c', 'service_tier="standard"'];
+
 let cachedGeminiModels: AiModelOption[] | null = null;
 
 /** Parses `<id>\t<label>` lines printed by `agy.exe models`. */
@@ -241,6 +247,7 @@ export function codexArgs(sessionId: string | null, message: string, writable: s
     ...(sessionId ? ['resume', sessionId] : []),
     '--json',
     '--skip-git-repo-check',
+    ...CODEX_STANDARD_TIER,
     ...aiModelArgs('codex'),
     '-c', 'sandbox_mode="workspace-write"',
     '-c', 'sandbox_workspace_write.network_access=true',

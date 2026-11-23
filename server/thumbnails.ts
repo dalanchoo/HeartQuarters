@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
@@ -225,7 +225,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
   const started = Date.now();
   if (ai === 'codex') {
     const images = [...(photo ? [photo] : []), ...(refs ?? [])];
-    const args = ['exec', ...(session ? ['resume', session] : []), '--json', '--skip-git-repo-check', ...aiModelArgs('codex'), '-c', 'sandbox_mode="workspace-write"', prompt, ...images.flatMap((i) => ['-i', i])];
+    const args = ['exec', ...(session ? ['resume', session] : []), '--json', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...aiModelArgs('codex'), '-c', 'sandbox_mode="workspace-write"', prompt, ...images.flatMap((i) => ['-i', i])];
     const output = await run(cmd, [...pre, ...args], cwd);
     const id = session || sessionFrom(output, 'thread_id');
     // If it didn't save where asked, the image tool keeps its own copy.

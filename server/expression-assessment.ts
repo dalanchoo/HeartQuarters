@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { AI_NAMES, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
@@ -132,7 +132,7 @@ export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
   const modelArgs = aiModelArgs(ai);
-  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...modelArgs, '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
+  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
     : ai === 'claude' ? ['-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
     : ['-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
   const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000 });
