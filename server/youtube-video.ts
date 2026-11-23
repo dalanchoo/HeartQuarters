@@ -82,7 +82,10 @@ function comparable(s: YoutubeVideoSettings): string {
   return JSON.stringify([s.title, s.description, s.tags, s.language, s.privacy, s.madeForKids, s.synthetic]);
 }
 
-export async function updateYoutubeVideo(token: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings): Promise<void> {
+/** The values YouTube itself confirmed in its answer to a save. Reading the video again right after can still return the old values. */
+export type ConfirmedSettings = Partial<Pick<YoutubeVideoSettings, 'etag' | 'title' | 'description' | 'tags' | 'language' | 'privacy' | 'madeForKids' | 'synthetic'>>;
+
+export async function updateYoutubeVideo(token: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings): Promise<ConfirmedSettings> {
   if (!baseline || !desired || typeof baseline.etag !== 'string') throw new Error('Load the current YouTube settings first.');
   if (typeof desired.title !== 'string' || !desired.title.trim() || desired.title.length > 100 || typeof desired.description !== 'string' || desired.description.length > 5000 || !Array.isArray(desired.tags) || desired.tags.some((t) => typeof t !== 'string') || desired.tags.join(',').length > 500) throw new Error('Check the title, description, and tags.');
   if (!['private', 'unlisted', 'public'].includes(desired.privacy) || ![true, false, null].includes(desired.madeForKids) || ![true, false, null].includes(desired.synthetic)) throw new Error('Check visibility and audience settings.');
@@ -91,7 +94,7 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
   const snippetChanged = desired.title !== baseline.title || desired.description !== baseline.description || JSON.stringify(desired.tags) !== JSON.stringify(baseline.tags) || desired.language !== baseline.language;
   const statusChanged = desired.privacy !== baseline.privacy || desired.madeForKids !== baseline.madeForKids || desired.synthetic !== baseline.synthetic;
   // Nothing to change here (only a thumbnail, captions or playlists are being sent): no need to ask YouTube.
-  if (!snippetChanged && !statusChanged) return;
+  if (!snippetChanged && !statusChanged) return {};
   // Refuse only if a value that matters changed since it was loaded (someone edited it in Studio). YouTube's etag
   // isn't used for this: it changes by itself for a while after a save, which wrongly refused a second push.
   const current = await readYoutubeVideo(token, id);
@@ -117,6 +120,21 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
   if (!res.ok) throw new Error(`YouTube could not save the video settings (${res.status}). Reload before trying again.`);
   const updated = await res.json() as VideoResource;
   if (snippetChanged && desired.language !== baseline.language && desired.language !== null && updated.snippet?.defaultAudioLanguage !== desired.language) throw new Error('YouTube saved the changes but did not confirm the video language. Check it in Studio.');
+  const confirmed: ConfirmedSettings = {};
+  if (typeof updated.etag === 'string') confirmed.etag = updated.etag;
+  const sn = updated.snippet; const st = updated.status;
+  if (snippetChanged && sn) {
+    if (typeof sn.title === 'string') confirmed.title = sn.title;
+    confirmed.description = typeof sn.description === 'string' ? sn.description : '';
+    confirmed.tags = Array.isArray(sn.tags) ? sn.tags.filter((t): t is string => typeof t === 'string') : [];
+    if (typeof sn.defaultAudioLanguage === 'string') confirmed.language = sn.defaultAudioLanguage;
+  }
+  if (statusChanged && st) {
+    if (['private', 'unlisted', 'public'].includes(String(st.privacyStatus))) confirmed.privacy = st.privacyStatus as YoutubeVideoSettings['privacy'];
+    if (typeof st.selfDeclaredMadeForKids === 'boolean') confirmed.madeForKids = st.selfDeclaredMadeForKids;
+    if (typeof st.containsSyntheticMedia === 'boolean') confirmed.synthetic = st.containsSyntheticMedia;
+  }
+  return confirmed;
 }
 
 export async function youtubeCaptionTracks(token: string, id: string): Promise<{ id: string; language: string; name: string; status: string; kind: string }[]> {

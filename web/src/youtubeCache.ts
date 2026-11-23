@@ -5,6 +5,9 @@ import { getJson } from './api';
 // when John clicks Reload from YouTube, after Push Changes, or when the page reloads. Nothing is saved anywhere.
 const cache = new Map<string, Promise<unknown>>();
 
+/** Replaces the remembered answer, e.g. with values YouTube just confirmed in its reply to a save. */
+export function rememberYoutube<T>(url: string, value: T) { cache.set(url, Promise.resolve(value)); }
+
 /** A YouTube read through the engine: the remembered answer, unless `fresh`. Two cards asking at once share one read. */
 export function cachedYoutube<T>(url: string, fresh = false): Promise<T> {
   if (fresh || !cache.has(url)) {

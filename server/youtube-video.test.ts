@@ -69,6 +69,14 @@ describe('YouTube video settings', () => {
     await updateYoutubeVideo('token', 'id', baseline, { ...baseline, title: 'New' });
     expect(mock.mock.calls[1][1].headers['If-Match']).toBe('newer');
   });
+  it("returns the values YouTube confirmed in its save reply, since reading again right after can still show the old ones", async () => {
+    const saved = { etag: 'after', snippet: { ...resource.snippet, description: 'New text' } };
+    const mock = vi.fn().mockResolvedValueOnce(Response.json({ items: [resource] })).mockResolvedValueOnce(Response.json(saved));
+    vi.stubGlobal('fetch', mock);
+    const baseline = { etag: 'tag', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };
+    const confirmed = await updateYoutubeVideo('token', 'id', baseline, { ...baseline, description: 'New text' });
+    expect(confirmed).toMatchObject({ etag: 'after', description: 'New text', title: 'Original' });
+  });
   it("doesn't ask YouTube at all when no setting changes (only a thumbnail is sent)", async () => {
     const mock = vi.fn(); vi.stubGlobal('fetch', mock);
     const baseline = { etag: 'old', title: 'Original', description: 'Text', tags: ['tag'], language: 'en-US', privacy: 'private' as const, madeForKids: false, synthetic: true, thumbnail: null };

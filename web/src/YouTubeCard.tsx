@@ -16,7 +16,7 @@ import { YouTubeIcon, YouTubeOpenLink } from './YouTubeOpenLink';
 import { copyValuesMatch, metadataDiff, type DiffPart } from './metadataDiff';
 import { checkYoutubeVideo, sameComment } from './videoChecks';
 import type { CommentCheck } from '../../server/youtube-comment';
-import { cachedYoutube } from './youtubeCache';
+import { cachedYoutube, rememberYoutube } from './youtubeCache';
 import { defaultSubtitle } from './subtitleChoice';
 import { isQuotaError, plainYoutubeError, quotaMessage, quotaUsedUp, readVideoCost, units, useYoutubeQuota } from './youtubeQuota';
 import { useStagedDoc } from './useStagedDoc';
@@ -410,12 +410,15 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
   const [privacy, setPrivacy] = useState<YoutubeVideoSettings['privacy']>('private');
   const [playlists, setPlaylists] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const load = async (fresh = false) => {
+  // `confirmed` = the values YouTube itself reported when saving; right after a save, reading the video again can still return the old ones.
+  const load = async (fresh = false, confirmed?: Partial<YoutubeVideoSettings>) => {
     if (!job) return;
     setLoading(true);
     setError('');
     try {
-      const r = await cachedYoutube<Existing>(`/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`, fresh);
+      const url = `/api/youtube/video-settings?piece=${encodeURIComponent(piece.path)}&id=${encodeURIComponent(job.id)}&captions=0`;
+      let r = await cachedYoutube<Existing>(url, fresh);
+      if (confirmed) { r = { ...r, video: { ...r.video, ...confirmed } }; rememberYoutube(url, r); }
       setData(r);
       setPrivacy(r.video.privacy);
       setPlaylists(r.selected);
@@ -546,7 +549,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         else if (k === 'Altered content') desired.synthetic = localBoolean(value);
       }
       desired.privacy = privacy;
-      const result = await postJson<{ errors: string[] }>('/api/youtube/video-settings', {
+      const result = await postJson<{ errors: string[]; confirmed?: Partial<YoutubeVideoSettings> }>('/api/youtube/video-settings', {
         piece: piece.path,
         id: job.id,
         baseline: data.video,
@@ -556,7 +559,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         subtitle: staged.includes('Captions') ? subtitle : '',
         cover: staged.includes('Thumbnail') ? localThumb?.path ?? '' : '',
       });
-      await load(true);
+      await load(true, result.confirmed);
       if (staged.includes('Captions')) setYtCaptions(null);
       if (result.errors.length) setError(`Some changes were not confirmed: ${result.errors.join('; ')}`);
       else setMessage('Changes saved to YouTube.');

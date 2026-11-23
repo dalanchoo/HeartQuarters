@@ -250,7 +250,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
     if ([...oldIds, ...newIds].some((p) => !available.has(p))) throw new Error('Your playlist list changed. Reload the YouTube settings before saving.');
     if (snapshot.playlists.some((p) => oldIds.includes(p.id) !== newIds.includes(p.id) && (snapshot!.entries.get(p.id)!.length > 0) !== oldIds.includes(p.id))) throw new Error('A playlist changed in Studio. Reload the YouTube settings before saving.');
   }
-  await updateYoutubeVideo(token, job.videoId!, baseline, desired);
+  const confirmed = await updateYoutubeVideo(token, job.videoId!, baseline, desired);
   const errors: string[] = [];
   if (snapshot) {
     try { const result = await applyPlaylistChanges(token, job.videoId!, snapshot, oldIds, newIds); errors.push(...result.errors); }
@@ -267,7 +267,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
     try { await addSubtitle(piece, id, subtitle, desired.language ?? 'en-US'); const updated = uploadsFor(piece).find((j) => j.id === id); if (updated?.subtitleStatus !== 'sent') throw new Error(updated?.subtitleError ?? 'YouTube did not confirm the subtitle upload.'); }
     catch (e) { errors.push(`Subtitles: ${e instanceof Error ? e.message : String(e)}`); }
   }
-  return { errors };
+  return { errors, confirmed };
 }
 
 export async function videoPlaylists(piece: string, id: string) {
