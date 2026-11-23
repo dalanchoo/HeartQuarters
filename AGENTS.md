@@ -3,7 +3,9 @@
 Instructions for any AI (or person) changing this code.
 
 1. Read `ARCHITECTURE.md` first. Its rules win over your own preferences.
-   `BACKLOG.md` says what's done and what's next.
+   Then read **Current Focus and Decisions** at the top of `BACKLOG.md`.
+   Use it to pick up the active work across AI sessions, and update it when
+   John changes the goal, makes a decision, or moves on to a new step.
 2. The owner (John) is learning TypeScript, Node, React and Git while building
    this. With every change, explain in plain language what it does, which part
    it touches (`server/` = engine, `web/` = screens), and what to try by hand.

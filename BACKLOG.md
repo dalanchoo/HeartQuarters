@@ -8,12 +8,36 @@ scripts) that works on its own, run by Claude or any other AI. A button in the
 app comes later, once the skill has proven useful. Nothing waits on the app.
 
 Automation levels:
+
 - **Auto**: HeartQuarters does it end to end.
 - **Prep**: HeartQuarters prepares everything (files + text); you drag, drop and paste.
 - **Remind**: HeartQuarters tracks it and tells you when it's due.
 
 ## Current Focus and Decisions
 
+**John's goal:** Use YouTube data and AI to decide **what to make or change next**.
+Compare the whole channel across topics, formats, and traffic sources. Help John
+weigh a new video, a follow-up, a remake, new packaging, or a trim. Use the
+script, video, packaging, and retention to investigate specific ideas. Explain
+what the evidence supports, what is missing, and where judgment is involved.
+John wants to discuss the recommendations and get feedback on ideas of his own.
+
+- **Channel is the shared background.** It should cover the whole catalog,
+  including SDAM, psychedelics, relationships, and emotional growth. Include
+  performance, search and browse traffic, John's notes, existing Shorts,
+  playlists, and end screen activity. Treat missing counts as unknown.
+- **Build on the existing Analysis tab.** Give it the channel background
+  before it advises on a specific video. Use the same background for a
+  channel-wide review that proposes options John can compare and discuss.
+- **Video Projects gives Shorts their source.** A Short clipped from a
+  longform follows the project grouping. `999 - Shorts` are standalone
+  projects. The later cross-post picker should judge whether any Short works
+  without the longform, including a Short that came from one.
+- **End screens need details.** Capture what the elements are, their
+  destinations when known, and their impressions and clicks. The recent
+  activity report is implemented. Exact destinations and playlist membership
+  and activity are still open, followed by the shared background file and
+  connecting it to Analysis. See the [detailed handoff](#video-analysis-and-recommendation-phase-what-is-left-handoff-2026-11-22).
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
 
 ---
@@ -152,7 +176,7 @@ Automation levels:
 | 7c | AI chat panel inside the app, aware of the open project | n/a | Pick Option A or B from ARCHITECTURE.md first. |
 | 8 | Expressions library: browse thumbnail photos of you, tag them by emotion, mark favourites | Auto | Pure GUI over one folder. Tags stored in a file in Drive. |
 | 20 | Thumbnail and title generator, for longform and Shorts | Auto (AI-assisted) | Plan below. |
-| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | **Partly done (2026-11-22).** Done: all 239 videos with numbers, Topic and Angle (main and second), notes and links to Video Projects. Left: search vs browse, which Shorts came from which longform, end screen and playlist tickboxes, the button that writes the background into one file, and making the Analysis tab read that file first. See the handoff section below. Found with the 003 SDAM analysis: it treated John's best video as needing fixes and suggested Shorts and end screens that already exist, because it saw one video with no context. |
+| 21 | Channel tab: the background every analysis reads. Every longform and Short with its topic (SDAM, psychedelics, relationships, emotional growth…), main numbers, main traffic source (search or browse), which Shorts came from which longform, end screens, playlists, and John's own notes ("my best video", "I dislike this thumbnail") | Auto | **Partly done (2026-11-22).** Channel shows the video list, numbers, Topic and Angle, notes, links to Video Projects, search and browse views, Shorts sources, and recent end screen activity. Left: end screen destinations, playlist membership and activity, the channel background file, and having Analysis read it first. |
 | 22 | Analysis follow-up chat: ask questions about a finished analysis, get feedback on John's own video ideas, with vidIQ for what works on other channels | n/a | Needs the background file from #21 (the part still left). Part of #7c. |
 
 ### Video analysis and recommendation phase: what is left (handoff, 2026-11-22)
@@ -162,9 +186,9 @@ Then build the smarter tools on top: a follow-up chat, a Shorts picker, and the 
 The initial Topic and Angle review is complete for the existing videos.
 
 **Still to do, in order**
-1. Finish the Channel tab (#21): search vs browse for each video; which Shorts came from which longform (the data is partly in each
-   project's `Shorts\Longform URL.txt`); tickboxes for end screens and playlists, which YouTube's API can't read; the button that writes the
-   channel background into one file; and **make the Analysis tab read that file first**. None of this has been started.
+1. Finish the Channel tab (#21). The end screen report supplies recent impressions and clicks by element. The destination video or playlist
+   still needs to come from Studio separately. Pull playlist membership and activity from YouTube. Then write the channel background into
+   one file and **make the Analysis tab read that file first**.
 2. Filters by Topic and Angle in the Video Projects sidebar (John called this a later step).
 3. Analysis follow-up chat (#22), with vidIQ for other channels. Needs step 1.
 4. Shorts picker (#13): judge which Shorts work on their own from swipe-away and watch time; John approves the list. Check whether vidIQ can
