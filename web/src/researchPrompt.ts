@@ -21,16 +21,9 @@ export interface ResearchFacts {
  * How the tools must format their answer. Their copy button turns tables, score badges, video cards and links into text
  * with the spaces and line breaks gone ("TitleScoreI Read...97"), so the answer has to be plain text from the start.
  */
-const PLAIN_TEXT_RULES = [
-  'Format your answer as plain text only, because I will copy it with a copy button and the AI that reads it cannot see formatting:',
-  '- no tables, cards, badges, buttons, icons, emoji or clickable links;',
-  '- put every item on its own line, with a blank line between pairs and between sections, and end every pair and every section with a line containing only the words === END OF SECTION ===;',
-  '- write every video as its full title in quotation marks, followed by its numbers in words, for example: "Title" (76,660 views, 12x its channel median);',
-  '- write every score, keyword and number as ordinary text, for example: Title: "..." Score: 97 out of 100; keyword: memory, search volume: high;',
-  '- write every timestamp as plain digits, like 1:35, never as a link;',
-  '- label each part clearly (Pair 1, Pair 2, My Choice, Description, Tags, Hashtags, Chapters, Pinned Comment) and write the description, tags, hashtags and pinned comment exactly as I would paste them, with no commentary inside them;',
-  '- put any notes or warnings of your own in a separate section at the very end called Notes.',
-].join('\n');
+// Kept short on purpose: a longer question gets pasted into vidIQ as an attachment, and then it doesn't look up the video.
+const PLAIN_TEXT_RULES =
+  'Answer in plain text only (I copy it with a copy button): no tables, cards, icons, emoji or links; each item on its own line; write each video as its full title in quotes with its numbers, like "Title" (76,660 views); timestamps as plain digits; label each part (Pair 1, My Choice, Description, Tags, Hashtags, Chapters, Pinned Comment) and end each with a line reading === END OF SECTION ===; put any warnings in a final Notes part.';
 
 /** The question for vidIQ and Ask Studio: what the video is, then what to suggest and how, honest to the video. */
 export function researchQuestion(f: ResearchFacts): string {

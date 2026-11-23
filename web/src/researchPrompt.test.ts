@@ -17,8 +17,8 @@ describe('the research question for vidIQ and Ask Studio', () => {
   });
   it('asks for plain text with no tables or links, before the transcript', () => {
     const q = researchQuestion({ title: 'T', about: '', short: false, source: { kind: 'transcript', text: 'Hello' } });
-    expect(q).toContain('Format your answer as plain text only');
-    expect(q).toContain('no tables, cards, badges');
+    expect(q).toContain('Answer in plain text only');
+    expect(q).toContain('no tables, cards, icons');
     expect(q).toContain('=== END OF SECTION ===');
     expect(q.indexOf('plain text only')).toBeLessThan(q.indexOf("video's transcript:"));
   });
