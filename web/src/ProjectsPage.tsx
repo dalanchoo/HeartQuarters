@@ -270,26 +270,28 @@ export function ProjectsPage() {
   return (
     <StatusContext.Provider value={{ items: overview, checks, focus, cleanup }}><div className="split">
       <aside className="sidebar">
-        <div className="sidebar-actions">
-          <NewFolderButton kind="top" onCreated={onCreated} />
-          <NewFolderButton kind="standalone" onCreated={onCreated} />
-        </div>
-        {/* Labels on the right of their column, boxes lined up on the left of theirs. */}
-        <div className="sidebar-filters">
-          <span id="video-show-label">Show</span>
-          <PackagingChoice name="Show" value={filter} options={Object.keys(FILTER_LABELS)} label={value => FILTER_LABELS[value as Filter]} render={showFilter} onChange={value => setFilter(value as Filter)} />
-          <label htmlFor="video-find">Find</label>
-          <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
-        </div>
-        <button className="small" aria-label={scanning ? 'Checking YouTube' : 'Check Linked Videos on YouTube'} title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking…' : 'Check Linked Videos on'} <YouTubeIcon /></button>
-        <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
         <ChannelAnalytics />
-        {scan && <p className="status-legend" role="status">{scan}</p>}
-        {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
-        {error && <p className="error">{error}</p>}
-        {!projects && !error && <p className="muted">Loading…</p>}
-        {projects &&
-          ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} search={search} />)}
+        <details className="sidebar-section sidebar-videos" open>
+          <summary>Videos</summary>
+          <div className="sidebar-actions">
+            <NewFolderButton kind="top" onCreated={onCreated} />
+            <NewFolderButton kind="standalone" onCreated={onCreated} />
+          </div>
+          <div className="sidebar-filters">
+            <span id="video-show-label">Show</span>
+            <PackagingChoice name="Show" value={filter} options={Object.keys(FILTER_LABELS)} label={value => FILTER_LABELS[value as Filter]} render={showFilter} onChange={value => setFilter(value as Filter)} />
+            <label htmlFor="video-find">Find</label>
+            <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
+          </div>
+          <button className="small" aria-label={scanning ? 'Checking YouTube' : 'Check Linked Videos on YouTube'} title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking…' : 'Check Linked Videos on'} <YouTubeIcon /></button>
+          <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
+          {scan && <p className="status-legend" role="status">{scan}</p>}
+          {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
+          {error && <p className="error">{error}</p>}
+          {!projects && !error && <p className="muted">Loading…</p>}
+          {projects &&
+            ordered(null, projects).map((p) => <TreeItem key={p.id} node={p} selected={selected} filter={filter} search={search} />)}
+        </details>
       </aside>
       <SidebarResizer />
       <section className="content" ref={contentRef}>

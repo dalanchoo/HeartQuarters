@@ -32,7 +32,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   Use per-video retention and packaging to investigate shortlisted
   candidates. Then bring in fresh outside evidence from vidIQ or Ask Studio,
   relevant Reddit threads, and news. Keep outside demand distinct from
-  what Heart Mind Fusion's own viewers watch.
+  what Heart Mind Fusion's own viewers watch. The Video Projects left pane
+  has separate collapsible sections for Channel Analytics and Videos.
 - **Video Projects gives Shorts their source.** A Short clipped from a
   longform follows the project grouping. `999 - Shorts` are standalone
   projects. The later cross-post picker should judge whether any Short works

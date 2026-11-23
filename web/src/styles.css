@@ -985,8 +985,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .sidebar-filters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.4rem 0.5rem; margin: 0.4rem 0 0.6rem; font-size: 0.85rem; }
 .sidebar-filters > label { text-align: right; }
 .sidebar-filters select, .sidebar-filters input { width: 100%; min-width: 0; box-sizing: border-box; }
-/* Channel Analytics' triangle lines up with the video list's triangles below it. */
-.channel-analytics > summary { padding: 0.3rem 0; }
+.channel-analytics > summary, .sidebar-videos > summary { padding: 0.3rem 0; }
 /* The YouTube quota in the title bar, with its details folded away. */
 .quota-badge { position: relative; font-size: 0.8rem; color: var(--muted); margin-left: auto; }
 .quota-badge + .ai-controls { margin-left: 0; }
