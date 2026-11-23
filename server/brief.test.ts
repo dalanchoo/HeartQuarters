@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
+import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 /** A fake AI: Claude writes a brief, ChatGPT and Gemini review it, each saying a little first. */
-const PICKS = { picks: [1, 2, 3].map((n) => ({ title: `Title ${n}`, thumbnailText: `TEXT ${n}`, accent: 'TEXT', expression: 'Composure > Calm', background: 'dark', why: 'because', backedBy: ['Claude', 'Gemini'], description: 'A description.\n\n#SDAM', tags: 'SDAM, Memory', pinnedComment: 'What do you think?'  })) };
+const PICKS = { picks: [1, 2, 3].map((n) => ({ title: `Title ${n}`, thumbnailText: `TEXT ${n}`, accent: 'TEXT', expression: 'Composure > Calm', background: 'dark', why: 'because', backedBy: ['Claude', 'Gemini'], description: 'A description.\n\n#SDAM', tags: 'SDAM, memory', pinnedComment: 'What do you think?'  })) };
 const fakeAi: AskAi = async (ai, prompt, cwd) => {
   if (fs.existsSync(path.join(cwd, 'source.txt'))) expect(fs.readFileSync(path.join(cwd, 'source.txt'), 'utf8')).toContain('agonized');
   if (fs.existsSync(path.join(cwd, 'notes.txt'))) expect(prompt).toContain('notes.txt');
@@ -81,6 +81,18 @@ describe('the source', () => {
 });
 
 describe('writing the brief', () => {
+  it('asks the brief and final picker to use search phrases and favor vidIQ evidence', () => {
+    const writer = writerPrompt('Video/Longform', { kind: 'transcript', path: 'captions.txt' }, true, '2026-11-23');
+    const picker = picksPrompt(true);
+    expect(writer).toContain('Record the exact phrases checked');
+    expect(picker).toContain('Use the keyword results recorded in the brief');
+    for (const prompt of [writer, picker]) {
+      expect(prompt).toContain('tags in Title Case');
+      expect(prompt).toContain('Leave out quotes, dialogue, title hooks');
+      expect(prompt).toContain('omit exact phrases reported at zero volume or score');
+      expect(prompt).toContain('never invent scores');
+    }
+  });
   it('asks each AI to label complete expression suggestions so they can be reviewed for the shot list', () => {
     const source = { kind: 'transcript' as const, path: 'captions.txt' };
     expect(writerPrompt('Video/Longform', source, false, '2026-11-17')).toContain('beginning "Expression:"');
@@ -190,6 +202,7 @@ describe('writing the brief', () => {
     expect(job.status).toBe('done');
     expect(job.steps.map((s) => s.role)).toEqual(['picks']);
     expect(readPicks(path.join(draftsDir(), 'Picks.json'))).toHaveLength(3);
+    expect(readPicks(path.join(draftsDir(), 'Picks.json'))?.[0].tags).toBe('SDAM, Memory');
     expect(fs.readdirSync(draftsDir()).filter((f) => /^Picks - .*\.json$/.test(f))).toHaveLength(1);
     expect(briefText()).toBe('# Brief: 022\n\nan older brief');
   });
@@ -268,6 +281,12 @@ describe('small helpers', () => {
 ${JSON.stringify(PICKS)}`)).toHaveLength(3);
     expect(() => picksFromAnswer('no json')).toThrow(/expected form/);
     expect(() => picksFromAnswer('{"picks":[{"title":"no thumbnail text"}]}')).toThrow(/expected form/);
+  });
+
+  it('capitalizes generated tags while preserving acronyms, apostrophes, and existing mixed case', () => {
+    const tags = 'active listening, how to be heard, Daryl Davis KKK, long-term memory, why people don’t listen, émotions, vidIQ';
+    const [pick] = picksFromAnswer(JSON.stringify({ picks: [{ ...PICKS.picks[0], tags }] }));
+    expect(pick.tags).toBe('Active Listening, How To Be Heard, Daryl Davis KKK, Long-Term Memory, Why People Don’t Listen, Émotions, vidIQ');
   });
 
   it('takes an answer from its heading on, and complains when there is none', () => {

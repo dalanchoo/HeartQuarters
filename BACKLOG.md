@@ -12,6 +12,10 @@ Automation levels:
 - **Prep**: HeartQuarters prepares everything (files + text); you drag, drop and paste.
 - **Remind**: HeartQuarters tracks it and tells you when it's due.
 
+## Current Focus and Decisions
+
+- **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
+
 ---
 
 ## Done: Milestone 1, the project dashboard (v0.1)
