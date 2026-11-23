@@ -13,11 +13,12 @@ import { fetchYoutubeThumbnail, firstWorkingThumbnail, savePackagingThumbnail } 
 import { isShortPiece, waitForShortProcessing, youtubeProcessingStatus } from './youtube-processing.js';
 import { youtubeFetch } from './youtube-quota.js';
 import { saveLinkFile } from './link-files.js';
+import { recordYoutubePackaging, versionFolder } from './packaging-version.js';
 
 /** The largest thumbnail YouTube takes from a computer (50 MB since September 2026), for uploads and pushes alike. */
 export const MAX_THUMBNAIL_BYTES = 50_000_000;
 
-export interface UploadInput { piece: string; video: string; cover: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
+export interface UploadInput { piece: string; video: string; cover: string; version?: string; subtitle?: string; language?: string; playlistIds?: string[]; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public'; madeForKids: boolean; synthetic: boolean }
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; createdAt?: string; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
@@ -102,6 +103,19 @@ export function moveUploadRecords(oldFolder: string, newFolder: string): number 
   return changed;
 }
 
+function checkPackagingVersion(piece: string, version: unknown, cover: string): string | undefined {
+  if (version === undefined) return undefined;
+  if (typeof version !== 'string') throw new Error('Choose a packaging version.');
+  const folder = versionFolder(piece, version);
+  if (cover && !isInside(folder, cover)) throw new Error('Choose a thumbnail from the selected packaging version.');
+  return version;
+}
+
+function savePackagingHistory(piece: string, version: string, fields: string[]): string | undefined {
+  try { recordYoutubePackaging(piece, version, fields); }
+  catch (e) { return `YouTube accepted ${fields.join(', ')}, but the version’s Notes could not be saved: ${e instanceof Error ? e.message : String(e)}.`; }
+}
+
 export function validateUpload(input: UploadInput) {
   if (!input || typeof input.piece !== 'string' || !input.piece || typeof input.video !== 'string' || typeof input.cover !== 'string') throw new Error('Choose a video and packaging.');
   const piece = safeResolve('projects', input.piece);
@@ -122,7 +136,7 @@ export function validateUpload(input: UploadInput) {
   videoLanguage(input.language);
   checkPlaylistIds(input.playlistIds);
   if (input.subtitle) readSubtitle(input.piece, input.subtitle);
-  return { video, cover, size: stat.size };
+  return { video, cover, size: stat.size, version: checkPackagingVersion(input.piece, input.version, cover) };
 }
 async function responseError(res: Response) { const s = await res.text(); try { const j = JSON.parse(s) as { error?: { message?: string } }; return j.error?.message ?? `YouTube returned ${res.status}`; } catch { return `YouTube returned ${res.status}`; } }
 export async function youtubeChannel() {
@@ -227,7 +241,7 @@ export async function removeExtraCaptions(piece: string, id: string): Promise<{ 
   return { removed: extra.length };
 }
 
-export async function syncYoutubeSettings(piece: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings, before: unknown, after: unknown, subtitle: unknown, cover: unknown) {
+export async function syncYoutubeSettings(piece: string, id: string, baseline: YoutubeVideoSettings, desired: YoutubeVideoSettings, before: unknown, after: unknown, subtitle: unknown, cover: unknown, versionChoice?: unknown) {
   const job = completedUpload(piece, id);
   if (!youtubeStatus().captionAccess) throw new Error('Reconnect YouTube to save changes.');
   if (typeof subtitle !== 'string' || typeof cover !== 'string') throw new Error('Check the subtitle and thumbnail choices.');
@@ -240,6 +254,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
     coverPath = safeResolve('projects', cover);
     if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
   }
+  const version = checkPackagingVersion(piece, versionChoice, coverPath);
   const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
   const playlistsChanged = oldIds.length !== newIds.length || oldIds.some((p) => !newIds.includes(p));
   const token = await youtubeAccessToken();
@@ -256,18 +271,24 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
     try { const result = await applyPlaylistChanges(token, job.videoId!, snapshot, oldIds, newIds); errors.push(...result.errors); }
     catch (e) { errors.push(`Playlists: ${e instanceof Error ? e.message : String(e)}`); }
   }
+  const fields = (['title', 'description', 'tags'] as const)
+    .filter(key => confirmed?.[key] !== undefined && JSON.stringify(desired[key]) !== JSON.stringify(baseline[key]) && JSON.stringify(confirmed[key]) !== JSON.stringify(baseline[key]))
+    .map(key => key[0].toUpperCase() + key.slice(1));
   if (coverPath) {
     try {
       if (isShortPiece(piece) && await youtubeProcessingStatus(token, job.videoId!) !== 'succeeded') throw new Error('YouTube is still processing this Short. Choose the thumbnail again after processing finishes.');
       const response = await youtubeFetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId!)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(coverPath)) });
       if (!response.ok) throw new Error(await responseError(response));
+      fields.push('Thumbnail');
     } catch (e) { errors.push(`Thumbnail: ${e instanceof Error ? e.message : String(e)}`); }
   }
+  const notesWarning = version && fields.length ? savePackagingHistory(piece, version, fields) : undefined;
+  const notesRecorded = !!(version && fields.length && !notesWarning);
   if (subtitle) {
     try { await addSubtitle(piece, id, subtitle, desired.language ?? 'en-US'); const updated = uploadsFor(piece).find((j) => j.id === id); if (updated?.subtitleStatus !== 'sent') throw new Error(updated?.subtitleError ?? 'YouTube did not confirm the subtitle upload.'); }
     catch (e) { errors.push(`Subtitles: ${e instanceof Error ? e.message : String(e)}`); }
   }
-  return { errors, confirmed };
+  return { errors, confirmed, ...(notesRecorded && { notesRecorded }), ...(notesWarning && { notesWarning }) };
 }
 
 export async function videoPlaylists(piece: string, id: string) {
@@ -358,7 +379,7 @@ export function acknowledgeUpload(piece: string, id: string) {
   jobs.delete(job.id);
   record(job);
 }
-async function upload(job: UploadJob, input: UploadInput, files: { video: string; cover: string; size: number }) {
+async function upload(job: UploadJob, input: UploadInput, files: ReturnType<typeof validateUpload>) {
   let token: string;
   try { token = await youtubeAccessToken(); } catch (e) { job.status = 'failed'; job.error = e instanceof Error ? e.message : String(e); record(job); return; }
   const init = await youtubeFetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
@@ -389,6 +410,7 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
     try { await putInPlaylists(job, token, checkPlaylistIds(input.playlistIds)); }
     catch (e) { job.playlistResults = input.playlistIds.map((id) => ({ id, status: 'error', error: e instanceof Error ? e.message : String(e) })); record(job); }
   }
+  const fields = ['Title', 'Description', 'Tags'];
   if (files.cover) {
     try {
       if (isShortPiece(job.piece)) {
@@ -398,7 +420,12 @@ async function upload(job: UploadJob, input: UploadInput, files: { video: string
       }
       const res = await youtubeFetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(job.videoId)}&uploadType=media`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': files.cover.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: new Uint8Array(await fs.promises.readFile(files.cover)) });
       if (!res.ok) throw new Error(await responseError(res));
+      fields.push('Thumbnail');
     } catch (e) { delete job.phase; job.warning = `The video uploaded, but its thumbnail did not: ${e instanceof Error ? e.message : String(e)}. Try the thumbnail again after processing or set it in YouTube Studio.`; }
+  }
+  if (files.version) {
+    const warning = savePackagingHistory(job.piece, files.version, fields);
+    if (warning) job.warning = [job.warning, warning].filter(Boolean).join(' ');
   }
   if (input.subtitle) {
     job.subtitleStatus = 'uploading'; record(job);

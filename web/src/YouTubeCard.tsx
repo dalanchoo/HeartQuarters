@@ -275,6 +275,7 @@ export function YouTubeLinkBar({ piece, link }: { piece: Piece; link: YoutubeLin
               </button>
             </p>
           )}
+          {job?.status === 'done' && job.warning && <p className="error">{job.warning}</p>}
           {jobs
             ?.filter((j) => j.status === 'unknown')
             .map((j) => (
@@ -538,8 +539,9 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         else if (k === 'Altered content') desired.synthetic = localBoolean(value);
       }
       desired.privacy = privacy;
-      const result = await postJson<{ errors: string[]; confirmed?: Partial<YoutubeVideoSettings> }>('/api/youtube/video-settings', {
+      const result = await postJson<{ errors: string[]; confirmed?: Partial<YoutubeVideoSettings>; notesRecorded?: boolean; notesWarning?: string }>('/api/youtube/video-settings', {
         piece: piece.path,
+        version,
         id: job.id,
         baseline: data.video,
         desired,
@@ -548,9 +550,13 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         subtitle: staged.includes('Captions') ? subtitle : '',
         cover: staged.includes('Thumbnail') ? localThumb?.path ?? '' : '',
       });
+      if (result.notesRecorded) onChanged?.();
       await load(true, result.confirmed);
       if (staged.includes('Captions')) setYtCaptions(null);
-      if (result.errors.length) setError(`Some changes were not confirmed: ${result.errors.join('; ')}`);
+      if (result.errors.length || result.notesWarning) setError([
+        result.errors.length ? `Some changes were not confirmed: ${result.errors.join('; ')}` : '',
+        result.notesWarning,
+      ].filter(Boolean).join(' '));
       else setMessage('Changes saved to YouTube.');
       return result.errors.length === 0;
     } catch (e) {
@@ -646,7 +652,7 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         </span>
       </div>
       {!linked && <div className="upload-hint" role="note"><strong>Not on YouTube Yet: Upload It First</strong><p><b>Upload to YouTube</b>, just below, sends everything in this version (title, description, tags and settings) together with the video. After that, you can copy single fields across here. If it's already on YouTube, link it in the YouTube section at the top of this card instead.</p></div>}
-      {!linked && link.status?.connected && link.job?.status !== 'uploading' && (dirty ? <p className="muted small-text">Apply or discard your changes before uploading.</p> : <NewUpload piece={piece} doc={originalDoc} covers={covers} link={link} longform={longform} localThumb={localThumb} subtitles={subtitles} />)}
+      {!linked && link.status?.connected && link.job?.status !== 'uploading' && (dirty ? <p className="muted small-text">Apply or discard your changes before uploading.</p> : <NewUpload piece={piece} version={version} doc={originalDoc} covers={covers} link={link} longform={longform} localThumb={localThumb} subtitles={subtitles} />)}
       {doc.error && <p className="error">{doc.error}</p>}
       {doc.text === null && !doc.error && <p className="muted">Loading…</p>}
       {/* Which side is which, once, instead of on every field. */}
@@ -961,7 +967,7 @@ function Related({ longform }: { longform?: string }) {
 }
 
 /** For a video not on YouTube yet: Upload sends the local file's values, with the video, thumbnail, captions and playlists chosen here. */
-function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }: { piece: Piece; doc: LoadedDoc; covers: FileRef[]; link: YoutubeLink; longform?: string; localThumb?: FileRef; subtitles: FileChoice[] }) {
+function NewUpload({ piece, version, doc, covers, link, longform, localThumb, subtitles }: { piece: Piece; version?: string; doc: LoadedDoc; covers: FileRef[]; link: YoutubeLink; longform?: string; localThumb?: FileRef; subtitles: FileChoice[] }) {
   const [open, setOpen] = useState(false);
   const [video, setVideo] = useState(piece.exports[0]?.path ?? '');
   const [cover, setCover] = useState(localThumb?.path ?? '');
@@ -1054,6 +1060,7 @@ function NewUpload({ piece, doc, covers, link, longform, localThumb, subtitles }
           try {
             const job = await postJson<UploadJob>('/api/youtube/upload', {
               piece: piece.path,
+              version,
               video,
               cover,
               subtitle,

@@ -50,6 +50,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   activity rows, so live clicks are still unverified.
   See the [detailed handoff](#video-analysis-and-recommendation-phase-what-is-left-handoff-2026-11-22).
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
+- **Record packaging changes in the version's Notes.** Uploads and updates sent through HeartQuarters
+  record the Pacific date and the title, description, tags, or thumbnail that YouTube confirmed.
 
 ---
 

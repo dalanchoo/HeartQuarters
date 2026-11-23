@@ -789,6 +789,13 @@ function PieceCard({
   const { focus } = useContext(StatusContext);
   // The link to YouTube, shared by the status line and Local vs YouTube. Nothing is read while the card is closed.
   const link = useYoutubeLink(piece, longformProject, (plain || open) && piece.kind !== 'reel');
+  const finishedUpload = link.job?.status === 'done' && link.job.video ? link.job.id : null;
+  const refreshedUpload = useRef<string | null>(null);
+  useEffect(() => {
+    if (!finishedUpload || finishedUpload === refreshedUpload.current) return;
+    refreshedUpload.current = finishedUpload;
+    onChanged?.();
+  }, [finishedUpload, onChanged]);
   const youtubeDoc = docs.find((d) => version?.docs.some(file => file.path === d.file.path) && /^youtube(?:\b|[_. -])/i.test(d.file.name.split('/').pop() ?? ''));
   const card = useRef<HTMLDetailsElement>(null);
   useEffect(() => {

@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
-import { writable } from './safe-files.js';
+import { readText, writable, writeFile } from './safe-files.js';
+import { NOTES_FILE } from './projects.js';
+import { pacificDay } from './youtube-quota.js';
 
 export function versionFolder(piece: string, source: string): string {
   if (!piece || !source) throw new Error('Choose a packaging version.');
@@ -46,13 +48,32 @@ export function createFirstPackagingVersion(piece: string): { name: string; path
 
 const NOT_YET = 'On YouTube: not yet.';
 
+/** Record what YouTube accepted, even when only part of this version was sent. */
+export function recordYoutubePackaging(piece: string, version: string, fields: string[], when = new Date()): void {
+  const folder = versionFolder(piece, version);
+  const name = fs.readdirSync(folder).find((file) => file.toLowerCase() === NOTES_FILE.toLowerCase()) ?? NOTES_FILE;
+  const file = writable(path.join(folder, name));
+  const notes = fs.existsSync(file) ? readText(file) : '';
+  const eol = notes.includes('\r\n') ? '\r\n' : '\n';
+  const entry = `On YouTube: ${pacificDay(when)} (sent ${fields.join(', ')}).`;
+  const placeholder = /^(\uFEFF?)On YouTube: not yet\.[ \t]*$/im;
+  const next = placeholder.test(notes)
+    ? notes.replace(placeholder, (_match, bom: string) => bom + entry)
+    : `${notes}${notes && !notes.endsWith('\n') ? eol : ''}${entry}${eol}`;
+  writeFile(file, next);
+}
+
 /**
- * A copied version isn't on YouTube yet, whatever its source's Notes.md said: each "On YouTube: ..." line becomes
- * "On YouTube: not yet.", and the line is added when there was none. Everything else, and the line endings, stay.
+ * A copied version starts with one "On YouTube: not yet." line. Its source's publication history stays with the source.
  */
 export function notYetOnYoutube(notes: string): string {
   const eol = notes.includes('\r\n') ? '\r\n' : '\n';
-  if (/^On YouTube:.*$/im.test(notes)) return notes.replace(/^On YouTube:[^\r\n]*/gim, NOT_YET);
+  let first = true;
+  if (/^\uFEFF?On YouTube:/im.test(notes)) return notes.replace(/^(\uFEFF?)On YouTube:[^\r\n]*(\r?\n|$)/gim, (_match, bom: string, ending: string) => {
+    if (!first) return '';
+    first = false;
+    return bom + NOT_YET + ending;
+  });
   if (!notes.trim()) return `${NOT_YET}${eol}`;
   return `${notes.replace(/\s+$/, '')}${eol}${eol}${NOT_YET}${eol}`;
 }

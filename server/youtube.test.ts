@@ -44,10 +44,12 @@ describe('YouTube uploads', () => {
       .mockResolvedValueOnce(Response.json({ id: 'youtube-id' }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    startUpload(input);
+    const version = `${input.piece}/Packaging/V01`;
+    startUpload({ ...input, version });
     for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
     const job = uploadsFor(input.piece)[0];
     expect(job.status).toBe('done'); expect(job.videoId).toBe('youtube-id');
+    expect(fs.readFileSync(path.join(tmp, 'Videos', version, 'Notes.md'), 'utf8')).toMatch(/^On YouTube: \d{4}-\d{2}-\d{2} \(sent Title, Description, Tags, Thumbnail\)\.\n$/);
     const init = fetchMock.mock.calls[0][1];
     expect(JSON.parse(init.body).status).toMatchObject({ privacyStatus: 'private', selfDeclaredMadeForKids: false });
     expect(Buffer.from(fetchMock.mock.calls[1][1].body).toString()).toBe('fake video');
