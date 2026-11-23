@@ -98,7 +98,12 @@ export async function updateYoutubeVideo(token: string, id: string, baseline: Yo
   // Refuse only if a value that matters changed since it was loaded (someone edited it in Studio). YouTube's etag
   // isn't used for this: it changes by itself for a while after a save, which wrongly refused a second push.
   const current = await readYoutubeVideo(token, id);
-  if (comparable(current.settings) !== comparable(baseline)) throw new Error('This video changed on YouTube. Reload its settings before saving.');
+  if (comparable(current.settings) !== comparable(baseline)) {
+    const names = ['title', 'description', 'tags', 'language', 'privacy', 'made for kids', 'altered content'];
+    const keys = ['title', 'description', 'tags', 'language', 'privacy', 'madeForKids', 'synthetic'] as const;
+    const differs = keys.map((key, i) => JSON.stringify(current.settings[key]) !== JSON.stringify(baseline[key]) ? names[i] : '').filter(Boolean);
+    throw new Error(`This video changed on YouTube${differs.length ? ` (${differs.join(', ')} differ)` : ''}. Reload its settings before saving.`);
+  }
   const payload: Record<string, unknown> = { id }; const parts: string[] = [];
   if (snippetChanged) {
     const source = current.resource.snippet!; const snippet: Record<string, unknown> = {};

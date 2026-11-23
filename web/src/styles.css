@@ -1124,3 +1124,5 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .channel-table .pair { display: flex; flex-direction: column; gap: 2px; }
 .channel-table .pair select.second { font-size: 0.72rem; min-height: 18px; color: var(--muted); }
 .about-video { max-width: 44rem; }
+
+.apply-result { margin: 6px 0 0; padding: 6px 10px; border: 2px solid #b42318; border-radius: 6px; background: #fef3f2; font-weight: 600; }

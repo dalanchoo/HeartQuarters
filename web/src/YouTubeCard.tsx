@@ -565,7 +565,12 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       else setMessage('Changes saved to YouTube.');
       return result.errors.length === 0;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const text = e instanceof Error ? e.message : String(e);
+      // The video changed on YouTube since it was read: read it again now, so the next Apply Changes compares against what is really there.
+      if (/changed on YouTube/i.test(text)) {
+        await load(true);
+        setError(`${text} It was reloaded just now, so your selections were cleared. Check the comparison above, choose what to send again, and click Apply Changes.`);
+      } else setError(text);
       return false;
     } finally {
       setBusy(false);
@@ -798,9 +803,6 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
         </CopyDirectionFrame>
       </details>
 
-      {error && <p className="error">{plainYoutubeError(error, quota)}</p>}
-      {message && <p className="picked-label small-text">{message}</p>}
-
       {linked && (
         <div className="lvy-push">
           {data ? (
@@ -840,6 +842,8 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       </div>
       <button disabled={busy || !dirty || (!!pending.length && (out || !data || !link.status?.captionAccess)) || (!!(draft.pending || fromYoutube.length || youtubeThumbnail || youtubeCaptions) && !!originalDoc.locked)} onClick={() => void applyChanges()}>Apply Changes</button>{' '}
       <button disabled={busy || !dirty} onClick={() => { draft.discard(); setFromYoutube([]); setYoutubeThumbnail(false); setYoutubeCaptions(false); setStaged([]); localBaseline.current = null; if (data) { setPrivacy(data.video.privacy); setPlaylists(data.selected); } setMessage('Changes discarded.'); }}>Discard Changes</button>{pending.length > 0 && <span className="muted small-text"> {units(pushCost)}</span>}
+      {error && <p className="error apply-result" role="alert">{plainYoutubeError(error, quota)}</p>}
+      {message && <p className="picked-label small-text" role="status">{message}</p>}
     </div>
   );
 }
