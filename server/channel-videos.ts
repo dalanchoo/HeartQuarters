@@ -4,12 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDir } from './config.js';
 import { pacificDate } from './analytics.js';
-import { youtubeAccessToken } from './youtube-auth.js';
+import { youtubeAccessToken, youtubeStatus } from './youtube-auth.js';
 import { recordAnalyticsUse, youtubeFetch } from './youtube-quota.js';
 import { readVideoProfile, type VideoProfile } from './video-profile.js';
 import { videoLinks, type VideoLink } from './video-links.js';
 import { youtubeChannel } from './youtube.js';
 import { STANDALONE_GROUP } from './create.js';
+import { getEndScreenData, type EndScreenData } from './youtube-end-screens.js';
+import { writeFileSafely } from './files.js';
 
 const FIRST_DATE = '2008-07-01';
 const METRICS = ['views', 'estimatedMinutesWatched', 'averageViewDuration', 'averageViewPercentage', 'likes', 'subscribersGained'] as const;
@@ -38,7 +40,14 @@ export interface ChannelVideo {
   angle2: VideoProfile['angle2'];
   note: string;
 }
-export interface ChannelVideoList { channel: { id: string; title: string }; updatedAt: string; videos: ChannelVideo[] }
+export interface ChannelVideoList {
+  channel: { id: string; title: string };
+  updatedAt: string;
+  videos: ChannelVideo[];
+  trafficUpdatedAt?: string;
+  trafficError?: string;
+  endScreens?: EndScreenData;
+}
 
 /** "PT1H2M3S" -> 3723. */
 export function parseDuration(iso: string): number {
@@ -114,8 +123,15 @@ async function videoTrafficViews(token: string, ids: string[], now: Date): Promi
       dimensions: singleId ? 'insightTrafficSourceType' : 'video,insightTrafficSourceType',
       filters: `video==${batch.join(',')}`,
     });
-    recordAnalyticsUse();
-    const res = await fetch(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    const request = () => {
+      recordAnalyticsUse();
+      return fetch(`https://youtubeanalytics.googleapis.com/v2/reports?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+    };
+    let res = await request();
+    if (res.status >= 500) {
+      await res.body?.cancel().catch(() => {});
+      res = await request();
+    }
     if (!res.ok) throw new Error(`YouTube Analytics could not load your search and browse views (${res.status}). Try refreshing again.`);
     const { rows = [] } = await res.json() as { rows?: (string | number)[][] };
     for (const row of rows) {
@@ -146,17 +162,30 @@ export function mergeChannelVideos(details: Detail[], numbers: Map<string, Video
 export async function collectChannelVideos(channel: { id: string; title: string }, now = new Date()): Promise<ChannelVideoList> {
   const token = await youtubeAccessToken();
   const ids = await uploadIds(token);
-  const [details, numbers, traffic] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now), videoTrafficViews(token, ids, now)]);
-  const videos = mergeChannelVideos(details, numbers, videoLinks()).map((video) => ({ ...video, traffic: traffic.get(video.id) }));
-  return { channel, updatedAt: now.toISOString(), videos };
+  const endScreensRequest: Promise<EndScreenData> = youtubeStatus().reportingAccess
+    ? getEndScreenData(token).catch((error): EndScreenData => ({ status: 'unavailable', note: error instanceof Error ? error.message : String(error) }))
+    : Promise.resolve({ status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to load end screen data.' });
+  const trafficRequest = videoTrafficViews(token, ids, now).catch((error: unknown) => error instanceof Error ? error : new Error(String(error)));
+  const [details, numbers, traffic, endScreens] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now), trafficRequest, endScreensRequest]);
+  const videos = mergeChannelVideos(details, numbers, videoLinks());
+  const updatedAt = now.toISOString();
+  if (traffic instanceof Error) return { channel, updatedAt, videos, endScreens, trafficError: traffic.message };
+  return { channel, updatedAt, videos: videos.map((video) => ({ ...video, traffic: traffic.get(video.id) })), endScreens, trafficUpdatedAt: updatedAt };
 }
 
 const savedFile = () => process.env.HQ_CHANNEL_VIDEOS_FILE ?? path.join(appDir, 'data', 'channel-video-list.json');
 
-export function readChannelVideos(): ChannelVideoList | null {
+function loadSavedList(): ChannelVideoList | null {
   try {
     const saved = JSON.parse(fs.readFileSync(savedFile(), 'utf8')) as ChannelVideoList;
-    if (!Array.isArray(saved?.videos)) return null; // anything else isn't ours
+    return Array.isArray(saved?.videos) ? saved : null;
+  } catch { return null; }
+}
+
+export function readChannelVideos(): ChannelVideoList | null {
+  const saved = loadSavedList();
+  if (!saved) return null;
+  try {
     const links = videoLinks(); // links are worked out now, so a link made after the refresh shows straight away
     const seen = new Set<string>(); // lists saved before duplicates were removed may still hold a video twice
     return { ...saved, videos: saved.videos.filter((v) => !seen.has(v.id) && seen.add(v.id)).map((v) => resolveLink(v, links.get(v.id))) };
@@ -165,7 +194,20 @@ export function readChannelVideos(): ChannelVideoList | null {
 
 export async function refreshChannelVideos(): Promise<ChannelVideoList> {
   const list = await collectChannelVideos(await youtubeChannel());
+  const previous = loadSavedList();
+  if (previous?.channel?.id === list.channel.id) {
+    if (list.endScreens && list.endScreens.status !== 'ready' && previous.endScreens?.status === 'ready') {
+      list.endScreens = { ...previous.endScreens, note: list.endScreens.note };
+    }
+    if (list.trafficError) {
+      const savedTraffic = new Map(previous.videos.filter((video) => video.traffic).map((video) => [video.id, video.traffic]));
+      if (savedTraffic.size) {
+        list.videos = list.videos.map((video) => ({ ...video, traffic: savedTraffic.get(video.id) }));
+        list.trafficUpdatedAt = previous.trafficUpdatedAt ?? previous.updatedAt;
+      }
+    }
+  }
   fs.mkdirSync(path.dirname(savedFile()), { recursive: true });
-  fs.writeFileSync(savedFile(), JSON.stringify(list, null, 2) + '\n');
+  writeFileSafely(savedFile(), JSON.stringify(list, null, 2) + '\n');
   return list;
 }

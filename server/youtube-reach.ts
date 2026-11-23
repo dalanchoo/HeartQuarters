@@ -1,16 +1,17 @@
 // YouTube Reporting API reach data. Reports arrive asynchronously and may have limited history.
 import { recordReportingUse } from './youtube-quota.js';
 
-type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
+export type ReportingFetch = (url: string, init?: RequestInit) => Promise<Response>;
 type Job = { id: string; reportTypeId: string; expireTime?: string };
 type Report = { id: string; startTime: string; endTime: string; createTime: string; downloadUrl: string };
 export interface ReachData { status: 'pending' | 'ready'; note: string; days: { start: string; end: string; rows: Record<string, string>[] }[]; truncated: boolean }
 const API = 'https://youtubereporting.googleapis.com/v1';
 const TYPE = 'channel_reach_basic_a1';
+const REACH_COLUMNS = ['video_id', 'video_thumbnail_impressions', 'video_thumbnail_impressions_ctr'];
 let jobLock: Promise<void> = Promise.resolve();
 
 /** RFC 4180 CSV fields, including quoted commas and line breaks. */
-export function parseReachCsv(csv: string): Record<string, string>[] {
+function parseReportCsv(csv: string, columns: readonly string[], label: string): Record<string, string>[] {
   const rows: string[][] = []; let row: string[] = []; let value = ''; let quoted = false;
   for (let i = 0; i < csv.length; i++) {
     const c = csv[i];
@@ -23,11 +24,15 @@ export function parseReachCsv(csv: string): Record<string, string>[] {
   if (quoted) throw new Error('YouTube returned an incomplete CSV report.');
   if (value || row.length) { row.push(value.replace(/\r$/, '')); rows.push(row); }
   const headers = rows.shift()?.map((h, i) => i === 0 ? h.replace(/^\uFEFF/, '') : h) ?? [];
-  if (!['video_id', 'video_thumbnail_impressions', 'video_thumbnail_impressions_ctr'].every(h => headers.includes(h))) throw new Error('YouTube returned a reach report with unexpected columns.');
+  if (!columns.every(h => headers.includes(h))) throw new Error(`YouTube returned a ${label} report with unexpected columns.`);
   return rows.filter(r => r.some(Boolean)).map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 }
 
-async function request(fetcher: Fetch, token: string, url: string, init: RequestInit = {}): Promise<Response> {
+export function parseReachCsv(csv: string): Record<string, string>[] {
+  return parseReportCsv(csv, REACH_COLUMNS, 'reach');
+}
+
+async function request(fetcher: ReportingFetch, token: string, url: string, init: RequestInit = {}): Promise<Response> {
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:' || parsed.hostname !== 'youtubereporting.googleapis.com' || parsed.port || parsed.username || parsed.password) throw new Error('YouTube returned an unsafe reporting URL.');
   recordReportingUse();
@@ -51,32 +56,31 @@ export function reportingError(status: number, body: string): string {
     if (typeof url === 'string' && /^https:\/\/console\.(?:developers|cloud)\.google\.com\//.test(url)) activation = url;
   } catch { /* not JSON: keep the plain status */ }
   if (reason === 'SERVICE_DISABLED' || reason === 'accessNotConfigured' || /has not been used in project|is disabled/i.test(message))
-    return `The YouTube Reporting API is turned off in your Google Cloud project, so YouTube won't send impressions and CTR. Turn it on${activation ? ` at ${activation}` : ' in the Google Cloud console (APIs & Services → Library → YouTube Reporting API)'}, wait a few minutes, then download the stats again.`;
+    return `The YouTube Reporting API is turned off in your Google Cloud project. Turn it on${activation ? ` at ${activation}` : ' in the Google Cloud console (APIs & Services → Library → YouTube Reporting API)'}, wait a few minutes, then download the stats again.`;
   if (reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' || reason === 'insufficientPermissions' || /insufficient authentication scopes/i.test(message))
     return 'The YouTube sign-in does not include analytics permission. Sign in to YouTube again in HeartQuarters, allow every permission it asks for, then download the stats again.';
   return `YouTube Reporting returned ${status}${message ? `: ${message}` : ''}${reason && !message.includes(reason) ? ` (${reason})` : ''}.`;
 }
 
-/** Starts or reuses a channel-wide reach job, then reads the latest available daily reports. */
-export async function getReachData(token: string, videoId?: string, fetcher: Fetch = fetch): Promise<ReachData> {
-  if (videoId && !/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw new Error('Invalid video ID.');
+/** Starts or reuses a channel report job. Returns the newest copy of each daily report, newest days first. */
+export async function listDailyReports(token: string, type: string, label: string, fetcher: ReportingFetch): Promise<Report[]> {
   const previous = jobLock; let release!: () => void;
   jobLock = new Promise<void>(resolve => { release = resolve; });
   await previous;
   let job: Job | undefined;
   try {
-  const jobs: Job[] = []; let page = '';
-  for (let i = 0; i < 20; i++) {
-    const q = new URLSearchParams({ pageSize: '100', ...(page ? { pageToken: page } : {}) });
-    const data = await (await request(fetcher, token, `${API}/jobs?${q}`)).json() as { jobs?: Job[]; nextPageToken?: string };
-    jobs.push(...(data.jobs ?? [])); page = data.nextPageToken ?? ''; if (!page) break;
-  }
-  if (page) throw new Error('Too many reporting jobs to safely locate the reach report.');
-  job = jobs.find(item => item.reportTypeId === TYPE && (!item.expireTime || Date.parse(item.expireTime) > Date.now()));
-  if (!job) {
-    job = await (await request(fetcher, token, `${API}/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportTypeId: TYPE, name: 'HeartQuarters Reach' }) })).json() as Job;
-    if (!job.id || job.reportTypeId !== TYPE) throw new Error('YouTube did not confirm the reach reporting job.');
-  }
+    const jobs: Job[] = []; let page = '';
+    for (let i = 0; i < 20; i++) {
+      const q = new URLSearchParams({ pageSize: '100', ...(page ? { pageToken: page } : {}) });
+      const data = await (await request(fetcher, token, `${API}/jobs?${q}`)).json() as { jobs?: Job[]; nextPageToken?: string };
+      jobs.push(...(data.jobs ?? [])); page = data.nextPageToken ?? ''; if (!page) break;
+    }
+    if (page) throw new Error(`Too many reporting jobs to locate the ${label} report.`);
+    job = jobs.find(item => item.reportTypeId === type && (!item.expireTime || Date.parse(item.expireTime) > Date.now()));
+    if (!job) {
+      job = await (await request(fetcher, token, `${API}/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportTypeId: type, name: `HeartQuarters ${label}` }) })).json() as Job;
+      if (!job.id || job.reportTypeId !== type) throw new Error(`YouTube did not confirm the ${label} reporting job.`);
+    }
   } finally { release(); }
   const reports: Report[] = []; let page = '';
   for (let i = 0; i < 20; i++) {
@@ -84,7 +88,7 @@ export async function getReachData(token: string, videoId?: string, fetcher: Fet
     const data = await (await request(fetcher, token, `${API}/jobs/${encodeURIComponent(job.id)}/reports?${q}`)).json() as { reports?: Report[]; nextPageToken?: string };
     reports.push(...(data.reports ?? [])); page = data.nextPageToken ?? ''; if (!page) break;
   }
-  if (page) throw new Error('Too many reach reports to retrieve safely.');
+  if (page) throw new Error(`Too many ${label} reports to retrieve safely.`);
   // Backfilled reports replace older versions of the same day.
   const latest = new Map<string, Report>();
   for (const report of reports) {
@@ -92,13 +96,23 @@ export async function getReachData(token: string, videoId?: string, fetcher: Fet
     const key = `${report.startTime}/${report.endTime}`; const old = latest.get(key);
     if (!old || report.createTime > old.createTime) latest.set(key, report);
   }
-  const ordered = [...latest.values()].sort((a, b) => b.startTime.localeCompare(a.startTime));
+  return [...latest.values()].sort((a, b) => b.startTime.localeCompare(a.startTime));
+}
+
+export async function readReportingRows(token: string, url: string, columns: readonly string[], label: string, fetcher: ReportingFetch): Promise<Record<string, string>[]> {
+  const response = await request(fetcher, token, url);
+  const csv = await response.text();
+  if (csv.length > 20_000_000) throw new Error(`A ${label} report is too large to process safely.`);
+  return parseReportCsv(csv, columns, label);
+}
+
+/** Starts or reuses a channel-wide reach job, then reads the latest available daily reports. */
+export async function getReachData(token: string, videoId?: string, fetcher: ReportingFetch = fetch): Promise<ReachData> {
+  if (videoId && !/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw new Error('Invalid video ID.');
+  const ordered = await listDailyReports(token, TYPE, 'Reach', fetcher);
   const days: ReachData['days'] = []; let count = 0; let bytes = 0; let truncated = ordered.length > 60;
   for (const report of ordered.slice(0, 60)) {
-    const response = await request(fetcher, token, report.downloadUrl);
-    const csv = await response.text();
-    if (csv.length > 20_000_000) throw new Error('A reach report is too large to process safely.');
-    const rows = parseReachCsv(csv).filter(row => !videoId || row.video_id === videoId);
+    const rows = (await readReportingRows(token, report.downloadUrl, REACH_COLUMNS, 'reach', fetcher)).filter(row => !videoId || row.video_id === videoId);
     const kept: Record<string, string>[] = [];
     for (const row of rows) {
       const size = Buffer.byteLength(JSON.stringify(row));

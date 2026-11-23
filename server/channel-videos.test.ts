@@ -2,8 +2,16 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeTree, removeTree } from './testing.js';
+import type { EndScreenData } from './youtube-end-screens.js';
 
-vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: false }) }));
+let endScreens: EndScreenData | Error | undefined;
+vi.mock('./youtube-auth.js', () => ({ youtubeAccessToken: async () => 'test-token', youtubeStatus: () => ({ reportingAccess: endScreens !== undefined }) }));
+vi.mock('./youtube-end-screens.js', () => ({
+  getEndScreenData: async () => {
+    if (endScreens instanceof Error) throw endScreens;
+    return endScreens;
+  },
+}));
 vi.mock('./youtube.js', () => ({ youtubeChannel: async () => ({ id: 'channel-id', title: 'Heart Mind Fusion' }) }));
 vi.mock('./video-profile.js', () => ({ readVideoProfile: () => ({ topic: 'unassigned', topic2: 'unassigned', angle: 'unassigned', angle2: 'unassigned', note: '' }) }));
 let links = new Map<string, { piece: string; kind?: 'longform' | 'short' }>();
@@ -14,11 +22,14 @@ let root: string;
 let extraIds: string[];
 let trafficBatches: string[][];
 let trafficStatus: number;
+let nextTrafficStatus: number | undefined;
 beforeEach(() => {
   root = makeTree({});
+  endScreens = undefined;
   extraIds = [];
   trafficBatches = [];
   trafficStatus = 200;
+  nextTrafficStatus = undefined;
   links = new Map([['b', { piece: '001 - Linked/Shorts/Clip', kind: 'short' }], ['c', { piece: 'Gone/Missing' }]]);
   process.env.HQ_CHANNEL_VIDEOS_FILE = path.join(root, 'channel-videos.json');
   const video = (id: string, duration: string, date: string) => ({ id, snippet: { title: `Video ${id}`, publishedAt: date }, contentDetails: { duration }, status: { privacyStatus: 'public' } });
@@ -37,7 +48,9 @@ beforeEach(() => {
       expect(url.searchParams.get('metrics')).toBe('views');
       const ids = filter.slice('video=='.length).split(',');
       trafficBatches.push(ids);
-      if (trafficStatus !== 200) return new Response(null, { status: trafficStatus });
+      const status = nextTrafficStatus ?? trafficStatus;
+      nextTrafficStatus = undefined;
+      if (status !== 200) return new Response(null, { status });
       const rows = [['a', 'YT_SEARCH', 25], ['b', 'SUBSCRIBER', 5], ['a', 'SUBSCRIBER', 0], ['a', 'SHORTS', 15], ['c', 'YT_SEARCH', 2], ['h', 'SUBSCRIBER', 3]];
       const matching = rows.filter(([id]) => ids.includes(String(id)));
       expect(dimensions).toBe(ids.length === 1 ? 'insightTrafficSourceType' : 'video,insightTrafficSourceType');
@@ -83,13 +96,35 @@ it('splits lifetime traffic requests to stay within YouTube’s video-day limit'
   expect(list.videos.find(v => v.id === 'h')?.traffic).toEqual({ browseViews: 3 });
 });
 
-it('keeps the previous saved list if the traffic request fails', async () => {
-  await refreshChannelVideos();
-  const file = process.env.HQ_CHANNEL_VIDEOS_FILE!;
-  const saved = fs.readFileSync(file, 'utf8');
+it('retries a search and browse batch once when YouTube returns a server error', async () => {
+  nextTrafficStatus = 500;
+  const list = await refreshChannelVideos();
+  expect(trafficBatches).toEqual([['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']]);
+  expect(list.videos.find((video) => video.id === 'a')?.traffic?.searchViews).toBe(25);
+  expect(list.trafficError).toBeUndefined();
+});
+
+it('refreshes end screens and video rows when both traffic attempts fail and retains saved traffic', async () => {
+  const previous = await refreshChannelVideos();
   trafficStatus = 503;
-  await expect(refreshChannelVideos()).rejects.toThrow('could not load your search and browse views');
-  expect(fs.readFileSync(file, 'utf8')).toBe(saved);
+  endScreens = { status: 'ready', startDate: '2026-11-12', endDate: '2026-11-12', reportedDays: 1, videos: {} };
+  extraIds = ['new'];
+  const list = await refreshChannelVideos();
+  expect(list.endScreens).toEqual(endScreens);
+  expect(list.trafficError).toContain('could not load your search and browse views (503)');
+  expect(list.trafficUpdatedAt).toBe(previous.trafficUpdatedAt);
+  expect(list.videos.find((video) => video.id === 'new')).toMatchObject({ id: 'new', numbers: null });
+  expect(list.videos.find((video) => video.id === 'new')?.traffic).toBeUndefined();
+  expect(readChannelVideos()?.videos.find((video) => video.id === 'a')?.traffic).toEqual({ searchViews: 25, browseViews: 0 });
+  expect(readChannelVideos()?.endScreens).toEqual(endScreens);
+});
+
+it('can load the video list on the first refresh even when traffic is unavailable', async () => {
+  trafficStatus = 503;
+  const list = await refreshChannelVideos();
+  expect(list.videos).toHaveLength(4);
+  expect(list.trafficUpdatedAt).toBeUndefined();
+  expect(list.trafficError).toContain('503');
 });
 
 it('opens an older saved list before search and browse views have been fetched', async () => {
@@ -116,6 +151,20 @@ it('saves a copy that opens without asking YouTube, and returns nothing before t
   await refreshChannelVideos();
   expect(fs.existsSync(process.env.HQ_CHANNEL_VIDEOS_FILE!)).toBe(true);
   expect(readChannelVideos()?.channel.title).toBe('Heart Mind Fusion');
+});
+
+it('saves end screen activity and keeps the saved totals if only the reporting request fails', async () => {
+  const activity: EndScreenData = {
+    status: 'ready', startDate: '2026-11-10', endDate: '2026-11-12', reportedDays: 3,
+    videos: { a: [{ id: 'element-a', type: 'Video', impressions: 40, clicks: 4 }] },
+  };
+  endScreens = activity;
+  await refreshChannelVideos();
+  expect(readChannelVideos()?.endScreens).toEqual(activity);
+  endScreens = new Error('End screen report is temporarily unavailable.');
+  const refreshed = await refreshChannelVideos();
+  expect(refreshed.videos).toHaveLength(4);
+  expect(readChannelVideos()?.endScreens).toEqual({ ...activity, note: endScreens.message });
 });
 
 it('ignores a saved file in some other format instead of showing it', () => {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getJson, postJson } from './api';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
 import type { Angle, Topic, VideoProfile } from '../../server/video-profile';
+import type { EndScreenData, EndScreenElement } from '../../server/youtube-end-screens';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type KindFilter, type SortKey } from './channelRows';
 
@@ -72,9 +73,32 @@ function NoteBox({ video, save }: { video: ChannelVideo; save: (note: string) =>
   );
 }
 
-export function ChannelProjectCell({ video, saveNote }: { video: ChannelVideo; saveNote: (note: string) => void }) {
+function EndScreenActivity({ elements, note }: { elements?: EndScreenElement[]; note: string }) {
+  return (
+    <div>
+      <strong>End Screen Activity</strong>
+      {elements?.length ? (
+        <ul className="channel-end-screens">
+          {elements.map((element) => (
+            <li key={element.id} title={`YouTube element ID: ${element.id}`}>
+              {element.type} · {element.clicks.toLocaleString()} clicks / {element.impressions.toLocaleString()} shown
+              {element.impressions > 0 && ` (${(100 * element.clicks / element.impressions).toFixed(1)}%)`}
+            </li>
+          ))}
+        </ul>
+      ) : <div className="muted">{note}</div>}
+    </div>
+  );
+}
+
+export function ChannelProjectCell({ video, saveNote, endScreens }: {
+  video: ChannelVideo; saveNote: (note: string) => void; endScreens?: EndScreenData;
+}) {
   const name = rowName(video);
   const source = video.fromLongform;
+  const elements = endScreens?.status === 'ready' ? endScreens.videos[video.id] ?? [] : undefined;
+  const endScreenNote = elements ? 'No activity reported for this period.'
+    : endScreens?.note ?? 'Click Refresh From YouTube to load end screen activity.';
   return (
     <td className="title">
       <div className="channel-project">
@@ -93,6 +117,7 @@ export function ChannelProjectCell({ video, saveNote }: { video: ChannelVideo; s
           <summary aria-label={`Details for ${name}`} title="Video Details" />
           <div className="channel-project-fields">
             <label>Note <NoteBox video={video} save={saveNote} /></label>
+            {(video.kind === 'longform' || !!elements?.length) && <EndScreenActivity elements={elements} note={endScreenNote} />}
           </div>
         </details>
       </div>
@@ -149,9 +174,22 @@ export function ChannelPage() {
         <>
           <p className="muted">
             {data.channel.title}: {count('longform')} longform, {count('short')} Shorts. Updated {new Date(data.updatedAt).toLocaleString()}.
-            Lifetime numbers. “–” means no count is available. Refresh to load Search and Browse Views on older lists.
+            Lifetime numbers. “–” means no count is available.
             Kinds marked “?” are guessed from length. Topics and notes are saved in each video's Drive folder.
           </p>
+          {data.trafficError && (
+            <p className="muted" role="status">
+              {data.trafficError} {data.trafficUpdatedAt && `Showing available Search and Browse Views saved on ${new Date(data.trafficUpdatedAt).toLocaleString()}.`}
+            </p>
+          )}
+          {data.endScreens && (
+            <p className="muted">
+              End screens · {data.endScreens.status === 'ready'
+                ? `${data.endScreens.startDate} through ${data.endScreens.endDate} (${data.endScreens.reportedDays} reporting days). Open a video's ▶ for details.`
+                : data.endScreens.note}
+              {data.endScreens.status === 'ready' && data.endScreens.note && ` Showing saved activity. ${data.endScreens.note}`}
+            </p>
+          )}
           <div className="idea-filters">
             <label>Kind
               <select value={kind} onChange={(e) => { setKind(e.target.value as KindFilter); setTouched(new Set()); }}>
@@ -183,7 +221,7 @@ export function ChannelPage() {
               {rows.map((v) => (
                 <tr key={v.id}>
                   <td>{channelKindLabel(v)}</td>
-                  <ChannelProjectCell video={v} saveNote={(note) => void saveProfile(v, { note })} />
+                  <ChannelProjectCell video={v} endScreens={data.endScreens} saveNote={(note) => void saveProfile(v, { note })} />
                   <td className="num">{v.publishedAt.slice(0, 10)}</td>
                   <td className="num">{v.numbers ? v.numbers.views.toLocaleString() : '–'}</td>
                   <td className="num">{v.traffic?.searchViews?.toLocaleString() ?? '–'}</td>
