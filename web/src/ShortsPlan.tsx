@@ -28,7 +28,7 @@ type Transcript = { file: string; words: TimedWord[] } | null;
 
 // The shorts of a longform, on its page: the AI proposes a list (Shorts\Shorts Plan.json), John edits it here (every
 // change is saved to that file straight away) and makes each short from its row.
-export function ShortsPlanCard({ video }: { video: string }) {
+export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?: () => void }) {
   const [state, setState] = useState<ShortsOverview | null>(null);
   const [transcript, setTranscript] = useState<Transcript>(null);
   const [draft, setDraft] = useState('');
@@ -66,6 +66,11 @@ export function ShortsPlanCard({ video }: { video: string }) {
 
   // While the AI works on anything here, check for news every 2 seconds.
   const busy = proposing || Object.values(state?.builds ?? {}).some((b) => b.status === 'running');
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy) onChanged?.();
+    wasBusy.current = busy;
+  }, [busy]);
   useEffect(() => {
     if (!busy) return;
     const timer = setInterval(refresh, 2000);
@@ -127,7 +132,13 @@ export function ShortsPlanCard({ video }: { video: string }) {
     setMakeError(null);
     setMaking(s.id);
     postJson(`/api/shorts/${how}`, { video, id: s.id, draft: source })
-      .then(refresh, (e: Error) => setMakeError({ id: s.id, message: e.message }))
+      .then(
+        () => {
+          onChanged?.();
+          return refresh();
+        },
+        (e: Error) => setMakeError({ id: s.id, message: e.message }),
+      )
       .finally(() => setMaking(null));
   };
 

@@ -511,7 +511,7 @@ function ProjectView({
       )}
       {hasJobs && (
         <Section name="make-shorts" title="Make Shorts">
-          <ShortsPlanCard video={project.id} />
+          <ShortsPlanCard video={project.id} onChanged={refresh} />
         </Section>
       )}
     </div>
