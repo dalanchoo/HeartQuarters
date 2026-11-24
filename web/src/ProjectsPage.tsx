@@ -588,7 +588,7 @@ function DeletePackagingVersion({ piece, version, locked, onChanged }: { piece: 
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const isDraft = /^D\d+/i.test(version.name);
   return <>
-    <button className="small danger-outline" disabled={busy || locked} onClick={async () => {
+    <button className="small danger-outline" disabled={busy || (!isDraft && locked)} onClick={async () => {
       if (!window.confirm(`Delete packaging ${isDraft ? 'draft' : 'version'} ${version.name}? It moves to HeartQuarters Trash with all its files. The video and the other versions stay.`)) return;
       setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     }}>{isDraft ? 'Delete Draft' : 'Delete Version'}</button>
@@ -877,36 +877,40 @@ function PieceCard({
           <div className="piece-docs">
             {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
             {!version && <div><p className="muted">No packaging yet.</p><button onClick={() => { void postJson<{ name: string; path: string }>('/api/packaging/first-version', { piece: piece.path }).then(result => { setVersionName(result.name); setUnlocked(result.path); onChanged?.(); }, e => window.alert(e instanceof Error ? e.message : String(e))); }}>Create V01</button></div>}
-            {version && (
-              <>
+            {version && (() => {
+              const versionButtons = (items: typeof piece.versions) => (
                 <div className="versions">
-                  {realVersions.map((v) => (
+                  {items.map((v) => (
                     <div key={v.path} className="version-choice">
                       <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(null); }}>
                         {versionLabel(v.name)}
                       </button>
                     </div>
                   ))}
-                  <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
-                  <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
-                  <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
                 </div>
-                {draftVersions.length > 0 && (
-                  <details className="yt-section version-drafts">
-                    <summary>Drafts ({draftVersions.length})</summary>
-                    <div className="versions">
-                      {draftVersions.map((v) => (
-                        <div key={v.path} className="version-choice">
-                          <button className={`version small ${v.name === version.name ? 'active' : ''}`} onClick={() => { if (v.name === version.name) return; if (!allowVersionChange()) return; setCompareDirty(false); setVersionName(v.name); setUnlocked(null); }}>
-                            {versionLabel(v.name)}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </>
-            )}
+              );
+              return (
+                <>
+                  {realVersions.length > 0 && (
+                    <details className="yt-section version-drafts" open>
+                      <summary>Versions ({realVersions.length})</summary>
+                      {versionButtons(realVersions)}
+                    </details>
+                  )}
+                  {draftVersions.length > 0 && (
+                    <details className="yt-section version-drafts">
+                      <summary>Drafts ({draftVersions.length})</summary>
+                      {versionButtons(draftVersions)}
+                    </details>
+                  )}
+                  <div className="versions">
+                    <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
+                    <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                    <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
+                  </div>
+                </>
+              );
+            })()}
             {version && <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />}
 
             <div className="versions piece-actions">
