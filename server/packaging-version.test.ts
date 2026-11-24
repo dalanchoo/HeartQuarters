@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { copyPackagingVersion, createFirstPackagingVersion, nextVersionName, notYetOnYoutube, recordYoutubePackaging, trashPackagingVersion } from './packaging-version';
+import { archiveDraftRound, copyPackagingVersion, createFirstPackagingVersion, nextDraftName, nextVersionName, notYetOnYoutube, recordYoutubePackaging, trashPackagingVersion } from './packaging-version';
 let tmp: string; let old: string; let oldTrash: string;
 beforeEach(() => { tmp = makeTree({ 'Videos/piece/Packaging/V01/YouTube.md': 'original', 'Videos/piece/Packaging/V01/Covers/image.png': 'cover', 'Videos/piece/Packaging/V02/YouTube.md': 'existing', 'Videos/other/Packaging/V01/YouTube.md': 'other' }); old = config.videoProjectsDir; oldTrash = config.trashDir; config.videoProjectsDir = path.join(tmp, 'Videos'); config.trashDir = path.join(tmp, 'Trash'); });
 afterEach(() => { config.videoProjectsDir = old; config.trashDir = oldTrash; removeTree(tmp); });
@@ -66,5 +66,44 @@ describe('deleting a packaging version', () => {
     const result = trashPackagingVersion('piece', 'piece/Packaging/V01');
     expect(fs.readFileSync(path.join(result.trashPath, 'YouTube.md'), 'utf8')).toBe('original');
     expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V02/YouTube.md'))).toBe(true);
+  });
+});
+describe('archiving generated drafts as D01, D02...', () => {
+  it('writes a complete YouTube.md, Notes.md, and Thumbnail, and supports cloning and trashing', async () => {
+    const img = path.join(tmp, 'Videos/piece/Packaging/Drafts/Gemini 01/01.png');
+    fs.mkdirSync(path.dirname(img), { recursive: true });
+    fs.writeFileSync(img, 'png-bytes');
+    const pick = {
+      thumbnailText: 'rendering off',
+      title: 'What It Feels Like (Aphantasia)',
+      description: 'My story.\n\n#aphantasia #mindseye',
+      tags: 'Aphantasia, Mind',
+      pinnedComment: 'What is your mind like?',
+      expression: 'Calm',
+      background: 'Warm amber toggle',
+      accent: 'Gold',
+      why: 'Matches game dev analogy',
+      backedBy: ['Retention'],
+    };
+    expect(nextDraftName('piece')).toBe('D01');
+    const saved = archiveDraftRound('piece', img, pick, 'Draft Gemini 01, round 01, by Gemini.');
+    expect(saved).toEqual({ name: 'D01', path: 'piece/Packaging/D01' });
+    expect(nextDraftName('piece')).toBe('D02');
+    const yt = fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/D01/YouTube.md'), 'utf8');
+    expect(yt).toContain('Title:\nWhat It Feels Like (Aphantasia)');
+    expect(yt).toContain('Description:\nMy story.');
+    expect(yt).toContain('Hashtags:\n#aphantasia #mindseye');
+    expect(yt).toContain('Thumbnail text:\nRENDERING OFF');
+    expect(yt).toContain('Thumbnail idea:\nCalm. Warm amber toggle');
+    expect(yt).toContain('Video language:\nen-US');
+    expect(yt).toContain('Made for kids:\nNo');
+    expect(yt).toContain('Altered content:\nNo');
+    expect(yt).toContain('Pinned Comment:\nWhat is your mind like?');
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/D01/Thumbnail/Thumbnail.png'), 'utf8')).toBe('png-bytes');
+    const cloned = await copyPackagingVersion('piece', 'piece/Packaging/D01');
+    expect(cloned.name).toBe('V03');
+    const trashed = trashPackagingVersion('piece', 'piece/Packaging/D01');
+    expect(fs.existsSync(path.join(trashed.trashPath, 'YouTube.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/D01'))).toBe(false);
   });
 });

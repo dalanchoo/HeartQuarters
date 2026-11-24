@@ -11,6 +11,7 @@ import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, ty
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
+import { archiveDraftRound } from './packaging-version.js';
 import { appendText, makeFolder, writable, writeFile } from './safe-files.js';
 
 export type ImageAi = Extract<AiId, 'codex' | 'gemini'>;
@@ -322,9 +323,11 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
     const work = workFolder(name);
     try {
       const answer = await make(ai, prompt, work, '01.png', { photo });
-      fs.copyFileSync(answer.image, writable(path.join(folder, '01.png')), fs.constants.COPYFILE_EXCL);
+      const copied = writable(path.join(folder, '01.png'));
+      fs.copyFileSync(answer.image, copied, fs.constants.COPYFILE_EXCL);
       const info: ConversationInfo = { ai, session: answer.session, photo: choice.photo!, pick: choice.pick };
       writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
+      archiveDraftRound(piece, copied, choice.pick, `Draft ${name}, round 01, by ${AI_NAMES[ai]}.`);
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }
@@ -403,11 +406,13 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
     const work = workFolder(path.basename(folder));
     try {
       const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
-      fs.copyFileSync(answer.image, writable(path.join(folder, out)), fs.constants.COPYFILE_EXCL);
+      const copied = writable(path.join(folder, out));
+      fs.copyFileSync(answer.image, copied, fs.constants.COPYFILE_EXCL);
       const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
       const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
       appendText(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
       if (newPhoto) writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+      archiveDraftRound(piece, copied, info.pick ?? null, `Draft ${path.basename(folder)}, round ${number}, by ${AI_NAMES[info.ai]}.`);
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }

@@ -69,7 +69,7 @@ export function makeVideoOverview(videos: { projectId: string; video: Video }[],
     for (const job of jobs) { if (!job.videoId || !['done', 'uploading'].includes(job.status ?? '')) continue; try { ids.add(youtubeVideoId(job.videoId)); } catch { /* Bad records cannot establish a link. */ } }
     const saved = piece.kind === 'longform' ? savedUrl(projectId) : { state: 'missing' as LinkState };
     if (saved.id) ids.add(saved.id);
-    const latest = piece.versions.at(-1);
+    const latest = piece.versions.filter((v) => !/^D\d+/i.test(v.name)).at(-1);
     const uncertain = jobs.some((job) => job.status === 'unknown' || job.status === 'uploading' || (job.status === 'done' && !job.videoId)) || !records.complete || saved.state === 'unknown';
     return { path: piece.path, projectId, name: piece.name, kind: piece.kind as 'longform' | 'short', link: ids.size ? 'linked' : uncertain ? 'unknown' : 'missing', videoId: ids.size === 1 ? [...ids][0] : undefined, localThumbnail: (latest?.covers.length ?? 0) > 0, titles: savedTitles(piece),
       capcut: capcutNames.has(plainDraftName(piece.kind === 'longform' ? path.posix.basename(projectId) : piece.name).toLowerCase()),

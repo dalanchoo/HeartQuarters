@@ -257,16 +257,20 @@ function filesDeep(dir: string, exts: Set<string>, base = dir): FileRef[] {
   return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
-/** Sort order for version folders: Legacy first, then by number. */
+/** Sort order for version folders: Legacy first, then Vxx by number, then Dxx drafts by number. */
 function versionOrder(name: string): number {
   if (name.toLowerCase() === 'legacy') return -1;
-  return Number(/^V(\d+)/i.exec(name)?.[1] ?? 9999);
+  const v = /^V(\d+)/i.exec(name);
+  if (v) return Number(v[1]);
+  const d = /^D(\d+)/i.exec(name);
+  if (d) return 10000 + Number(d[1]);
+  return 9999;
 }
 
 function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
   const packagingRoot = path.join(dir, 'Packaging');
   const versions = subfolders(packagingRoot)
-    .filter((v) => /^V\d+/i.test(v) || v.toLowerCase() === 'legacy')
+    .filter((v) => /^[VD]\d+/i.test(v) || v.toLowerCase() === 'legacy')
     .sort((a, b) => versionOrder(a) - versionOrder(b))
     .map((v): PackagingVersion => {
       const vDir = path.join(packagingRoot, v);
@@ -284,7 +288,7 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
     kind,
     name,
     path: rel(dir),
-    packagingVersion: versions.at(-1)?.name ?? null,
+    packagingVersion: versions.filter((v) => !/^D\d+/i.test(v.name)).at(-1)?.name ?? null,
     versions,
     drafts: readDrafts(packagingRoot),
     exports: filesIn(path.join(dir, 'Exports'), VIDEO_EXTS),
