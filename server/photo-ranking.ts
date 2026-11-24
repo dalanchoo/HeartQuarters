@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { appDir, config, safeResolve } from './config.js';
 import { askAi, type AskAi } from './brief.js';
+import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences } from './expression-references.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { expressionIndex, type ExpressionPhoto } from './expressions.js';
@@ -24,6 +25,7 @@ export interface PhotoRanking {
   title: string;
   thumbnailText: string;
   ranked: RankedPhoto[];
+  cameraFirst?: true;
   /** How many photos Claude looked at. */
   looked: number;
   at: string;
@@ -43,7 +45,7 @@ export function pickCategories(expression: string): string[] {
 /**
  * Look at eligible category photos and starred photos, giving likes priority before applying the cap.
  */
-export function rankingCandidates(photos: ExpressionPhoto[], categories: string[], starred: string[]): { photo: ExpressionPhoto; starred: boolean }[] {
+export function rankingCandidates(photos: ExpressionPhoto[], categories: string[], starred: string[]) {
   const inCategory = (p: ExpressionPhoto, c: string) => p.category.toLowerCase() === c.toLowerCase() || p.category.toLowerCase().startsWith(c.toLowerCase() + '/');
   const stars = new Set(starred);
   const order: ExpressionPhoto[] = [];
@@ -54,10 +56,14 @@ export function rankingCandidates(photos: ExpressionPhoto[], categories: string[
   for (const c of categories) photos.filter((p) => inCategory(p, c)).forEach(add);
   photos.filter((p) => stars.has(p.path)).forEach(add);
   order.sort((a, b) => Number(b.rating === 'liked') - Number(a.rating === 'liked'));
-  return order.slice(0, MAX_CANDIDATES).map((photo) => ({ photo, starred: stars.has(photo.path) }));
+  const candidates = order.map(photo => ({ photo, starred: stars.has(photo.path), aiGenerated: isAiExpression(photo) }));
+  const generated = candidates.filter(c => c.aiGenerated);
+  // Leave room to assess AI fallbacks in the same request, even when the camera shortlist is full.
+  const camera = candidates.filter(c => !c.aiGenerated).slice(0, MAX_CANDIDATES - Math.min(TOP, generated.length));
+  return [...camera, ...generated.slice(0, MAX_CANDIDATES - camera.length)];
 }
 
-type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; rating?: ExpressionPhoto['rating'] };
+type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; aiGenerated: boolean; rating?: ExpressionPhoto['rating'] };
 
 export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhoto[], skill: string): string {
   return [
@@ -71,15 +77,15 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
     ].join('\n'),
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
     'Liked and Meh are John’s own ratings. Give a liked photo a boost when it fits the pair. Meh and unrated photos are also usable.',
-    list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
-    `Rank the ${TOP} that would make the strongest ${short ? 'cover' : 'thumbnail'} for this pair, best first: the expression that fits the title, reads at phone size, looks like John at his most natural, and gazes toward the centre or the camera rather than out of the frame. Prefer variety among the ${TOP} when photos are close.`,
+    list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.aiGenerated ? 'AI-generated' : 'camera photo', c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
+    `Judge the actual photos for emotional fit, natural lighting and skin color, a clear expression at phone size, and gaze toward the centre or camera. Prefer variety when photos are close. Rank up to ${TOP} suitable camera photos, best first. If even one camera photo suits the pair, return only suitable camera photos. If none suits it, rank up to ${TOP} suitable AI-generated photos as fallbacks. Return an empty ranked array if none of the photos is suitable.`,
     "Don't create or change any file. Reply with only this JSON, nothing before or after it, using the library paths exactly as listed:",
     '{"ranked":[{"photo":"Category/Sub/Name.jpg","why":"one sentence"}]}',
   ].join('\n\n');
 }
 
 /** The ranking in Claude's answer: only photos that were offered, in its order, at most five. */
-export function rankingFromAnswer(answer: string, offered: string[]): RankedPhoto[] {
+export function rankingFromAnswer(answer: string, offered: string[], aiPhotos: ReadonlySet<string> = new Set()): RankedPhoto[] {
   const start = answer.indexOf('{');
   const end = answer.lastIndexOf('}');
   let ranked: unknown;
@@ -94,8 +100,9 @@ export function rankingFromAnswer(answer: string, offered: string[]): RankedPhot
     const photo = typeof r?.photo === 'string' ? r.photo.replace(/\\/g, '/') : '';
     if (offered.includes(photo) && !out.some((o) => o.photo === photo)) out.push({ photo, why: typeof r.why === 'string' ? r.why.trim() : '' });
   }
-  if (!out.length) throw new Error('Claude named none of the photos it was shown.');
-  return out.slice(0, TOP);
+  if (ranked.length && !out.length) throw new Error('Claude named none of the photos it was shown.');
+  const camera = out.filter(r => !aiPhotos.has(r.photo));
+  return (camera.length ? camera : out).slice(0, TOP);
 }
 
 const jobs = new Map<string, RankingJob>();
@@ -151,12 +158,13 @@ export function startRanking(piece: string, deps: RankingDeps = {}): { job: Rank
     for (const [i, c] of candidates.entries()) {
       const file = `${String(i + 1).padStart(2, '0')}.jpg`;
       fs.copyFileSync(await small(resolveExpressionPhoto(c.photo.path)), path.join(work, file));
-      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred, rating: c.photo.rating });
+      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred, aiGenerated: c.aiGenerated, rating: c.photo.rating });
     }
     const skill = path.join(config.skillsDir, 'HMF_Skills', 'thumbnails-and-titles', 'SKILL.md');
     const short = /(^|\/)Shorts\//i.test(piece) || /^999 - Shorts\//i.test(piece);
-    const ranked = rankingFromAnswer(await ask('claude', rankingPrompt(choice.pick, short, list, skill), work), list.map((l) => l.photo));
-    const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, looked: list.length, at: new Date().toISOString() };
+    const aiPhotos = new Set(list.filter(c => c.aiGenerated).map(c => c.photo));
+    const ranked = rankingFromAnswer(await ask('claude', rankingPrompt(choice.pick, short, list, skill), work), list.map(c => c.photo), aiPhotos);
+    const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, cameraFirst: true, looked: list.length, at: new Date().toISOString() };
     writeFile(path.join(drafts, RANKING_FILE), JSON.stringify(ranking, null, 2) + '\n');
     fs.rmSync(work, { recursive: true, force: true });
   })().then(

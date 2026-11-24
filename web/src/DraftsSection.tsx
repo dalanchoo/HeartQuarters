@@ -10,6 +10,7 @@ import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
 import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
+import { isAiExpression } from '../../server/expression-origin';
 import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { expressionShotSuggestions } from './expressionShotSuggestions';
@@ -269,7 +270,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     setError('');
     postJson('/api/brief/photo', { piece, photo }).then(() => onChanged?.(), (e: Error) => setError(e.message)).finally(() => setSaving(null));
   };
-  const tile = (p: { path: string; name: string; revision?: string }, place?: number, why?: string) => {
+  const tile = (p: { path: string; name: string; revision?: string }, place?: number, why?: string, label?: string) => {
     const picked = choice.photo === p.path;
     const root = p.path.startsWith('project:') ? 'projects' : 'expressions';
     const photoPath = root === 'projects' ? p.path.slice(8) : p.path;
@@ -278,7 +279,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
         <button className="photo-choice" disabled={saving !== null} title={`Use ${p.name}`} onClick={() => pick(p.path)}>
           <img src={thumbUrl(root, photoPath, 320, p.revision)} alt={p.name} loading="lazy" />
         </button>
-        {place !== undefined && <div className="photo-rank">#{place}</div>}
+        {place !== undefined && <div className="photo-rank">#{place}{label && ` · ${label}`}</div>}
         <div className="photo-path">{p.path.replace(/\.[^.]+$/, '')}</div>
         {why && <div className="photo-why small-text">{why}</div>}
         <div className="photo-tile-foot">
@@ -313,7 +314,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           )}
         </p>
-        {rankingNow && <p className="brief-working small-text">Claude is looking at {ranking?.job?.looked} photos to find the best five…</p>}
+        {rankingNow && <p className="brief-working small-text">Claude is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
         {ranking?.job?.state === 'failed' && !rankingNow && (
           <p className="error small-text">
             {ranking.job.error}{' '}
@@ -322,12 +323,15 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           </p>
         )}
-        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">The saved ranking has no eligible photos. Use Rank Again to look for other options.</p>}
+        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. You can choose a photo below or add the expression to the Shot List.</p>}
+        {ranked && !ranked.cameraFirst && !rankingNow && <p className="muted small-text">Use Rank Again to check this older ranking with camera photos first.</p>}
         {ranked && library && (
           <div className="photo-grid">
             {ranked.ranked.map((r, i) => {
               const found = library.photos.find((p) => p.path === r.photo);
-              return found ? tile(found, i + 1, r.why) : null;
+              if (!found) return null;
+              const aiLabel = isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
+              return tile(found, i + 1, r.why, aiLabel);
             })}
           </div>
         )}

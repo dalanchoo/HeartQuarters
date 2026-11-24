@@ -13,13 +13,14 @@ const PIECE = '022 - V/Shorts/022_S07 - Somebody Knows Me';
 const PICK = { title: "They Know Me. I Don't Know Who They Are.", thumbnailText: 'Remember me?', accent: 'ME?', expression: 'Positive > Warmth, Empathy > Compassion (warm, sheepish smile)', background: 'dark room', why: 'because', backedBy: ['Claude'] };
 const photo = (p: string): ExpressionPhoto => ({ path: p, name: p.split('/').pop()!, category: p.split('/').slice(0, -1).join('/'), tags: [] });
 const PHOTOS = [photo('Positive/Warmth/Warm_001.jpg'), photo('Positive/Warmth/Warm_002.jpg'), photo('Empathy/Compassion/Compassion_002.jpg'), photo('Doubt/Unsure/Unsure_001.jpg'), photo('Composure/Calm/Calm_004.jpg')];
+const AI_PHOTO = photo('Positive/Warmth/Warm_AI_001.jpg');
 
 let tmp: string;
 let old: { projects: string; expressions: string };
 beforeEach(() => {
   tmp = makeTree({
     [`Videos/${PIECE}/Packaging/Drafts/Brief.md`]: '# Brief',
-    ...Object.fromEntries(PHOTOS.map(({ path }) => [`Expressions/${path}`, 'fake photo'])),
+    ...Object.fromEntries([...PHOTOS, AI_PHOTO].map(({ path }) => [`Expressions/${path}`, 'fake photo'])),
   });
   old = { projects: config.videoProjectsDir, expressions: config.expressionsDir };
   config.videoProjectsDir = path.join(tmp, 'Videos');
@@ -62,6 +63,14 @@ describe('which photos Claude looks at', () => {
     expect(list.slice(0, 3).map(c => c.photo)).toEqual([many[59], many[1], many[2]]);
     expect(list.map(c => c.photo)).not.toContain(many[0]);
   });
+  it('keeps camera photos ahead of AI fallbacks and leaves room for both in one request', () => {
+    const cameras = Array.from({ length: MAX_CANDIDATES }, (_, i) => photo(`Positive/Warmth/W_${i}.jpg`));
+    const tagged = { ...PHOTOS[0], tags: [{ tag: 'AIGenerated', confirmed: true, confidence: null }] };
+    const list = rankingCandidates([AI_PHOTO, tagged, ...cameras], ['Positive/Warmth'], [AI_PHOTO.path]);
+    expect(list).toHaveLength(MAX_CANDIDATES);
+    expect(list.slice(0, -2).every(c => !c.aiGenerated)).toBe(true);
+    expect(list.slice(-2).map(c => [c.photo.path, c.aiGenerated])).toEqual([[AI_PHOTO.path, true], [tagged.path, true]]);
+  });
 });
 
 describe("reading Claude's ranking", () => {
@@ -76,7 +85,7 @@ describe("reading Claude's ranking", () => {
 });
 
 describe('ranking the photos for the chosen pair', () => {
-  it('shows Claude small copies with their names, and saves the top five for that pair', async () => {
+  it('shows Claude one set of labeled previews and saves only suitable camera photos from a mixed answer', async () => {
     choose();
     setExpressionRating(PHOTOS[0].path, 'liked');
     setExpressionRating(PHOTOS[1].path, 'disliked');
@@ -86,23 +95,41 @@ describe('ranking the photos for the chosen pair', () => {
     const ask: AskAi = async (_ai, prompt, cwd) => {
       seen = prompt;
       files = fs.readdirSync(cwd).sort();
-      return '{"ranked":[{"photo":"Empathy/Compassion/Compassion_002.jpg","why":"kind and a bit sheepish"},{"photo":"Positive/Warmth/Warm_001.jpg","why":"warm"}]}';
+      return JSON.stringify({ ranked: [
+        { photo: AI_PHOTO.path, why: 'AI warmth' },
+        { photo: PHOTOS[2].path, why: 'kind and a bit sheepish' },
+        { photo: PHOTOS[0].path, why: 'warm' },
+      ] });
     };
     const { job, finished } = startRanking(PIECE, { ask, starred: () => [PHOTOS[0].path, PHOTOS[1].path], small });
-    expect(job).toMatchObject({ state: 'working', looked: 2 });
+    expect(job).toMatchObject({ state: 'working', looked: 3 });
     await finished;
     expect(job.state).toBe('done');
-    expect(files).toEqual(['01.jpg', '02.jpg']);
-    expect(seen).toContain('- 01.jpg: Positive/Warmth/Warm_001.jpg (Positive > Warmth, starred, liked)');
-    expect(seen).toContain('- 02.jpg: Empathy/Compassion/Compassion_002.jpg (Empathy > Compassion, meh)');
+    expect(files).toEqual(['01.jpg', '02.jpg', '03.jpg']);
+    expect(seen).toContain('- 01.jpg: Positive/Warmth/Warm_001.jpg (Positive > Warmth, camera photo, starred, liked)');
+    expect(seen).toContain('- 02.jpg: Empathy/Compassion/Compassion_002.jpg (Empathy > Compassion, camera photo, meh)');
+    expect(seen).toContain('- 03.jpg: Positive/Warmth/Warm_AI_001.jpg (Positive > Warmth, AI-generated)');
     expect(seen).not.toContain(PHOTOS[1].path);
     expect(seen).toContain("Title: \"They Know Me. I Don't Know Who They Are.\"");
     const saved = readRanking(PIECE)!;
-    expect(saved).toMatchObject({ title: PICK.title, looked: 2 });
+    expect(saved).toMatchObject({ title: PICK.title, looked: 3, cameraFirst: true });
     expect(saved.ranked).toEqual([
       { photo: 'Empathy/Compassion/Compassion_002.jpg', why: 'kind and a bit sheepish' },
       { photo: 'Positive/Warmth/Warm_001.jpg', why: 'warm' },
     ]);
+  });
+  it.each([
+    { result: 'an AI fallback', ranked: [{ photo: AI_PHOTO.path, why: 'suitable fallback' }] },
+    { result: 'an empty ranking', ranked: [] },
+  ])('saves $result when no camera photo is suitable', async ({ ranked }) => {
+    choose();
+    let calls = 0;
+    const ask: AskAi = async () => { calls++; return JSON.stringify({ ranked }); };
+    const { job, finished } = startRanking(PIECE, { ask, starred: () => [], small });
+    await finished;
+    expect(job.state).toBe('done');
+    expect(calls).toBe(1);
+    expect(readRanking(PIECE)).toMatchObject({ cameraFirst: true, ranked });
   });
   it('updates saved recommendations when ratings change without rewriting the saved ranking', () => {
     const file = path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', RANKING_FILE);

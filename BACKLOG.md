@@ -52,9 +52,10 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
 - **Record packaging changes in the version's Notes.** Uploads and updates sent through HeartQuarters
   record the Pacific date and the title, description, tags, or thumbnail that YouTube confirmed.
-- **Start thumbnail improvements with photo ratings.** Exclude thumbs-down photos from new and saved
-  recommendations, give likes a boost, and keep Meh and unrated photos eligible. Next, prefer suitable
-  camera photos, then search across folders using sidecar attributes. The packaging prompts will favor
+- **Prefer suitable camera photos for thumbnails.** New rankings check the photo's emotional fit,
+  lighting, color, and readability at phone size. AI photos are labeled fallbacks when no camera photo
+  fits. Ratings still apply. Older rankings can be refreshed with Rank Again. Next, search across
+  folders using sidecar attributes. The packaging prompts will favor
   an inviting expression when it fits, compare against the previous numbered episode, and ask for a
   visual that helps tell the story.
 
