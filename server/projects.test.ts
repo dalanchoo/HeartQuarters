@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { listProjects, readProject } from './projects';
+import { listProjects, previousLongformPiece, readProject } from './projects';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -48,6 +48,13 @@ afterAll(() => {
 });
 
 describe('listProjects', () => {
+  it('finds the preceding numbered longform across ordinary projects, series parts and legacy layouts', () => {
+    expect(previousLongformPiece('023 – En Dash Name/Longform')).toBe('022 - Worth Telling Them/Longform');
+    expect(previousLongformPiece('022 - Worth Telling Them/Longform')).toBe('006 - Old Layout');
+    expect(previousLongformPiece('006 - Old Layout')).toBe('005 - Series/005B – Part Two/Longform');
+    expect(previousLongformPiece('005 - Series/005B – Part Two/Longform')).toBe('005 - Series/005A - Part One/Longform');
+    expect(previousLongformPiece('005 - Series/005A - Part One/Longform')).toBeNull();
+  });
   it('lists numbered folders, skipping templates and other folders', () => {
     expect(listProjects().map((p) => p.id)).toEqual([
       '005 - Series',

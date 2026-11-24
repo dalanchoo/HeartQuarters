@@ -7,6 +7,7 @@ import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorI
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
+import { stageLongformThumbnails } from './brief-thumbnail-comparison';
 
 let tmp: string;
 let original: string;
@@ -81,6 +82,56 @@ describe('the source', () => {
 });
 
 describe('writing the brief', () => {
+  it('gives every AI the previous numbered cover and separates the current episode’s revision context', async () => {
+    const previous = '021 - Earlier/Longform';
+    const files = {
+      [`${previous}/Packaging/V01/Thumbnail/Thumbnail.jpg`]: 'recorded predecessor',
+      [`${previous}/Packaging/V01/Notes.md`]: 'On YouTube: from 2026-11-05.',
+      [`${previous}/Packaging/V02/Thumbnail/Thumbnail.png`]: 'title-only update',
+      [`${previous}/Packaging/V02/Notes.md`]: 'On YouTube: 2026-11-23 (sent Title).',
+      [`${previous}/Packaging/V03/Thumbnail/Thumbnail.png`]: 'unpublished draft',
+      [`${previous}/Packaging/V03/Notes.md`]: 'On YouTube: not yet.',
+      [`${LONGFORM}/Packaging/V02/Thumbnail/Thumbnail.png`]: 'current local revision',
+      '023 - Not Recorded/Longform/Packaging/V01/Thumbnail/Thumbnail.png': 'later episode',
+    };
+    for (const [relative, content] of Object.entries(files)) {
+      const file = path.join(tmp, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, content);
+    }
+    const check: AskAi = async (ai, prompt, cwd, images) => {
+      expect(prompt).toContain(`from "${previous}" (V01, publication recorded in local notes)`);
+      expect(prompt).toContain('A color or expression can repeat');
+      expect(prompt).toContain("this video's latest local thumbnail version (V02)");
+      expect(images?.map(file => fs.readFileSync(file, 'utf8'))).toEqual(['recorded predecessor', 'current local revision']);
+      return fakeAi(ai, prompt, cwd, images);
+    };
+    const calls: string[] = [];
+    const { job, finished } = await startBrief(LONGFORM, '', async (...args) => { calls.push(args[0]); return check(...args); });
+    await finished;
+    expect(job.steps.map(step => step.state)).toEqual(['done', 'done', 'done', 'done']);
+    expect(calls).toEqual(['claude', 'codex', 'gemini', 'claude']);
+    const retry = await startPicks(LONGFORM, '', check);
+    await retry.finished;
+    expect(retry.job.status).toBe('done');
+  });
+
+  it('labels an unverified local comparison and keeps a missing previous cover from selecting an unrelated episode', () => {
+    const prior = '021 - Earlier/Longform';
+    const folder = path.join(tmp, prior, 'Packaging', 'V01');
+    const older = path.join(tmp, '020 - Older', 'Longform', 'Packaging', 'V08');
+    const work = path.join(tmp, 'test work');
+    for (const dir of [folder, older, work]) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(older, 'Thumbnail.jpg'), 'different episode');
+    const missing = stageLongformThumbnails(LONGFORM, work);
+    expect(missing.context).toContain(`previous numbered longform is "${prior}"`);
+    expect(missing.images).toEqual([]);
+    const local = path.join(folder, 'Thumbnail.jpg');
+    fs.writeFileSync(local, 'local');
+    const found = stageLongformThumbnails(LONGFORM, work);
+    expect(found.context).toContain('local version, YouTube status unverified');
+    expect(found.images.map(file => fs.readFileSync(file, 'utf8'))).toEqual(['local']);
+  });
   it('asks the brief and final picker to use search phrases and favor vidIQ evidence', () => {
     const writer = writerPrompt('Video/Longform', { kind: 'transcript', path: 'captions.txt' }, true, '2026-11-23');
     const picker = picksPrompt(true);

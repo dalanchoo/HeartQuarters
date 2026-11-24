@@ -59,8 +59,9 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   Rank Again. New picks can request gaze and mouth attributes when the concept calls for them.
   Confirmed matches get priority and photos with missing tags stay eligible. Packaging favors a
   natural expression that fits the story and avoids a strongly negative look when a more inviting
-  one also fits. Next, compare against the previous numbered episode and ask for a visual that helps
-  tell the story.
+  one also fits. Longform briefs compare the overall look with the previous numbered episode and
+  use the current episode's thumbnail as revision context. Next, ask for a visual that helps tell
+  the story.
 
 ---
 

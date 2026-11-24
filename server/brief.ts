@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
 import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
+import { stageLongformThumbnails, thumbnailComparisonNote } from './brief-thumbnail-comparison.js';
 import { appDir, config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
@@ -152,11 +153,11 @@ const READ_SKILLS = () =>
 export function shortNote(piece: string): string[] {
   if (!isShort(piece)) return [];
   return [
-    `This video is a YouTube Short (vertical, 9:16). Plan its cover, not a wide thumbnail: follow the skill's rules for a Shorts cover (2160 x 3840, nothing important in the top tenth, which the Shorts feed crops off, the bottom fifth or by the right edge, where the app's buttons are). Its title is the Short's title. For "Recent thumbnails", look at the newest few Shorts' covers (each Shorts folder's Packaging, newest version) rather than longform thumbnails.`,
+    `This video is a YouTube Short (vertical, 9:16). Plan its cover, not a wide thumbnail: follow the skill's rules for a Shorts cover (2160 x 3840, nothing important in the top tenth, which the Shorts feed crops off, the bottom fifth or by the right edge, where the app's buttons are). Its title is the Short's title. For "Thumbnail comparison", look at the newest few other Shorts' covers (each Shorts folder's Packaging, newest version). Treat any earlier cover for this Short as revision context.`,
   ];
 }
 
-export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string): string {
+export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string, comparison = ''): string {
   return [
     `Write a YouTube packaging brief for the Heart Mind Fusion video "${pieceName}", following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
     ...shortNote(pieceName),
@@ -164,7 +165,7 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     ...(hasNotes ? [NOTES_NOTE] : []),
     `Research with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits. Prioritize keyword research for candidate tags. Record the exact phrases checked and the search volume or overall score vidIQ returns, including zero values, so the final picker can use them. If keyword metrics aren't available, write the brief anyway and say so.`,
     CATEGORIES_NOTE(),
-    `For "Recent thumbnails", look in "${config.videoProjectsDir}": the newest few numbered video folders, each Longform\\Packaging's newest version (its YouTube.md and thumbnail). Which version is on YouTube is written in each version's Notes.md ("On YouTube: ..."); don't assume the newest one is.`,
+    ...(!isShort(pieceName) ? [thumbnailComparisonNote(comparison)] : []),
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
     TAG_RULES,
     THUMBNAIL_EXPRESSION_GUIDANCE,
@@ -173,13 +174,14 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
   ].join('\n\n');
 }
 
-export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false, piece = ''): string {
+export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false, piece = '', comparison = ''): string {
   return [
     `Review a thumbnail and title brief for the Heart Mind Fusion channel, following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
     ...shortNote(piece),
     `Read all of the video's ${source.kind}, in source.txt in the current folder, then the brief, in brief.md in the current folder (with any earlier reviews at its end).`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
+    ...(piece && !isShort(piece) ? [thumbnailComparisonNote(comparison)] : []),
     THUMBNAIL_EXPRESSION_GUIDANCE,
     `Don't create or change any file, and don't make images. Reply with only your review in Markdown, starting with the line "## Review: ${name}":`,
     '- your ranking of the title options, best first, one line each on why;',
@@ -291,11 +293,12 @@ const CATEGORIES_NOTE = () => {
   return list.length ? `For expressions, use these categories from John's library. Choose the best fit for the idea. Photos tagged with an expression may be filed in other categories: ${list.join('; ')}.` : '';
 };
 
-export function picksPrompt(hasNotes: boolean): string {
+export function picksPrompt(hasNotes: boolean, comparison = ''): string {
   return [
     `In brief.md in the current folder is a thumbnail and title brief for a Heart Mind Fusion video, with reviews by other AIs at its end. Read it, and the skill "${skillFile('thumbnails-and-titles')}".`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
+    ...(comparison ? [thumbnailComparisonNote(comparison)] : []),
     'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on and follow John\'s notes. Follow the thumbnail skill, including the 30-second payoff, gaze toward the centre or camera, and a clear bottom-right corner for longform. A pair may combine a title from one place with a thumbnail from another.',
     THUMBNAIL_EXPRESSION_GUIDANCE,
     `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
@@ -328,10 +331,10 @@ export function picksFromAnswer(answer: string): BriefPick[] {
 }
 
 /** The last step: Claude picks the top 3 pairs, saved as Picks.json (an earlier one is kept, renamed). */
-async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boolean, drafts: string, when: Date, shots: string[] = []): Promise<void> {
+async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boolean, drafts: string, when: Date, shots: string[], comparison: string): Promise<void> {
   step.state = 'working';
   try {
-    const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes), work, shots));
+    const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes, comparison), work, shots));
     if (picks.some(p => !p.description || !p.tags || !p.pinnedComment)) throw new Error('The generated package is missing a description, tags or pinned comment. Try Pick Top 3 Again.');
     keepOld(drafts, PICKS_FILE, when);
     writeFile(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
@@ -436,6 +439,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
   let work: string;
   let shots: string[];
   let notes: string;
+  let comparison = '';
   try {
     writable(path.join(dir, 'Packaging', DRAFTS_FOLDER, BRIEF_FILE));
     work = workFolder(piece);
@@ -443,6 +447,11 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     if (found.kind === 'transcript') copySourceTimings(dir, work);
     const saved = saveResearchImages(path.join(dir, 'Packaging', DRAFTS_FOLDER), work, images, new Date());
     shots = saved.map((s) => s.file);
+    if (!isShort(piece)) {
+      const thumbnails = stageLongformThumbnails(piece, work);
+      comparison = thumbnails.context;
+      shots.push(...thumbnails.images);
+    }
     notes = notesWithImages(rawNotes, saved);
     if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
   } catch (e) {
@@ -461,7 +470,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     const when = new Date();
     try {
       writer.state = 'working';
-      const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10)), work, shots), /^# Brief:/m, 'Claude');
+      const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10), comparison), work, shots), /^# Brief:/m, 'Claude');
       makeFolder(drafts);
       job.kept = keepOld(drafts, BRIEF_FILE, when);
       writeFile(brief, text + '\n');
@@ -478,7 +487,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     for (const r of reviewers) {
       r.state = 'working';
       try {
-        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece), work, shots), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
+        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece, comparison), work, shots), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
         appendText(brief, `\n${review}\n`);
         fs.appendFileSync(path.join(work, 'brief.md'), `\n${review}\n`);
         r.state = 'done';
@@ -488,7 +497,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
       }
     }
     writeFile(brief, noteWhoTookPart(readText(brief), job.steps));
-    await runPicks(picker, ask, work, !!notes.trim(), drafts, when, shots);
+    await runPicks(picker, ask, work, !!notes.trim(), drafts, when, shots, comparison);
     job.status = 'done';
   })().catch((e) => {
     job.status = 'failed';
@@ -516,6 +525,7 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
   let work: string;
   let notes: string;
   let shots: string[];
+  let comparison = '';
   try {
     work = workFolder(piece);
     fs.copyFileSync(readable(brief), path.join(work, 'brief.md'));
@@ -523,13 +533,18 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     if (found?.kind === 'transcript') copySourceTimings(dir, work);
     const saved = saveResearchImages(drafts, work, images, new Date());
     shots = saved.map((s) => s.file);
+    if (!isShort(piece)) {
+      const thumbnails = stageLongformThumbnails(piece, work);
+      comparison = thumbnails.context;
+      shots.push(...thumbnails.images);
+    }
     notes = notesWithImages(rawNotes, saved);
     if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
   } catch (e) {
     jobs.delete(piece);
     throw e;
   }
-  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots).then(() => {
+  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots, comparison).then(() => {
     job.status = job.steps[0].state === 'done' ? 'done' : 'failed';
   });
   return { job, finished };

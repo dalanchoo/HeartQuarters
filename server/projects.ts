@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
-import { readable } from './safe-files.js';
+import { readable, readText } from './safe-files.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -441,6 +441,61 @@ export function listProjects(): ProjectNode[] {
   return subfolders(config.videoProjectsDir)
     .filter((name) => PROJECT_RE.test(name))
     .map((name) => readNode(path.join(config.videoProjectsDir, name), 'top').node);
+}
+
+/** The longform piece immediately before this one in episode order, including lettered series parts. */
+export function previousLongformPiece(piece: string): string | null {
+  const segments = piece.split('/');
+  if (segments.at(-1) === 'Longform') segments.pop();
+  const current = splitName(segments.at(-1) ?? '').number;
+  if (!current || !/^\d+[A-Z]?$/i.test(current) || segments.length > 2) return null;
+  const compare = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' });
+  const episodes = subfolders(config.videoProjectsDir).flatMap(folder => {
+    const number = splitName(folder).number;
+    if (!number || !/^\d+$/.test(number) || Number(number) === 999 || compare(number, current) > 0) return [];
+    const children = subfolders(safeResolve('projects', folder));
+    const parts = children.filter(child => SERIES_RE.test(child));
+    return parts.length ? parts.map(part => `${folder}/${part}`) : [folder];
+  }).flatMap(folder => {
+    const number = splitName(path.basename(folder)).number;
+    return number && compare(number, current) < 0 ? [{ folder, number }] : [];
+  })
+    .sort((a, b) => compare(b.number, a.number));
+  for (const { folder } of episodes) {
+    const children = subfolders(safeResolve('projects', folder));
+    if (children.includes('Longform')) return `${folder}/Longform`;
+    if (children.includes('Packaging') || children.includes('Exports')) return folder;
+  }
+  return null;
+}
+
+/** Choose a cover from saved packaging. Publication notes are evidence for the thumbnail specifically. */
+export function packagingThumbnail(piece: string, preferRecorded: boolean): { file: string; version: string; recorded: boolean } | null {
+  const root = safeResolve('projects', path.join(piece, 'Packaging'));
+  if (!fs.lstatSync(root, { throwIfNoEntry: false })?.isDirectory()) return null;
+  const versions = subfolders(root).filter(v => /^(?:V\d+|Legacy$)/i.test(v));
+  const covers = versions.flatMap(version => {
+    const dir = readable(path.join(root, version));
+    const folders = subfolders(dir);
+    const locations = ['thumbnail', 'covers'].flatMap(name => folders.filter(folder => folder.toLowerCase() === name));
+    const cover = [...locations.map(folder => readable(path.join(dir, folder))), dir]
+      .flatMap(p => filesIn(p, IMAGE_EXTS, readable)).find(file => /^thumbnail\.(png|jpe?g|webp)$/i.test(file.name));
+    if (!cover) return [];
+    let notes = '';
+    if (preferRecorded) {
+      const notesFile = filesIn(dir, DOC_EXTS, readable).find(file => file.name.toLowerCase() === NOTES_FILE.toLowerCase());
+      if (notesFile) notes = readText(safeResolve('projects', notesFile.path));
+    }
+    const dates = [...notes.matchAll(/^\s*On YouTube:[ \t]*(?:from[ \t]+)?(\d{4}-\d{2}-\d{2})(?:[ \t]+\(sent ([^)]+)\))?\.?[ \t]*$/gim)]
+      .filter(match => !match[2] || match[2].split(',').some(field => field.trim().toLowerCase() === 'thumbnail'))
+      .map(match => match[1]).sort();
+    const recordedAt = dates.at(-1) ?? '';
+    const draft = /^(?:\uFEFF)?On YouTube:[ \t]*not yet\./im.test(notes);
+    return [{ file: safeResolve('projects', cover.path), version, recordedAt, draft }];
+  });
+  const cover = covers.sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)
+    || Number(a.draft) - Number(b.draft) || versionOrder(b.version) - versionOrder(a.version))[0];
+  return cover ? { file: cover.file, version: cover.version, recorded: !!cover.recordedAt } : null;
 }
 
 /** Read the same video tree for the status overview, once for the whole sidebar. */
