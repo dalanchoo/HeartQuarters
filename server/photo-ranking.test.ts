@@ -153,6 +153,7 @@ describe('ranking the photos for the chosen pair', () => {
     expect(seen).toContain('- 02.jpg: Empathy/Compassion/Compassion_002.jpg (Empathy > Compassion, camera photo, meh)');
     expect(seen).toContain('- 03.jpg: Positive/Warmth/Warm_AI_001.jpg (Positive > Warmth, AI-generated)');
     expect(seen).not.toContain(PHOTOS[1].path);
+    expect(seen).toContain('Avoid a strongly negative look when a more inviting expression also fits.');
     expect(seen).toContain("Title: \"They Know Me. I Don't Know Who They Are.\"");
     const saved = readRanking(PIECE)!;
     expect(saved).toMatchObject({ title: PICK.title, looked: 3, cameraFirst: true });

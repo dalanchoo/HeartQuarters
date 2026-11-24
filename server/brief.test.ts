@@ -98,6 +98,15 @@ describe('writing the brief', () => {
     expect(writerPrompt('Video/Longform', source, false, '2026-11-17')).toContain('beginning "Expression:"');
     expect(reviewerPrompt('ChatGPT', source)).toContain('beginning "Expression:"');
   });
+  it('uses the story to decide when a strongly negative expression fits', () => {
+    const source = { kind: 'transcript' as const, path: 'captions.txt' };
+    for (const prompt of [writerPrompt('Video/Longform', source, false, '2026-11-23'), reviewerPrompt('ChatGPT', source), picksPrompt(false)]) {
+      expect(prompt).toContain('Avoid a strongly negative look when a more inviting expression also fits.');
+      expect(prompt).toContain('Anger can fit a story about being consumed by rage.');
+      expect(prompt).toContain('swinging between anger and joy, favor joy when it fits the concept');
+      expect(prompt).not.toContain('most positive');
+    }
+  });
   it('Claude writes it, then ChatGPT and Gemini add their reviews, and the brief says who took part', async () => {
     const { job, finished } = await startBrief(LONGFORM, 'V01 is on YouTube. Ask Studio says: SDAM is rising', fakeAi);
     expect(job.status).toBe('running');

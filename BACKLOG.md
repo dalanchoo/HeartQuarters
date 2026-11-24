@@ -57,9 +57,10 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   fits. Ratings still apply. Rankings search the whole library for expression tags, giving John's
   confirmed tags priority. Folders and stars still count. Older rankings can be refreshed with
   Rank Again. New picks can request gaze and mouth attributes when the concept calls for them.
-  Confirmed matches get priority and photos with missing tags stay eligible. Next, the packaging prompts will favor
-  an inviting expression when it fits, compare against the previous numbered episode, and ask for a
-  visual that helps tell the story.
+  Confirmed matches get priority and photos with missing tags stay eligible. Packaging favors a
+  natural expression that fits the story and avoids a strongly negative look when a more inviting
+  one also fits. Next, compare against the previous numbered episode and ask for a visual that helps
+  tell the story.
 
 ---
 

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appDir, config, safeResolve } from './config.js';
-import { askAi, type AskAi } from './brief.js';
+import { askAi, THUMBNAIL_EXPRESSION_GUIDANCE, type AskAi } from './brief.js';
 import { OPEN_MOUTH_TAGS } from './expression-attribute-vocabulary.js';
 import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences } from './expression-references.js';
@@ -107,6 +107,7 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
     'Some matching photos are filed in other expression folders. Judge the expression you see in the photo.',
     'Liked and Meh are John’s own ratings. Give a liked photo a boost when it fits the pair. Meh and unrated photos are also usable.',
+    THUMBNAIL_EXPRESSION_GUIDANCE,
     list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.aiGenerated ? 'AI-generated' : 'camera photo', c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
     `Judge the actual photos for emotional fit, natural lighting and skin color, a clear expression at phone size, and how the gaze and mouth suit the layout and any photo cues above. Prefer variety when photos are close. Rank up to ${TOP} suitable camera photos, best first. If even one camera photo suits the pair, return only suitable camera photos. If none suits it, rank up to ${TOP} suitable AI-generated photos as fallbacks. Return an empty ranked array if none of the photos is suitable.`,
     "Don't create or change any file. Reply with only this JSON, nothing before or after it, using the library paths exactly as listed:",

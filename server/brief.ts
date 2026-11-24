@@ -143,6 +143,8 @@ const NOTES_NOTE = "John's notes for this brief (what he wants, what he doesn't 
 
 const TAG_RULES = 'Write comma-separated YouTube tags in Title Case, preserving acronyms such as SDAM and KKK. Choose specific topics, names, and natural phrases a viewer would type into YouTube search. Leave out quotes, dialogue, title hooks, and near-duplicates. Prefer relevant exact phrases with positive search volume or scores from vidIQ, and omit exact phrases reported at zero volume or score. Where metrics are unavailable, use plausible search terms and never invent scores.';
 
+export const THUMBNAIL_EXPRESSION_GUIDANCE = 'Choose a natural expression that fits the story. Avoid a strongly negative look when a more inviting expression also fits. Anger can fit a story about being consumed by rage. For a story about swinging between anger and joy, favor joy when it fits the concept and let the words or supporting image convey the contrast.';
+
 const READ_SKILLS = () =>
   `First read the skills "${skillFile('channel-basics')}" and "${skillFile('thumbnails-and-titles')}" (they say Claude where they mean any AI).`;
 
@@ -165,6 +167,7 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     `For "Recent thumbnails", look in "${config.videoProjectsDir}": the newest few numbered video folders, each Longform\\Packaging's newest version (its YouTube.md and thumbnail). Which version is on YouTube is written in each version's Notes.md ("On YouTube: ..."); don't assume the newest one is.`,
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
     TAG_RULES,
+    THUMBNAIL_EXPRESSION_GUIDANCE,
     'For each thumbnail idea, put the complete suggested expression on its own line beginning "Expression:", including category paths and the detailed look to photograph.',
     `Today is ${today}. Don't create or change any file. Reply with only the brief in Markdown, starting with the line "# Brief:", in the skill's format, ending with the empty "## John's notes" section.`,
   ].join('\n\n');
@@ -177,6 +180,7 @@ export function reviewerPrompt(name: string, source: BriefSource, hasNotes = fal
     `Read all of the video's ${source.kind}, in source.txt in the current folder, then the brief, in brief.md in the current folder (with any earlier reviews at its end).`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
+    THUMBNAIL_EXPRESSION_GUIDANCE,
     `Don't create or change any file, and don't make images. Reply with only your review in Markdown, starting with the line "## Review: ${name}":`,
     '- your ranking of the title options, best first, one line each on why;',
     '- your ranking of the thumbnail ideas, one line each;',
@@ -292,7 +296,8 @@ export function picksPrompt(hasNotes: boolean): string {
     `In brief.md in the current folder is a thumbnail and title brief for a Heart Mind Fusion video, with reviews by other AIs at its end. Read it, and the skill "${skillFile('thumbnails-and-titles')}".`,
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
-    'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on, follow John\'s notes, and keep to the skill\'s hard rules (paid off in the first 30 seconds, the most positive true expression, gaze toward the centre, nothing in the bottom-right corner). A pair may combine a title from one place with a thumbnail from another.',
+    'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on and follow John\'s notes. Follow the thumbnail skill, including the 30-second payoff, gaze toward the centre or camera, and a clear bottom-right corner for longform. A pair may combine a title from one place with a thumbnail from another.',
+    THUMBNAIL_EXPRESSION_GUIDANCE,
     `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
     'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. For longform, if source-timings.srt or source-timings.vtt exists, read it and include accurate chapters based on those timestamps in the description; otherwise omit chapters. Put hashtags inside the description. Do not invent facts or timestamps.',
     TAG_RULES,
