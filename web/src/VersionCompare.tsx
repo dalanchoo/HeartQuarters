@@ -41,7 +41,7 @@ function useVersionText(path: string, version: PackagingVersion | undefined, cur
 export interface GeneratedDraft { piece: string; text: string; image: FileRef | null; images: (FileRef & { label: string })[]; chooseImage: (path: string) => void }
 const DRAFT_VERSION: PackagingVersion = { name: 'Draft', path: DRAFT_SELECTION, docs: [], notes: null, covers: [] };
 
-export function VersionCompare({ versions, version, doc: originalDoc, locked, onChanged, left, right, onDirty, generated }: { versions: PackagingVersion[]; version: PackagingVersion; doc: LoadedDoc; locked: boolean; onChanged?: () => void; left: string; right: string; onDirty?: (dirty: boolean) => void; generated?: GeneratedDraft }) {
+export function VersionCompare({ versions, version, doc: originalDoc, locked, onChanged, left, right, onDirty, onReady, generated }: { versions: PackagingVersion[]; version: PackagingVersion; doc: LoadedDoc; locked: boolean; onChanged?: () => void; left: string; right: string; onDirty?: (dirty: boolean) => void; onReady?: (ready: boolean) => void; generated?: GeneratedDraft }) {
   const draft = useStagedDoc(originalDoc);
   const doc = draft.doc;
   const [selected, setSelected] = useState<string[]>([]);
@@ -60,6 +60,8 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
   const leftText = leftData.text;
   const rightText = rightData.text;
   const ready = leftText !== null && (!right || rightText !== null);
+  const settled = ready || !!leftData.error || !!rightData.error;
+  useEffect(() => { onReady?.(settled); }, [settled, onReady]);
   const leftFields = parseFields(leftText ?? '') ?? [];
   const rightFields = parseFields(rightText ?? '') ?? [];
   const labels = ready ? comparisonLabels(leftText, rightText ?? '') : [];

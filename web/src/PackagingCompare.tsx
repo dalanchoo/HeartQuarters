@@ -17,6 +17,9 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const order = choiceOrder(versions.map(v => v.path), false);
   const { left, right } = orderedChoices(choices, version.path, order);
   const [dirty, setDirty] = useState(false);
+  const [heldHeight, setHeldHeight] = useState<number | null>(null);
+  const [compareReady, setCompareReady] = useState(true);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const pendingId = useRef(Symbol('packaging'));
   useEffect(() => { const id = pendingId.current; setPendingPackaging(id, dirty); return () => setPendingPackaging(id, false); }, [dirty]);
   useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
@@ -24,8 +27,13 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const changeSelection = (side: 'left' | 'right', value: string) => {
     if (value === (side === 'left' ? left : right)) return;
     if (dirty && !window.confirm('You have unapplied changes. Discard them and change the comparison?')) return;
+    const height = bodyRef.current?.offsetHeight ?? 0;
+    if (height > 0) setHeldHeight(height);
+    const nextLeft = side === 'left' ? value : left;
+    const nextRight = side === 'right' ? value : right;
+    if (nextRight && nextLeft !== YOUTUBE && nextRight !== YOUTUBE) setCompareReady(false);
     setDirty(false);
-    setChoices({ left: side === 'left' ? value : left, right: side === 'right' ? value : right });
+    setChoices({ left: nextLeft, right: nextRight });
   };
   const selection = comparisonSelection(left, right, version.path);
   const { youtube: usesYoutube, localPath, display } = selection;
@@ -38,6 +46,10 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const unlockedFile = unlockedVersion && unlockedVersion.path !== version.path ? unlockedVersion.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name)) : undefined;
   const unlockedDocs = usePackagingDocs(unlockedFile ? [unlockedFile] : []);
   const unlockedDoc = unlockedFile ? unlockedDocs.find(d => d.file.path === unlockedFile.path) : (!locked ? doc : undefined);
+  const bodyReady = usesYoutube || !right ? !!localDoc : (!unlockedFile || !!unlockedDoc) && compareReady;
+  useEffect(() => {
+    if (bodyReady && heldHeight !== null) setHeldHeight(null);
+  }, [bodyReady, heldHeight]);
   const label = (value: string) => {
     if (value === YOUTUBE) return 'YouTube';
     const v = versions.find(x => x.path === value);
@@ -66,7 +78,9 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
       if (!shown.length || shown.some(v => v.path === unlocked)) return null;
       return <p className="lock-hint">Unlock {shown.map(v => v.name).join(' or ')} to edit it or copy into it.</p>;
     })()}
-    {usesYoutube || !right ? localDoc ? <LocalVsYouTube key={`${localVersion.path}|${left}|${right}`} piece={piece} doc={localDoc} covers={localVersion.covers} version={localVersion.path} versionName={localVersion.name} link={link} onChanged={onChanged} longform={longform} display={display} reverse={selection.reverse} onDirty={setDirty} /> : <p className="muted">Loading Version…</p> :
-      unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} />}
+    <div ref={bodyRef} style={heldHeight ? { minHeight: heldHeight } : undefined}>
+      {usesYoutube || !right ? localDoc ? <LocalVsYouTube key={`${localVersion.path}|${left}|${right}`} piece={piece} doc={localDoc} covers={localVersion.covers} version={localVersion.path} versionName={localVersion.name} link={link} onChanged={onChanged} longform={longform} display={display} reverse={selection.reverse} onDirty={setDirty} /> : <p className="muted">Loading Version…</p> :
+        unlockedFile && !unlockedDoc ? <p className="muted">Loading Unlocked Version…</p> : <VersionCompare key={`${left}|${right}|${unlocked ?? ''}`} versions={versions} version={unlockedVersion ?? version} doc={unlockedDoc ?? doc} locked={!unlockedVersion || !unlockedDoc} onChanged={onChanged} left={left} right={right} onDirty={setDirty} onReady={setCompareReady} />}
+    </div>
   </details>;
 }
