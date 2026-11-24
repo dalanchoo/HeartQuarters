@@ -106,4 +106,18 @@ describe('archiving generated drafts as D01, D02...', () => {
     expect(fs.existsSync(path.join(trashed.trashPath, 'YouTube.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/D01'))).toBe(false);
   });
+  it('renames the highest remaining draft into the deleted slot so there is no gap', () => {
+    const img = path.join(tmp, 'Videos/piece/Packaging/Drafts/Gemini 01/01.png');
+    fs.mkdirSync(path.dirname(img), { recursive: true });
+    fs.writeFileSync(img, 'png-bytes');
+    archiveDraftRound('piece', img, null, 'Round 1');
+    archiveDraftRound('piece', img, null, 'Round 2');
+    archiveDraftRound('piece', img, null, 'Round 3');
+    const trashed = trashPackagingVersion('piece', 'piece/Packaging/D01');
+    expect(fs.readFileSync(path.join(trashed.trashPath, 'Notes.md'), 'utf8')).toContain('Round 1');
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/D01/Notes.md'), 'utf8')).toContain('Round 3');
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/D02/Notes.md'), 'utf8')).toContain('Round 2');
+    expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/D03'))).toBe(false);
+    expect(nextDraftName('piece')).toBe('D03');
+  });
 });

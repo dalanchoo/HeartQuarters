@@ -589,10 +589,10 @@ function DeletePackagingVersion({ piece, version, locked, onChanged }: { piece: 
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const isDraft = /^D\d+/i.test(version.name);
   return <>
-    <button className="small danger-outline" disabled={busy || (!isDraft && locked)} onClick={async () => {
+    <button className="small danger-outline" disabled={busy || locked} onClick={async () => {
       if (!window.confirm(`Delete packaging ${isDraft ? 'draft' : 'version'} ${version.name}? It moves to HeartQuarters Trash with all its files. The video and the other versions stay.`)) return;
       setBusy(true); setError(''); try { await postJson('/api/packaging/trash-version', { piece: piece.path, source: version.path }); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-    }}>{isDraft ? 'Delete Draft' : 'Delete Version'}</button>
+    }}>{busy ? 'Deleting…' : isDraft ? 'Delete Draft' : 'Delete Version'}</button>
     {error && <p className="error">{error}</p>}
   </>;
 }
@@ -915,7 +915,7 @@ function PieceCard({
                         <>
                           <div className="versions version-actions">
                             <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
-                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setUnlocked(null); setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
                             <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
                             <LockSwitch locked={locked} name={versionLabel(version.name)} onToggle={() => toggleLock(version.path)} />
                           </div>
@@ -932,7 +932,7 @@ function PieceCard({
                         <>
                           <div className="versions version-actions">
                             <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
-                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setUnlocked(null); setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
                             <LockSwitch locked={locked} name={versionLabel(version.name)} onToggle={() => toggleLock(version.path)} />
                           </div>
                           <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />

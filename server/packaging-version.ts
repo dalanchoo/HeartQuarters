@@ -21,8 +21,20 @@ export function trashPackagingVersion(piece: string, source: string): { trashPat
   if (!config.trashDir) throw new Error('No trash folder is set in config.json. Nothing was changed.');
   fs.mkdirSync(config.trashDir, { recursive: true });
   const holder = fs.mkdtempSync(path.join(config.trashDir, 'Packaging-'));
-  const to = path.join(holder, path.basename(from));
+  const name = path.basename(from);
+  const to = path.join(holder, name);
   fs.renameSync(from, to);
+  // Deleting a draft (Dxx) renames the highest remaining draft into its slot so D01..Dnn stays contiguous.
+  const deletedDraft = /^D(\d+)$/i.exec(name);
+  if (deletedDraft) {
+    const deletedNum = Number(deletedDraft[1]);
+    const parent = path.dirname(from);
+    const highest = fs.readdirSync(parent, { withFileTypes: true })
+      .map((entry) => ({ entry, num: Number(/^D(\d+)$/i.exec(entry.name)?.[1] ?? 0) }))
+      .filter(({ entry, num }) => num > deletedNum && entry.isDirectory() && !entry.isSymbolicLink())
+      .sort((a, b) => b.num - a.num)[0];
+    if (highest) fs.renameSync(writable(path.join(parent, highest.entry.name)), from);
+  }
   return { trashPath: to };
 }
 
