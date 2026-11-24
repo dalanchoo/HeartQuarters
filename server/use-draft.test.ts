@@ -61,12 +61,21 @@ describe('setField', () => {
     expect(out).toBe('Title:\nNew\n\nDescription:\nA.\n\nB.\n\nThumbnail text:\nROPE\n\nTags:\nx\n\nThumbnail idea:\ncalm\n');
     expect(setField('Title:\r\nOld\r\n', 'title', 'New')).toBe('Title:\r\nNew\r\n');
   });
+  it('supports ## Field Markdown headings and adds missing fields with ##', () => {
+    const text = '# YouTube Info\n\n## Title\nOld\n\n## Description\nA.\n\n## Thumbnail text\n\n## Tags\nx\n';
+    let out = setField(text, 'Title', 'New');
+    out = setField(out, 'Thumbnail text', 'ROPE');
+    out = setField(out, 'Thumbnail idea', 'calm');
+    expect(out).toBe('# YouTube Info\n\n## Title\nNew\n\n## Description\nA.\n\n## Thumbnail text\nROPE\n\n## Tags\nx\n\n## Thumbnail idea\ncalm\n');
+  });
 });
 
 describe('getField', () => {
   it('reads a one-line value, or nothing for an empty or missing field', () => {
     expect(getField('Title:\nOld\n\nTags:\nx\n', 'title')).toBe('Old');
+    expect(getField('## Title\nOld\n\n## Tags\nx\n', 'title')).toBe('Old');
     expect(getField('Title:\nTags:\nx\n', 'Title')).toBe('');
+    expect(getField('## Title\n## Tags\nx\n', 'Title')).toBe('');
     expect(getField('Tags:\nx\n', 'Title')).toBe('');
   });
 });

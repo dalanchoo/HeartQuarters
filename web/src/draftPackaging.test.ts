@@ -8,9 +8,9 @@ const img = (name: string, modified: number) => ({ name, path: `D/${name}`, size
 
 describe('the Draft', () => {
   it("is written like a YouTube.md, with the hashtags in their own field", () => {
-    const settings = '\n\nVideo language:\nen-US\n\nMade for kids:\nNo\n\nAltered content:\nNo\n';
-    expect(draftText(PICK)).toBe('Title:\nT\n\nDescription:\nAbout it.\n\nHashtags:\n#SDAM #Memory\n\nTags:\na, b\n\nPinned Comment:\nQuestion?\n\nThumbnail text:\nREMEMBER ME?' + settings);
-    expect(draftText({ ...PICK, description: undefined, tags: undefined, pinnedComment: undefined })).toBe('Title:\nT\n\nThumbnail text:\nREMEMBER ME?' + settings);
+    const settings = '\n\n## Video language\nen-US\n\n## Made for kids\nNo\n\n## Altered content\nNo\n';
+    expect(draftText(PICK)).toBe('## Title\nT\n\n## Description\nAbout it.\n\n## Hashtags\n#SDAM #Memory\n\n## Tags\na, b\n\n## Pinned Comment\nQuestion?\n\n## Thumbnail text\nREMEMBER ME?' + settings);
+    expect(draftText({ ...PICK, description: undefined, tags: undefined, pinnedComment: undefined })).toBe('## Title\nT\n\n## Thumbnail text\nREMEMBER ME?' + settings);
   });
   it('lists all draft images newest first across pairs, carrying each image’s pair', () => {
     const otherPick = { ...PICK, title: 'Other' };

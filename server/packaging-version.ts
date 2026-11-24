@@ -75,7 +75,7 @@ export function buildDraftYoutubeMd(pick: BriefPick | null): string {
     ['Altered content', 'No'],
     ['Pinned Comment', pick?.pinnedComment ?? ''],
   ];
-  return `# YouTube Info\n\n${fields.map(([label, value]) => `${label}:\n${value}`).join('\n\n')}\n`;
+  return `# YouTube Info\n\n${fields.map(([label, value]) => `## ${label}\n${value}`).join('\n\n')}\n`;
 }
 
 /** Saves one generated thumbnail round as D01, D02... with a full YouTube.md and Notes.md. */
@@ -100,7 +100,7 @@ export function createFirstPackagingVersion(piece: string): { name: string; path
   fs.mkdirSync(parent, { recursive: true });
   if (fs.lstatSync(parent).isSymbolicLink() || fs.readdirSync(parent).some(n => /^(?:V\d+|Legacy)/i.test(n))) throw new Error('A packaging version already exists or the folder is a shortcut.');
   const folder = writable(safeResolve('projects', path.join(piece, 'Packaging', 'V01'))); fs.mkdirSync(folder);
-  fs.writeFileSync(path.join(folder, 'YouTube.md'), '# YouTube Info\n\nTitle:\n\nDescription:\n\nTags:\n\nPinned Comment:\n', { flag: 'wx' });
+  fs.writeFileSync(path.join(folder, 'YouTube.md'), '# YouTube Info\n\n## Title\n\n## Description\n\n## Tags\n\n## Pinned Comment\n', { flag: 'wx' });
   return { name: 'V01', path: path.relative(safeResolve('projects', ''), folder).split(path.sep).join('/') };
 }
 

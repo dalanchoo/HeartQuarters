@@ -22,23 +22,32 @@ import { AI_NAMES } from './ai.js';
 export type Enlarge = (source: string, out: string, width: number, height: number) => Promise<void>;
 export type Measure = (file: string) => Promise<{ width: number; height: number } | null>;
 
+const HEADING_LABEL_RE = /^##\s+([A-Z][A-Za-z ]{0,30}):?\s*$/;
 const LABEL_RE = /^[A-Z][A-Za-z ]{0,30}:\s*$/;
 /** Older files wrote some labels in capitals without the colon ("PINNED COMMENT"); only known field names count. */
 const OLD_LABELS = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'thumbnail idea', 'video language', 'made for kids', 'altered content', 'playlists']);
-const isLabel = (line: string) => LABEL_RE.test(line) || OLD_LABELS.has(line.replace(/:$/, '').toLowerCase()) && /^[A-Z][A-Z ]+:?$/.test(line);
+const isLabel = (line: string) => HEADING_LABEL_RE.test(line) || LABEL_RE.test(line) || OLD_LABELS.has(line.replace(/:$/, '').toLowerCase()) && /^[A-Z][A-Z ]+:?$/.test(line);
+const matchesField = (line: string, label: string) => {
+  const lower = label.toLowerCase();
+  const heading = HEADING_LABEL_RE.exec(line);
+  return heading ? heading[1].toLowerCase() === lower : line.toLowerCase() === `${lower}:`;
+};
 const ROUND_RE = /^(\d+)\.(png|jpe?g|webp)$/i;
 
 /**
- * Sets one field of a labelled file like YouTube.md ("Title:" on its own line, the value below it) to a one-line value,
- * replacing what was there up to the next blank line or label. A missing field is added at the end.
+ * Sets one field of a Markdown/labelled file like YouTube.md ("## Title" or legacy "Title:" on its own line, the value
+ * below it) to a one-line value, replacing what was there up to the next blank line or label. A missing field is added
+ * at the end.
  */
 export function setField(text: string, label: string, value: string): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text.split(/\r?\n/);
-  const at = lines.findIndex((l) => l.trim().toLowerCase() === `${label.toLowerCase()}:`);
+  const at = lines.findIndex((l) => matchesField(l.trim(), label));
   if (at < 0) {
+    const trimmed = lines.map((l) => l.trim());
+    const useColon = !trimmed.some((l) => HEADING_LABEL_RE.test(l)) && trimmed.some((l) => LABEL_RE.test(l));
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-    return [...lines, '', `${label}:`, value].join(eol) + eol;
+    return [...lines, '', useColon ? `${label}:` : `## ${label}`, value].join(eol) + eol;
   }
   let end = at + 1;
   while (end < lines.length && lines[end].trim() && !isLabel(lines[end].trim())) end++;
@@ -49,7 +58,7 @@ export function setField(text: string, label: string, value: string): string {
 /** One field's current one-line value, or '' when it's missing or empty. */
 export function getField(text: string, label: string): string {
   const lines = text.split(/\r?\n/);
-  const at = lines.findIndex((l) => l.trim().toLowerCase() === `${label.toLowerCase()}:`);
+  const at = lines.findIndex((l) => matchesField(l.trim(), label));
   const next = at >= 0 ? lines[at + 1]?.trim() ?? '' : '';
   return next && !isLabel(next) ? next : '';
 }
@@ -202,7 +211,7 @@ export async function useDraft(piece: string, image: string, version: string, pa
     if (pick) {
       const ytName = fs.readdirSync(dir).find((f) => f.toLowerCase() === 'youtube.md') ?? 'YouTube.md';
       const ytFile = writable(path.join(dir, ytName));
-      let text = fs.existsSync(ytFile) ? readText(ytFile) : '# YouTube Info\n\nTitle:\n';
+      let text = fs.existsSync(ytFile) ? readText(ytFile) : '# YouTube Info\n\n## Title\n';
       if (parts.title) {
         const before = getField(text, 'Title');
         text = setField(text, 'Title', pick.title);

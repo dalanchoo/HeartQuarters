@@ -1,4 +1,4 @@
-import { parseFields, setFieldValue, sortTags } from './packaging';
+import { formatFieldLabel, parseFields, setFieldValue, sortTags } from './packaging';
 import type { YoutubeVideoSettings } from '../../server/youtube-video';
 import { VIDEO_LANGUAGES } from '../../server/youtube-constants';
 
@@ -61,7 +61,7 @@ function setPlain(text: string, label: string, value: string): string {
   if (matches.length > 1) throw new Error(`The local file has more than one ${label} field. Resolve that before copying.`);
   if (matches.length) return setFieldValue(text, matches[0].i, value);
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  return `${text.replace(/(?:\r?\n)*$/, '')}${eol}${eol}${label}:${eol}${value}${eol}`;
+  return `${text.replace(/(?:\r?\n)*$/, '')}${eol}${eol}${formatFieldLabel(text, label)}${eol}${value}${eol}`;
 }
 
 export function youtubeValues(video: YoutubeVideoSettings): Record<SyncField, string | null> {

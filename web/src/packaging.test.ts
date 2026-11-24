@@ -1,6 +1,6 @@
 // Splitting YouTube.md and similar files into fields for the Copy buttons.
 import { describe, expect, it } from 'vitest';
-import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, missingMetadata, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags, undoFieldEdit } from './packaging';
+import { addThumbnailPlanningFields, inPlatformOrder, isBlankPackaging, migratePackagingText, missingMetadata, parseFields, readAiLines, setAiLines, setFieldValue, sortTags, sortYoutubeTags, undoFieldEdit } from './packaging';
 
 describe('undoing an individual field edit', () => {
   it('restores the saved field while keeping other edits', () => {
@@ -269,5 +269,37 @@ describe('a pinned comment with its own label-like lines', () => {
     const fields = parseFields(text)!;
     expect(fields.map(f => f.label)).toEqual(['Title', 'Pinned Comment', 'Video language']);
     expect(fields[1].value).toBe('Hello\n\nRegister here:\nhttps://example.com');
+  });
+});
+
+describe('Markdown ## field headings', () => {
+  const mdFile = '# YouTube Info\n\n## Title\nOld title\n\n## Description\nHook.\n\nFull video:\nhttps://a\n\n## Tags\nzebra, Apple\n\n## Pinned Comment\nA question?\n';
+
+  it('parses, edits, sorts tags, detects blank, and manages AI lines for ## headings', () => {
+    expect(parseFields(mdFile)).toEqual([
+      { label: 'Title', value: 'Old title' },
+      { label: 'Description', value: 'Hook.\n\nFull video:\nhttps://a' },
+      { label: 'Tags', value: 'zebra, Apple' },
+      { label: 'Pinned Comment', value: 'A question?' },
+    ]);
+    expect(setFieldValue(mdFile, 0, 'New title')).toBe(mdFile.replace('Old title', 'New title'));
+    expect(sortYoutubeTags(mdFile)).toBe(mdFile.replace('zebra, Apple', 'Apple, zebra'));
+    expect(isBlankPackaging('# YouTube Info\n\n## Title\n\n## Description\n\n#tags\n\n## Tags\n\n## Pinned Comment')).toBe(true);
+    expect(isBlankPackaging(mdFile)).toBe(false);
+    const withAi = setAiLines(mdFile, { visuals: false, music: true });
+    expect(withAi).toContain('The music is AI-generated.');
+    expect(readAiLines(withAi)).toEqual({ visuals: false, music: true });
+  });
+
+  it('adds missing thumbnail planning fields using ## headings for Markdown or empty files', () => {
+    expect(addThumbnailPlanningFields('# YouTube Info\n\n## Title\nA\n')).toBe('# YouTube Info\n\n## Title\nA\n\n## Thumbnail text\n\n## Thumbnail idea\n');
+    expect(addThumbnailPlanningFields('')).toBe('## Thumbnail text\n\n## Thumbnail idea\n');
+  });
+
+  it('migrates legacy Title: and PINNED COMMENT files to ## headings without altering description sub-labels, CRLF, or BOM', () => {
+    const legacy = '\uFEFF# YouTube Info\r\n\r\nTitle:\r\nMy Title\r\n\r\nDescription:\r\nHook.\r\n\r\nFull video:\r\nhttps://a\r\n\r\nPINNED COMMENT\r\nQuestion?\r\n';
+    expect(migratePackagingText(legacy)).toBe('\uFEFF# YouTube Info\r\n\r\n## Title\r\nMy Title\r\n\r\n## Description\r\nHook.\r\n\r\nFull video:\r\nhttps://a\r\n\r\n## Pinned Comment\r\nQuestion?\r\n');
+    expect(migratePackagingText(mdFile)).toBe(mdFile);
+    expect(migratePackagingText('Just plain prose without fields.')).toBe('Just plain prose without fields.');
   });
 });

@@ -25,7 +25,7 @@ export function draftText(pick: BriefPick): string {
     { label: 'Made for kids', value: 'No' },
     { label: 'Altered content', value: 'No' },
   ].filter((f): f is { label: string; value: string } => !!f.value);
-  return fields.map((f) => `${f.label}:\n${f.value}`).join('\n\n') + '\n';
+  return fields.map((f) => `## ${f.label}\n${f.value}`).join('\n\n') + '\n';
 }
 
 export type DraftImage = FileRef & { label: string; pick: BriefPick | null };

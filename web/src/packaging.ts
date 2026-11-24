@@ -1,9 +1,9 @@
-// Packaging files (YouTube.md etc.) are written as labelled blocks:
+// Packaging files (YouTube.md etc.) are written as Markdown sections (or legacy labelled blocks):
 //
-//   Title:
+//   ## Title
 //   When Should You Tell Someone You Have SDAM?
 //
-//   Description:
+//   ## Description
 //   ...
 //
 // parseFields splits them into fields so each one gets its own Copy button.
@@ -40,10 +40,19 @@ export function inPlatformOrder<T extends { name: string }>(files: T[]): T[] {
   return [...files].sort((a, b) => platformRank(a.name) - platformRank(b.name));
 }
 
+const HEADING_LABEL_RE = /^##\s+([A-Z][A-Za-z ]{0,30}):?\s*$/;
 const LABEL_RE = /^([A-Z][A-Za-z ]{0,30}):\s*$/;
 
 // A description has lines of its own that look like labels ("Full video:", above a link). Only these end it.
 const AFTER_DESCRIPTION = new Set(['title', 'tags', 'pinned comment', 'comment', 'hashtags', 'thumbnail text', 'thumbnail idea', 'thumbnail prompt', 'accessibility', 'purpose', 'video language', 'visibility', 'made for kids', 'altered content', 'playlists']);
+
+/** Format a new field heading as Markdown (`## Label`), or `Label:` when adding to an un-migrated colon-label file. */
+export function formatFieldLabel(text: string, label: string): string {
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const hasHeading = lines.some((line) => HEADING_LABEL_RE.test(line));
+  const hasColon = lines.some((line) => LABEL_RE.test(line));
+  return !hasHeading && hasColon ? `${label}:` : `## ${label}`;
+}
 
 /** Add missing planning fields, leaving the existing document and its values alone. */
 export function addThumbnailPlanningFields(text: string): string {
@@ -55,7 +64,7 @@ export function addThumbnailPlanningFields(text: string): string {
   if (!missing.length) return text;
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const prefix = text && !text.endsWith('\n') ? `${eol}${eol}` : text ? eol : '';
-  return text + prefix + missing.map((label) => `${label}:${eol}`).join(eol);
+  return text + prefix + missing.map((label) => `${formatFieldLabel(text, label)}${eol}`).join(eol);
 }
 
 /** True for a file nobody has filled in: nothing but headings, labels and the template's "#tags". */
@@ -78,12 +87,14 @@ export function parseFields(text: string): Field[] | null {
 }
 
 /**
- * A line's label, or null if it isn't one. A label is "Title:" on its own line. Older files also wrote some labels in
- * capitals without the colon ("PINNED COMMENT"); those count when they're one of the known field names, and are given
- * the usual spelling ("Pinned Comment").
+ * A line's label, or null if it isn't one. A label is "## Title" (Markdown) or legacy "Title:" on its own line.
+ * Older files also wrote some labels in capitals without the colon ("PINNED COMMENT"); those count when they're one
+ * of the known field names, and are given the usual spelling ("Pinned Comment").
  */
 export function labelOf(line: string): string | null {
   const trimmed = line.trim();
+  const heading = HEADING_LABEL_RE.exec(trimmed);
+  if (heading) return heading[1];
   const match = LABEL_RE.exec(trimmed);
   if (match) return match[1];
   const old = /^([A-Z][A-Z ]{2,30}):?$/.exec(trimmed);
@@ -104,6 +115,24 @@ function fieldSpans(lines: string[]): { label: string; from: number; to: number 
     spans.push({ label, from: i + 1, to: lines.length });
   });
   return spans;
+}
+
+/**
+ * Convert legacy labelled packaging text ("Title:", "PINNED COMMENT") to standard Markdown "## Field" headings.
+ * Leaves non-packaging prose, descriptions containing "Full video:" lines, line endings, and BOM intact.
+ */
+export function migratePackagingText(text: string): string {
+  const bom = text.startsWith('\uFEFF') ? '\uFEFF' : '';
+  const body = bom ? text.slice(1) : text;
+  const before = parseFields(body);
+  if (!before) return text;
+  const eol = body.includes('\r\n') ? '\r\n' : '\n';
+  const lines = body.split(/\r?\n/);
+  for (const span of fieldSpans(lines)) lines[span.from - 1] = `## ${span.label}`;
+  const next = bom + lines.join(eol);
+  const after = parseFields(bom ? next.slice(1) : next);
+  if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('Migration changed parsed field values.');
+  return next;
 }
 
 /**
@@ -155,7 +184,7 @@ export interface AiLines {
 
 /** Where the description's lines are: from just after its label, up to the next field or the end of the file. */
 function descriptionLines(lines: string[]): { from: number; to: number } | null {
-  const label = lines.findIndex((l) => /^description:\s*$/i.test(l.trim()));
+  const label = lines.findIndex((l) => labelOf(l)?.toLowerCase() === 'description');
   if (label < 0) return null;
   const next = lines.findIndex((l, i) => {
     const found = i > label ? labelOf(l) : null;
