@@ -175,16 +175,47 @@ export interface TimedWord {
   word: string;
 }
 
+const SRT_TIME = /(\d+):(\d\d):(\d\d)[,.](\d{1,3})\s*-->\s*(\d+):(\d\d):(\d\d)[,.](\d{1,3})/;
+const srtSeconds = (h: string, m: string, s: string, ms: string) => +h * 3600 + +m * 60 + +s + +ms.padEnd(3, '0') / 1000;
+
+/**
+ * Turns an .srt file into word-by-word timings by spreading each caption's duration across its words
+ * in proportion to word length. Used when no exact .words.json transcript exists.
+ */
+function srtToTimedWords(srt: string): TimedWord[] {
+  const lines = srt.replace(/^﻿/, '').split(/\r?\n/);
+  const words: TimedWord[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = SRT_TIME.exec(lines[i]);
+    if (!m) continue;
+    const start = srtSeconds(m[1], m[2], m[3], m[4]);
+    const end = Math.max(start, srtSeconds(m[5], m[6], m[7], m[8]));
+    const cueLines: string[] = [];
+    for (i++; i < lines.length && lines[i].trim(); i++) cueLines.push(lines[i].trim());
+    const tokens = cueLines.join(' ').split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) continue;
+    const totalWeight = tokens.reduce((sum, w) => sum + Math.max(1, w.length), 0);
+    let cursor = start;
+    for (let j = 0; j < tokens.length; j++) {
+      const wordEnd = j === tokens.length - 1 ? end : cursor + ((end - start) * Math.max(1, tokens[j].length)) / totalWeight;
+      words.push({ start: cursor, end: wordEnd, word: tokens[j] });
+      cursor = wordEnd;
+    }
+  }
+  return words;
+}
+
 /**
  * The longform's word-by-word transcript, for showing what each clip says. The final video's is in Subtitles, named
  * "NNN-captions.words.json"; older episodes kept it elsewhere as "... - edit" or "... - final". Otherwise the newest.
+ * If no .words.json exists, falls back to an .srt in Subtitles with estimated per-word timings.
  * The takes' own transcripts aren't on the longform's timeline.
  */
 export function readTranscript(video: string): { file: string; words: TimedWord[] } | null {
   const longform = safeResolve('projects', path.join(video, 'Longform'));
   const found: { name: string; full: string; time: number; rank: number }[] = [];
   // Subtitles first: that's where the final video's transcript lives now. The others hold older episodes' and work in progress.
-  const dirs = ['Subtitles', path.join('Intermediate', 'Transcript'), path.join('Claude', 'transcript')];
+  const dirs = ['Subtitles', path.join('Intermediate', 'Transcript'), path.join('AI', 'transcript')];
   for (const dir of dirs) {
     let names: string[] = [];
     try {
@@ -206,18 +237,40 @@ export function readTranscript(video: string): { file: string; words: TimedWord[
   }
   const finished = (name: string) => (/(-captions| - (edit|final))\.words\.json$/i.test(name) ? 1 : 0);
   found.sort((a, b) => finished(b.name) - finished(a.name) || a.rank - b.rank || b.time - a.time);
-  if (!found[0]) return null;
-  let raw: { words?: TimedWord[]; segments?: { words?: TimedWord[] }[] };
-  try {
-    raw = JSON.parse(readText(found[0].full).replace(/^﻿/, ''));
-  } catch (e) {
-    throw new Error(`The transcript ${found[0].name} couldn't be read: ${e instanceof Error ? e.message : String(e)}`);
+  if (found[0]) {
+    let raw: { words?: TimedWord[]; segments?: { words?: TimedWord[] }[] };
+    try {
+      raw = JSON.parse(readText(found[0].full).replace(/^﻿/, ''));
+    } catch (e) {
+      throw new Error(`The transcript ${found[0].name} couldn't be read: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const all = raw.segments ? raw.segments.flatMap((s) => s.words ?? []) : (raw.words ?? []);
+    return {
+      file: found[0].name,
+      words: all.map((w) => ({ start: w.start, end: w.end, word: w.word.trim() })),
+    };
   }
-  const all = raw.segments ? raw.segments.flatMap((s) => s.words ?? []) : (raw.words ?? []);
-  return {
-    file: found[0].name,
-    words: all.map((w) => ({ start: w.start, end: w.end, word: w.word.trim() })),
-  };
+
+  // Older episodes only have an .srt in Subtitles (no .words.json).
+  const srtFound: { name: string; full: string; time: number }[] = [];
+  try {
+    for (const name of fs.readdirSync(path.join(longform, 'Subtitles'))) {
+      if (!/\.srt$/i.test(name) || /^take\b/i.test(name)) continue;
+      try {
+        const full = readable(path.join(longform, 'Subtitles', name));
+        srtFound.push({ name, full, time: fs.statSync(full).mtimeMs });
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return null;
+  }
+  const isCaptionsSrt = (name: string) => (/-captions\.srt$/i.test(name) ? 1 : 0);
+  srtFound.sort((a, b) => isCaptionsSrt(b.name) - isCaptionsSrt(a.name) || b.time - a.time);
+  if (!srtFound[0]) return null;
+  const words = srtToTimedWords(readText(srtFound[0].full));
+  return words.length > 0 ? { file: srtFound[0].name, words } : null;
 }
 
 /** The newest export of the longform, for previewing clips. Relative to Video Projects, like a project's other files. */

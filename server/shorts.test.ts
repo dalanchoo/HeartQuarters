@@ -456,9 +456,9 @@ describe('the transcript of a clip', () => {
     expect(readTranscript(VIDEO)).toBeNull();
     write('Intermediate/Transcript', 'Take 1.words.json', words('take'));
     expect(readTranscript(VIDEO)).toBeNull();
-    write('Claude/transcript', 'Video.words.json', words('rough'));
+    write('AI/transcript', 'Video.words.json', words('rough'));
     expect(readTranscript(VIDEO)!.words[0].word).toBe('rough');
-    write('Claude/transcript', 'Video - final.words.json', words('finished'));
+    write('AI/transcript', 'Video - final.words.json', words('finished'));
     const found = readTranscript(VIDEO)!;
     expect(found.file).toBe('Video - final.words.json');
     expect(found.words).toEqual([{ start: 1, end: 2, word: 'finished' }]);
@@ -471,7 +471,7 @@ describe('the transcript of a clip', () => {
     fs.mkdirSync(path.join(tmp, 'Videos', VIDEO, 'Longform'), { recursive: true });
     fs.symlinkSync(away, path.join(tmp, 'Videos', VIDEO, 'Longform', 'Subtitles'), 'junction');
     expect(readTranscript(VIDEO)).toBeNull();
-    write('Claude/transcript', 'Video.words.json', words('ours'));
+    write('AI/transcript', 'Video.words.json', words('ours'));
     expect(readTranscript(VIDEO)!.words[0].word).toBe('ours');
   });
 
@@ -484,7 +484,7 @@ describe('the transcript of a clip', () => {
 
   it("prefers the final video's transcript in Subtitles over older places", () => {
     write('Intermediate/Transcript', 'Video - edit.words.json', words('older place'));
-    write('Claude/transcript', 'Video - final.words.json', words('work in progress'));
+    write('AI/transcript', 'Video - final.words.json', words('work in progress'));
     expect(readTranscript(VIDEO)!.words[0].word).toBe('older place');
     write('Subtitles', '777-captions.words.json', words('final video'));
     const found = readTranscript(VIDEO)!;
@@ -493,8 +493,36 @@ describe('the transcript of a clip', () => {
   });
 
   it('reads a flat list of words too', () => {
-    write('Claude/transcript', 'Flat.words.json', { words: [{ start: 0, end: 1, word: 'flat' }] });
+    write('AI/transcript', 'Flat.words.json', { words: [{ start: 0, end: 1, word: 'flat' }] });
     expect(readTranscript(VIDEO)!.words[0].word).toBe('flat');
+  });
+
+  it('falls back to an .srt in Subtitles when there is no .words.json', () => {
+    const subs = path.join(tmp, 'Videos', VIDEO, 'Longform', 'Subtitles');
+    fs.mkdirSync(subs, { recursive: true });
+    fs.writeFileSync(
+      path.join(subs, '021-captions.srt'),
+      '1\n00:00:01,000 --> 00:00:04,000\nHi there\n\n2\n00:00:05,000 --> 00:00:06,000\nDone\n',
+    );
+    const found = readTranscript(VIDEO)!;
+    expect(found.file).toBe('021-captions.srt');
+    expect(found.words.map((w) => w.word)).toEqual(['Hi', 'there', 'Done']);
+    expect(found.words[0].start).toBe(1);
+    expect(found.words[1].end).toBe(4);
+    expect(found.words[2]).toEqual({ start: 5, end: 6, word: 'Done' });
+
+    // A real .words.json still wins over .srt.
+    write('Subtitles', '021-captions.words.json', words('exact'));
+    expect(readTranscript(VIDEO)!.file).toBe('021-captions.words.json');
+  });
+
+  it('never reads an .srt through a Subtitles junction that points outside', () => {
+    const away = path.join(tmp, 'OutsideSrt');
+    fs.mkdirSync(away);
+    fs.writeFileSync(path.join(away, '021-captions.srt'), '1\n00:00:00,000 --> 00:00:01,000\nsecret\n');
+    fs.mkdirSync(path.join(tmp, 'Videos', VIDEO, 'Longform'), { recursive: true });
+    fs.symlinkSync(away, path.join(tmp, 'Videos', VIDEO, 'Longform', 'Subtitles'), 'junction');
+    expect(readTranscript(VIDEO)).toBeNull();
   });
 });
 
