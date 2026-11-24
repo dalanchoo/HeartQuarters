@@ -111,6 +111,7 @@ describe('idea brainstorm', () => {
     const [idea] = addIdea('Junction check');
     const elsewhere = path.join(root, 'Elsewhere');
     fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.dirname(path.join(config.videoProjectsDir, BRAINSTORMS_DIR)), { recursive: true });
     fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, BRAINSTORMS_DIR), 'junction');
     expect(() => readBrainstorm(idea.id)).toThrow();
     await expect(sendBrainstormMessage(idea.id, 'claude', 'Hello')).rejects.toThrow();

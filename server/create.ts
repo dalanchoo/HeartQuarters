@@ -15,6 +15,8 @@ import { readProject } from './projects.js';
 
 export type NewKind = 'top' | 'part' | 'short' | 'standalone';
 
+export const TEMPLATES_DIR = '_HeartQuarters/Templates';
+
 export const TEMPLATES: Record<NewKind, string> = {
   top: '--- LONGFORM TEMPLATE',
   part: '--- LONGFORM TEMPLATE',
@@ -122,9 +124,9 @@ function makeNewFolder(dir: string) {
 }
 
 function templateDir(kind: NewKind): string {
-  const template = path.join(config.videoProjectsDir, TEMPLATES[kind]);
+  const template = path.join(config.videoProjectsDir, TEMPLATES_DIR, TEMPLATES[kind]);
   if (!fs.statSync(template, { throwIfNoEntry: false })?.isDirectory()) {
-    throw new Error(`The template folder "${TEMPLATES[kind]}" is missing from Video Projects.`);
+    throw new Error(`The template folder "${TEMPLATES[kind]}" is missing from Video Projects\\_HeartQuarters\\Templates.`);
   }
   return template;
 }

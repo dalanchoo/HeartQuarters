@@ -6,8 +6,8 @@ import path from 'node:path';
 import { config, isInside, safeResolve } from './config.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 
-export const IDEAS_FILE = 'Video Ideas.json';
-export const IDEA_RESOURCES_DIR = '_IdeaResources';
+export const IDEAS_FILE = '_HeartQuarters/Ideas/Video Ideas.json';
+export const IDEA_RESOURCES_DIR = '_HeartQuarters/Ideas/Resources';
 /** Where an idea is on its way to becoming a video. */
 export const IDEA_STATUSES = ['thinking', 'brainstorming', 'researching', 'packaged', 'filming', 'made', 'dropped'] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
@@ -82,6 +82,7 @@ function save(ideas: VideoIdea[], original: string | null) {
   const file = location();
   const now = fs.existsSync(file) ? readText(file) : null;
   if (now !== original) throw new Error('The ideas list changed elsewhere. Reload it and try again; nothing was changed.');
+  makeFolder(path.dirname(file));
   writeFile(file, JSON.stringify({ version: 1, ideas }, null, 2) + '\n');
 }
 

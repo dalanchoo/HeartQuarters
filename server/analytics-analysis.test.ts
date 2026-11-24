@@ -18,12 +18,12 @@ vi.mock('./video-links.js', () => ({
 }));
 
 let root: string; let previous: string;
-beforeEach(() => { root = makeTree({ 'Video/Longform/Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', periods: [] }), 'Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', reports: [] }) }); previous = config.videoProjectsDir; config.videoProjectsDir = root; });
+beforeEach(() => { root = makeTree({ 'Video/Longform/Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', periods: [] }), '_HeartQuarters/Analytics/2026-11-18/Stats.json': JSON.stringify({ downloadedAt: '2026-11-18', reports: [] }) }); previous = config.videoProjectsDir; config.videoProjectsDir = root; });
 afterEach(() => { config.videoProjectsDir = previous; removeTree(root); });
 
 describe('analytics analysis', () => {
   it('uses the matching Channel catalog to ask every reviewer for ranked next steps', async () => {
-    const stats = path.join(root, 'Analytics/2026-11-18/Stats.json');
+    const stats = path.join(root, '_HeartQuarters/Analytics/2026-11-18/Stats.json');
     fs.writeFileSync(stats, JSON.stringify({ downloadedAt: '2026-11-18', channel: { id: 'own' }, reports: [] }));
     vi.mocked(readChannelVideos).mockReturnValueOnce({
       channel: { id: 'own', title: 'Heart Mind Fusion' }, updatedAt: '2026-11-23', trafficUpdatedAt: '2026-11-21',
@@ -52,7 +52,7 @@ describe('analytics analysis', () => {
       expect(context).not.toContain('/Longform');
     }
     for (const file of ['Claude.md', 'ChatGPT.md', 'Gemini.md', 'Recommendations.md', 'Summary.md']) {
-      expect(fs.readFileSync(path.join(root, 'Analytics/2026-11-18/Analysis', job.id, file), 'utf8'))
+      expect(fs.readFileSync(path.join(root, '_HeartQuarters/Analytics/2026-11-18/Analysis', job.id, file), 'utf8'))
         .toBe('Repackage 022 - Worth Telling Them.\n');
     }
   });
@@ -60,7 +60,7 @@ describe('analytics analysis', () => {
   it('gives channel synthesis and summary the shortlisted video’s retention, transcript and packaging', async () => {
     const piece = '022 - Worth Telling Them/Longform';
     const videoId = 'abcdefghijk';
-    const stats = path.join(root, 'Analytics/2026-11-18/Stats.json');
+    const stats = path.join(root, '_HeartQuarters/Analytics/2026-11-18/Stats.json');
     fs.writeFileSync(stats, JSON.stringify({ downloadedAt: '2026-11-18', channel: { id: 'own' }, reports: [] }));
     const catalog = {
       channel: { id: 'own', title: 'Heart Mind Fusion' }, updatedAt: '2026-11-23', videos: [{
@@ -112,7 +112,7 @@ describe('analytics analysis', () => {
     const report = 'Repackage `abcdefghijk`. Compare abcdefghijk and unknownguid. [`zyxwvutsrqp`](https://youtu.be/zyxwvutsrqp).';
     const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async () => 'Earlier review');
     await finished;
-    const file = path.join(root, 'Analytics/2026-11-18/Analysis', job.id, 'Summary.md');
+    const file = path.join(root, '_HeartQuarters/Analytics/2026-11-18/Analysis', job.id, 'Summary.md');
     fs.writeFileSync(file, report);
     expect(analyticsAnalysis('', '2026-11-18')[0].summary)
       .toBe("Repackage 022 - Worth Telling Them. Compare 022 - Worth Telling Them and unknownguid. [015A\\_S05 - You Don't Know Why](https://youtu.be/zyxwvutsrqp).");
@@ -140,7 +140,7 @@ describe('analytics analysis', () => {
     await finished;
     expect(calls).toHaveLength(3); expect(job.state).toBe('failed'); expect(job.models.gemini.error).toBe('Unavailable');
     expect(analyticsAnalysis('', '2026-11-18')[0]).toMatchObject({ claude: 'claude\n', codex: 'codex\n', gemini: null, recommendations: null, failure: 'Independent review (Gemini) failed.\n' });
-    expect(fs.readFileSync(path.join(root, 'Analytics/2026-11-18/Analysis', job.id, 'Failure.txt'), 'utf8'))
+    expect(fs.readFileSync(path.join(root, '_HeartQuarters/Analytics/2026-11-18/Analysis', job.id, 'Failure.txt'), 'utf8'))
       .toBe('Independent review (Gemini) failed.\n');
     const { finished: summary } = startAnalyticsSummary('', '2026-11-18', job.id, async () => 'A short summary');
     await summary;

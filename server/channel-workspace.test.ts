@@ -18,7 +18,7 @@ let root: string;
 let previous: string;
 beforeEach(() => {
   root = makeTree({
-    [`Analytics/${date}/Stats.json`]: JSON.stringify({
+    [`_HeartQuarters/Analytics/${date}/Stats.json`]: JSON.stringify({
       channel, downloadedAt: catalog.updatedAt,
       reports: [{ name: 'Last 28 Days', start: '2026-10-27', end: date, report: { columns: ['views', 'estimatedMinutesWatched'], rows: [[100, 60]] } }],
       reach: { status: 'ready', days: [

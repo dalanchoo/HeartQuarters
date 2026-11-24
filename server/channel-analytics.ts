@@ -60,12 +60,12 @@ export async function collectChannelAnalytics(channel: ChannelSnapshot['channel'
 }
 
 export function saveChannelAnalytics(snapshot: ChannelSnapshot): string {
-  const root = safeResolve('projects', 'Analytics');
+  const root = safeResolve('projects', '_HeartQuarters/Analytics');
   if (fs.existsSync(root) && !fs.lstatSync(root).isDirectory()) throw new Error('Analytics must be a real folder.');
   fs.mkdirSync(root, { recursive: true });
   const day = pacificDate(new Date(snapshot.downloadedAt));
   for (let n = 1; ; n++) {
-    const relative = path.join('Analytics', `${day}${n === 1 ? '' : ` (${n})`}`);
+    const relative = path.join('_HeartQuarters', 'Analytics', `${day}${n === 1 ? '' : ` (${n})`}`);
     const folder = safeResolve('projects', relative);
     try { fs.mkdirSync(folder); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue; throw error; }
     const file = safeResolve('projects', path.join(relative, 'Stats.json'));

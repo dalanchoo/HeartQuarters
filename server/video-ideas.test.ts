@@ -135,6 +135,7 @@ describe('video ideas', () => {
     expect(() => addAttachment(idea.id, 'empty.pdf', Buffer.alloc(0))).toThrow('empty');
 
     const elsewhere = path.join(root, 'Elsewhere'); fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.dirname(path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR)), { recursive: true });
     fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR), 'junction');
     expect(() => addAttachment(idea.id, 'guide.pdf', Buffer.from('%PDF'))).toThrow();
     expect(fs.readdirSync(elsewhere)).toEqual([]);
@@ -142,6 +143,7 @@ describe('video ideas', () => {
 
   it('refuses to write through a shortcut or junction', () => {
     const elsewhere = path.join(root, 'Elsewhere'); fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.dirname(file()), { recursive: true });
     fs.symlinkSync(elsewhere, file(), 'junction');
     expect(() => addIdea('Sneaky')).toThrow();
     expect(() => readIdeas()).toThrow();

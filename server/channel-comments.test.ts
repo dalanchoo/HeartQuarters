@@ -219,6 +219,7 @@ describe('channel comments sync', () => {
 
     const elsewhere = path.join(root, 'Elsewhere');
     fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.dirname(path.join(config.videoProjectsDir, COMMENTS_DIR)), { recursive: true });
     fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, COMMENTS_DIR), 'junction');
     expect(() => listStoredComments()).toThrow();
     await expect(syncVideoComments(VIDEO_A, { token: 'tok' })).rejects.toThrow();

@@ -1,4 +1,4 @@
-// Downloaded YouTube comments per video, saved in Drive under Video Projects\_Comments\<videoId>.json.
+// Downloaded YouTube comments per video, saved in Drive under Video Projects\_HeartQuarters\Comments\<videoId>.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import { readChannelVideos, refreshChannelVideos } from './channel-videos.js';
@@ -7,7 +7,7 @@ import { makeFolder, readable, readText, writable, writeFile } from './safe-file
 import { youtubeAccessToken } from './youtube-auth.js';
 import { QUOTA_USED_UP, youtubeFetch } from './youtube-quota.js';
 
-export const COMMENTS_DIR = '_Comments';
+export const COMMENTS_DIR = '_HeartQuarters/Comments';
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 const MAX_PAGES = 10;
 const SYNC_BATCH_SIZE = 5;

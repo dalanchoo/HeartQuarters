@@ -28,7 +28,7 @@ describe('channel analytics', () => {
   it('reports a failed request without saving incomplete results', async () => {
     await expect(collectChannelAnalytics(channel, 'token', now, async () => new Response('', { status: 403 }))).rejects.toThrow('Lifetime (403)');
     expect(youtubeQuota().analyticsUsed).toBe(1);
-    expect(fs.existsSync(path.join(root, 'Analytics'))).toBe(false);
+    expect(fs.existsSync(path.join(root, '_HeartQuarters/Analytics'))).toBe(false);
   });
   it('keeps the main reports when an optional breakdown is unavailable', async () => {
     const snapshot = await collectChannelAnalytics(channel, 'token', now, async url => new URL(url).searchParams.get('dimensions') === 'country' ? new Response('', { status: 403 }) : Response.json({ rows: [[1]] }));
@@ -38,7 +38,8 @@ describe('channel analytics', () => {
   it('refuses a linked analytics folder pointing outside the projects root', () => {
     const outside = makeTree({});
     try {
-      fs.symlinkSync(outside, path.join(root, 'Analytics'), 'junction');
+      fs.mkdirSync(path.join(root, '_HeartQuarters'), { recursive: true });
+      fs.symlinkSync(outside, path.join(root, '_HeartQuarters/Analytics'), 'junction');
       expect(() => saveChannelAnalytics({ channel, downloadedAt: now.toISOString(), reports: [], notes: [] })).toThrow();
     } finally { removeTree(outside); }
   });

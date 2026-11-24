@@ -45,8 +45,8 @@ beforeEach(() => {
   tmp = makeTree({
     [`Videos/${VIDEO}/Longform/Raw/`]: '',
     [`Videos/${NUMBERED}/Longform/Raw/`]: '',
-    'Videos/--- SHORTS TEMPLATE/Exports/': '',
-    'Videos/--- SHORTS TEMPLATE/XXX - Topic - Script.docx': 'script',
+    'Videos/_HeartQuarters/Templates/--- SHORTS TEMPLATE/Exports/': '',
+    'Videos/_HeartQuarters/Templates/--- SHORTS TEMPLATE/XXX - Topic - Script.docx': 'script',
     [`Drafts/${NUMBERED}/draft_meta_info.json`]: JSON.stringify({
       draft_name: '',
       draft_fold_path: '',

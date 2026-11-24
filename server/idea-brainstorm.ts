@@ -1,4 +1,4 @@
-// Brainstorming conversations for Video Ideas, stored in Drive under Video Projects\_Brainstorms\<idea-id>.json.
+// Brainstorming conversations for Video Ideas, stored in Drive under Video Projects\_HeartQuarters\Brainstorms\<idea-id>.json.
 // Any of the three AIs (Claude, ChatGPT, Gemini) can be called on any turn and receives the full idea + thread context.
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import { askReadOnlyImage } from './expression-assessment.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 import { attachmentFile, readIdeas, type VideoIdea } from './video-ideas.js';
 
-export const BRAINSTORMS_DIR = '_Brainstorms';
+export const BRAINSTORMS_DIR = '_HeartQuarters/Brainstorms';
 const IDEA_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
 const MESSAGE_MAX = 20_000;
 

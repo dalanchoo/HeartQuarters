@@ -106,7 +106,7 @@ const summaryJobs = new Map<string, Step>();
 
 function root(piece: string): string {
   if (piece.includes('\\') || piece.split('/').some(part => part === '.' || part === '..')) throw new Error('Invalid video folder.');
-  const relative = piece ? `${piece}/Analytics` : 'Analytics';
+  const relative = piece ? `${piece}/Analytics` : '_HeartQuarters/Analytics';
   const full = safeResolve('projects', relative);
   if (!fs.lstatSync(full, { throwIfNoEntry: false })?.isDirectory()) throw new Error('No analytics snapshots found. Download stats first.');
   return relative;

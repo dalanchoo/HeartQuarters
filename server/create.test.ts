@@ -29,10 +29,10 @@ const exists = (...p: string[]) => fs.existsSync(path.join(projects(), ...p));
 
 beforeEach(() => {
   tmp = makeTree({
-    'Video Projects/--- LONGFORM TEMPLATE/Packaging/V01/YouTube.md': 'Title:\n',
-    'Video Projects/--- LONGFORM TEMPLATE/XXX - Topic - Script.docx': 'docx',
-    'Video Projects/--- SHORTS TEMPLATE/Packaging/V01/TikTok.md': '',
-    'Video Projects/--- STANDALONE SHORTS TEMPLATE/Raw/': '',
+    'Video Projects/_HeartQuarters/Templates/--- LONGFORM TEMPLATE/Packaging/V01/YouTube.md': 'Title:\n',
+    'Video Projects/_HeartQuarters/Templates/--- LONGFORM TEMPLATE/XXX - Topic - Script.docx': 'docx',
+    'Video Projects/_HeartQuarters/Templates/--- SHORTS TEMPLATE/Packaging/V01/TikTok.md': '',
+    'Video Projects/_HeartQuarters/Templates/--- STANDALONE SHORTS TEMPLATE/Raw/': '',
     'Video Projects/021 - Mountain Acid Trip/Longform/Exports/': '',
     'Video Projects/022 - Worth Telling Them/Longform/Exports/': '',
     'Video Projects/022 - Worth Telling Them/Shorts/022_S01 - One/Exports/': '',
@@ -97,7 +97,7 @@ describe('createVideoFolder', () => {
     // The script gets the video's name.
     expect(exists('023 - New One', 'Longform', '023 - New One - Script.docx')).toBe(true);
     // The template itself is untouched.
-    expect(exists('--- LONGFORM TEMPLATE', 'XXX - Topic - Script.docx')).toBe(true);
+    expect(exists('_HeartQuarters', 'Templates', '--- LONGFORM TEMPLATE', 'XXX - Topic - Script.docx')).toBe(true);
   });
 
   it('makes a new part inside a series', async () => {
@@ -141,7 +141,7 @@ describe('createVideoFolder', () => {
   });
 
   it("doesn't make anything if the template is missing", async () => {
-    fs.rmSync(path.join(projects(), '--- LONGFORM TEMPLATE'), { recursive: true });
+    fs.rmSync(path.join(projects(), '_HeartQuarters', 'Templates', '--- LONGFORM TEMPLATE'), { recursive: true });
     await expect(createVideoFolder('top', '', '023 - X')).rejects.toThrow(/template/);
     expect(exists('023 - X')).toBe(false);
   });
