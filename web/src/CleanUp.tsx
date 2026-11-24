@@ -66,12 +66,13 @@ export function CleanUp({ piece, onDone, intro }: { piece: string; onDone?: () =
       )}
       {plan && plan.missing.length === 0 && (
         <>
-          {plan.remove.length === 0 && plan.move.length === 0 ? (
+          {plan.remove.length === 0 && plan.move.length === 0 && plan.removeFolders.length === 0 ? (
             <p>Nothing to clean up.</p>
           ) : (
             <p>
               <strong>{plan.remove.length} files, {formatSize(plan.freed)},</strong> would go to HeartQuarters Trash.
               {plan.move.length > 0 && ` ${plan.move.length} files CapCut uses would move from Claude into Intermediate.`}
+              {plan.removeFolders.length > 0 && ` ${plan.removeFolders.length} emptied ${plan.removeFolders.length === 1 ? 'folder' : 'folders'} would be deleted.`}
             </p>
           )}
           {groups.map(([why, items]) => (
@@ -88,9 +89,17 @@ export function CleanUp({ piece, onDone, intro }: { piece: string; onDone?: () =
               <ul className="small-text">{plan.move.map((i) => <li key={i.path}>{short(i.path)} → {short(i.to!)}</li>)}</ul>
             </details>
           )}
+          {plan.removeFolders.length > 0 && (
+            <details className="clean-up-group">
+              <summary>
+                Emptied folders to delete <span className="muted">· {plan.removeFolders.length} {plan.removeFolders.length === 1 ? 'folder' : 'folders'}</span>
+              </summary>
+              <ul className="small-text">{plan.removeFolders.map((f) => <li key={f}>{short(f)}</li>)}</ul>
+            </details>
+          )}
           {plan.skipped.length > 0 && <p className="muted small-text">Left alone (shortcuts or junctions): {plan.skipped.map(short).join(', ')}</p>}
           <div className="draft-use">
-            {(plan.remove.length > 0 || plan.move.length > 0) && (
+            {(plan.remove.length > 0 || plan.move.length > 0 || plan.removeFolders.length > 0) && (
               <button disabled={busy} onClick={run}>
                 {busy ? 'Cleaning up…' : 'Move These to Trash'}
               </button>

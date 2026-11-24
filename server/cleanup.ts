@@ -36,6 +36,8 @@ export interface CleanupPlan {
   piece: string;
   remove: CleanupItem[];
   move: CleanupItem[];
+  /** Folders that will be left empty in cleaned areas and deleted (relative to Video Projects, forward slashes). */
+  removeFolders: string[];
   /** Bytes that go to Trash. */
   freed: number;
   /** Shortcuts and junctions, left alone. */
@@ -245,17 +247,18 @@ export function cleanupPlan(piece: string, given?: Set<string> | CapCutLinks): C
   const links = given instanceof Set ? { used: given, missing: [] } : (given ?? capcutLinks(video));
   const used = links.used;
   if (links.missing.length) {
-    return { piece: `${video}/${inVideo}`, remove: [], move: [], freed: 0, skipped: [], missing: links.missing, token: '' };
+    return { piece: `${video}/${inVideo}`, remove: [], move: [], removeFolders: [], freed: 0, skipped: [], missing: links.missing, token: '' };
   }
   const remove: CleanupItem[] = [];
   const move: CleanupItem[] = [];
+  const removeFolders: string[] = [];
   const skipped: string[] = [];
-  const walk = (dir: string, rel: string, added: Set<string>) => {
+  const walk = (dir: string, rel: string, added: Set<string>): boolean => {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-      return;
+      return false;
     }
     // In a Thumbnail\Source folder, HeartQuarters' own list of what it added.
     let here = added;
@@ -267,22 +270,35 @@ export function cleanupPlan(piece: string, given?: Set<string> | CapCutLinks): C
         /* an unreadable list adds nothing */
       }
     }
+    let empty = true;
     for (const e of entries) {
       const full = path.join(dir, e.name);
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isSymbolicLink()) {
         skipped.push(`${video}/${r}`);
+        empty = false;
         continue;
       }
-      if (e.isDirectory()) walk(full, r, here);
-      else if (e.isFile()) {
+      if (e.isDirectory()) {
+        if (walk(full, r, here) && classify(`${r}/x`, false).action !== 'keep') {
+          removeFolders.push(`${video}/${r}`);
+        } else {
+          empty = false;
+        }
+      } else if (e.isFile()) {
         const v = classify(r, used.has(`${fwd(full)}`.toLowerCase()), here);
-        if (v.action === 'keep') continue;
+        if (v.action === 'keep') {
+          empty = false;
+          continue;
+        }
         const item: CleanupItem = { path: `${video}/${r}`, size: fs.statSync(full).size, why: v.why };
         if (v.action === 'move') move.push({ ...item, to: `${video}/${v.to}` });
         else remove.push(item);
+      } else {
+        empty = false;
       }
     }
+    return empty;
   };
   if (inVideo === 'Shorts') {
     // Make Shorts: only the files beside the Shorts' folders (the plan and retention graphs), never inside a Short.
@@ -293,9 +309,10 @@ export function cleanupPlan(piece: string, given?: Set<string> | CapCutLinks): C
       if (v.action === 'remove') remove.push({ path: `${video}/Shorts/${e.name}`, size: fs.statSync(full).size, why: v.why });
     }
   } else walk(pieceRoot, inVideo, new Set());
+  removeFolders.sort();
   const freed = remove.reduce((n, i) => n + i.size, 0);
-  const token = crypto.createHash('sha1').update(JSON.stringify([remove, move])).digest('hex');
-  return { piece: `${video}/${inVideo}`, remove, move, freed, skipped, missing: [], token };
+  const token = crypto.createHash('sha1').update(JSON.stringify([remove, move, removeFolders])).digest('hex');
+  return { piece: `${video}/${inVideo}`, remove, move, removeFolders, freed, skipped, missing: [], token };
 }
 
 /** Removes folders left empty inside the areas that were cleaned, deepest first. Never the piece's own folders. */

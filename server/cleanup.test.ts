@@ -100,6 +100,12 @@ describe('cleaning up a video', () => {
       'Longform/Packaging/V01/Thumbnail/Source/Photo - Calm_004.jpg',
     ]);
     expect(plan.move).toEqual([{ path: '022 - V/Longform/Claude/broll/graded.mp4', to: '022 - V/Longform/Intermediate/broll/graded.mp4', size: 16, why: 'used in CapCut, but kept in Claude' }]);
+    expect(plan.removeFolders.map((p) => p.replace('022 - V/', ''))).toEqual([
+      'Longform/Claude',
+      'Longform/Claude/broll',
+      'Longform/Intermediate/Motion Graphics/Source',
+      'Longform/Packaging/Drafts',
+    ]);
     expect(fs.existsSync(V('Longform', 'Claude', 'notes.md'))).toBe(true);
   });
 
