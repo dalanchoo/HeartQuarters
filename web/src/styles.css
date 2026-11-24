@@ -1127,6 +1127,15 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-video-option:disabled { opacity: 0.5; cursor: default; }
 .button-link { display: inline-flex; align-items: center; padding: 0.2rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); text-decoration: none; font-size: 0.85rem; line-height: 1.2; }
 .button-link:hover { border-color: var(--accent); color: var(--accent); }
+.idea-attach { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto; gap: 0.35rem; align-items: center; }
+.idea-attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.idea-attach input { min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
+.idea-attach-drop { border: 1px dashed var(--line); border-radius: 6px; padding: 0.35rem 0.45rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.idea-attach-drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.idea-attach-drop.dragging { border-color: var(--accent); background: var(--accent-soft); }
+.idea-attach-new { display: flex; gap: 0.35rem; align-items: center; }
+.idea-attach-new input[type="text"] { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
+.idea-attach-hint { font-size: 0.78rem; }
 
 /* Ideas: compact Raw and Processed headers and idea rows */
 .idea-section { margin: 0.3rem 0 0; }

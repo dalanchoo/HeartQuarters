@@ -105,6 +105,9 @@ export function buildBrainstormPrompt(
   const refs = idea.references.length
     ? idea.references.map((r, i) => `${i + 1}. ${r.url}${r.note ? ` — ${r.note}` : ''}`).join('\n')
     : '(none)';
+  const files = idea.attachments.length
+    ? idea.attachments.map((a, i) => `${i + 1}. ${a.name}${a.note ? ` — ${a.note}` : ''}`).join('\n')
+    : '(none)';
   const thread = history.length
     ? history.map((m) => `[${speakerLabel(m.from)}]\n${m.text}`).join('\n\n')
     : '(no messages yet)';
@@ -118,6 +121,7 @@ export function buildBrainstormPrompt(
       `Category: ${idea.category} | Format: ${idea.format} | Status: ${idea.status}`,
       `Notes:\n${idea.notes.trim() || '(none)'}`,
       `References:\n${refs}`,
+      `Attached Files:\n${files}`,
     ].join('\n'),
     `--- CONVERSATION SO FAR ---\n${thread}`,
     `--- JOHN'S NEW MESSAGE ---\n${nextMessage}`,

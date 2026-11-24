@@ -2,10 +2,12 @@
 // so it survives without the app. The order in the file is John's order: the top is what he'd make next.
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
-import { safeResolve } from './config.js';
-import { readText, writable, writeFile } from './safe-files.js';
+import path from 'node:path';
+import { config, isInside, safeResolve } from './config.js';
+import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 
 export const IDEAS_FILE = 'Video Ideas.json';
+export const IDEA_RESOURCES_DIR = '_IdeaResources';
 /** Where an idea is on its way to becoming a video. */
 export const IDEA_STATUSES = ['thinking', 'brainstorming', 'researching', 'packaged', 'filming', 'made', 'dropped'] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
@@ -18,15 +20,32 @@ export type IdeaCategory = (typeof IDEA_CATEGORIES)[number];
 /** `processed` is false for a raw brain dump; true once John has turned it into a clear idea. Older ideas are unprocessed. */
 /** A link to a place or thing that informs the idea, with a note saying why it matters. */
 export interface IdeaReference { id: string; url: string; note: string }
-export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; category: IdeaCategory; processed: boolean; references: IdeaReference[]; createdAt: string; updatedAt: string }
+/** A file attached to an idea (such as a PDF or notes doc), stored in Video Projects\_IdeaResources\<ideaId>\. */
+export interface IdeaAttachment { id: string; name: string; note: string; size: number; addedAt: string }
+export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; category: IdeaCategory; processed: boolean; references: IdeaReference[]; attachments: IdeaAttachment[]; createdAt: string; updatedAt: string }
 
 const TITLE_MAX = 300;
 const NOTES_MAX = 20_000;
 const URL_MAX = 2000;
 const REFERENCES_MAX = 200;
+const ATTACHMENTS_MAX = 100;
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const IDEA_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const BLOCKED_EXTS = new Set(['.lnk', '.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi']);
 
 function location() {
   return writable(safeResolve('projects', IDEAS_FILE));
+}
+
+function validAttachment(a: unknown): boolean {
+  const item = a as IdeaAttachment;
+  return !!item
+    && typeof item.id === 'string'
+    && typeof item.name === 'string'
+    && typeof item.note === 'string'
+    && typeof item.size === 'number'
+    && typeof item.addedAt === 'string';
 }
 
 function valid(idea: unknown): idea is VideoIdea {
@@ -34,6 +53,7 @@ function valid(idea: unknown): idea is VideoIdea {
   return !!i && typeof i.id === 'string' && typeof i.title === 'string' && typeof i.notes === 'string'
     && IDEA_STATUSES.includes(i.status) && (i.format === undefined || IDEA_FORMATS.includes(i.format)) && (i.category === undefined || IDEA_CATEGORIES.includes(i.category)) && (i.processed === undefined || typeof i.processed === 'boolean')
     && (i.references === undefined || (Array.isArray(i.references) && i.references.every(r => !!r && typeof r.id === 'string' && typeof r.url === 'string' && typeof r.note === 'string')))
+    && (i.attachments === undefined || (Array.isArray(i.attachments) && i.attachments.every(validAttachment)))
     && typeof i.createdAt === 'string' && typeof i.updatedAt === 'string';
 }
 
@@ -45,8 +65,15 @@ function load(): { ideas: VideoIdea[]; original: string | null } {
   try { data = JSON.parse(original.replace(/^﻿/, '')); }
   catch { throw new Error('The ideas list could not be read. Nothing was changed.'); }
   if (data?.version !== 1 || !Array.isArray(data.ideas) || !data.ideas.every(valid)) throw new Error('The ideas list has an unexpected format. Nothing was changed.');
-  // Ideas saved before the format and processed fields existed are undecided and unprocessed.
-  const ideas = (data.ideas as VideoIdea[]).map(i => ({ ...i, format: i.format ?? 'undecided', category: i.category ?? 'unassigned', processed: i.processed ?? false, references: (i.references ?? []).map(r => ({ id: r.id, url: r.url, note: r.note })) }));
+  // Ideas saved before the format, processed, references, or attachments fields existed get safe defaults.
+  const ideas = (data.ideas as VideoIdea[]).map(i => ({
+    ...i,
+    format: i.format ?? 'undecided',
+    category: i.category ?? 'unassigned',
+    processed: i.processed ?? false,
+    references: (i.references ?? []).map(r => ({ id: r.id, url: r.url, note: r.note })),
+    attachments: (i.attachments ?? []).map(a => ({ id: a.id, name: a.name, note: a.note, size: a.size, addedAt: a.addedAt })),
+  }));
   return { ideas, original };
 }
 
@@ -76,7 +103,7 @@ export function addIdea(title: unknown, notes: unknown = ''): VideoIdea[] {
   const clean = text(title, TITLE_MAX, 'title').trim();
   if (!clean) throw new Error('Give the idea a title.');
   const { ideas, original } = load(); const now = new Date().toISOString();
-  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'undecided', category: 'unassigned', processed: false, references: [], createdAt: now, updatedAt: now });
+  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'undecided', category: 'unassigned', processed: false, references: [], attachments: [], createdAt: now, updatedAt: now });
   save(ideas, original); return ideas;
 }
 
@@ -180,4 +207,112 @@ export function deleteReference(ideaId: unknown, referenceId: unknown): VideoIde
   idea.references.splice(referenceAt(idea, referenceId), 1);
   idea.updatedAt = new Date().toISOString();
   save(ideas, original); return ideas;
+}
+
+function checkIdeaFolderId(ideaId: unknown): string {
+  if (typeof ideaId !== 'string' || !IDEA_ID_RE.test(ideaId)) throw new Error('Choose a valid idea.');
+  return ideaId;
+}
+
+function cleanAttachmentName(raw: unknown): { stem: string; ext: string } {
+  if (typeof raw !== 'string' || !raw.trim()) throw new Error('Choose a file to attach.');
+  const base = raw.replace(/\\/g, '/').split('/').pop() ?? '';
+  const ext = path.extname(base).toLowerCase();
+  if (BLOCKED_EXTS.has(ext)) throw new Error(`Files ending in ${ext} cannot be attached.`);
+  const stem = path
+    .basename(base, ext)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120);
+  const safeStem = !stem || stem === '.' || stem === '..' || RESERVED_NAME.test(stem) ? 'Resource' : stem;
+  return { stem: safeStem, ext };
+}
+
+function attachmentAt(idea: VideoIdea, attachmentId: unknown): number {
+  const at = typeof attachmentId === 'string' ? idea.attachments.findIndex(a => a.id === attachmentId) : -1;
+  if (at < 0) throw new Error('That attached file is no longer on the idea. Reload it and try again.');
+  return at;
+}
+
+/** Attach a file (such as a PDF) to one idea, storing it under Video Projects\_IdeaResources\<ideaId>\. */
+export function addAttachment(ideaId: unknown, rawName: unknown, bytes: Buffer, rawNote: unknown = ''): VideoIdea[] {
+  const folderId = checkIdeaFolderId(ideaId);
+  if (!Buffer.isBuffer(bytes) || bytes.length === 0) throw new Error('The attached file is empty.');
+  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('Attached files must be 50 MB or smaller.');
+  const note = text(rawNote ?? '', NOTES_MAX, 'note');
+
+  const { ideas, original } = load();
+  const idea = ideas[find(ideas, folderId)];
+  if (idea.attachments.length >= ATTACHMENTS_MAX) throw new Error('This idea has too many attached files.');
+
+  const { stem, ext } = cleanAttachmentName(rawName);
+  const dir = makeFolder(safeResolve('projects', path.posix.join(IDEA_RESOURCES_DIR, folderId)));
+  const existing = new Set(fs.readdirSync(dir).map(n => n.toLowerCase()));
+  let candidate = `${stem}${ext}`;
+  let n = 2;
+  while (existing.has(candidate.toLowerCase())) {
+    candidate = `${stem} (${n++})${ext}`;
+  }
+
+  const target = safeResolve('projects', path.posix.join(IDEA_RESOURCES_DIR, folderId, candidate));
+  writeFile(target, bytes, { flag: 'wx' });
+
+  const now = new Date().toISOString();
+  idea.attachments.push({ id: randomUUID(), name: candidate, note, size: bytes.length, addedAt: now });
+  idea.updatedAt = now;
+  save(ideas, original);
+  return ideas;
+}
+
+/** Update the note on an attached file. */
+export function updateAttachment(ideaId: unknown, attachmentId: unknown, changes: { note?: unknown }): VideoIdea[] {
+  const { ideas, original } = load();
+  const idea = ideas[find(ideas, ideaId)];
+  const att = idea.attachments[attachmentAt(idea, attachmentId)];
+  if (changes.note !== undefined) att.note = text(changes.note, NOTES_MAX, 'note');
+  idea.updatedAt = new Date().toISOString();
+  save(ideas, original);
+  return ideas;
+}
+
+/** Remove an attachment from an idea and move its file to HeartQuarters Trash. */
+export function deleteAttachment(ideaId: unknown, attachmentId: unknown): VideoIdea[] {
+  const folderId = checkIdeaFolderId(ideaId);
+  const { ideas, original } = load();
+  const idea = ideas[find(ideas, folderId)];
+  const idx = attachmentAt(idea, attachmentId);
+  const att = idea.attachments[idx];
+  const file = safeResolve('projects', path.posix.join(IDEA_RESOURCES_DIR, folderId, att.name));
+
+  if (fs.existsSync(file)) {
+    writable(file);
+    const projects = path.resolve(config.videoProjectsDir);
+    const trash = path.resolve(config.trashDir);
+    if (!config.trashDir || isInside(projects, trash) || isInside(trash, projects)) {
+      throw new Error('The trash folder must be outside Video Projects.');
+    }
+    fs.mkdirSync(trash, { recursive: true });
+    const holder = fs.mkdtempSync(path.join(trash, 'Idea Resources '));
+    fs.renameSync(file, path.join(holder, path.basename(file)));
+  }
+
+  idea.attachments.splice(idx, 1);
+  idea.updatedAt = new Date().toISOString();
+  save(ideas, original);
+  return ideas;
+}
+
+/** Checked path to an idea's attached file for serving sandboxed in the browser. */
+export function attachmentFile(ideaId: unknown, attachmentId: unknown): string {
+  const folderId = checkIdeaFolderId(ideaId);
+  const ideas = load().ideas;
+  const idea = ideas[find(ideas, folderId)];
+  const att = idea.attachments[attachmentAt(idea, attachmentId)];
+  const full = readable(safeResolve('projects', path.posix.join(IDEA_RESOURCES_DIR, folderId, att.name)));
+  const stat = fs.lstatSync(full, { throwIfNoEntry: false });
+  if (!stat || !stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error('That attached file could not be found.');
+  }
+  return full;
 }

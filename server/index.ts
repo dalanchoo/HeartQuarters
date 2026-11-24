@@ -19,7 +19,7 @@ import { slowRequestLogger, watchEngineStalls } from './slow-watch.js';
 import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
-import { addIdea, addReference, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas.js';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { copyShotReferenceToInbox, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
@@ -323,6 +323,12 @@ app.post('/api/ideas/reference/add', handle((req, res) => { res.json(addReferenc
 app.post('/api/ideas/reference/update', handle((req, res) => { res.json(updateReference(req.body?.id, req.body?.referenceId, req.body ?? {})); }));
 app.post('/api/ideas/reference/move', handle((req, res) => { res.json(moveReference(req.body?.id, req.body?.referenceId, req.body?.step)); }));
 app.post('/api/ideas/reference/delete', handle((req, res) => { res.json(deleteReference(req.body?.id, req.body?.referenceId)); }));
+app.get('/api/ideas/attachment', handle((req, res) => { sandboxHeaders(res); res.sendFile(attachmentFile(req.query.id, req.query.attachmentId)); }));
+app.post('/api/ideas/attachment/upload', express.raw({ type: 'application/octet-stream', limit: '50mb' }), handle((req, res) => {
+  res.json(addAttachment(req.query.id, req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), req.query.note ?? ''));
+}));
+app.post('/api/ideas/attachment/update', handle((req, res) => { res.json(updateAttachment(req.body?.id, req.body?.attachmentId, req.body ?? {})); }));
+app.post('/api/ideas/attachment/delete', handle((req, res) => { res.json(deleteAttachment(req.body?.id, req.body?.attachmentId)); }));
 app.get('/api/ideas/brainstorm', handle((req, res) => { res.json(readBrainstorm(req.query.id)); }));
 app.post('/api/ideas/brainstorm/send', (req, res) => {
   sendBrainstormMessage(req.body?.id, req.body?.ai, req.body?.message).then(

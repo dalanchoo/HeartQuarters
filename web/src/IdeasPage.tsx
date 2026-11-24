@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { getJson, postJson, type AiId } from './api';
+import { formatSize, getJson, postJson, type AiId } from './api';
 import { useAi } from './AiPicker';
 import { channelRows, rowName, videoProjectsHash } from './channelRows';
 import { ALL_VIDEO_FILTERS, VideoFilterBar, type VideoSearchFilters } from './VideoFinder';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
 import type { BrainstormMessage, IdeaBrainstorm } from '../../server/idea-brainstorm';
-import type { IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
+import type { IdeaAttachment, IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 /** A filter dropdown value: "all" shows everything. */
 type Filter<T extends string> = 'all' | T;
@@ -63,6 +63,25 @@ export function IdeasPage() {
     finally { setBusy(false); }
   };
 
+  const uploadAttachment = async (ideaId: string, file: File, note: string) => {
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch(
+        `/api/ideas/attachment/upload?id=${encodeURIComponent(ideaId)}&name=${encodeURIComponent(file.name)}&note=${encodeURIComponent(note)}`,
+        { method: 'POST', headers: { 'X-HeartQuarters': '1', 'Content-Type': 'application/octet-stream' }, body: file },
+      );
+      const body = (await res.json().catch(() => ({}))) as VideoIdea[] & { error?: string };
+      if (!res.ok) throw new Error(body.error || res.statusText || 'Could not attach file.');
+      setIdeas(body);
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const add = async () => {
     if (!title.trim()) return;
     if (await send('/api/ideas/add', { title })) setTitle('');
@@ -90,6 +109,7 @@ export function IdeasPage() {
       videos={videos}
       busy={busy}
       send={send}
+      uploadAttachment={uploadAttachment}
       first={first === idea.id}
       last={last === idea.id}
       brainstorming={activeIdea?.id === idea.id}
@@ -185,9 +205,10 @@ export function IdeasPage() {
   );
 }
 
-function IdeaCard({ idea, videos, busy, send, first, last, brainstorming, onBrainstorm }: {
+function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, brainstorming, onBrainstorm }: {
   idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; first: boolean; last: boolean; brainstorming: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
+  uploadAttachment: (ideaId: string, file: File, note: string) => Promise<boolean>;
   onBrainstorm: () => void;
 }) {
   const [title, setTitle] = useState(idea.title);
@@ -205,7 +226,7 @@ function IdeaCard({ idea, videos, busy, send, first, last, brainstorming, onBrai
     <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
-        <span className="muted small-text">{CATEGORY_LABELS[idea.category]} · {FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}</span>
+        <span className="muted small-text">{CATEGORY_LABELS[idea.category]} · {FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}{idea.attachments.length ? ` · ${idea.attachments.length} File${idea.attachments.length === 1 ? '' : 's'}` : ''}</span>
       </summary>
       <div className="idea-body">
         <input className="idea-title-input" type="text" value={title} maxLength={300} aria-label="Title" onChange={(e) => setTitle(e.target.value)} />
@@ -229,6 +250,7 @@ function IdeaCard({ idea, videos, busy, send, first, last, brainstorming, onBrai
           ))}
           <AddReference ideaId={idea.id} videos={videos} busy={busy} send={send} />
         </div>
+        <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
           <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
           {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
@@ -342,6 +364,131 @@ function AddReference({ ideaId, videos, busy, send }: {
         </details>
       )}
     </>
+  );
+}
+
+/** Files attached to an idea (such as PDFs), saved in Video Projects\_IdeaResources\<ideaId>\. */
+function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
+  idea: VideoIdea;
+  busy: boolean;
+  send: (url: string, data: unknown) => Promise<boolean>;
+  uploadAttachment: (ideaId: string, file: File, note: string) => Promise<boolean>;
+}) {
+  const [note, setNote] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const pickerRef = useRef<HTMLInputElement>(null);
+
+  const attachFiles = async (files: File[]) => {
+    if (!files.length || busy) return;
+    let allOk = true;
+    for (const file of files) {
+      const ok = await uploadAttachment(idea.id, file, note);
+      if (!ok) {
+        allOk = false;
+        break;
+      }
+    }
+    if (allOk) setNote('');
+  };
+
+  const filesFromClipboard = (data: DataTransfer | null): File[] => {
+    if (!data) return [];
+    if (data.files?.length) return Array.from(data.files);
+    return Array.from(data.items ?? [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+  };
+
+  return (
+    <div className="idea-refs">
+      <div className="idea-refs-head">Attached Files</div>
+      {idea.attachments.map((att) => (
+        <AttachmentRow key={att.id} ideaId={idea.id} attachment={att} busy={busy} send={send} />
+      ))}
+      <div
+        className={`idea-attach-drop${dragging ? ' dragging' : ''}`}
+        tabIndex={0}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            setDragging(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const files = Array.from(e.dataTransfer.files);
+          if (files.length) void attachFiles(files);
+        }}
+        onPaste={(e) => {
+          const files = filesFromClipboard(e.clipboardData);
+          if (!files.length) return;
+          e.preventDefault();
+          void attachFiles(files);
+        }}
+      >
+        <div className="idea-attach-new">
+          <input
+            type="text"
+            aria-label="New attachment note"
+            placeholder="Optional note for the file (e.g. SDAM PDF)"
+            maxLength={20000}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <input
+            ref={pickerRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = '';
+              if (files.length) void attachFiles(files);
+            }}
+          />
+          <button type="button" className="small" disabled={busy} onClick={() => pickerRef.current?.click()}>
+            Attach File
+          </button>
+        </div>
+        <div className="muted small-text idea-attach-hint">
+          {dragging ? 'Drop to attach…' : 'Drop files here, or click here and press Ctrl+V to paste a file or image.'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentRow({ ideaId, attachment, busy, send }: {
+  ideaId: string; attachment: IdeaAttachment; busy: boolean;
+  send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  const [note, setNote] = useState(attachment.note);
+  useEffect(() => { setNote(attachment.note); }, [attachment.note]);
+  const changed = note !== attachment.note;
+  const href = `/api/ideas/attachment?id=${encodeURIComponent(ideaId)}&attachmentId=${encodeURIComponent(attachment.id)}`;
+
+  const remove = () => {
+    if (!window.confirm(`Remove “${attachment.name}”? It will be moved to HeartQuarters Trash.`)) return;
+    void send('/api/ideas/attachment/delete', { id: ideaId, attachmentId: attachment.id });
+  };
+
+  return (
+    <div className="idea-attach">
+      <span className="idea-attach-name" title={attachment.name}>
+        {attachment.name} <span className="muted small-text">({formatSize(attachment.size)})</span>
+      </span>
+      <input type="text" aria-label="Attachment note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="idea-ref-actions">
+        <a className="button-link small" href={href} target="_blank" rel="noreferrer">Open</a>
+        <button type="button" className="small" disabled={busy || !changed} onClick={() => void send('/api/ideas/attachment/update', { id: ideaId, attachmentId: attachment.id, note })}>Save</button>
+        <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
+      </div>
+    </div>
   );
 }
 

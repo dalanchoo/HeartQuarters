@@ -3,16 +3,18 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { addIdea, addReference, deleteIdea, deleteReference, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, IDEA_RESOURCES_DIR, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
 
 let root: string;
 let saved: string;
+let savedTrash: string;
 const file = () => path.join(config.videoProjectsDir, IDEAS_FILE);
 beforeEach(() => {
   root = makeTree({ 'Projects/001 - Video/': '' });
   saved = config.videoProjectsDir; config.videoProjectsDir = path.join(root, 'Projects');
+  savedTrash = config.trashDir; config.trashDir = path.join(root, 'Trash');
 });
-afterEach(() => { config.videoProjectsDir = saved; removeTree(root); });
+afterEach(() => { config.videoProjectsDir = saved; config.trashDir = savedTrash; removeTree(root); });
 
 describe('video ideas', () => {
   it('starts empty and creates the file on the first idea, newest at the top', () => {
@@ -105,6 +107,37 @@ describe('video ideas', () => {
     expect(fs.readFileSync(file(), 'utf8')).toBe('not json');
     fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ id: 'x' }] }));
     expect(() => readIdeas()).toThrow('unexpected format');
+  });
+
+  it('attaches files (such as PDFs), deduplicates names, updates notes, and trashes on delete', () => {
+    const [idea] = addIdea('SDAM Guide');
+    const pdf = Buffer.from('%PDF-1.4\nhello');
+    const first = addAttachment(idea.id, 'SDAM Guide.pdf', pdf, 'For people who just discovered SDAM');
+    expect(first[0].attachments).toHaveLength(1);
+    expect(first[0].attachments[0]).toMatchObject({ name: 'SDAM Guide.pdf', note: 'For people who just discovered SDAM', size: pdf.length });
+
+    const second = addAttachment(idea.id, 'SDAM Guide.pdf', pdf, 'Updated version');
+    expect(second[0].attachments.map(a => a.name)).toEqual(['SDAM Guide.pdf', 'SDAM Guide (2).pdf']);
+
+    const attId = second[0].attachments[0].id;
+    expect(fs.readFileSync(attachmentFile(idea.id, attId)).equals(pdf)).toBe(true);
+    expect(updateAttachment(idea.id, attId, { note: 'Edited note' })[0].attachments[0].note).toBe('Edited note');
+
+    const afterDelete = deleteAttachment(idea.id, attId);
+    expect(afterDelete[0].attachments.map(a => a.name)).toEqual(['SDAM Guide (2).pdf']);
+    expect(fs.existsSync(path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR, idea.id, 'SDAM Guide.pdf'))).toBe(false);
+    expect(fs.readdirSync(config.trashDir).some(d => d.startsWith('Idea Resources '))).toBe(true);
+  });
+
+  it('refuses unsafe attachment types and junctions', () => {
+    const [idea] = addIdea('Unsafe attachments');
+    expect(() => addAttachment(idea.id, 'shortcut.lnk', Buffer.from('x'))).toThrow('cannot be attached');
+    expect(() => addAttachment(idea.id, 'empty.pdf', Buffer.alloc(0))).toThrow('empty');
+
+    const elsewhere = path.join(root, 'Elsewhere'); fs.mkdirSync(elsewhere);
+    fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR), 'junction');
+    expect(() => addAttachment(idea.id, 'guide.pdf', Buffer.from('%PDF'))).toThrow();
+    expect(fs.readdirSync(elsewhere)).toEqual([]);
   });
 
   it('refuses to write through a shortcut or junction', () => {
