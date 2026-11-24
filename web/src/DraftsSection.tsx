@@ -307,9 +307,9 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
       <div className="photo-group">
         <p className="small-text">
           <strong>Best Photos for This Pair</strong>{' '}
-          {ranked && <span className="muted">· Claude looked at {ranked.looked} photos from the suggested categories and your starred photos</span>}
+          {ranked && <span className="muted">· Claude looked at {ranked.looked} photos</span>}
           {ranked && !rankingNow && (
-            <button className="small" onClick={rank} title="Claude looks at the photos again using your current ratings and stars">
+            <button className="small" onClick={rank} title="Searches the library using current expression tags, folders, ratings and stars">
               Rank Again
             </button>
           )}

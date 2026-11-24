@@ -264,7 +264,7 @@ describe("John's choice", () => {
 });
 
 describe('small helpers', () => {
-  it("lists the expressions library's categories that have photos, two levels deep", () => {
+  it("lists the expressions library's categories two levels deep, including empty ones", () => {
     const lib = path.join(tmp, 'Expressions');
     for (const d of ['Positive/Warmth/Glow', 'Positive/Joy', 'Positive/Amusement', 'Composure/Calm', '_blind_pending/x']) fs.mkdirSync(path.join(lib, d), { recursive: true });
     fs.writeFileSync(path.join(lib, 'Positive/Warmth/Glow/Glow_001.jpg'), 'jpg'); // a photo in a sub-category counts
@@ -272,7 +272,7 @@ describe('small helpers', () => {
     fs.writeFileSync(path.join(lib, 'Composure/Calm/Calm_001.jpg'), 'jpg');
     fs.writeFileSync(path.join(lib, 'Positive/Amusement/_Amusement.png'), 'reference picture only');
     fs.writeFileSync(path.join(lib, '_blind_pending/x/a.jpg'), 'jpg');
-    expect(expressionCategories(lib)).toEqual(['Composure > Calm', 'Positive > Joy', 'Positive > Warmth']);
+    expect(expressionCategories(lib)).toEqual(['Composure > Calm', 'Positive > Amusement', 'Positive > Joy', 'Positive > Warmth']);
     expect(expressionCategories(path.join(tmp, 'missing'))).toEqual([]);
   });
 

@@ -32,7 +32,7 @@ afterEach(() => {
   clearExpressionIndex();
   removeTree(tmp);
 });
-const choose = () => fs.writeFileSync(path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', 'Choice.json'), JSON.stringify({ pick: PICK, index: 0, photo: null }));
+const choose = (pick = PICK) => fs.writeFileSync(path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', 'Choice.json'), JSON.stringify({ pick, index: 0, photo: null }));
 /** Makes a small copy: here just a text file standing in for the image. */
 const small = async (full: string) => {
   const out = path.join(tmp, `small-${path.basename(full)}`);
@@ -71,6 +71,13 @@ describe('which photos Claude looks at', () => {
     expect(list.slice(0, -2).every(c => !c.aiGenerated)).toBe(true);
     expect(list.slice(-2).map(c => [c.photo.path, c.aiGenerated])).toEqual([[AI_PHOTO.path, true], [tagged.path, true]]);
   });
+  it('gives a confirmed expression match from another folder room in a full shortlist', () => {
+    const inFolder = Array.from({ length: MAX_CANDIDATES }, (_, i) => ({ ...photo(`Positive/Warmth/W_${i}.jpg`), rating: 'liked' as const }));
+    const confirmed = { ...PHOTOS[3], tags: [{ tag: 'WARMTH', confirmed: true, confidence: null }] };
+    const list = rankingCandidates([...inFolder, confirmed], ['Positive/Warmth'], []);
+    expect(list).toHaveLength(MAX_CANDIDATES);
+    expect(list[0].photo).toBe(confirmed);
+  });
 });
 
 describe("reading Claude's ranking", () => {
@@ -85,6 +92,31 @@ describe("reading Claude's ranking", () => {
 });
 
 describe('ranking the photos for the chosen pair', () => {
+  it('ranks photos from sidecar tags even when the requested folder is empty', async () => {
+    choose({ ...PICK, expression: 'Cognitive > Curiosity (a questioning look)' });
+    fs.mkdirSync(path.join(tmp, 'Expressions', 'Cognitive', 'Curiosity'), { recursive: true });
+    const [confirmed, suggested, disconfirmed, disliked, starred] = PHOTOS;
+    for (const [p, tag] of [
+      [confirmed, 'Curiosity, N/A, CONFIRMED'],
+      [suggested, 'Curiosity, 82%, UNCONFIRMED'],
+      [disconfirmed, 'Curiosity, 99%, DISCONFIRMED'],
+      [disliked, 'Curiosity, N/A, CONFIRMED\n# Rating: Disliked'],
+    ] as const) {
+      fs.writeFileSync(path.join(tmp, 'Expressions', p.path.replace(/\.jpg$/, '.txt')), tag);
+    }
+    let seen = '';
+    const ranked = [{ photo: confirmed.path, why: 'thoughtful' }];
+    const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked }); };
+    const { job, finished } = startRanking(PIECE, { ask, starred: () => [starred.path], small });
+    await finished;
+    expect(job).toMatchObject({ state: 'done', looked: 3 });
+    expect(seen).toContain(`- 01.jpg: ${confirmed.path}`);
+    expect(seen).toContain(`- 02.jpg: ${suggested.path}`);
+    expect(seen).toContain(`- 03.jpg: ${starred.path}`);
+    expect(seen).not.toContain(disconfirmed.path);
+    expect(seen).not.toContain(disliked.path);
+    expect(readRanking(PIECE)?.ranked).toEqual(ranked);
+  });
   it('shows Claude one set of labeled previews and saves only suitable camera photos from a mixed answer', async () => {
     choose();
     setExpressionRating(PHOTOS[0].path, 'liked');

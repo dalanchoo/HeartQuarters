@@ -54,8 +54,9 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   record the Pacific date and the title, description, tags, or thumbnail that YouTube confirmed.
 - **Prefer suitable camera photos for thumbnails.** New rankings check the photo's emotional fit,
   lighting, color, and readability at phone size. AI photos are labeled fallbacks when no camera photo
-  fits. Ratings still apply. Older rankings can be refreshed with Rank Again. Next, search across
-  folders using sidecar attributes. The packaging prompts will favor
+  fits. Ratings still apply. Rankings search the whole library for expression tags, giving John's
+  confirmed tags priority. Folders and stars still count. Older rankings can be refreshed with
+  Rank Again. Next, use gaze and mouth attributes when the thumbnail concept calls for them. The packaging prompts will favor
   an inviting expression when it fits, compare against the previous numbered episode, and ask for a
   visual that helps tell the story.
 

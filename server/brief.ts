@@ -268,7 +268,7 @@ function keepOld(drafts: string, fileName: string, when: Date): string | undefin
   return name;
 }
 
-/** The expressions library's categories, as "Category > Sub" (two levels of folders), so the AIs name real ones. */
+/** The expressions library's categories, as "Category > Sub". Even empty folders can have tagged photos elsewhere. */
 export function expressionCategories(root = config.expressionsDir): string[] {
   const entries = (d: string) => {
     try {
@@ -278,15 +278,12 @@ export function expressionCategories(root = config.expressionsDir): string[] {
     }
   };
   const dirs = (d: string) => entries(d).filter((e) => e.isDirectory() && !/^[._]/.test(e.name)).map((e) => e.name).sort();
-  // A category counts only if it has photos (in it or below it). "_Name.png" is the category's reference picture, not a photo.
-  const hasPhotos = (d: string): boolean =>
-    entries(d).some((e) => (e.isFile() && IMAGE_RE.test(e.name) && !e.name.startsWith('_')) || (e.isDirectory() && !/^[._]/.test(e.name) && hasPhotos(path.join(d, e.name))));
-  return dirs(root).flatMap((c) => dirs(path.join(root, c)).filter((s) => hasPhotos(path.join(root, c, s))).map((s) => `${c} > ${s}`));
+  return dirs(root).flatMap((c) => dirs(path.join(root, c)).map((s) => `${c} > ${s}`));
 }
 
 const CATEGORIES_NOTE = () => {
   const list = expressionCategories();
-  return list.length ? `For expressions, name only categories that exist in John's expressions library and have photos: ${list.join('; ')}.` : '';
+  return list.length ? `For expressions, use these categories from John's library. Choose the best fit for the idea. Photos tagged with an expression may be filed in other categories: ${list.join('; ')}.` : '';
 };
 
 export function picksPrompt(hasNotes: boolean): string {
