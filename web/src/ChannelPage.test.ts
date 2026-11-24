@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { ChannelProjectCell, ChannelTableHead, ChannelVideoBrowser } from './ChannelPage';
+import { ChannelCommentsSync, ChannelProjectCell, ChannelTableHead, ChannelVideoBrowser } from './ChannelPage';
 import type { ChannelVideo } from '../../server/channel-videos';
 import type { EndScreenData } from '../../server/youtube-end-screens';
 import type { SortKey } from './channelRows';
@@ -96,4 +96,10 @@ it('shows and announces the direction only on the active heading', () => {
   expect(fewest).toMatch(/aria-sort="ascending"[^>]*><button[^>]*>Search Views<span[^>]*>▲/);
   expect(fewest.match(/aria-sort=/g)).toHaveLength(1);
   expect(fewest).toMatch(/Published<span[^>]*>↕/);
+});
+
+it('shows the Comments tab and Sync Comments button', () => {
+  const html = renderToStaticMarkup(createElement(ChannelCommentsSync));
+  expect(html).toContain('<h2>Comments</h2>');
+  expect(html).toContain('Sync Comments');
 });

@@ -79,6 +79,7 @@ import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
+import { listStoredComments, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
 
 const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
@@ -107,6 +108,14 @@ app.get('/api/channel/video', (req, res) => {
 });
 app.post('/api/channel/refresh', (_req, res) => {
   refreshChannelWorkspace().then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.get('/api/channel/comments', handle((_req, res) => { res.json(listStoredComments()); }));
+app.post('/api/channel/comments/sync', (req, res) => {
+  const videoId = req.body?.videoId;
+  const run = typeof videoId === 'string' && videoId.trim()
+    ? syncVideoComments(videoId).then((file) => ({ synced: 1, disabled: file.disabled ? 1 : 0, failed: [], totalThreads: file.threads.length, syncedAt: file.syncedAt, stored: listStoredComments() }))
+    : syncAllChannelComments().then((result) => ({ ...result, stored: listStoredComments() }));
+  run.then((result) => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/video-analysis', (req, res) => {
   startChannelVideoAnalysis(String(req.body?.videoId ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));

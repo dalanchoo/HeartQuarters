@@ -6,6 +6,7 @@ import type { EndScreenData, EndScreenElement } from '../../server/youtube-end-s
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type RowFilters, type SortKey } from './channelRows';
 import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
+import type { CommentsSyncResult, StoredCommentsSummary } from '../../server/channel-comments';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ReachSetup } from './ReachSetup';
 import { SidebarResizer } from './SidebarResizer';
@@ -279,7 +280,7 @@ export function ChannelPage() {
   const rows = data ? channelRows(data.videos, { ...filters, text, keep: touched }, key, descending) : [];
   const count = (k: 'longform' | 'short') => data?.videos.filter((v) => v.kind === k).length ?? 0;
   const [, section, id] = address.split('/');
-  const view = section === 'Recommendations' || section === 'Video' || section === 'Research' ? section : 'Overview';
+  const view = section === 'Recommendations' || section === 'Video' || section === 'Comments' || section === 'Research' ? section : 'Overview';
   const reach = (data && overview?.channelId === data.channel.id) ? overview : null;
 
   return (
@@ -292,6 +293,7 @@ export function ChannelPage() {
         <a href="#Channel" aria-current={view === 'Overview' ? 'page' : undefined}>Overview</a>
         <a href="#Channel/Recommendations" aria-current={view === 'Recommendations' ? 'page' : undefined}>What to Make Next</a>
         <a href={id && view === 'Video' ? videoHash(id) : '#Channel/Video'} aria-current={view === 'Video' ? 'page' : undefined}>Video Detail</a>
+        <a href="#Channel/Comments" aria-current={view === 'Comments' ? 'page' : undefined}>Comments</a>
         <a href="#Channel/Research" aria-current={view === 'Research' ? 'page' : undefined}>Research</a>
       </nav>
       {error && <p className="error" role="alert">{error}</p>}
@@ -300,6 +302,7 @@ export function ChannelPage() {
         return video && rowName(video);
       }} />}
       {view === 'Video' && <ChannelVideoBrowser videos={data?.videos} id={id} />}
+      {view === 'Comments' && <ChannelCommentsSync />}
       {view === 'Research' && <section><h2>Research Sources</h2><p className="muted">Planned sources include vidIQ, Ask Studio, Reddit, and news.</p></section>}
       {view === 'Overview' && <>
       {overview && (!data || reach) && <ChannelPerformance overview={overview} />}
@@ -359,5 +362,58 @@ export function ChannelPage() {
       )}
       </>}
     </div>
+  );
+}
+
+export function ChannelCommentsSync() {
+  const [summary, setSummary] = useState<StoredCommentsSummary | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastResult, setLastResult] = useState<CommentsSyncResult | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getJson<StoredCommentsSummary>('/api/channel/comments').then(setSummary, (e) => setError((e as Error).message));
+  }, []);
+
+  const sync = async () => {
+    setSyncing(true);
+    setError('');
+    try {
+      const res = await postJson<CommentsSyncResult & { stored: StoredCommentsSummary }>('/api/channel/comments/sync', {});
+      setLastResult(res);
+      setSummary(res.stored);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="page-head">
+        <h2>Comments</h2>
+        <button type="button" className="small" disabled={syncing} onClick={() => void sync()}>
+          {syncing ? 'Syncing Comments…' : 'Sync Comments'}
+        </button>
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
+      {summary === null && !error && <p className="muted">Loading saved comments…</p>}
+      {summary && summary.totalVideos === 0 && !syncing && (
+        <p className="muted">No comments downloaded yet. Click Sync Comments to save your YouTube comments to Drive.</p>
+      )}
+      {summary && summary.totalVideos > 0 && (
+        <p className="muted">
+          Saved in Drive: {summary.totalThreads.toLocaleString()} comment {summary.totalThreads === 1 ? 'thread' : 'threads'} across {summary.totalVideos} {summary.totalVideos === 1 ? 'video' : 'videos'}
+          {summary.disabledVideos > 0 ? ` (${summary.disabledVideos} with comments turned off)` : ''}.
+          {summary.lastSyncedAt ? ` Last synced ${new Date(summary.lastSyncedAt).toLocaleString()}.` : ''}
+        </p>
+      )}
+      {lastResult && lastResult.failed.length > 0 && (
+        <p className="error" role="alert">
+          {lastResult.failed.length} {lastResult.failed.length === 1 ? 'video' : 'videos'} failed to sync ({lastResult.failed[0].error}).
+        </p>
+      )}
+    </section>
   );
 }
