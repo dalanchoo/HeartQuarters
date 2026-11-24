@@ -10,38 +10,12 @@ import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ReachSetup } from './ReachSetup';
 import { SidebarResizer } from './SidebarResizer';
 import { VideoPreview } from './VideoPreview';
+import { ALL_VIDEO_FACETS, ALL_VIDEO_FILTERS, VideoFacetControls, VideoFilterBar } from './VideoFinder';
 
 type Overview = NonNullable<ReturnType<typeof channelOverview>>;
 const videoHash = (id: string) => `#Channel/Video/${encodeURIComponent(id)}`;
-type VideoFacets = Pick<RowFilters, 'kind' | 'topic' | 'angle'>;
-const allVideoFacets: VideoFacets = { kind: 'all', topic: 'all', angle: 'all' };
-
-function VideoFacetControls({ filters, onChange }: { filters: VideoFacets; onChange: (filters: VideoFacets) => void }) {
-  return <>
-    <label>Kind
-      <select value={filters.kind} onChange={e => onChange({ ...filters, kind: e.target.value as VideoFacets['kind'] })}>
-        <option value="all">All Videos</option>
-        <option value="longform">Longform</option>
-        <option value="short">Shorts</option>
-        <option value="standalone">Standalone</option>
-      </select>
-    </label>
-    <label>Topic
-      <select value={filters.topic} onChange={e => onChange({ ...filters, topic: e.target.value as VideoFacets['topic'] })}>
-        <option value="all">All Topics</option>
-        {Object.entries(TOPIC_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-      </select>
-    </label>
-    <label>Angle
-      <select value={filters.angle} onChange={e => onChange({ ...filters, angle: e.target.value as VideoFacets['angle'] })}>
-        <option value="all">All Angles</option>
-        {Object.entries(ANGLE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-      </select>
-    </label>
-  </>;
-}
-
-const allVideoResults = { ...allVideoFacets, text: '' };
+const allVideoFacets = ALL_VIDEO_FACETS;
+const allVideoResults = ALL_VIDEO_FILTERS;
 
 export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; id?: string }) {
   const [filters, setFilters] = useState(allVideoResults);
@@ -59,13 +33,7 @@ export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; i
 
   return <div className="channel-video-browser">
     <aside aria-label="Video Browser" className="channel-video-sidebar">
-      <label className="channel-video-search">Find a Video
-        <input type="search" value={filters.text} placeholder="Project name or YouTube title" onChange={e => applyFilters({ ...filters, text: e.target.value })} />
-      </label>
-      <div className="idea-filters">
-        <VideoFacetControls filters={filters} onChange={next => applyFilters({ ...next, text: filters.text })} />
-        {filtering && <button type="button" className="small" onClick={() => applyFilters(allVideoResults)}>Clear Filters</button>}
-      </div>
+      <VideoFilterBar filters={filters} onChange={applyFilters} />
       <p className="muted small-text" role="status">
         {videos ? `${matching.length} ${filtering ? 'Matching ' : ''}${matching.length === 1 ? 'Video' : 'Videos'}` : 'Use Refresh YouTube Data to load the video list.'}
       </p>

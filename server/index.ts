@@ -20,6 +20,7 @@ import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addIdea, addReference, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateIdea, updateReference } from './video-ideas.js';
+import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { copyShotReferenceToInbox, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
@@ -322,6 +323,14 @@ app.post('/api/ideas/reference/add', handle((req, res) => { res.json(addReferenc
 app.post('/api/ideas/reference/update', handle((req, res) => { res.json(updateReference(req.body?.id, req.body?.referenceId, req.body ?? {})); }));
 app.post('/api/ideas/reference/move', handle((req, res) => { res.json(moveReference(req.body?.id, req.body?.referenceId, req.body?.step)); }));
 app.post('/api/ideas/reference/delete', handle((req, res) => { res.json(deleteReference(req.body?.id, req.body?.referenceId)); }));
+app.get('/api/ideas/brainstorm', handle((req, res) => { res.json(readBrainstorm(req.query.id)); }));
+app.post('/api/ideas/brainstorm/send', (req, res) => {
+  sendBrainstormMessage(req.body?.id, req.body?.ai, req.body?.message).then(
+    (result) => res.json(result),
+    (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
+app.post('/api/ideas/brainstorm/clear', handle((req, res) => { res.json(clearBrainstorm(req.body?.id)); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));

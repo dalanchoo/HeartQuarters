@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react';
-import { getJson, postJson } from './api';
+import { useEffect, useRef, useState } from 'react';
+import { getJson, postJson, type AiId } from './api';
+import { useAi } from './AiPicker';
+import { channelRows, rowName, videoProjectsHash } from './channelRows';
+import { ALL_VIDEO_FILTERS, VideoFilterBar, type VideoSearchFilters } from './VideoFinder';
+import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
+import type { BrainstormMessage, IdeaBrainstorm } from '../../server/idea-brainstorm';
 import type { IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 /** A filter dropdown value: "all" shows everything. */
@@ -10,6 +15,7 @@ type Filter<T extends string> = 'all' | T;
 // The order is his: the top is what he'd make next.
 export const STATUS_LABELS: Record<IdeaStatus, string> = {
   thinking: 'Thinking About It',
+  brainstorming: 'Brainstorming',
   researching: 'Researching',
   packaged: 'Packaged',
   filming: 'Filming',
@@ -22,6 +28,7 @@ export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided
 
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);
+  const [videos, setVideos] = useState<ChannelVideo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [showFinished, setShowFinished] = useState(false);
@@ -30,9 +37,23 @@ export function IdeasPage() {
   const [format, setFormat] = useState<Filter<IdeaFormat>>('all');
   const [status, setStatus] = useState<Filter<IdeaStatus>>('all');
   const [text, setText] = useState('');
+  const [brainstormId, setBrainstormId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('hq-brainstorm-width'));
+      return Number.isFinite(saved) && saved >= 300 ? saved : 440;
+    } catch {
+      return 440;
+    }
+  });
 
   const load = () => getJson<VideoIdea[]>('/api/ideas').then(setIdeas, (e: Error) => setError(e.message));
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void getJson<ChannelVideoList | null>('/api/channel/videos').then((data) => {
+      setVideos((data?.videos ?? []).filter((v) => !!v.piece));
+    }, () => {});
+  }, []);
 
   /** Send one change; the server replies with the whole updated list. */
   const send = async (url: string, data: unknown) => {
@@ -48,6 +69,7 @@ export function IdeasPage() {
   };
 
   const all = ideas ?? [];
+  const activeIdea = brainstormId ? all.find((i) => i.id === brainstormId) ?? null : null;
   const matches = (idea: VideoIdea) =>
     (category === 'all' || idea.category === category)
     && (format === 'all' || idea.format === format)
@@ -62,11 +84,21 @@ export function IdeasPage() {
   const last = all[all.length - 1]?.id;
 
   const list = (items: VideoIdea[]) => items.map((idea) => (
-    <IdeaCard key={idea.id} idea={idea} busy={busy} send={send} first={first === idea.id} last={last === idea.id} />
+    <IdeaCard
+      key={idea.id}
+      idea={idea}
+      videos={videos}
+      busy={busy}
+      send={send}
+      first={first === idea.id}
+      last={last === idea.id}
+      brainstorming={activeIdea?.id === idea.id}
+      onBrainstorm={() => setBrainstormId((cur) => (cur === idea.id ? null : idea.id))}
+    />
   ));
 
-  return (
-    <div className="content wide">
+  const mainContent = (
+    <div className={activeIdea ? 'ideas-main' : 'content wide'}>
       <div className="page-head">
         <h1>Video Ideas</h1>
         <button type="button" className="small" disabled={busy} onClick={() => void load()}>Reload</button>
@@ -129,11 +161,34 @@ export function IdeasPage() {
       )}
     </div>
   );
+
+  if (!activeIdea) return mainContent;
+
+  return (
+    <div className="ideas-split">
+      {mainContent}
+      <BrainstormResizer width={panelWidth} onWidth={(w, save) => {
+        setPanelWidth(w);
+        if (save) { try { localStorage.setItem('hq-brainstorm-width', String(w)); } catch { /* convenience */ } }
+      }} />
+      <BrainstormPanel
+        idea={activeIdea}
+        width={panelWidth}
+        busyIdeas={busy}
+        onAddToNotes={async (textToAdd) => {
+          const next = activeIdea.notes.trim() ? `${activeIdea.notes.trim()}\n\n${textToAdd}` : textToAdd;
+          return send('/api/ideas/update', { id: activeIdea.id, notes: next });
+        }}
+        onClose={() => setBrainstormId(null)}
+      />
+    </div>
+  );
 }
 
-function IdeaCard({ idea, busy, send, first, last }: {
-  idea: VideoIdea; busy: boolean; first: boolean; last: boolean;
+function IdeaCard({ idea, videos, busy, send, first, last, brainstorming, onBrainstorm }: {
+  idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; first: boolean; last: boolean; brainstorming: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
+  onBrainstorm: () => void;
 }) {
   const [title, setTitle] = useState(idea.title);
   const [notes, setNotes] = useState(idea.notes);
@@ -172,13 +227,16 @@ function IdeaCard({ idea, busy, send, first, last }: {
             <ReferenceRow key={ref.id} ideaId={idea.id} reference={ref} busy={busy} send={send}
               first={at === 0} last={at === idea.references.length - 1} />
           ))}
-          <AddReference ideaId={idea.id} busy={busy} send={send} />
+          <AddReference ideaId={idea.id} videos={videos} busy={busy} send={send} />
         </div>
         <div className="idea-actions">
           <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
           {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
           <button type="button" className="small" disabled={busy || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
             {idea.processed ? 'Back to Raw' : 'Mark Processed'}
+          </button>
+          <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
+            {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}
           </button>
           <span className="muted small-text">Changed {new Date(idea.updatedAt).toLocaleDateString()}</span>
           <span className="spacer" />
@@ -207,11 +265,21 @@ function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
     void send('/api/ideas/reference/delete', base);
   };
 
+  const isInternal = reference.url.startsWith('#Videos/');
+
   return (
     <div className="idea-ref">
-      <input type="url" aria-label="Link address" placeholder="https://…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <input type="text" aria-label="Link address" placeholder="https://… or #Videos/…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
       <input type="text" aria-label="Link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="idea-ref-actions">
+        <a
+          className="button-link small"
+          href={reference.url}
+          target={isInternal ? undefined : '_blank'}
+          rel={isInternal ? undefined : 'noreferrer'}
+        >
+          Open
+        </a>
         <button type="button" className="small" disabled={busy || !changed || !url.trim()} onClick={() => void send('/api/ideas/reference/update', { ...base, url, note })}>Save</button>
         <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: -1 })}>Up</button>
         <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: 1 })}>Down</button>
@@ -221,22 +289,278 @@ function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
   );
 }
 
-/** A new link at the bottom of the list. */
-function AddReference({ ideaId, busy, send }: {
-  ideaId: string; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+/** A new link at the bottom of the list, plus a collapsible Video Finder matching Channel → Video Detail. */
+function AddReference({ ideaId, videos, busy, send }: {
+  ideaId: string; videos: ChannelVideo[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
   const [url, setUrl] = useState('');
   const [note, setNote] = useState('');
+  const [filters, setFilters] = useState<VideoSearchFilters>(ALL_VIDEO_FILTERS);
   const add = async () => {
     if (await send('/api/ideas/reference/add', { id: ideaId, url, note })) { setUrl(''); setNote(''); }
   };
+  const matching = channelRows(videos, filters, 'publishedAt', true);
+  const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
+
   return (
-    <div className="idea-ref idea-ref-new">
-      <input type="url" aria-label="New link address" placeholder="https://…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
-      <input type="text" aria-label="New link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
-      <div className="idea-ref-actions">
-        <button type="button" className="small" disabled={busy || !url.trim()} onClick={() => void add()}>Add Link</button>
+    <>
+      <div className="idea-ref idea-ref-new">
+        <input type="text" aria-label="New link address" placeholder="https://… or pick a video below" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
+        <input type="text" aria-label="New link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+        <div className="idea-ref-actions">
+          <button type="button" className="small" disabled={busy || !url.trim()} onClick={() => void add()}>Add Link</button>
+        </div>
       </div>
-    </div>
+      {videos.length > 0 && (
+        <details className="idea-video-finder">
+          <summary>Find a Video in HeartQuarters</summary>
+          <div className="idea-video-finder-body">
+            <VideoFilterBar filters={filters} onChange={setFilters} />
+            <p className="muted small-text idea-video-count">
+              {matching.length} {filtering ? 'Matching ' : ''}{matching.length === 1 ? 'Video' : 'Videos'} · click one to add
+            </p>
+            <div className="idea-video-list">
+              {matching.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className="idea-video-option"
+                  disabled={busy}
+                  title={v.title}
+                  onClick={() => void send('/api/ideas/reference/add', {
+                    id: ideaId,
+                    url: videoProjectsHash(v.piece ?? ''),
+                    note: rowName(v),
+                  })}
+                >
+                  {rowName(v)}
+                </button>
+              ))}
+              {matching.length === 0 && <p className="muted small-text">No videos match these filters.</p>}
+            </div>
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
+const BRAINSTORM_AIS: { id: AiId; label: string }[] = [
+  { id: 'claude', label: 'Send to Claude' },
+  { id: 'codex', label: 'Send to ChatGPT' },
+  { id: 'gemini', label: 'Send to Gemini' },
+];
+
+const SPEAKER_NAMES: Record<BrainstormMessage['from'], string> = {
+  john: 'John',
+  claude: 'Claude',
+  codex: 'ChatGPT',
+  gemini: 'Gemini',
+};
+
+function clampBrainstormWidth(width: number): number {
+  const max = Math.min(820, Math.max(300, window.innerWidth - 360));
+  return Math.round(Math.min(max, Math.max(300, width)));
+}
+
+function BrainstormResizer({ width, onWidth }: { width: number; onWidth: (width: number, save: boolean) => void }) {
+  const drag = useRef<{ x: number; width: number; pointerId: number } | null>(null);
+  const latest = useRef(width);
+  latest.current = width;
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const active = drag.current;
+      if (active?.pointerId === e.pointerId) {
+        onWidth(clampBrainstormWidth(active.width + (active.x - e.clientX)), false);
+      }
+    };
+    const stop = (e: PointerEvent) => {
+      if (drag.current?.pointerId !== e.pointerId) return;
+      drag.current = null;
+      document.body.classList.remove('is-resizing-sidebar');
+      if (e.type === 'pointerup') onWidth(latest.current, true);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      if (drag.current) document.body.classList.remove('is-resizing-sidebar');
+    };
+  }, [onWidth]);
+
+  return (
+    <div
+      className="sidebar-resizer brainstorm-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize Brainstorm Panel"
+      aria-valuenow={width}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        drag.current = { x: e.clientX, width: latest.current, pointerId: e.pointerId };
+        document.body.classList.add('is-resizing-sidebar');
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); onWidth(clampBrainstormWidth(latest.current + 24), true); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); onWidth(clampBrainstormWidth(latest.current - 24), true); }
+      }}
+      onDoubleClick={() => onWidth(440, true)}
+    />
+  );
+}
+
+function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
+  idea: VideoIdea;
+  width: number;
+  busyIdeas: boolean;
+  onAddToNotes: (text: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [thread, setThread] = useState<IdeaBrainstorm | null>(null);
+  const [draft, setDraft] = useState('');
+  const [asking, setAsking] = useState<AiId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [addedId, setAddedId] = useState<string | null>(null);
+  const { overview } = useAi();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    setError(null);
+    setThread(null);
+    getJson<IdeaBrainstorm>(`/api/ideas/brainstorm?id=${encodeURIComponent(idea.id)}`).then(
+      (data) => { if (active) setThread(data); },
+      (e: Error) => { if (active) setError(e.message); },
+    );
+    return () => { active = false; };
+  }, [idea.id]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [thread?.messages.length]);
+
+  const sendTo = async (ai: AiId) => {
+    const msg = draft.trim();
+    if (!msg || asking) return;
+    setAsking(ai);
+    setError(null);
+    try {
+      const updated = await postJson<IdeaBrainstorm>('/api/ideas/brainstorm/send', { id: idea.id, ai, message: msg });
+      setThread(updated);
+      setDraft('');
+    } catch (e) {
+      setError((e as Error).message);
+      // Reload in case John's message was saved before the AI call failed.
+      void getJson<IdeaBrainstorm>(`/api/ideas/brainstorm?id=${encodeURIComponent(idea.id)}`).then(setThread, () => {});
+    } finally {
+      setAsking(null);
+    }
+  };
+
+  const clear = async () => {
+    if (!thread?.messages.length) return;
+    if (!window.confirm(`Clear the brainstorm conversation for “${idea.title}”?`)) return;
+    setError(null);
+    try {
+      setThread(await postJson<IdeaBrainstorm>('/api/ideas/brainstorm/clear', { id: idea.id }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const messages = thread?.messages ?? [];
+
+  return (
+    <aside className="ideas-brainstorm" style={{ width: `${width}px` }}>
+      <div className="brainstorm-head">
+        <div>
+          <h2>Brainstorm</h2>
+          <div className="muted small-text brainstorm-idea-title">{idea.title}</div>
+        </div>
+        <div className="brainstorm-head-actions">
+          <button type="button" className="small" disabled={!!asking || !messages.length} onClick={() => void clear()}>Clear</button>
+          <button type="button" className="small" onClick={onClose}>Close</button>
+        </div>
+      </div>
+
+      <p className="muted small-text brainstorm-context-note">
+        Saved in Drive. Each AI sees the idea title, notes, references, and full thread.
+      </p>
+
+      {error && <p className="error">{error}</p>}
+
+      <div className="brainstorm-messages" ref={listRef}>
+        {thread === null && !error && <p className="muted small-text">Loading conversation…</p>}
+        {thread !== null && messages.length === 0 && (
+          <p className="muted small-text">
+            No messages yet. Type a thought below and send it to Claude, ChatGPT, or Gemini.
+          </p>
+        )}
+        {messages.map((m) => (
+          <div key={m.id} className={`brainstorm-msg brainstorm-msg--${m.from}`}>
+            <div className="brainstorm-msg-head">
+              <strong>{SPEAKER_NAMES[m.from]}</strong>
+              <span className="muted small-text">{new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              {m.from !== 'john' && (
+                <button
+                  type="button"
+                  className="small brainstorm-add-note"
+                  disabled={busyIdeas}
+                  onClick={() => {
+                    void onAddToNotes(m.text).then((ok) => {
+                      if (ok) {
+                        setAddedId(m.id);
+                        setTimeout(() => setAddedId((cur) => (cur === m.id ? null : cur)), 1500);
+                      }
+                    });
+                  }}
+                >
+                  {addedId === m.id ? 'Added' : 'Add to Notes'}
+                </button>
+              )}
+            </div>
+            <div className="brainstorm-msg-text">{m.text}</div>
+          </div>
+        ))}
+      </div>
+
+      {asking && <p className="muted small-text">Asking {SPEAKER_NAMES[asking]}…</p>}
+
+      <div className="brainstorm-compose">
+        <textarea
+          rows={3}
+          value={draft}
+          disabled={!!asking}
+          maxLength={20000}
+          placeholder="Ask for angles, hooks, structure, or a devil's advocate…"
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <div className="brainstorm-send-buttons">
+          {BRAINSTORM_AIS.map(({ id, label }) => {
+            const opt = overview?.options.find((o) => o.id === id);
+            const available = opt ? opt.available : true;
+            return (
+              <button
+                key={id}
+                type="button"
+                className="small"
+                disabled={!!asking || !draft.trim() || !available}
+                title={!available ? `${SPEAKER_NAMES[id]} is not installed` : undefined}
+                onClick={() => void sendTo(id)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </aside>
   );
 }

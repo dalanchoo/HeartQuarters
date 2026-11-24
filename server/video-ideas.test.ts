@@ -27,9 +27,9 @@ describe('video ideas', () => {
 
   it('edits title, notes and status, and refuses bad values', () => {
     const [idea] = addIdea('Old title');
-    const [changed] = updateIdea(idea.id, { title: 'New title', notes: 'More', status: 'researching' });
-    expect(changed).toMatchObject({ title: 'New title', notes: 'More', status: 'researching' });
-    expect(updateIdea(idea.id, { notes: 'Only notes' })[0]).toMatchObject({ title: 'New title', status: 'researching' });
+    const [changed] = updateIdea(idea.id, { title: 'New title', notes: 'More', status: 'brainstorming' });
+    expect(changed).toMatchObject({ title: 'New title', notes: 'More', status: 'brainstorming' });
+    expect(updateIdea(idea.id, { notes: 'Only notes' })[0]).toMatchObject({ title: 'New title', status: 'brainstorming' });
     expect(() => updateIdea(idea.id, { status: 'famous' })).toThrow('valid status');
     expect(() => updateIdea(idea.id, { title: '   ' })).toThrow('title');
     expect(() => updateIdea('missing', { notes: 'x' })).toThrow('no longer');
@@ -78,12 +78,15 @@ describe('video ideas', () => {
     expect(readIdeas()[0].references).toEqual([]);
   });
 
-  it('only accepts web links for references', () => {
+  it('accepts web links and HeartQuarters video links, and rejects unsafe links', () => {
     const [idea] = addIdea('Links');
+    expect(addReference(idea.id, { url: '#Videos/005%20-%20Ayahuasca', note: 'Day One' })[0].references[0].url)
+      .toBe('#Videos/005%20-%20Ayahuasca');
+    expect(() => addReference(idea.id, { url: '#Videos/' })).toThrow('valid video');
     expect(() => addReference(idea.id, { url: 'file:///C:/secret.txt' })).toThrow('https://');
     expect(() => addReference(idea.id, { url: 'javascript:alert(1)' })).toThrow('https://');
     expect(() => addReference(idea.id, { url: 'not a link' })).toThrow('https://');
-    expect(readIdeas()[0].references).toEqual([]);
+    expect(readIdeas()[0].references).toHaveLength(1);
   });
 
   it('moves ideas up and down and deletes one', () => {

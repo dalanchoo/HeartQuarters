@@ -1112,8 +1112,21 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-refs-head { font-size: 0.85rem; color: var(--muted); }
 .idea-ref { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto; gap: 0.35rem; align-items: center; }
 .idea-ref input { min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
-.idea-ref-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.idea-ref-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; }
 .idea-ref-new { border-top: 1px dashed var(--line); padding-top: 0.3rem; }
+.idea-video-finder { margin-top: 0.2rem; }
+.idea-video-finder > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); list-style: none; }
+.idea-video-finder > summary::-webkit-details-marker { display: none; }
+.idea-video-finder > summary::before { content: '▶ '; font-size: 0.75rem; }
+.idea-video-finder[open] > summary::before { content: '▼ '; }
+.idea-video-finder-body { margin-top: 0.3rem; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); display: flex; flex-direction: column; gap: 0.3rem; }
+.idea-video-count { margin: 0; }
+.idea-video-list { max-height: 165px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.1rem; border-top: 1px solid var(--line); padding-top: 0.25rem; }
+.idea-video-option { all: unset; cursor: pointer; padding: 0.15rem 0.4rem; border-radius: 5px; font-size: 0.85rem; text-align: left; }
+.idea-video-option:hover:not(:disabled) { background: var(--accent-soft); }
+.idea-video-option:disabled { opacity: 0.5; cursor: default; }
+.button-link { display: inline-flex; align-items: center; padding: 0.2rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); text-decoration: none; font-size: 0.85rem; line-height: 1.2; }
+.button-link:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Ideas: compact Raw and Processed headers and idea rows */
 .idea-section { margin: 0.3rem 0 0; }
@@ -1129,6 +1142,27 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-filters select { min-height: 24px; font-size: 0.85rem; }
 .idea-filters .idea-filter-text { flex: 1; min-width: 12rem; }
 .idea-filters .idea-filter-text input { width: 100%; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
+
+/* Ideas: resizable Brainstorm panel on the right */
+.ideas-split { display: flex; height: 100%; overflow: hidden; }
+.ideas-main { flex: 1; min-width: 0; overflow-y: auto; padding: 0.9rem 1.25rem; }
+.ideas-brainstorm { flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.45rem; padding: 0.75rem 0.9rem; background: var(--panel); border-left: 1px solid var(--line); min-width: 300px; overflow: hidden; }
+.brainstorm-resizer { margin-left: 0; margin-right: -4px; }
+.brainstorm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.brainstorm-head h2 { margin: 0; font-size: 1.05rem; }
+.brainstorm-idea-title { font-weight: 600; color: var(--text); }
+.brainstorm-head-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+.brainstorm-context-note { margin: 0; }
+.brainstorm-messages { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.45rem; padding-right: 0.2rem; }
+.brainstorm-msg { border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem; background: var(--bg); }
+.brainstorm-msg--john { background: var(--accent-soft); }
+.brainstorm-msg-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.2rem; }
+.brainstorm-add-note { margin-left: auto; }
+.brainstorm-msg-text { white-space: pre-wrap; font-size: 0.9rem; line-height: 1.38; overflow-wrap: anywhere; }
+.brainstorm-compose { display: flex; flex-direction: column; gap: 0.35rem; border-top: 1px solid var(--line); padding-top: 0.45rem; }
+.brainstorm-compose textarea { min-height: 0; font-size: 0.9rem; }
+.brainstorm-send-buttons { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.active-brainstorm { background: var(--accent-soft); border-color: var(--accent); }
 
 /* Channel tab: a full-width table of every video, headings stay visible while scrolling */
 .content.channel-page { height: 100%; }

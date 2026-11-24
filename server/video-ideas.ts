@@ -7,7 +7,7 @@ import { readText, writable, writeFile } from './safe-files.js';
 
 export const IDEAS_FILE = 'Video Ideas.json';
 /** Where an idea is on its way to becoming a video. */
-export const IDEA_STATUSES = ['thinking', 'researching', 'packaged', 'filming', 'made', 'dropped'] as const;
+export const IDEA_STATUSES = ['thinking', 'brainstorming', 'researching', 'packaged', 'filming', 'made', 'dropped'] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 /** Whether the idea would be a longform video or a Short. New ideas start Undecided, and so do ideas saved before this field existed. */
 export const IDEA_FORMATS = ['undecided', 'longform', 'short'] as const;
@@ -130,12 +130,18 @@ function referenceAt(idea: VideoIdea, referenceId: unknown): number {
   return at;
 }
 
-/** Only web addresses, so a reference can't hold a file path or a script. */
+/** Web addresses or internal HeartQuarters #Videos/ links, so a reference can't hold a file path or script. */
 export function checkUrl(value: unknown): string {
   const url = text(value, URL_MAX, 'link').trim();
+  if (url.startsWith('#Videos/')) {
+    if (url.length <= '#Videos/'.length || /[\r\n\t]/.test(url)) {
+      throw new Error('Choose a valid video in HeartQuarters.');
+    }
+    return url;
+  }
   let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new Error('The link must be a full web address starting with https://.'); }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('The link must start with https:// or http://.');
+  try { parsed = new URL(url); } catch { throw new Error('The link must start with https://, http://, or #Videos/.'); }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('The link must start with https://, http://, or #Videos/.');
   return url;
 }
 
