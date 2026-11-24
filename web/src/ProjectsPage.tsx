@@ -288,18 +288,20 @@ export function ProjectsPage() {
       <aside className="sidebar">
         <details className="sidebar-section sidebar-videos" open>
           <summary>Videos</summary>
-          <div className="sidebar-actions">
-            <NewFolderButton kind="top" onCreated={onCreated} />
-            <NewFolderButton kind="standalone" onCreated={onCreated} />
-          </div>
           <div className="sidebar-filters">
+            <div className="sidebar-actions">
+              <button className="small" aria-label={scanning ? 'Checking YouTube' : 'Check Linked Videos on YouTube'} title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking…' : 'Check Linked Videos on'} <YouTubeIcon /></button>
+              <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}>{units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
+            </div>
+            <div className="sidebar-actions">
+              <NewFolderButton kind="top" onCreated={onCreated} />
+              <NewFolderButton kind="standalone" onCreated={onCreated} />
+            </div>
             <span id="video-show-label">Show</span>
             <PackagingChoice name="Show" value={filter} options={Object.keys(FILTER_LABELS)} label={value => FILTER_LABELS[value as Filter]} render={showFilter} onChange={value => setFilter(value as Filter)} />
             <label htmlFor="video-find">Find</label>
             <input id="video-find" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Project name or saved title" />
           </div>
-          <button className="small" aria-label={scanning ? 'Checking YouTube' : 'Check Linked Videos on YouTube'} title="YouTube checks last for this session; check again after changing Studio." disabled={scanning || !overview.length || quotaUsedUp(quota)} onClick={() => void checkLinkedVideos()}>{scanning ? 'Checking…' : 'Check Linked Videos on'} <YouTubeIcon /></button>
-          <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}> {units(Math.max(1, Math.ceil(overview.filter((item) => item.videoId).length / 50)) + overview.filter((item) => item.videoId).length)}</span>
           {scan && <p className="status-legend" role="status">{scan}</p>}
           {overviewError && <p className="error">Video status unavailable: {overviewError}</p>}
           {error && <p className="error">{error}</p>}

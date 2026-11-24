@@ -993,6 +993,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 
 /* Videos sidebar: "Show" and "Find" on the right of their column, their boxes lined up on the left. */
 .sidebar-filters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.4rem 0.5rem; margin: 0.4rem 0 0.6rem; font-size: 0.85rem; }
+.sidebar-filters > .sidebar-actions { grid-column: 2; margin-bottom: 0; align-items: center; }
 .sidebar-filters > label { text-align: right; }
 .sidebar-filters select, .sidebar-filters input { width: 100%; min-width: 0; box-sizing: border-box; }
 .sidebar-videos > summary { padding: 0.3rem 0; }
