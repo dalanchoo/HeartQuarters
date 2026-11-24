@@ -14,6 +14,7 @@ import path from 'node:path';
 import mammoth from 'mammoth';
 import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
+import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
 import { appendText, makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
@@ -292,12 +293,13 @@ export function picksPrompt(hasNotes: boolean): string {
     ...(hasNotes ? [NOTES_NOTE] : []),
     CATEGORIES_NOTE(),
     'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on, follow John\'s notes, and keep to the skill\'s hard rules (paid off in the first 30 seconds, the most positive true expression, gaze toward the centre, nothing in the bottom-right corner). A pair may combine a title from one place with a thumbnail from another.',
+    `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
     'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. For longform, if source-timings.srt or source-timings.vtt exists, read it and include accurate chapters based on those timestamps in the description; otherwise omit chapters. Put hashtags inside the description. Do not invent facts or timestamps.',
     TAG_RULES,
     'Use the keyword results recorded in the brief and any pasted research in notes.txt when available. A phrase appearing in a transcript, title, or review is not evidence of search demand.',
     "The description's first sentence must contain one of that pick's own tags word for word (ignoring capitals), within the first 200 characters, because vidIQ scores the description by this; a related word isn't enough. For example, with the tag \"Memory Condition\", open with \"With my memory condition, …\" rather than \"Sometimes I meet somebody…\". Check every pick for this before replying.",
     "Don't create or change any file, and don't use vidIQ. Reply with only this JSON, nothing before or after it:",
-    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","background":"the background and any supporting image","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"],"description":"complete YouTube description including hashtags and accurate chapters only when available","tags":"comma-separated tags","pinnedComment":"proposed pinned comment"}]}',
+    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","photoAttributes":[],"background":"the background and any supporting image","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"],"description":"complete YouTube description including hashtags and accurate chapters only when available","tags":"comma-separated tags","pinnedComment":"proposed pinned comment"}]}',
   ].join('\n\n');
 }
 

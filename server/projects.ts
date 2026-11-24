@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
+import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 import { readable } from './safe-files.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
@@ -64,6 +65,8 @@ export interface BriefPick {
   accent: string;
   /** Expressions-library categories that fit, e.g. "Composure > Calm". */
   expression: string;
+  /** Optional gaze or mouth tags that help the chosen composition. */
+  photoAttributes?: string[];
   background: string;
   why: string;
   /** Which AIs suggested or ranked it highly. */
@@ -128,6 +131,9 @@ export function parsePicks(data: unknown): BriefPick[] | null {
     thumbnailText: text(p?.thumbnailText),
     accent: text(p?.accent),
     expression: text(p?.expression),
+    ...(Array.isArray(p?.photoAttributes) ? {
+      photoAttributes: [...new Set(p.photoAttributes.filter((tag): tag is string => typeof tag === 'string' && THUMBNAIL_PHOTO_ATTRIBUTES.includes(tag)))],
+    } : {}),
     background: text(p?.background),
     why: text(p?.why),
     backedBy: Array.isArray(p?.backedBy) ? p.backedBy.filter((b): b is string => typeof b === 'string') : [],

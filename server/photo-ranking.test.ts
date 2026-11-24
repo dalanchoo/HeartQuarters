@@ -8,6 +8,7 @@ import { MAX_CANDIDATES, RANKING_FILE, pickCategories, rankingCandidates, rankin
 import { setExpressionRating } from './expression-rating';
 import { clearExpressionIndex, type ExpressionPhoto } from './expressions';
 import type { AskAi } from './brief';
+import type { BriefPick } from './projects';
 
 const PIECE = '022 - V/Shorts/022_S07 - Somebody Knows Me';
 const PICK = { title: "They Know Me. I Don't Know Who They Are.", thumbnailText: 'Remember me?', accent: 'ME?', expression: 'Positive > Warmth, Empathy > Compassion (warm, sheepish smile)', background: 'dark room', why: 'because', backedBy: ['Claude'] };
@@ -32,7 +33,7 @@ afterEach(() => {
   clearExpressionIndex();
   removeTree(tmp);
 });
-const choose = (pick = PICK) => fs.writeFileSync(path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', 'Choice.json'), JSON.stringify({ pick, index: 0, photo: null }));
+const choose = (pick: BriefPick = PICK) => fs.writeFileSync(path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', 'Choice.json'), JSON.stringify({ pick, index: 0, photo: null }));
 /** Makes a small copy: here just a text file standing in for the image. */
 const small = async (full: string) => {
   const out = path.join(tmp, `small-${path.basename(full)}`);
@@ -77,6 +78,16 @@ describe('which photos Claude looks at', () => {
     const list = rankingCandidates([...inFolder, confirmed], ['Positive/Warmth'], []);
     expect(list).toHaveLength(MAX_CANDIDATES);
     expect(list[0].photo).toBe(confirmed);
+  });
+  it('prefers confirmed cues over guesses and keeps photos without matching cues eligible', () => {
+    const [unknown, rejected, guessed, confirmed] = PHOTOS.slice(0, 4).map((_, i) => photo(`Positive/Warmth/Photo_${i}.jpg`));
+    rejected.tags = [{ tag: 'LookRight', confirmed: false, disconfirmed: true, confidence: 99 }];
+    guessed.tags = ['LookRight', 'MouthOpen'].map(tag => ({ tag, confirmed: false, confidence: 98 }));
+    confirmed.tags = [{ tag: 'OpenMouthLaugh', confirmed: true, confidence: null }];
+    const photos = [unknown, rejected, guessed, confirmed];
+    expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
+    expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo))
+      .toEqual([confirmed, guessed, unknown, rejected]);
   });
 });
 
@@ -149,6 +160,22 @@ describe('ranking the photos for the chosen pair', () => {
       { photo: 'Empathy/Compassion/Compassion_002.jpg', why: 'kind and a bit sheepish' },
       { photo: 'Positive/Warmth/Warm_001.jpg', why: 'warm' },
     ]);
+  });
+  it('uses the chosen pair’s photo cues from disk for the previews and the single ranking request', async () => {
+    choose({ ...PICK, photoAttributes: ['LookAtCamera'] });
+    const match = PHOTOS[2];
+    fs.writeFileSync(path.join(tmp, 'Expressions', match.path.replace(/\.jpg$/, '.txt')), 'LookAtCamera, N/A, CONFIRMED');
+    const prompts: string[] = [];
+    const ask: AskAi = async (_ai, prompt) => {
+      prompts.push(prompt);
+      return JSON.stringify({ ranked: [{ photo: match.path, why: 'direct gaze' }] });
+    };
+    const { job, finished } = startRanking(PIECE, { ask, starred: () => [], small });
+    await finished;
+    expect(job.state).toBe('done');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Photo cues: LookAtCamera');
+    expect(prompts[0]).toContain(`- 01.jpg: ${match.path}`);
   });
   it.each([
     { result: 'an AI fallback', ranked: [{ photo: AI_PHOTO.path, why: 'suitable fallback' }] },

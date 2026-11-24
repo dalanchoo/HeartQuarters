@@ -295,8 +295,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     <div className="photo-picker">
       <h4>Pick the Photo</h4>
       <p className="muted small-text">
-        Click a photo to use it for this pair; Full Size opens the whole photo. With your portrait on the left, choose one where you look at the
-        camera or to your left (toward the text), not away from it.
+        Click a photo to use it for this pair. Full Size opens the whole photo.
       </p>
       {choice.photo && (
         <div className="photo-group">
@@ -314,6 +313,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           )}
         </p>
+        {!!choice.pick.photoAttributes?.length && <p className="muted small-text">Photo Cues: {choice.pick.photoAttributes.map(tag => tag.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}</p>}
         {rankingNow && <p className="brief-working small-text">Claude is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
         {ranking?.job?.state === 'failed' && !rankingNow && (
           <p className="error small-text">

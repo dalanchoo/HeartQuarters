@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { appDir, config, safeResolve } from './config.js';
 import { askAi, type AskAi } from './brief.js';
+import { OPEN_MOUTH_TAGS } from './expression-attribute-vocabulary.js';
 import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences } from './expression-references.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
@@ -43,9 +44,9 @@ export function pickCategories(expression: string): string[] {
 }
 
 /**
- * Find eligible photos by expression tag, folder, or star. Give confirmed tags and likes priority before the cap.
+ * Find eligible photos by expression tag, folder, or star. Then prefer requested gaze and mouth tags before the cap.
  */
-export function rankingCandidates(photos: ExpressionPhoto[], categories: string[], starred: string[]) {
+export function rankingCandidates(photos: ExpressionPhoto[], categories: string[], starred: string[], attributes: string[] = []) {
   const inCategory = (p: ExpressionPhoto, c: string) => p.category.toLowerCase() === c.toLowerCase() || p.category.toLowerCase().startsWith(c.toLowerCase() + '/');
   const names = new Set(categories.map(category => category.slice(category.lastIndexOf('/') + 1).toLowerCase()));
   const confirmed = new Set<ExpressionPhoto>();
@@ -67,12 +68,27 @@ export function rankingCandidates(photos: ExpressionPhoto[], categories: string[
   for (const c of categories) photos.filter((p) => inCategory(p, c)).forEach(add);
   suggested.forEach(add);
   photos.filter((p) => stars.has(p.path)).forEach(add);
-  order.sort((a, b) => Number(confirmed.has(b)) - Number(confirmed.has(a)) || Number(b.rating === 'liked') - Number(a.rating === 'liked'));
-  const candidates = order.map(photo => ({ photo, starred: stars.has(photo.path), aiGenerated: isAiExpression(photo) }));
+  const candidates = order.map(photo => ({
+    photo, starred: stars.has(photo.path), aiGenerated: isAiExpression(photo), attributeScore: attributeScore(photo, attributes),
+  }));
+  candidates.sort((a, b) => Number(confirmed.has(b.photo)) - Number(confirmed.has(a.photo))
+    || b.attributeScore - a.attributeScore
+    || Number(b.photo.rating === 'liked') - Number(a.photo.rating === 'liked'));
   const generated = candidates.filter(c => c.aiGenerated);
   // Leave room to assess AI fallbacks in the same request, even when the camera shortlist is full.
   const camera = candidates.filter(c => !c.aiGenerated).slice(0, MAX_CANDIDATES - Math.min(TOP, generated.length));
   return [...camera, ...generated.slice(0, MAX_CANDIDATES - camera.length)];
+}
+
+function attributeScore(photo: ExpressionPhoto, attributes: string[]): number {
+  let score = 0;
+  for (const attribute of attributes) {
+    const names = (attribute === 'MouthOpen' ? OPEN_MOUTH_TAGS : [attribute]).map(tag => tag.toLowerCase());
+    const matches = photo.tags.filter(tag => !tag.disconfirmed && names.includes(tag.tag.toLowerCase()));
+    if (matches.some(tag => tag.confirmed)) score += attributes.length + 1;
+    else if (matches.length) score++;
+  }
+  return score;
 }
 
 type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; aiGenerated: boolean; rating?: ExpressionPhoto['rating'] };
@@ -85,13 +101,14 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
       `- Title: "${pick.title}"`,
       `- Thumbnail text: ${pick.thumbnailText.toUpperCase()}`,
       `- Expression wanted: ${pick.expression}`,
+      ...(pick.photoAttributes?.length ? [`- Photo cues: ${pick.photoAttributes.join(', ')}. Left and right refer to the viewer's sides of the image.`] : []),
       `- Background and layout: ${pick.background}`,
     ].join('\n'),
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
     'Some matching photos are filed in other expression folders. Judge the expression you see in the photo.',
     'Liked and Meh are John’s own ratings. Give a liked photo a boost when it fits the pair. Meh and unrated photos are also usable.',
     list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.aiGenerated ? 'AI-generated' : 'camera photo', c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
-    `Judge the actual photos for emotional fit, natural lighting and skin color, a clear expression at phone size, and gaze toward the centre or camera. Prefer variety when photos are close. Rank up to ${TOP} suitable camera photos, best first. If even one camera photo suits the pair, return only suitable camera photos. If none suits it, rank up to ${TOP} suitable AI-generated photos as fallbacks. Return an empty ranked array if none of the photos is suitable.`,
+    `Judge the actual photos for emotional fit, natural lighting and skin color, a clear expression at phone size, and how the gaze and mouth suit the layout and any photo cues above. Prefer variety when photos are close. Rank up to ${TOP} suitable camera photos, best first. If even one camera photo suits the pair, return only suitable camera photos. If none suits it, rank up to ${TOP} suitable AI-generated photos as fallbacks. Return an empty ranked array if none of the photos is suitable.`,
     "Don't create or change any file. Reply with only this JSON, nothing before or after it, using the library paths exactly as listed:",
     '{"ranked":[{"photo":"Category/Sub/Name.jpg","why":"one sentence"}]}',
   ].join('\n\n');
@@ -158,7 +175,7 @@ export function startRanking(piece: string, deps: RankingDeps = {}): { job: Rank
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   const photos = (deps.photos ?? (() => expressionIndex().photos))();
   const starred = (deps.starred ?? (() => readExpressionReferences().paths))();
-  const candidates = rankingCandidates(photos, pickCategories(choice.pick.expression), starred);
+  const candidates = rankingCandidates(photos, pickCategories(choice.pick.expression), starred, choice.pick.photoAttributes);
   if (!candidates.length) throw new Error("No eligible photos matched this pair's expression tags, folders, or your starred photos. Thumbs-down photos are excluded.");
   const job: RankingJob = { piece, state: 'working', looked: candidates.length };
   jobs.set(piece, job);

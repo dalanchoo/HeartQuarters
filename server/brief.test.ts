@@ -282,6 +282,15 @@ ${JSON.stringify(PICKS)}`)).toHaveLength(3);
     expect(() => picksFromAnswer('no json')).toThrow(/expected form/);
     expect(() => picksFromAnswer('{"picks":[{"title":"no thumbnail text"}]}')).toThrow(/expected form/);
   });
+  it('accepts only supported photo cues and still reads older picks', () => {
+    const [withCues, older] = picksFromAnswer(JSON.stringify({ picks: [
+      { ...PICKS.picks[0], photoAttributes: ['LookRight', 123, 'MouthOpen', 'LookRight', 'EyesWide'] },
+      PICKS.picks[0],
+    ] }));
+    expect(withCues.photoAttributes).toEqual(['LookRight', 'MouthOpen']);
+    expect(older.photoAttributes).toBeUndefined();
+    expect(picksPrompt(false)).toContain('Use photoAttributes only when a particular gaze or mouth position helps the concept.');
+  });
 
   it('capitalizes generated tags while preserving acronyms, apostrophes, and existing mixed case', () => {
     const tags = 'active listening, how to be heard, Daryl Davis KKK, long-term memory, why people don’t listen, émotions, vidIQ';
