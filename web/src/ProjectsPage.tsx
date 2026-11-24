@@ -29,6 +29,7 @@ import { YouTubeLinkBar, useYoutubeLink } from './YouTubeCard';
 import { YouTubeIcon } from './YouTubeOpenLink';
 import { VideoPreview } from './VideoPreview';
 import { PackagingChoice, PackagingCompare } from './PackagingCompare';
+import { LockSwitch } from './LockSwitch';
 import { YOUTUBE_SELECTION } from './comparisonSelection';
 import { hasPendingPackaging } from './pendingPackaging';
 import { ThumbnailImport } from './ThumbnailImport';
@@ -850,6 +851,15 @@ function PieceCard({
     setDocsLoads((n) => n + 1);
     onChanged?.();
   };
+  const toggleLock = (path: string) => {
+    const v = piece.versions.find(x => x.path === path);
+    if (!v || !version) return;
+    if (compareDirty && !window.confirm(`You have unapplied changes to ${versionLabel(version.name)}. Discard them and ${unlocked === path ? 'lock it' : `unlock ${versionLabel(v.name)} instead`}?`)) return;
+    setCompareDirty(false);
+    if (unlocked === path) { setUnlocked(null); return; }
+    setVersionName(v.name);
+    setUnlocked(path);
+  };
   // Every card has 10 collapsible sections, top to bottom:
   // 1. YouTube, 2. About This Video, 3. Script, 4. Versions (open by default), 5. Generate Video, 6. Generate Packaging,
   // 7. View and Compare Packaging, 8. Analysis, 9. Other Platforms, 10. Clean Up.
@@ -872,12 +882,18 @@ function PieceCard({
         <div className={`piece-body${piece.kind === 'short' ? ' piece-body--short' : ''}`}>
           <div className="piece-media">
             <VideoPreview key={piece.path} exports={piece.exports} covers={version?.covers ?? []} />
+            <div className="versions piece-actions">
+              {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
+              <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open {piece.kind === 'short' ? 'Short' : 'Video'} Folder</button>
+              {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
+            </div>
           </div>
 
           <div className="piece-docs">
             {version && <ThumbnailImport key={version.path} piece={piece.path} version={version.path} versions={piece.versions} locked={locked} onSaved={() => onChanged?.()} />}
             {!version && <div><p className="muted">No packaging yet.</p><button onClick={() => { void postJson<{ name: string; path: string }>('/api/packaging/first-version', { piece: piece.path }).then(result => { setVersionName(result.name); setUnlocked(result.path); onChanged?.(); }, e => window.alert(e instanceof Error ? e.message : String(e))); }}>Create V01</button></div>}
             {version && (() => {
+              const isDraft = isDraftVersion(version.name);
               const versionButtons = (items: typeof piece.versions) => (
                 <div className="versions">
                   {items.map((v) => (
@@ -895,29 +911,38 @@ function PieceCard({
                     <details className="yt-section version-drafts" open>
                       <summary>Versions ({realVersions.length})</summary>
                       {versionButtons(realVersions)}
+                      {!isDraft && (
+                        <>
+                          <div className="versions version-actions">
+                            <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
+                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                            <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
+                            <LockSwitch locked={locked} name={versionLabel(version.name)} onToggle={() => toggleLock(version.path)} />
+                          </div>
+                          <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />
+                        </>
+                      )}
                     </details>
                   )}
                   {draftVersions.length > 0 && (
-                    <details className="yt-section version-drafts">
+                    <details className="yt-section version-drafts" open={realVersions.length === 0 || undefined}>
                       <summary>Drafts ({draftVersions.length})</summary>
                       {versionButtons(draftVersions)}
+                      {isDraft && (
+                        <>
+                          <div className="versions version-actions">
+                            <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
+                            <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
+                            <LockSwitch locked={locked} name={versionLabel(version.name)} onToggle={() => toggleLock(version.path)} />
+                          </div>
+                          <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />
+                        </>
+                      )}
                     </details>
                   )}
-                  <div className="versions">
-                    <NewPackagingVersion key={version.path} piece={piece} source={version} onCreated={(name) => { setVersionName(name); setUnlocked(version.path.replace(/[^/]+$/, name)); onChanged?.(); }} />
-                    <DeletePackagingVersion key={`delete-${version.path}`} piece={piece} version={version} locked={locked} onChanged={() => { setVersionName(realVersions.find((v) => v.path !== version.path)?.name ?? piece.versions.find((v) => v.path !== version.path)?.name ?? ''); onChanged?.(); }} />
-                    <button className="small" onClick={() => openInExplorer('projects', version.path)}>Open {versionLabel(version.name)} Folder</button>
-                  </div>
                 </>
               );
             })()}
-            {version && <VersionNotes key={`notes-${version.path}`} version={version} locked={locked} />}
-
-            <div className="versions piece-actions">
-              {piece.kind !== 'reel' && <OpenInCapCut draft={draft ?? piece.name} />}
-              <button className="small" onClick={() => openInExplorer('projects', piece.path)}>Open {piece.kind === 'short' ? 'Short' : 'Video'} Folder</button>
-              {manage && <ManageButtons what={manage.path === piece.path && piece.kind === 'short' ? 'Short' : 'Video'} path={manage.path} onDone={manage.onDone} />}
-            </div>
           </div>
         </div>
       </details>
@@ -937,15 +962,7 @@ function PieceCard({
 
       {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
-        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={(path) => {
-          const v = piece.versions.find(x => x.path === path);
-          if (!v) return;
-          if (compareDirty && !window.confirm(`You have unapplied changes to ${versionLabel(version.name)}. Discard them and ${unlocked === path ? 'lock it' : `unlock ${versionLabel(v.name)} instead`}?`)) return;
-          setCompareDirty(false);
-          if (unlocked === path) { setUnlocked(null); return; }
-          setVersionName(v.name);
-          setUnlocked(path);
-        }} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} open={compareOpen} setOpen={setCompareOpen} />
+        <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={toggleLock} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} open={compareOpen} setOpen={setCompareOpen} />
       ) : (
         <details className="yt-section">
           <summary>View and Compare Packaging</summary>
