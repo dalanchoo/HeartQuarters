@@ -14,6 +14,7 @@ import { canSelectIncomingCopy } from './stagedPackaging';
 import { AiHighlightedText, AiWritingChecker } from './AiWritingChecker';
 import { setFieldValue } from './packaging';
 import { fieldKey } from './fieldSuggestions';
+import { PackagingChoice } from './PackagingChoice';
 
 const youtubeFile = (version?: PackagingVersion) => version?.docs.find(d => /(^|\/)youtube\.md$/i.test(d.name));
 const thumbnail = (version?: PackagingVersion) => version?.covers.find(c => /(^|\/)thumbnail\.(png|jpe?g)$/i.test(c.name));
@@ -122,6 +123,24 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
   return <div>
     {(leftData.error || rightData.error) && <p className="error">Could Not Read Version: {leftData.error || rightData.error}</p>}
     {left && !ready && !leftData.error && !rightData.error && <p className="muted">Loading Versions…</p>}
+    {ready && (leftThumb || rightThumb || (generated && (isDraft(left) || isDraft(right)))) && <div className="version-field-compare"><div className="lvy-row-head"><span className="comparison-label"><strong>Thumbnail</strong></span>{right && <span className="comparison-actions"><CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)} disabled={busy} showCopyRight={targetIsRight} showCopyLeft={targetIsLeft} canCopyRight={!busy && canCopy && targetIsRight && !!sourceThumb} canCopyLeft={!busy && canCopy && targetIsLeft && !!sourceThumb} copyRight={() => toggle('Thumbnail')} copyLeft={() => toggle('Thumbnail')} /></span>}</div><CopyDirectionFrame left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)}>
+      <div className={right ? 'compare-columns' : undefined}>{(right ? [leftThumb, rightThumb] : [leftThumb]).map((thumb, i) => {
+        const side = i === 0 ? left : right;
+        const name = i === 0 ? leftVersion?.name : rightVersion?.name;
+        const imageTitle = (path: string) => {
+          const idx = generated?.images.findIndex(img => img.path === path) ?? -1;
+          const img = idx >= 0 ? generated!.images[idx] : undefined;
+          return img ? `${img.label}${idx === 0 ? ' (Newest)' : ''}` : path;
+        };
+        // The name above each image, with the Draft's thumbnail dropdown beside its name, so both images start level.
+        return <div key={i}><div className="thumb-name"><strong>{name}</strong>
+          {isDraft(side) && (generated!.images.length ? <PackagingChoice className="draft-thumb-choice" name="Draft Thumbnail" value={generated!.image?.path ?? ''} options={generated!.images.map(img => img.path)} disabled={busy} label={imageTitle} onChange={path => generated!.chooseImage(path)} render={path => {
+            const img = generated!.images.find(item => item.path === path);
+            return img ? <img className="draft-thumb-option" src={thumbUrl('projects', img.path, 320, fileStamp(img))} alt={imageTitle(path)} title={imageTitle(path)} /> : path;
+          }} /> : <span className="muted small-text">No draft images yet.</span>)}</div>
+          <div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${name} thumbnail`} /> : isDraft(side) ? null : '(empty)'}</div></div>;
+      })}</div>
+    </CopyDirectionFrame></div>}
     {ready && labels.map(label => {
       const displayValue = (value: string | undefined) => value !== undefined && label.toLowerCase() === 'tags' ? sortTags(value) : value;
       const savedFields = parseFields(originalDoc.text ?? '') ?? [];
@@ -156,16 +175,6 @@ export function VersionCompare({ versions, version, doc: originalDoc, locked, on
         {diff?.reordered && <p className="muted small-text">The same tags are present in a different order.</p>}
       </ComparisonRow>;
     })}
-    {ready && (leftThumb || rightThumb || (generated && (isDraft(left) || isDraft(right)))) && <div className="version-field-compare"><div className="lvy-row-head"><span className="comparison-label"><strong>Thumbnail</strong></span>{right && <span className="comparison-actions"><CopyDirectionControls left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)} disabled={busy} showCopyRight={targetIsRight} showCopyLeft={targetIsLeft} canCopyRight={!busy && canCopy && targetIsRight && !!sourceThumb} canCopyLeft={!busy && canCopy && targetIsLeft && !!sourceThumb} copyRight={() => toggle('Thumbnail')} copyLeft={() => toggle('Thumbnail')} /></span>}</div><CopyDirectionFrame left={leftVersion?.name ?? 'Left'} right={rightVersion?.name ?? 'Right'} selected={localCopyDirection(selected.includes('Thumbnail'), targetIsRight)}>
-      <div className={right ? 'compare-columns' : undefined}>{(right ? [leftThumb, rightThumb] : [leftThumb]).map((thumb, i) => {
-        const side = i === 0 ? left : right;
-        const name = i === 0 ? leftVersion?.name : rightVersion?.name;
-        // The name above each image, with the Draft's image menu beside its name, so both images start level.
-        return <div key={i}><div className="thumb-name"><strong>{name}</strong>
-          {isDraft(side) && (generated!.images.length ? <select className="draft-image-select" value={generated!.image?.path ?? ''} disabled={busy} onChange={e => generated!.chooseImage(e.target.value)}>{generated!.images.map((img, n) => <option key={img.path} value={img.path}>{img.label}{n === 0 ? ' (Newest)' : ''}</option>)}</select> : <span className="muted small-text">No draft images for this pair yet.</span>)}</div>
-          <div>{thumb ? <img className="lvy-thumb" src={thumbUrl('projects', thumb.path, 320, fileStamp(thumb))} alt={`${name} thumbnail`} /> : isDraft(side) ? null : '(empty)'}</div></div>;
-      })}</div>
-    </CopyDirectionFrame></div>}
     {ready && right && !sourceVersion && <p className="muted small-text">To edit or copy, unlock one of the two versions above.</p>}
     <div className={`push-summary${dirty ? ' has-changes' : ''}`}>{dirty ? <>{draft.clashes.length > 0 && <p className="error-note" role="alert">{draft.clashes.join(', ')} also changed outside this page since you started editing (by the AI, another part of this page or another program), so Apply can't combine them. Copy your edit somewhere, click Discard Changes to see the newer text, then put your edit back.</p>}<strong>Apply Changes Will:</strong><ul>{draft.changes.filter(label => !selected.includes(label)).map(label => <li key={`edit-${label}`}>Save Edited {label} to {version.name}</li>)}{selected.map(label => <li key={`copy-${label}`}>Copy {label} From {sourceVersion?.name} to {version.name}{draft.changes.includes(label) ? ' (replaces the edit)' : ''}</li>)}</ul>{losesChapters && <p role="alert">{sourceVersion?.name}&apos;s description has no chapter list, but {version.name}&apos;s has. Copying it replaces the whole description, chapters included.</p>}</> : <span className="muted small-text">No Changes Selected.</span>}</div>
     <button disabled={!dirty || busy || locked} onClick={() => void apply()}>Apply Changes</button>{' '}<button disabled={!dirty || busy} onClick={() => { draft.discard(); setSelected([]); targetBaseline.current = null; setMessage('Changes discarded.'); }}>Discard Changes</button>

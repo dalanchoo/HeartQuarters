@@ -12,13 +12,16 @@ describe('the Draft', () => {
     expect(draftText(PICK)).toBe('Title:\nT\n\nDescription:\nAbout it.\n\nHashtags:\n#SDAM #Memory\n\nTags:\na, b\n\nPinned Comment:\nQuestion?\n\nThumbnail text:\nREMEMBER ME?' + settings);
     expect(draftText({ ...PICK, description: undefined, tags: undefined, pinnedComment: undefined })).toBe('Title:\nT\n\nThumbnail text:\nREMEMBER ME?' + settings);
   });
-  it("lists the pair's images newest first, and no other pair's", () => {
+  it('lists all draft images newest first across pairs, carrying each image’s pair', () => {
+    const otherPick = { ...PICK, title: 'Other' };
     const conversations = [
       { name: 'ChatGPT 01', path: 'c1', images: [img('01.png', 10), img('02.png', 30)], requests: null, pick: PICK, photo: null },
       { name: 'Gemini 01', path: 'g1', images: [img('01.png', 20)], requests: null, pick: PICK, photo: null },
-      { name: 'ChatGPT 02', path: 'c2', images: [img('01.png', 99)], requests: null, pick: { ...PICK, title: 'Other' }, photo: null },
+      { name: 'ChatGPT 02', path: 'c2', images: [img('01.png', 99)], requests: null, pick: otherPick, photo: null },
     ] as DraftConversation[];
-    expect(draftImages(choice, conversations).map((i) => i.label)).toEqual(['ChatGPT 01 · Round 02', 'Gemini 01 · Round 01', 'ChatGPT 01 · Round 01']);
+    const list = draftImages(conversations);
+    expect(list.map((i) => i.label)).toEqual(['ChatGPT 02 · Round 01', 'ChatGPT 01 · Round 02', 'Gemini 01 · Round 01', 'ChatGPT 01 · Round 01']);
+    expect(list.map((i) => i.pick?.title)).toEqual(['Other', 'T', 'T', 'T']);
   });
   it('is only offered for a choice that is still in the top 3', () => {
     expect(isCurrentChoice(choice, [PICK])).toBe(true);

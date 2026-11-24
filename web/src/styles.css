@@ -863,10 +863,13 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .photo-category > summary { cursor: pointer; display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; padding: 0.2rem 0; }
 .photo-category > summary::before { content: "▸"; color: var(--muted); transition: transform 0.1s; }
 .photo-category[open] > summary::before { transform: rotate(90deg); }
-/* View and Compare Packaging: which draft image the Draft uses. */
-.draft-image-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 0; }
-.draft-image-choice p { flex-basis: 100%; margin: 0; }
-.draft-image-preview { height: 90px; width: auto; border-radius: 4px; border: 1px solid var(--line); }
+/* View and Compare Packaging: which draft image the Draft uses, shown as preview images in a compact dropdown. */
+.packaging-choice.draft-thumb-choice { min-width: 0; }
+.packaging-choice.draft-thumb-choice > summary { padding: 0.2rem 0.45rem; }
+.packaging-choice.draft-thumb-choice > summary .draft-thumb-option { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; display: block; }
+.packaging-choice.draft-thumb-choice .packaging-choice-menu { max-height: 22rem; overflow-y: auto; display: grid; grid-template-columns: repeat(2, auto); gap: 0.25rem; max-width: min(90vw, 22rem); }
+.packaging-choice.draft-thumb-choice .packaging-choice-menu button { padding: 0.2rem; justify-content: center; }
+.packaging-choice.draft-thumb-choice .packaging-choice-menu .draft-thumb-option { width: 140px; height: 79px; object-fit: cover; border-radius: 4px; display: block; }
 /* Compare rows: the copy-direction choice on the label's line, right-aligned and small. */
 .comparison-actions .copy-direction-option { padding: .1rem .45rem; font-size: .85rem; }
 /* Compare rows: the field name on the left, the copy choice centred between the two sides. */
@@ -876,7 +879,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .comparison-actions .copy-direction-controls { margin: 0; justify-content: center; gap: .3rem; }
 .compare-names { margin: .4rem 0 0; color: var(--muted); }
 .thumb-name { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-height: 2rem; margin-bottom: .2rem; }
-.draft-image-select { max-width: 100%; }
+.compare-columns:has(.draft-thumb-choice) .thumb-name { min-height: 3rem; }
 /* A folding row's triangle sits outside the three-part grid, so its name and copy choice line up like an unfolding row's. */
 .comparison-row > summary.lvy-row-head:has(.comparison-actions) { position: relative; padding-left: 1rem; }
 .comparison-row > summary.lvy-row-head:has(.comparison-actions)::before { position: absolute; left: 0; top: 50%; translate: 0 -50%; }

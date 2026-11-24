@@ -28,10 +28,11 @@ export function draftText(pick: BriefPick): string {
   return fields.map((f) => `${f.label}:\n${f.value}`).join('\n\n') + '\n';
 }
 
-/** The draft images made for the chosen pair, newest first, each labelled with its conversation and round. */
-export function draftImages(choice: BriefChoice, conversations: DraftConversation[]): (FileRef & { label: string })[] {
+export type DraftImage = FileRef & { label: string; pick: BriefPick | null };
+
+/** All draft images made across every conversation, newest first, each with the pair it was made for. */
+export function draftImages(conversations: DraftConversation[]): DraftImage[] {
   const made = conversations
-    .filter((c) => c.pick?.title === choice.pick.title)
-    .flatMap((c, ci) => c.images.map((image, ii) => ({ ...image, label: `${c.name} · Round ${image.name.replace(/\.[^.]+$/, '')}`, order: ci * 1000 + ii })));
+    .flatMap((c, ci) => c.images.map((image, ii) => ({ ...image, label: `${c.name} · Round ${image.name.replace(/\.[^.]+$/, '')}`, pick: c.pick, order: ci * 1000 + ii })));
   return made.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0) || b.order - a.order).map(({ order: _order, ...image }) => image);
 }

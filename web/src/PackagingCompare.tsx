@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { PackagingVersion, Piece } from './api';
 import { lockDocs, usePackagingDocs, type LoadedDoc } from './PackagingDoc';
 import { LocalVsYouTube, type YoutubeLink } from './YouTubeCard';
@@ -7,42 +7,22 @@ import { choiceOrder, comparisonSelection, DRAFT_SELECTION as DRAFT, orderedChoi
 import { draftImages, draftText, isCurrentChoice } from './draftPackaging';
 import { setPendingPackaging } from './pendingPackaging';
 import { LockSwitch } from './LockSwitch';
-import { YouTubeIcon } from './YouTubeOpenLink';
+import { PackagingChoice } from './PackagingChoice';
 
-/**
- * A drop-down that can show pictures (a plain <select> can only show text). `label` is the spoken name of each choice;
- * `render` (optional) draws it, for example with the YouTube icon.
- */
-export function PackagingChoice({ name, value, options, label, onChange, render }: { name: string; value: string; options: string[]; label: (value: string) => string; onChange: (value: string) => void; render?: (value: string) => ReactNode }) {
-  const menu = useRef<HTMLDetailsElement>(null);
-  const show = (choice: string) => render ? render(choice) : choice === YOUTUBE ? <YouTubeIcon /> : label(choice);
-  return <details className="packaging-choice" ref={menu} onKeyDown={event => {
-    if (event.key === 'Escape') { menu.current!.open = false; menu.current!.querySelector('summary')?.focus(); }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault(); menu.current!.open = true;
-      const buttons = [...menu.current!.querySelectorAll<HTMLButtonElement>('.packaging-choice-menu button')];
-      const at = buttons.indexOf(event.target as HTMLButtonElement);
-      buttons[at < 0 ? (event.key === 'ArrowDown' ? 0 : buttons.length - 1) : (at + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
-    }
-  }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
-    <summary aria-label={`${name}: ${value === YOUTUBE && !render ? 'YouTube' : label(value)}`}>{show(value)}</summary>
-    <div className="packaging-choice-menu">
-      {options.map(choice => <button key={choice} type="button" className={choice === value ? 'selected' : ''} aria-label={choice === YOUTUBE && !render ? 'YouTube' : render ? label(choice) : undefined} aria-current={choice === value ? 'true' : undefined} onClick={() => { onChange(choice); menu.current!.open = false; }}>{show(choice)}</button>)}
-    </div>
-  </details>;
-}
+export { PackagingChoice };
 
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
 export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, draftImage, setDraftImage, open, setOpen }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; draftImage: string; setDraftImage: (path: string) => void; open: boolean; setOpen: (open: boolean) => void }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
-  // Draft: what Generate Packaging made for the chosen pair, with one of its images (the newest unless John picks another).
+  // Draft: any generated thumbnail (newest first) and the pair it was made for, falling back to Choice.json before any images exist.
   const drafts = piece.drafts;
   const choice = drafts?.choice && isCurrentChoice(drafts.choice, drafts.picks) ? drafts.choice : null;
-  const images = choice && drafts ? draftImages(choice, drafts.conversations) : [];
+  const images = drafts ? draftImages(drafts.conversations) : [];
   // The image John picked is kept by the card, like the two selections, so locking or unlocking a version (which
   // rebuilds this) doesn't put it back to the newest (John, 2026-11-18).
   const image = images.find(i => i.path === draftImage) ?? images[0] ?? null;
-  const generated: GeneratedDraft | undefined = choice ? { piece: piece.path, text: draftText(choice.pick), image, images, chooseImage: setDraftImage } : undefined;
+  const draftPick = image?.pick ?? choice?.pick ?? null;
+  const generated: GeneratedDraft | undefined = draftPick || image ? { piece: piece.path, text: draftPick ? draftText(draftPick) : '', image, images, chooseImage: setDraftImage } : undefined;
   // Draft first, then the versions, then YouTube; the left is always earlier than the right.
   const order = choiceOrder(versions.map(v => v.path), !!generated);
   const { left, right } = orderedChoices(choices, version.path, order);
