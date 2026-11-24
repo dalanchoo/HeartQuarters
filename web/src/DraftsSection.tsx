@@ -198,7 +198,7 @@ function TopPicks({ piece, picks, choice, onChanged }: { piece: string; picks: B
             </div>
             <p className="top-pick-title">{p.title}</p>
             <p className="small-text"><span className="muted">Expression:</span> {p.expression}</p>
-            <p className="small-text"><span className="muted">Background:</span> {p.background}</p>
+            <p className="small-text"><span className="muted">Visual Concept:</span> {p.background}</p>
             <p className="small-text">{p.why}</p>
             {p.backedBy.length > 0 && <p className="muted small-text">Backed by {p.backedBy.join(', ')}</p>}
             <button className="small" disabled={busy || chosen === i} onClick={() => choose(i)}>

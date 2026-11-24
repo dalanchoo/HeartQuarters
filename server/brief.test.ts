@@ -158,6 +158,19 @@ describe('writing the brief', () => {
       expect(prompt).not.toContain('most positive');
     }
   });
+  it('asks the brief, reviewers, and final picker for story-specific visuals and varied compositions', () => {
+    const source = { kind: 'transcript' as const, path: 'captions.txt' };
+    const writer = writerPrompt('Video/Longform', source, false, '2026-11-23');
+    const review = reviewerPrompt('ChatGPT', source);
+    const picker = picksPrompt(false);
+    for (const prompt of [writer, review, picker]) {
+      expect(prompt).toContain('one supporting visual that helps tell this specific story');
+      expect(prompt).toContain('recognizable at phone size');
+    }
+    expect(writer).toContain('Give the thumbnail ideas different compositions');
+    expect(review).toContain('a different composition from the ideas in the brief');
+    expect(picker).toContain('Make the top three easy to tell apart at phone size');
+  });
   it('Claude writes it, then ChatGPT and Gemini add their reviews, and the brief says who took part', async () => {
     const { job, finished } = await startBrief(LONGFORM, 'V01 is on YouTube. Ask Studio says: SDAM is rising', fakeAi);
     expect(job.status).toBe('running');

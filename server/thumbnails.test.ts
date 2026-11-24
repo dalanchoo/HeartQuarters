@@ -32,8 +32,8 @@ afterEach(() => {
   removeTree(tmp);
 });
 
-const choose = (photo: string | null = 'Positive/Relief/Relief_008.jpg') =>
-  fs.writeFileSync(path.join(drafts(), 'Choice.json'), JSON.stringify({ pick: PICK, index: 1, photo }));
+const choose = (photo: string | null = 'Positive/Relief/Relief_008.jpg', pick = PICK) =>
+  fs.writeFileSync(path.join(drafts(), 'Choice.json'), JSON.stringify({ pick, index: 1, photo }));
 
 /** A fake image AI: writes a small file where it's asked, and remembers what it was given. */
 const calls: { ai: string; prompt: string; out: string; session?: string; photo?: string; refs?: string[] }[] = [];
@@ -47,6 +47,16 @@ beforeEach(() => {
 });
 
 describe('Make Thumbnail', () => {
+  it('passes the chosen composition and supporting visual into the image request', async () => {
+    const composition = 'A large unsent message at center. John is below it with the words across the top.';
+    choose(undefined, { ...PICK, background: composition });
+    const { job, finished } = startThumbnail(LONGFORM, 'codex', fakeMake);
+    await finished;
+    expect(job.state).toBe('done');
+    expect(calls[0].prompt).toContain(composition);
+    expect(calls[0].prompt).toContain('Follow the concept for the placement and scale');
+    expect(calls[0].prompt).not.toContain('John on one side, the text on the other');
+  });
   it('gives Gemini all reference photos and their distinct folders without enabling terminal commands', () => {
     const first = path.join(tmp, 'one', 'first.jpg');
     const second = path.join(tmp, 'two', 'second.jpg');

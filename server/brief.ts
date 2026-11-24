@@ -146,6 +146,8 @@ const TAG_RULES = 'Write comma-separated YouTube tags in Title Case, preserving 
 
 export const THUMBNAIL_EXPRESSION_GUIDANCE = 'Choose a natural expression that fits the story. Avoid a strongly negative look when a more inviting expression also fits. Anger can fit a story about being consumed by rage. For a story about swinging between anger and joy, favor joy when it fits the concept and let the words or supporting image convey the contrast.';
 
+const THUMBNAIL_CONCEPT_GUIDANCE = 'Give each thumbnail concept one supporting visual that helps tell this specific story, such as a prop, a recognizable setting, or a simple symbol. It should be recognizable at phone size and add meaning alongside John and the words. Describe where the portrait, supporting visual, and words sit, which element draws the eye first, and how the elements relate.';
+
 const READ_SKILLS = () =>
   `First read the skills "${skillFile('channel-basics')}" and "${skillFile('thumbnails-and-titles')}" (they say Claude where they mean any AI).`;
 
@@ -169,6 +171,8 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
     TAG_RULES,
     THUMBNAIL_EXPRESSION_GUIDANCE,
+    THUMBNAIL_CONCEPT_GUIDANCE,
+    'Give the thumbnail ideas different compositions. Vary the portrait crop and position, the location of the words, or which element leads the image.',
     'For each thumbnail idea, put the complete suggested expression on its own line beginning "Expression:", including category paths and the detailed look to photograph.',
     `Today is ${today}. Don't create or change any file. Reply with only the brief in Markdown, starting with the line "# Brief:", in the skill's format, ending with the empty "## John's notes" section.`,
   ].join('\n\n');
@@ -183,11 +187,12 @@ export function reviewerPrompt(name: string, source: BriefSource, hasNotes = fal
     CATEGORIES_NOTE(),
     ...(piece && !isShort(piece) ? [thumbnailComparisonNote(comparison)] : []),
     THUMBNAIL_EXPRESSION_GUIDANCE,
+    THUMBNAIL_CONCEPT_GUIDANCE,
     `Don't create or change any file, and don't make images. Reply with only your review in Markdown, starting with the line "## Review: ${name}":`,
     '- your ranking of the title options, best first, one line each on why;',
     '- your ranking of the thumbnail ideas, one line each;',
     '- what is weak or wrong in the brief, and why;',
-    '- at least one title and one thumbnail idea of your own (text, expression categories from the expressions library, background and supporting image, why a stranger would click, 30-second check), different from the ones in the brief.',
+    '- at least one fresh title and one thumbnail idea of your own (text, expression categories from the expressions library, composition and supporting visual, why a stranger would click, 30-second check). Give the thumbnail a different composition from the ideas in the brief.',
     'For each thumbnail idea of your own, put the complete suggested expression on its own line beginning "Expression:", including category paths and the detailed look to photograph.',
   ].join('\n');
 }
@@ -301,13 +306,15 @@ export function picksPrompt(hasNotes: boolean, comparison = ''): string {
     ...(comparison ? [thumbnailComparisonNote(comparison)] : []),
     'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on and follow John\'s notes. Follow the thumbnail skill, including the 30-second payoff, gaze toward the centre or camera, and a clear bottom-right corner for longform. A pair may combine a title from one place with a thumbnail from another.',
     THUMBNAIL_EXPRESSION_GUIDANCE,
+    THUMBNAIL_CONCEPT_GUIDANCE,
+    'Make the top three easy to tell apart at phone size. Give each a distinct composition by varying the placement, scale, and visual relationship of the portrait, words, and supporting visual.',
     `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
     'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. For longform, if source-timings.srt or source-timings.vtt exists, read it and include accurate chapters based on those timestamps in the description; otherwise omit chapters. Put hashtags inside the description. Do not invent facts or timestamps.',
     TAG_RULES,
     'Use the keyword results recorded in the brief and any pasted research in notes.txt when available. A phrase appearing in a transcript, title, or review is not evidence of search demand.',
     "The description's first sentence must contain one of that pick's own tags word for word (ignoring capitals), within the first 200 characters, because vidIQ scores the description by this; a related word isn't enough. For example, with the tag \"Memory Condition\", open with \"With my memory condition, …\" rather than \"Sometimes I meet somebody…\". Check every pick for this before replying.",
     "Don't create or change any file, and don't use vidIQ. Reply with only this JSON, nothing before or after it:",
-    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","photoAttributes":[],"background":"the background and any supporting image","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"],"description":"complete YouTube description including hashtags and accurate chapters only when available","tags":"comma-separated tags","pinnedComment":"proposed pinned comment"}]}',
+    '{"picks":[{"title":"the exact title","thumbnailText":"THE EXACT WORDS ON THE THUMBNAIL","accent":"the word in the accent colour","expression":"one to three of the library categories above, then a few words on the look, e.g. Composure > Calm (open eyes, slight smile)","photoAttributes":[],"background":"the composition, background, and story-specific supporting visual with its placement","why":"one or two sentences: why a stranger would click, and how the first 30 seconds pay it off","backedBy":["Claude","ChatGPT","Gemini"],"description":"complete YouTube description including hashtags and accurate chapters only when available","tags":"comma-separated tags","pinnedComment":"proposed pinned comment"}]}',
   ].join('\n\n');
 }
 

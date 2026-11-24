@@ -102,7 +102,7 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
       `- Thumbnail text: ${pick.thumbnailText.toUpperCase()}`,
       `- Expression wanted: ${pick.expression}`,
       ...(pick.photoAttributes?.length ? [`- Photo cues: ${pick.photoAttributes.join(', ')}. Left and right refer to the viewer's sides of the image.`] : []),
-      `- Background and layout: ${pick.background}`,
+      `- Composition, background, and supporting visual: ${pick.background}`,
     ].join('\n'),
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
     'Some matching photos are filed in other expression folders. Judge the expression you see in the photo.',

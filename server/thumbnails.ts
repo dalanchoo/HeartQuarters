@@ -100,18 +100,19 @@ export function firstRequest(choice: BriefChoice, short: boolean, out: string): 
     'Make a YouTube thumbnail for the Heart Mind Fusion channel. Use your built-in image generation tool to make the image (not code).',
     `First read the skill "${skillFile('thumbnails-and-titles')}": follow its hard rules, "How John's thumbnails look" and "John's face".`,
     'THE IDENTITY REFERENCE: the attached photo is the creator, John. Keep his exact face: grey hair, goatee, face shape, skin texture, age. ' +
-      "Don't beautify, smooth or make him younger. Keep his expression from the photo. Replace the background.",
+      "Don't beautify, smooth or make him younger. Keep his expression from the photo and place him in the chosen composition.",
     [
       'THE BRIEF:',
       `- The video's title: "${p.title}"`,
-      `- Thumbnail text, exactly: ${p.thumbnailText.toUpperCase()}${p.accent ? ` (accent colour on ${p.accent.toUpperCase()}; the other words white)` : ''}. Tall, condensed, heavy sans-serif, all caps.`,
+      `- Thumbnail text, exactly: ${p.thumbnailText.toUpperCase()}${p.accent ? ` (accent colour on ${p.accent.toUpperCase()}; the other words white)` : ''}.`,
       `- Expression: ${p.expression}`,
-      `- Background and supporting image: ${p.background}`,
+      `- Composition, background, and supporting visual: ${p.background}`,
+      '- Follow the concept for the placement and scale of John, the words, and the supporting visual. Make the visual recognizable at phone size. If the brief leaves it unspecified, choose one prop, setting, or symbol that helps tell this specific story.',
       `- Why it should work: ${p.why}`,
       short
         ? '- Layout: portrait. Keep all text out of the top tenth (the Shorts feed crops it off) and the bottom fifth, and away from the right edge, where the app\'s buttons are.'
-        : "- Layout: John on one side, the text on the other. He looks at the camera or toward the text, never away out of the frame. Nothing important in the bottom-right corner, where YouTube shows the video's length.",
-      '- It must read at phone size: big face, big words.',
+        : "- Keep John looking at the camera or into the frame. Keep the bottom-right corner clear of anything important, where YouTube shows the video's length.",
+      '- Keep the expression and every word readable at phone size.',
     ].join('\n'),
     `FORMAT: ${short ? '9:16 portrait' : '16:9'}, as large as your tool can make it, PNG. Don't enlarge it with code; HeartQuarters does that later.`,
     `Save the image in the current folder as ${out} and reply with its full path.`,
