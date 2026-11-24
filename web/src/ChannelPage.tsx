@@ -6,8 +6,8 @@ import type { EndScreenData, EndScreenElement } from '../../server/youtube-end-s
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, videoProjectsHash, type RowFilters, type SortKey } from './channelRows';
 import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
-import type { CommentsSyncResult, StoredCommentsSummary } from '../../server/channel-comments';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
+import { ChannelComments } from './ChannelComments';
 import { ReachSetup } from './ReachSetup';
 import { SidebarResizer } from './SidebarResizer';
 import { VideoPreview } from './VideoPreview';
@@ -89,6 +89,7 @@ function ChannelVideoView({ id, video }: { id: string; video?: ChannelVideo }) {
   return <section className="channel-video-view">
     <div className="yt-linkbar-row"><h2>{rowName({ piece: piece ?? null, title: video?.title ?? 'Video Detail' })}</h2>
       {piece && <a href={videoProjectsHash(piece)}>Open in Video Projects ↗</a>}
+      <a href={`#Channel/Comments/${encodeURIComponent(id)}`}>Comments</a>
       <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">Watch on YouTube ↗</a>
     </div>
     <details className="yt-section" open>
@@ -302,7 +303,7 @@ export function ChannelPage() {
         return video && rowName(video);
       }} />}
       {view === 'Video' && <ChannelVideoBrowser videos={data?.videos} id={id} />}
-      {view === 'Comments' && <ChannelCommentsSync />}
+      {view === 'Comments' && <ChannelComments videos={data?.videos} videoId={id} />}
       {view === 'Research' && <section><h2>Research Sources</h2><p className="muted">Planned sources include vidIQ, Ask Studio, Reddit, and news.</p></section>}
       {view === 'Overview' && <>
       {overview && (!data || reach) && <ChannelPerformance overview={overview} />}
@@ -362,58 +363,5 @@ export function ChannelPage() {
       )}
       </>}
     </div>
-  );
-}
-
-export function ChannelCommentsSync() {
-  const [summary, setSummary] = useState<StoredCommentsSummary | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [lastResult, setLastResult] = useState<CommentsSyncResult | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    getJson<StoredCommentsSummary>('/api/channel/comments').then(setSummary, (e) => setError((e as Error).message));
-  }, []);
-
-  const sync = async () => {
-    setSyncing(true);
-    setError('');
-    try {
-      const res = await postJson<CommentsSyncResult & { stored: StoredCommentsSummary }>('/api/channel/comments/sync', {});
-      setLastResult(res);
-      setSummary(res.stored);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  return (
-    <section>
-      <div className="page-head">
-        <h2>Comments</h2>
-        <button type="button" className="small" disabled={syncing} onClick={() => void sync()}>
-          {syncing ? 'Syncing Comments…' : 'Sync Comments'}
-        </button>
-      </div>
-      {error && <p className="error" role="alert">{error}</p>}
-      {summary === null && !error && <p className="muted">Loading saved comments…</p>}
-      {summary && summary.totalVideos === 0 && !syncing && (
-        <p className="muted">No comments downloaded yet. Click Sync Comments to save your YouTube comments to Drive.</p>
-      )}
-      {summary && summary.totalVideos > 0 && (
-        <p className="muted">
-          Saved in Drive: {summary.totalThreads.toLocaleString()} comment {summary.totalThreads === 1 ? 'thread' : 'threads'} across {summary.totalVideos} {summary.totalVideos === 1 ? 'video' : 'videos'}
-          {summary.disabledVideos > 0 ? ` (${summary.disabledVideos} with comments turned off)` : ''}.
-          {summary.lastSyncedAt ? ` Last synced ${new Date(summary.lastSyncedAt).toLocaleString()}.` : ''}
-        </p>
-      )}
-      {lastResult && lastResult.failed.length > 0 && (
-        <p className="error" role="alert">
-          {lastResult.failed.length} {lastResult.failed.length === 1 ? 'video' : 'videos'} failed to sync ({lastResult.failed[0].error}).
-        </p>
-      )}
-    </section>
   );
 }

@@ -79,7 +79,7 @@ import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
-import { listStoredComments, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
+import { listStoredComments, moderateComment, replyToComment, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
 
 const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
@@ -116,6 +116,14 @@ app.post('/api/channel/comments/sync', (req, res) => {
     ? syncVideoComments(videoId).then((file) => ({ synced: 1, disabled: file.disabled ? 1 : 0, failed: [], totalThreads: file.threads.length, syncedAt: file.syncedAt, stored: listStoredComments() }))
     : syncAllChannelComments().then((result) => ({ ...result, stored: listStoredComments() }));
   run.then((result) => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/comments/reply', (req, res) => {
+  replyToComment(req.body?.videoId, req.body?.parentId, req.body?.text)
+    .then((file) => res.json({ file, stored: listStoredComments() }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/comments/moderate', (req, res) => {
+  moderateComment(req.body?.videoId, req.body?.commentId, req.body?.action)
+    .then((file) => res.json({ file, stored: listStoredComments() }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/video-analysis', (req, res) => {
   startChannelVideoAnalysis(String(req.body?.videoId ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));

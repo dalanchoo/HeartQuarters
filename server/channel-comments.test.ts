@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   COMMENTS_DIR,
   listStoredComments,
+  moderateComment,
   readVideoComments,
+  replyToComment,
   syncAllChannelComments,
   syncVideoComments,
 } from './channel-comments';
@@ -223,5 +225,82 @@ describe('channel comments sync', () => {
     fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, COMMENTS_DIR), 'junction');
     expect(() => listStoredComments()).toThrow();
     await expect(syncVideoComments(VIDEO_A, { token: 'tok' })).rejects.toThrow();
+  });
+
+  it('posts a reply to YouTube and marks the saved thread as owner-replied', async () => {
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('commentThreads')) {
+        return Response.json({
+          items: [rawThread('t1', 'UCjohn', 'UCviewer', 'Viewer', 'How does SDAM feel?')],
+        });
+      }
+      if (url.includes('/comments?part=snippet') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          snippet: { parentId: 't1', textOriginal: 'Like reading a book about someone else.' },
+        });
+        return Response.json({
+          id: 'r-new',
+          snippet: {
+            authorDisplayName: 'Heart Mind Fusion',
+            authorChannelId: { value: 'UCjohn' },
+            textOriginal: 'Like reading a book about someone else.',
+            publishedAt: '2026-11-24T15:30:00Z',
+            likeCount: 0,
+          },
+        });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await syncVideoComments(VIDEO_A, { token: 'tok', fetcher });
+    expect(readVideoComments(VIDEO_A)?.threads[0].ownerReplied).toBe(false);
+
+    const updated = await replyToComment(VIDEO_A, 't1', '  Like reading a book about someone else.  ', {
+      token: 'tok',
+      fetcher,
+    });
+    expect(updated?.threads[0].ownerReplied).toBe(true);
+    expect(updated?.threads[0].totalReplyCount).toBe(1);
+    expect(updated?.threads[0].replies[0]).toMatchObject({
+      id: 'r-new',
+      isOwner: true,
+      text: 'Like reading a book about someone else.',
+    });
+    expect(readVideoComments(VIDEO_A)?.threads[0].ownerReplied).toBe(true);
+
+    await expect(replyToComment(VIDEO_A, 't1', '   ', { token: 'tok' })).rejects.toThrow('Type a reply first.');
+  });
+
+  it('hides or deletes a comment on YouTube and updates the saved Drive file', async () => {
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('commentThreads')) {
+        return Response.json({
+          items: [
+            rawThread('t1', 'UCjohn', 'UCviewer', 'Viewer', 'Spam link', [
+              { id: 'r1', authorChannelId: 'UCjohn', author: 'Heart Mind Fusion', text: 'Removing' },
+            ]),
+            rawThread('t2', 'UCjohn', 'UCviewer2', 'Viewer 2', 'Good video'),
+          ],
+        });
+      }
+      if (url.includes('setModerationStatus') && init?.method === 'POST') {
+        expect(url).toContain('id=t1');
+        expect(url).toContain('moderationStatus=heldForReview');
+        return new Response(null, { status: 204 });
+      }
+      if (url.includes('/comments?id=r1') && init?.method === 'DELETE') {
+        return new Response(null, { status: 204 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await syncVideoComments(VIDEO_A, { token: 'tok', fetcher });
+    const afterDeleteReply = await moderateComment(VIDEO_A, 'r1', 'delete', { token: 'tok', fetcher });
+    expect(afterDeleteReply?.threads[0].replies).toHaveLength(0);
+    expect(afterDeleteReply?.threads[0].ownerReplied).toBe(false);
+
+    const afterHide = await moderateComment(VIDEO_A, 't1', 'hide', { token: 'tok', fetcher });
+    expect(afterHide?.threads.map((t) => t.id)).toEqual(['t2']);
+    expect(readVideoComments(VIDEO_A)?.threads.map((t) => t.id)).toEqual(['t2']);
   });
 });

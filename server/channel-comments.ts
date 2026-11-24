@@ -9,8 +9,12 @@ import { QUOTA_USED_UP, youtubeFetch } from './youtube-quota.js';
 
 export const COMMENTS_DIR = '_HeartQuarters/Comments';
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const COMMENT_ID_RE = /^[A-Za-z0-9_.-]{1,120}$/;
+const COMMENT_TEXT_MAX = 10_000;
 const MAX_PAGES = 10;
 const SYNC_BATCH_SIZE = 5;
+
+export type ModerationAction = 'hide' | 'spam' | 'delete';
 
 export interface StoredReply {
   id: string;
@@ -373,4 +377,151 @@ export function syncAllChannelComments(deps?: {
     syncAllInProgress = undefined;
   });
   return syncAllInProgress;
+}
+
+function checkCommentId(raw: unknown): string {
+  if (typeof raw !== 'string' || !COMMENT_ID_RE.test(raw.trim())) {
+    throw new Error('Choose a valid comment.');
+  }
+  return raw.trim();
+}
+
+function recomputeThreadFlags(thread: StoredCommentThread): StoredCommentThread {
+  const ownerReplied = thread.isOwner || thread.replies.some((r) => r.isOwner);
+  return {
+    ...thread,
+    totalReplyCount: Math.max(thread.totalReplyCount, thread.replies.length),
+    ownerReplied,
+  };
+}
+
+/** Posts a reply to a top-level comment on YouTube and updates the saved Drive file if present. */
+export async function replyToComment(
+  rawVideoId: unknown,
+  rawParentId: unknown,
+  rawText: unknown,
+  deps?: { token?: string; fetcher?: FetchFn; now?: Date },
+): Promise<VideoCommentsFile | null> {
+  const videoId = checkVideoId(rawVideoId);
+  const parentId = checkCommentId(rawParentId);
+  if (typeof rawText !== 'string') throw new Error('Type a reply first.');
+  const text = rawText.trim();
+  if (!text) throw new Error('Type a reply first.');
+  if (text.length > COMMENT_TEXT_MAX) throw new Error('That reply is too long.');
+
+  const token = deps?.token ?? (await youtubeAccessToken());
+  const fetcher = deps?.fetcher ?? youtubeFetch;
+  const res = await fetcher('https://www.googleapis.com/youtube/v3/comments?part=snippet', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      snippet: {
+        parentId,
+        textOriginal: text,
+      },
+    }),
+  });
+  if (res.status === 403) {
+    const body = await res.text().catch(() => '');
+    if (/quotaExceeded|dailyLimitExceeded/.test(body)) throw new Error(QUOTA_USED_UP);
+    throw new Error('YouTube refused to post that reply. Check that your YouTube connection has permission.');
+  }
+  if (!res.ok) {
+    throw new Error(`YouTube returned ${res.status} when posting your reply.`);
+  }
+
+  const created = (await res.json()) as RawComment;
+  const now = (deps?.now ?? new Date()).toISOString();
+  const reply: StoredReply = {
+    id: created.id ?? `local-${Date.now()}`,
+    author: created.snippet?.authorDisplayName ?? 'Heart Mind Fusion',
+    ...(created.snippet?.authorChannelId?.value ? { authorChannelId: created.snippet.authorChannelId.value } : {}),
+    isOwner: true,
+    text: created.snippet?.textOriginal ?? text,
+    publishedAt: created.snippet?.publishedAt ?? now,
+    updatedAt: created.snippet?.updatedAt ?? created.snippet?.publishedAt ?? now,
+    likeCount: Number(created.snippet?.likeCount ?? 0),
+  };
+
+  const existing = readVideoComments(videoId);
+  if (!existing) return null;
+  const updated: VideoCommentsFile = {
+    ...existing,
+    threads: existing.threads.map((t) => {
+      if (t.topLevelCommentId !== parentId && t.id !== parentId) return t;
+      return recomputeThreadFlags({
+        ...t,
+        totalReplyCount: t.totalReplyCount + 1,
+        replies: [...t.replies, reply],
+      });
+    }),
+  };
+  writeFile(commentsFile(videoId, true), JSON.stringify(updated, null, 2) + '\n');
+  return updated;
+}
+
+/** Hides, marks as spam, or deletes a comment on YouTube and updates the saved Drive file if present. */
+export async function moderateComment(
+  rawVideoId: unknown,
+  rawCommentId: unknown,
+  rawAction: unknown,
+  deps?: { token?: string; fetcher?: FetchFn },
+): Promise<VideoCommentsFile | null> {
+  const videoId = checkVideoId(rawVideoId);
+  const commentId = checkCommentId(rawCommentId);
+  if (rawAction !== 'hide' && rawAction !== 'spam' && rawAction !== 'delete') {
+    throw new Error('Choose hide, spam, or delete.');
+  }
+  const action: ModerationAction = rawAction;
+  const token = deps?.token ?? (await youtubeAccessToken());
+  const fetcher = deps?.fetcher ?? youtubeFetch;
+
+  let res: Response;
+  if (action === 'delete') {
+    const params = new URLSearchParams({ id: commentId });
+    res = await fetcher(`https://www.googleapis.com/youtube/v3/comments?${params}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } else {
+    const params = new URLSearchParams({
+      id: commentId,
+      moderationStatus: action === 'hide' ? 'heldForReview' : 'rejected',
+    });
+    res = await fetcher(`https://www.googleapis.com/youtube/v3/comments/setModerationStatus?${params}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  if (res.status === 403) {
+    const body = await res.text().catch(() => '');
+    if (/quotaExceeded|dailyLimitExceeded/.test(body)) throw new Error(QUOTA_USED_UP);
+    throw new Error('YouTube refused to update that comment. Check your YouTube permissions.');
+  }
+  if (!res.ok) {
+    throw new Error(`YouTube returned ${res.status} when updating that comment.`);
+  }
+
+  const existing = readVideoComments(videoId);
+  if (!existing) return null;
+  const updated: VideoCommentsFile = {
+    ...existing,
+    threads: existing.threads
+      .filter((t) => t.topLevelCommentId !== commentId && t.id !== commentId)
+      .map((t) => {
+        const nextReplies = t.replies.filter((r) => r.id !== commentId);
+        if (nextReplies.length === t.replies.length) return t;
+        return recomputeThreadFlags({
+          ...t,
+          totalReplyCount: Math.max(0, t.totalReplyCount - 1),
+          replies: nextReplies,
+        });
+      }),
+  };
+  writeFile(commentsFile(videoId, true), JSON.stringify(updated, null, 2) + '\n');
+  return updated;
 }
