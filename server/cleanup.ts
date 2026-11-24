@@ -5,11 +5,11 @@
 // Always kept: Raw and Exports; every file a CapCut project of the video uses (longform and Shorts); each packaging
 // version's files (YouTube.md, Notes.md, thumbnail, other platforms) and what John put in Thumbnail\Source himself;
 // everything in Subtitles, word-by-word transcripts included (John, 2026-11-18); anything not listed below.
-// Removed when CapCut doesn't use it: Claude\ (CapCut backups, frames, scripts...), Packaging\Drafts, a version's
+// Removed when CapCut doesn't use it: AI\ (CapCut backups, frames, scripts...), Packaging\Drafts, a version's
 // Thumbnail\Backups and what HeartQuarters copied into Thumbnail\Source, Intermediate files (renders, sources,
 // Decisions.md, Edit Scripts, Transcript). Each longform and each Short is cleaned on its own; the Shorts Plan and the
 // retention graphs are cleaned from Make Shorts, since its lists come from the plan.
-// A file in Claude\ that CapCut does use is moved to Intermediate\ and the CapCut projects are pointed at it.
+// A file in AI\ that CapCut does use is moved to Intermediate\ and the CapCut projects are pointed at it.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -73,8 +73,8 @@ export function classify(rel: string, used: boolean, addedToSource: Set<string> 
   const piece = parts.slice(0, parts.length - inPiece.length).join('/');
   const [top] = inPiece;
   if (top === 'Raw' || top === 'Exports') return { action: 'keep' };
-  if (top === 'Claude') {
-    return used ? { action: 'move', to: [piece, 'Intermediate', ...inPiece.slice(1)].join('/'), why: 'used in CapCut, but kept in Claude' } : { action: 'remove', why: 'AI working files' };
+  if (top === 'AI') {
+    return used ? { action: 'move', to: [piece, 'Intermediate', ...inPiece.slice(1)].join('/'), why: 'used in CapCut, but kept in AI' } : { action: 'remove', why: 'AI working files' };
   }
   if (used) return { action: 'keep' };
   if (top === 'Packaging' && inPiece[1] === 'Drafts') return { action: 'remove', why: 'thumbnail and title drafts' };
@@ -336,7 +336,7 @@ function removeEmptyFolders(root: string, inVideo: string) {
 
 /**
  * Carries out the plan John approved (`token`): files to remove go to HeartQuarters Trash under their same folders,
- * and files used from Claude\ move to Intermediate\ with the CapCut projects pointed at them (their old text files
+ * and files used from AI\ move to Intermediate\ with the CapCut projects pointed at them (their old text files
  * are kept in Trash first). CapCut must be closed. Returns what was done and where Trash put it.
  */
 export function runCleanup(piece: string, token: unknown): { removed: number; moved: number; freed: number; trash: string } {

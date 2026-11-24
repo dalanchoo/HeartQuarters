@@ -16,13 +16,13 @@ describe('the rules', () => {
     }
   });
   it('removes what HeartQuarters and the AIs made, unless CapCut uses it', () => {
-    for (const rel of ['Longform/Claude/notes.md', 'Shorts/022_S01 - A/Claude/capcut backups/x.json', 'Longform/Packaging/Drafts/Brief.md', 'Longform/Packaging/V01/Thumbnail/Backups/Replaced 1.png', 'Longform/Packaging/V01/Thumbnail/Source/Draft - ChatGPT 01 round 03.png', 'Longform/Packaging/V01/Thumbnail/Source/References - ChatGPT 01/03 - 1.png', 'Longform/Intermediate/Motion Graphics/unused.mov', 'Longform/Intermediate/Decisions.md', 'Shorts/Shorts Plan.json', 'Shorts/Retention Graph - before 2026-01-01 010101.png']) {
+    for (const rel of ['Longform/AI/notes.md', 'Shorts/022_S01 - A/AI/capcut backups/x.json', 'Longform/Packaging/Drafts/Brief.md', 'Longform/Packaging/V01/Thumbnail/Backups/Replaced 1.png', 'Longform/Packaging/V01/Thumbnail/Source/Draft - ChatGPT 01 round 03.png', 'Longform/Packaging/V01/Thumbnail/Source/References - ChatGPT 01/03 - 1.png', 'Longform/Intermediate/Motion Graphics/unused.mov', 'Longform/Intermediate/Decisions.md', 'Shorts/Shorts Plan.json', 'Shorts/Retention Graph - before 2026-01-01 010101.png']) {
       expect([rel, remove(rel)]).toEqual([rel, 'remove']);
     }
     expect(remove('Longform/Intermediate/Motion Graphics/g01.mov', true)).toBe('keep');
   });
-  it('moves a file CapCut uses out of Claude into Intermediate', () => {
-    expect(classify('Shorts/022_S01 - A/Claude/broll/b.mp4', true)).toEqual({ action: 'move', to: 'Shorts/022_S01 - A/Intermediate/broll/b.mp4', why: 'used in CapCut, but kept in Claude' });
+  it('moves a file CapCut uses out of AI into Intermediate', () => {
+    expect(classify('Shorts/022_S01 - A/AI/broll/b.mp4', true)).toEqual({ action: 'move', to: 'Shorts/022_S01 - A/Intermediate/broll/b.mp4', why: 'used in CapCut, but kept in AI' });
   });
   it("knows HeartQuarters' own Source files by name or by its list, never John's", () => {
     expect(madeByHeartQuarters('Photo - Calm_004.jpg')).toBe(true);
@@ -38,7 +38,7 @@ describe('which piece is cleaned', () => {
     expect(pieceOf('022 - V/Shorts/022_S01 - A')).toEqual({ video: '022 - V', inVideo: 'Shorts/022_S01 - A' });
     expect(pieceOf('005 - Series/005A - Part/Longform')).toEqual({ video: '005 - Series/005A - Part', inVideo: 'Longform' });
     expect(pieceOf('022 - V/Shorts')).toEqual({ video: '022 - V', inVideo: 'Shorts' }); // Make Shorts' own files
-    for (const bad of ['022 - V', 'Shorts', '022 - V/Longform/Claude', '../x/Longform', '', '022 - V//Longform']) expect(() => pieceOf(bad)).toThrow(/longform, a Short or Make Shorts/);
+    for (const bad of ['022 - V', 'Shorts', '022 - V/Longform/AI', '../x/Longform', '', '022 - V//Longform']) expect(() => pieceOf(bad)).toThrow(/longform, a Short or Make Shorts/);
   });
 });
 
@@ -57,18 +57,18 @@ describe('cleaning up a video', () => {
       'Video Projects/022 - V/Longform/Intermediate/Motion Graphics/used.mov': 'used render',
       'Video Projects/022 - V/Longform/Intermediate/Motion Graphics/unused.mov': 'old render',
       'Video Projects/022 - V/Longform/Intermediate/Motion Graphics/Source/index.html': 'source',
-      'Video Projects/022 - V/Longform/Claude/notes.md': 'notes',
-      'Video Projects/022 - V/Longform/Claude/broll/graded.mp4': 'used from Claude',
+      'Video Projects/022 - V/Longform/AI/notes.md': 'notes',
+      'Video Projects/022 - V/Longform/AI/broll/graded.mp4': 'used from AI',
       'Video Projects/022 - V/Longform/Packaging/V01/YouTube.md': 'Title:\nT\n',
       'Video Projects/022 - V/Longform/Packaging/V01/Thumbnail/Thumbnail.png': 'thumb',
       'Video Projects/022 - V/Longform/Packaging/V01/Thumbnail/Source/mine.psd': 'psd',
       'Video Projects/022 - V/Longform/Packaging/V01/Thumbnail/Source/Photo - Calm_004.jpg': 'photo copy',
       'Video Projects/022 - V/Longform/Packaging/Drafts/Brief.md': 'brief',
       'Video Projects/022 - V/Shorts/Shorts Plan.json': '{}',
-      'Video Projects/022 - V/Shorts/022_S01 - A/Claude/frame.jpg': 'frame',
+      'Video Projects/022 - V/Shorts/022_S01 - A/AI/frame.jpg': 'frame',
       'Video Projects/022 - V/Shorts/022_S01 - A/Exports/a.mp4': 'short export',
     });
-    const used = [V('Longform', 'Intermediate', 'Motion Graphics', 'used.mov'), V('Longform', 'Claude', 'broll', 'graded.mp4'), V('Longform', 'Raw', 'take.mp4')].map(fwd);
+    const used = [V('Longform', 'Intermediate', 'Motion Graphics', 'used.mov'), V('Longform', 'AI', 'broll', 'graded.mp4'), V('Longform', 'Raw', 'take.mp4')].map(fwd);
     const draft = path.join(tmp, 'Drafts', '022 - V');
     fs.mkdirSync(path.join(draft, 'Timelines', 'T1'), { recursive: true });
     fs.writeFileSync(path.join(draft, 'draft_meta_info.json'), JSON.stringify({ draft_materials: [{ value: used.map((p) => ({ file_Path: p })) }] }));
@@ -93,20 +93,20 @@ describe('cleaning up a video', () => {
     const plan = cleanupPlan('022 - V/Longform');
     expect(plan.piece).toBe('022 - V/Longform');
     expect(plan.remove.map((i) => i.path.replace('022 - V/', '')).sort()).toEqual([
-      'Longform/Claude/notes.md',
+      'Longform/AI/notes.md',
       'Longform/Intermediate/Motion Graphics/Source/index.html',
       'Longform/Intermediate/Motion Graphics/unused.mov',
       'Longform/Packaging/Drafts/Brief.md',
       'Longform/Packaging/V01/Thumbnail/Source/Photo - Calm_004.jpg',
     ]);
-    expect(plan.move).toEqual([{ path: '022 - V/Longform/Claude/broll/graded.mp4', to: '022 - V/Longform/Intermediate/broll/graded.mp4', size: 16, why: 'used in CapCut, but kept in Claude' }]);
+    expect(plan.move).toEqual([{ path: '022 - V/Longform/AI/broll/graded.mp4', to: '022 - V/Longform/Intermediate/broll/graded.mp4', size: 12, why: 'used in CapCut, but kept in AI' }]);
     expect(plan.removeFolders.map((p) => p.replace('022 - V/', ''))).toEqual([
-      'Longform/Claude',
-      'Longform/Claude/broll',
+      'Longform/AI',
+      'Longform/AI/broll',
       'Longform/Intermediate/Motion Graphics/Source',
       'Longform/Packaging/Drafts',
     ]);
-    expect(fs.existsSync(V('Longform', 'Claude', 'notes.md'))).toBe(true);
+    expect(fs.existsSync(V('Longform', 'AI', 'notes.md'))).toBe(true);
   });
 
   it("Make Shorts' cleanup takes only the Shorts Plan and the retention graphs", () => {
@@ -117,11 +117,11 @@ describe('cleaning up a video', () => {
     const done = runCleanup('022 - V/Shorts', plan.token);
     expect(done.removed).toBe(3);
     expect(fs.readFileSync(path.join(done.trash, '022 - V', 'Shorts', 'Shorts Plan.json'), 'utf8')).toBe('{}');
-    expect(fs.existsSync(V('Shorts', '022_S01 - A', 'Claude', 'frame.jpg'))).toBe(true); // nothing inside a Short
+    expect(fs.existsSync(V('Shorts', '022_S01 - A', 'AI', 'frame.jpg'))).toBe(true); // nothing inside a Short
   });
 
   it('a Short is cleaned on its own', () => {
-    expect(cleanupPlan('022 - V/Shorts/022_S01 - A').remove.map((i) => i.path)).toEqual(['022 - V/Shorts/022_S01 - A/Claude/frame.jpg']);
+    expect(cleanupPlan('022 - V/Shorts/022_S01 - A').remove.map((i) => i.path)).toEqual(['022 - V/Shorts/022_S01 - A/AI/frame.jpg']);
   });
 
   it('moves the list to Trash, keeps the rest, and points CapCut at the moved file', () => {
@@ -129,20 +129,20 @@ describe('cleaning up a video', () => {
     const done = runCleanup('022 - V/Longform', plan.token);
     expect(done).toMatchObject({ removed: 5, moved: 1 });
     expect(fs.existsSync(V('Shorts', 'Shorts Plan.json'))).toBe(true); // kept, for Make Shorts
-    expect(fs.existsSync(V('Shorts', '022_S01 - A', 'Claude', 'frame.jpg'))).toBe(true); // the Short's own cleanup takes that
+    expect(fs.existsSync(V('Shorts', '022_S01 - A', 'AI', 'frame.jpg'))).toBe(true); // the Short's own cleanup takes that
     // Kept.
     for (const f of [['Longform', 'Raw', 'take.mp4'], ['Longform', 'Exports', 'final.mp4'], ['Longform', 'Intermediate', 'Motion Graphics', 'used.mov'], ['Longform', 'Packaging', 'V01', 'YouTube.md'], ['Longform', 'Packaging', 'V01', 'Thumbnail', 'Thumbnail.png'], ['Longform', 'Packaging', 'V01', 'Thumbnail', 'Source', 'mine.psd'], ['Shorts', '022_S01 - A', 'Exports', 'a.mp4']]) {
       expect([f.join('/'), fs.existsSync(V(...f))]).toEqual([f.join('/'), true]);
     }
     // Moved, and CapCut points at the new place; its old text is kept in Trash.
-    expect(fs.readFileSync(V('Longform', 'Intermediate', 'broll', 'graded.mp4'), 'utf8')).toBe('used from Claude');
+    expect(fs.readFileSync(V('Longform', 'Intermediate', 'broll', 'graded.mp4'), 'utf8')).toBe('used from AI');
     const content = fs.readFileSync(path.join(tmp, 'Drafts', '022 - V', 'Timelines', 'T1', 'draft_content.json'), 'utf8');
     expect(content).toContain('Longform/Intermediate/broll/graded.mp4');
-    expect(content).not.toContain('Longform/Claude/');
+    expect(content).not.toContain('Longform/AI/');
     expect(fs.existsSync(path.join(done.trash, 'CapCut Drafts (before)', '022 - V', 'Timelines', 'T1', 'draft_content.json'))).toBe(true);
     // Removed: in Trash under the same folders, and the emptied folders gone.
     expect(fs.readFileSync(path.join(done.trash, '022 - V', 'Longform', 'Packaging', 'Drafts', 'Brief.md'), 'utf8')).toBe('brief');
-    expect(fs.existsSync(V('Longform', 'Claude'))).toBe(false);
+    expect(fs.existsSync(V('Longform', 'AI'))).toBe(false);
     expect(fs.existsSync(V('Longform', 'Packaging', 'Drafts'))).toBe(false);
     expect(fs.existsSync(V('Longform', 'Packaging', 'V01', 'Thumbnail', 'Source'))).toBe(true);
   });
@@ -152,9 +152,9 @@ describe('cleaning up a video', () => {
     capcutOpen = true;
     expect(() => runCleanup('022 - V/Longform', plan.token)).toThrow(/Close CapCut/);
     capcutOpen = false;
-    fs.writeFileSync(V('Longform', 'Claude', 'new.txt'), 'new');
+    fs.writeFileSync(V('Longform', 'AI', 'new.txt'), 'new');
     expect(() => runCleanup('022 - V/Longform', plan.token)).toThrow(/changed since the list was made/);
-    expect(fs.existsSync(V('Longform', 'Claude', 'notes.md'))).toBe(true);
+    expect(fs.existsSync(V('Longform', 'AI', 'notes.md'))).toBe(true);
   });
 
   it("uses HeartQuarters' list of what it added to Source", () => {
@@ -177,7 +177,7 @@ describe('cleaning up a video', () => {
   });
 
   it("ignores stale links in Google Drive's numbered copies, like template (1).json", () => {
-    const gone = fwd(V('Longform', 'Claude', 'Motion Graphics', 'old.mov'));
+    const gone = fwd(V('Longform', 'AI', 'Motion Graphics', 'old.mov'));
     fs.writeFileSync(path.join(tmp, 'Drafts', '022 - V', 'template (1).json'), JSON.stringify({ path: gone }));
     expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
   });
@@ -209,7 +209,7 @@ describe('cleaning up a video', () => {
   it('keeps and relinks CapCut paths stored with escaped backslashes or different drive-letter case', () => {
     const content = path.join(tmp, 'Drafts', '022 - V', 'Timelines', 'T1', 'draft_content.json');
     const meta = path.join(tmp, 'Drafts', '022 - V', 'draft_meta_info.json');
-    const winUsed = V('Longform', 'Claude', 'broll', 'graded.mp4').replace(/^[A-Z]:/, (m) => m.toLowerCase());
+    const winUsed = V('Longform', 'AI', 'broll', 'graded.mp4').replace(/^[A-Z]:/, (m) => m.toLowerCase());
     const winMotion = V('Longform', 'Intermediate', 'Motion Graphics', 'used.mov').replace(/^[A-Z]:/, (m) => m.toLowerCase());
     fs.writeFileSync(meta, JSON.stringify({ draft_materials: [{ value: [{ file_Path: winUsed }] }] }));
     fs.writeFileSync(content, JSON.stringify({ materials: { videos: [{ path: winUsed }, { path: winMotion }] } }));
@@ -218,7 +218,7 @@ describe('cleaning up a video', () => {
     expect(done.moved).toBe(1);
     const updated = fs.readFileSync(content, 'utf8');
     expect(updated).toContain('Intermediate\\\\broll\\\\graded.mp4');
-    expect(updated).not.toContain('Claude\\\\broll');
+    expect(updated).not.toContain('AI\\\\broll');
   });
 
   it('refuses Clean Up if a CapCut draft metadata file cannot be read', () => {

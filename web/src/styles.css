@@ -1169,6 +1169,8 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .brainstorm-add-note { margin-left: auto; }
 .brainstorm-msg-text { white-space: pre-wrap; font-size: 0.9rem; line-height: 1.38; overflow-wrap: anywhere; }
 .brainstorm-compose { display: flex; flex-direction: column; gap: 0.35rem; border-top: 1px solid var(--line); padding-top: 0.45rem; }
+.brainstorm-inserts { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.brainstorm-inserts select { max-width: 100%; min-height: 24px; font-size: 0.82rem; flex: 1 1 140px; }
 .brainstorm-compose textarea { min-height: 0; font-size: 0.9rem; }
 .brainstorm-send-buttons { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .active-brainstorm { background: var(--accent-soft); border-color: var(--accent); }

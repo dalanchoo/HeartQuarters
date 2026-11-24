@@ -10,7 +10,7 @@ import {
   sendBrainstormMessage,
 } from './idea-brainstorm';
 import { makeTree, removeTree } from './testing';
-import { addIdea, addReference } from './video-ideas';
+import { addAttachment, addIdea, addReference } from './video-ideas';
 
 let root: string;
 let saved: string;
@@ -71,6 +71,23 @@ describe('idea brainstorm', () => {
     // Clearing resets messages in Drive.
     expect(clearBrainstorm(idea.id).messages).toEqual([]);
     expect(readBrainstorm(idea.id).messages).toEqual([]);
+  });
+
+  it('copies attached files into the AI working folder so any AI can read them', async () => {
+    const [idea] = addIdea('SDAM Guide');
+    addAttachment(idea.id, 'SDAM Guide.pdf', Buffer.from('%PDF-1.4\ntest'), 'Intro guide');
+
+    let sawPdf = false;
+    let promptSeen = '';
+    const fakeAsk = async (_ai: 'claude' | 'codex' | 'gemini', prompt: string, cwd: string) => {
+      promptSeen = prompt;
+      sawPdf = fs.existsSync(path.join(cwd, 'SDAM Guide.pdf'));
+      return 'Read it!';
+    };
+
+    await sendBrainstormMessage(idea.id, 'gemini', 'Summarize [Attached File: SDAM Guide.pdf]', fakeAsk);
+    expect(sawPdf).toBe(true);
+    expect(promptSeen).toContain('SDAM Guide.pdf — Intro guide');
   });
 
   it('builds a prompt with empty fallbacks when notes and references are missing', () => {

@@ -576,6 +576,25 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
   const [addedId, setAddedId] = useState<string | null>(null);
   const { overview } = useAi();
   const listRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertAtCursor = (snippet: string) => {
+    const el = draftRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    const before = draft.slice(0, start);
+    const after = draft.slice(end);
+    const padLeft = before && !/[\s\n]$/.test(before) ? ' ' : '';
+    const padRight = after && !/^[\s\n]/.test(after) ? ' ' : '';
+    const next = `${before}${padLeft}${snippet}${padRight}${after}`;
+    const caret = before.length + padLeft.length + snippet.length;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      if (!draftRef.current) return;
+      draftRef.current.focus();
+      draftRef.current.setSelectionRange(caret, caret);
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -681,7 +700,50 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
       {asking && <p className="muted small-text">Asking {SPEAKER_NAMES[asking]}…</p>}
 
       <div className="brainstorm-compose">
+        {(idea.attachments.length > 0 || idea.references.length > 0) && (
+          <div className="brainstorm-inserts">
+            {idea.attachments.length > 0 && (
+              <select
+                aria-label="Insert Attached File"
+                value=""
+                disabled={!!asking}
+                onChange={(e) => {
+                  const att = idea.attachments.find((a) => a.id === e.target.value);
+                  if (!att) return;
+                  insertAtCursor(`[Attached File: ${att.name}]`);
+                }}
+              >
+                <option value="">Insert File…</option>
+                {idea.attachments.map((att) => (
+                  <option key={att.id} value={att.id}>
+                    {att.name}{att.note ? ` — ${att.note}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {idea.references.length > 0 && (
+              <select
+                aria-label="Insert Reference Link"
+                value=""
+                disabled={!!asking}
+                onChange={(e) => {
+                  const ref = idea.references.find((r) => r.id === e.target.value);
+                  if (!ref) return;
+                  insertAtCursor(ref.note ? `${ref.url} (${ref.note})` : ref.url);
+                }}
+              >
+                <option value="">Insert Link…</option>
+                {idea.references.map((ref) => (
+                  <option key={ref.id} value={ref.id}>
+                    {ref.note || ref.url}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         <textarea
+          ref={draftRef}
           rows={3}
           value={draft}
           disabled={!!asking}

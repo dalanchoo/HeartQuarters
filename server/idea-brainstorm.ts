@@ -9,7 +9,7 @@ import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { askReadOnlyImage } from './expression-assessment.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
-import { readIdeas, type VideoIdea } from './video-ideas.js';
+import { attachmentFile, readIdeas, type VideoIdea } from './video-ideas.js';
 
 export const BRAINSTORMS_DIR = '_Brainstorms';
 const IDEA_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
@@ -121,7 +121,7 @@ export function buildBrainstormPrompt(
       `Category: ${idea.category} | Format: ${idea.format} | Status: ${idea.status}`,
       `Notes:\n${idea.notes.trim() || '(none)'}`,
       `References:\n${refs}`,
-      `Attached Files:\n${files}`,
+      `Attached Files (copied into your working folder so you can read them):\n${files}`,
     ].join('\n'),
     `--- CONVERSATION SO FAR ---\n${thread}`,
     `--- JOHN'S NEW MESSAGE ---\n${nextMessage}`,
@@ -156,6 +156,15 @@ export async function sendBrainstormMessage(
     const historyBefore = [...current.messages];
     current.messages.push({ id: randomUUID(), from: 'john', text: message, at: new Date().toISOString() });
     saveBrainstorm(current);
+
+    for (const att of idea.attachments) {
+      try {
+        const src = attachmentFile(idea.id, att.id);
+        fs.copyFileSync(src, path.join(work, att.name));
+      } catch {
+        // If an older attachment is missing on disk, continue with the remaining context.
+      }
+    }
 
     const prompt = buildBrainstormPrompt(idea, historyBefore, message, rawAi);
     const answer = (await ask(rawAi, prompt, work)).trim();

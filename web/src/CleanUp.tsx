@@ -71,7 +71,7 @@ export function CleanUp({ piece, onDone, intro }: { piece: string; onDone?: () =
           ) : (
             <p>
               <strong>{plan.remove.length} files, {formatSize(plan.freed)},</strong> would go to HeartQuarters Trash.
-              {plan.move.length > 0 && ` ${plan.move.length} files CapCut uses would move from Claude into Intermediate.`}
+              {plan.move.length > 0 && ` ${plan.move.length} files CapCut uses would move from AI into Intermediate.`}
               {plan.removeFolders.length > 0 && ` ${plan.removeFolders.length} emptied ${plan.removeFolders.length === 1 ? 'folder' : 'folders'} would be deleted.`}
             </p>
           )}
