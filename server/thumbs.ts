@@ -41,12 +41,21 @@ export function finishPreview(code: number | null, tmp: string, out: string, err
   throw new Error(`Couldn't make a preview: ${err.trim() || `ffmpeg exit ${code}`}`);
 }
 
+/**
+ * Builds the FFmpeg scale filter for a preview: keeps the shorter side at `width` pixels
+ * (never upscaling smaller images) with Lanczos resampling so landscape and portrait photos
+ * both stay sharp in square or cropped preview tiles.
+ */
+export function previewScaleFilter(width: number): string {
+  return `scale='if(lt(iw,ih),min(iw,${width}),-2)':'if(lt(iw,ih),-2,min(ih,${width}))':flags=lanczos`;
+}
+
 function runFfmpeg(source: string, out: string, width: number): Promise<string> {
   const tmp = `${out}.${process.pid}.tmp.jpg`;
   return new Promise((resolve, reject) => {
     const child = spawn(
       'ffmpeg',
-      ['-v', 'error', '-y', '-i', source, '-vf', `scale=${width}:-2`, '-frames:v', '1', '-q:v', '5', tmp],
+      ['-v', 'error', '-y', '-i', source, '-vf', previewScaleFilter(width), '-frames:v', '1', '-q:v', '2', tmp],
       { windowsHide: true },
     );
     let err = '';
@@ -63,12 +72,12 @@ function runFfmpeg(source: string, out: string, width: number): Promise<string> 
   });
 }
 
-/** Returns the path of a cached JPEG preview of `source`, `width` pixels wide. */
+/** Returns the path of a cached JPEG preview of `source`, at least `width` pixels on its shorter side (unless smaller). */
 export function thumbnail(source: string, width: number): Promise<string> {
   const st = fs.statSync(source);
   const key = crypto
     .createHash('sha1')
-    .update(`${source}|${st.size}|${st.mtimeMs}|${st.ctimeMs}|${width}`)
+    .update(`${source}|${st.size}|${st.mtimeMs}|${st.ctimeMs}|${width}|v2`)
     .digest('hex');
   const out = path.join(cacheDir, `${key}.jpg`);
   if (fs.existsSync(out)) return Promise.resolve(out);

@@ -286,7 +286,7 @@ app.post('/api/open-exports', handle((req, res) => {
 app.get('/api/thumb', (req, res) => {
   try {
     const full = safeResolve(parseRoot(req.query.root), String(req.query.path ?? ''));
-    const width = Math.min(800, Math.max(120, Number(req.query.w) || 360));
+    const width = Math.min(1600, Math.max(120, Number(req.query.w) || 360));
     thumbnail(full, width).then(
       (thumb) => res.set('Cache-Control', req.query.root === 'expressions' ? 'no-cache' : 'max-age=86400').sendFile(thumb),
       (e) => res.status(500).json({ error: e instanceof Error ? e.message : String(e) }),

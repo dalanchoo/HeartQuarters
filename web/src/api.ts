@@ -88,7 +88,8 @@ export function fileUrl(root: RootId, path: string, stamp = ''): string {
 }
 
 export function thumbUrl(root: RootId, path: string, width = 360, stamp = ''): string {
-  return `/api/thumb?root=${root}&w=${width}&path=${encodeURIComponent(path)}${stamp || root === 'expressions' ? `&v=${encodeURIComponent(stamp || 'expressions-2')}` : ''}`;
+  const pixelWidth = Math.round(width * Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1));
+  return `/api/thumb?root=${root}&w=${pixelWidth}&path=${encodeURIComponent(path)}${stamp || root === 'expressions' ? `&v=${encodeURIComponent(stamp || 'expressions-2')}` : ''}`;
 }
 
 export function openInExplorer(root: RootId, path: string) {
