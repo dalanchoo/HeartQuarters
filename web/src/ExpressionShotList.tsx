@@ -42,8 +42,12 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     setBusy(shot.id); setError('');
     try {
       const result = await postJson<{ path: string }>('/api/expressions/shot-list/reference/copy-to-inbox', { id: shot.id, name });
-      setCopied(current => ({ ...current, [shot.id]: `Copied to the Expression Inbox: ${result.path}` }));
+      setCopied(current => ({ ...current, [`${shot.id}\0${name}`]: `Copied to the Expression Inbox: ${result.path}` }));
       window.dispatchEvent(new Event('hq-expression-inbox-changed'));
+      if (!shot.done) {
+        setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/status', { id: shot.id, done: true }));
+        window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
+      }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   };
@@ -75,6 +79,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     const pick = chosen[shot.id]?.count === list.length && list.includes(chosen[shot.id].name) ? chosen[shot.id].name : list[0];
     const pictureUrl = pick ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(pick)}` : '';
     const pictureLabel = (name: string) => `AI ${String(list.length - list.indexOf(name)).padStart(2, '0')}${name === list[0] ? ' (Newest)' : ''}`;
+    const copiedMessage = pick ? copied[`${shot.id}\0${pick}`] : '';
     const name = shot.title || shot.description || 'Untitled Shot';
     return <details className="expression-shot" key={shot.id}>
       <summary><strong>{name}</strong></summary>
@@ -94,8 +99,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
         {pictureUrl && <div className="expression-shot-pictures">
           <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
           {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
-          <button className="small" disabled={!!busy} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
-          {copied[shot.id] && <p className="muted small-text" role="status">{copied[shot.id]}</p>}
+          <button className="small" disabled={!!busy || !!copiedMessage} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
+          {copiedMessage && <p className="muted small-text" role="status">{copiedMessage}</p>}
         </div>}
       </div>
     </details>;
