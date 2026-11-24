@@ -28,6 +28,18 @@ describe('saving thumbnails', () => {
     expect(() => copyVersionThumbnail('piece', 'piece/Packaging/V01', 'piece/Packaging/V02')).toThrow(/already has a thumbnail/);
     expect(() => copyVersionThumbnail('piece', 'other/Packaging/V01', 'piece/Packaging/V02')).toThrow();
   });
+  it('deletes an inherited Source folder when copying a thumbnail from a draft (Dxx)', () => {
+    fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/D01'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Source'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Source/old.psd'), 'psd');
+    savePackagingThumbnail('piece', 'piece/Packaging/D01', png);
+    const oldThumb = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1]);
+    const current = savePackagingThumbnail('piece', 'piece/Packaging/V02', oldThumb);
+    const st = fs.statSync(path.join(tmp, 'Videos', current.path));
+    copyVersionThumbnail('piece', 'piece/Packaging/D01', 'piece/Packaging/V02', { size: st.size, modified: Math.round(st.mtimeMs) });
+    expect(fs.existsSync(path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Source'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'Videos/piece/Packaging/V02/Thumbnail/Thumbnail.png'))).toEqual(png);
+  });
   it('backs up and replaces a thumbnail only when the displayed target still matches', () => {
     fs.mkdirSync(path.join(tmp, 'Videos/piece/Packaging/V02'));
     savePackagingThumbnail('piece', 'piece/Packaging/V01', png);

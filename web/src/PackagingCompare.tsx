@@ -13,8 +13,10 @@ export { PackagingChoice };
 /** One set of selectors for viewing and comparing packaging, whether local or on YouTube. */
 export function PackagingCompare({ piece, version, doc, locked, unlocked, onToggleLock, link, onChanged, longform, onDirtyChange, choices, setChoices, open, setOpen }: { piece: Piece; version: PackagingVersion; doc: LoadedDoc; locked: boolean; unlocked: string | null; onToggleLock: (path: string) => void; link: YoutubeLink; onChanged?: () => void; longform?: string; onDirtyChange?: (dirty: boolean) => void; choices: ComparisonChoices; setChoices: Dispatch<SetStateAction<ComparisonChoices>>; open: boolean; setOpen: (open: boolean) => void }) {
   const versions = piece.versions.filter(v => v.docs.some(d => /(^|\/)youtube\.md$/i.test(d.name)));
-  // Versions (Legacy, V01...), then archived drafts (D01...), then YouTube; the left is always earlier than the right.
-  const order = choiceOrder(versions.map(v => v.path), false);
+  // Archived drafts (D01...), then versions (Legacy, V01...), then YouTube; the left is always earlier than the right.
+  const draftPaths = versions.filter(v => /^D\d+$/i.test(v.name)).map(v => v.path);
+  const versionPaths = versions.filter(v => !/^D\d+$/i.test(v.name)).map(v => v.path);
+  const order = choiceOrder([...draftPaths, ...versionPaths], false);
   const { left, right } = orderedChoices(choices, version.path, order);
   const [dirty, setDirty] = useState(false);
   const [heldHeight, setHeldHeight] = useState<number | null>(null);

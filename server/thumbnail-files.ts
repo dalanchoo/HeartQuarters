@@ -66,6 +66,15 @@ export function copyVersionThumbnail(piece: string, source: string, target: stri
     catch (error) { if (moved) { try { if (fs.existsSync(old)) throw new Error('destination occupied'); fs.renameSync(backup, old); } catch { throw new Error(`Copy failed and the previous thumbnail could not be restored. It is saved at ${backup}.`); } } throw error; }
     finally { try { fs.unlinkSync(temp); } catch { /* no temporary file remains on success */ } }
   }
+  if (/^D\d+$/i.test(path.basename(fromVersion))) {
+    // Drafts created in HeartQuarters have no Photoshop/art Source folder; remove any inherited one from a cloned version.
+    const targetSource = safeResolve('projects', path.join(target, THUMBNAIL_FOLDER, 'Source'));
+    const sourceFolderStat = fs.lstatSync(targetSource, { throwIfNoEntry: false });
+    if (sourceFolderStat) {
+      if (sourceFolderStat.isSymbolicLink()) throw new Error('The destination Source folder must be a real folder, not a shortcut.');
+      fs.rmSync(targetSource, { recursive: true, force: true });
+    }
+  }
   return { path: path.relative(safeResolve('projects', ''), dest).split(path.sep).join('/') };
 }
 
