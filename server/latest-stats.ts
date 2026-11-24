@@ -14,6 +14,8 @@ export interface LatestStats {
   averageViewPercent: number | null;
   impressions: number | null;
   ctrPercent: number | null;
+  reachFrom: string | null;
+  reachTo: string | null;
 }
 
 // Parsing every video's Stats.json each time the list loads would be slow on Drive, so each file's result is kept
@@ -37,6 +39,7 @@ export function latestStats(piece: string): LatestStats | undefined {
       snapshot, downloadedAt: typeof data.downloadedAt === 'string' ? data.downloadedAt : '',
       views: lifetime?.views ?? null, averageViewPercent: lifetime?.averageViewPercent ?? null,
       impressions: summary.reach?.impressions ?? null, ctrPercent: summary.reach?.ctrPercent ?? null,
+      reachFrom: summary.reach?.from ?? null, reachTo: summary.reach?.to ?? null,
     };
     kept.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, stats });
     return stats;

@@ -30,7 +30,10 @@ afterEach(() => { config.videoProjectsDir = original; removeTree(tmp); });
 
 describe('latest stats for the video list', () => {
   it('uses the newest download and its lifetime numbers', () => {
-    expect(latestStats('P/Shorts/S')).toEqual({ snapshot: '2026-11-21 (2)', downloadedAt: '2026-11-21T12:00:00Z', views: 58, averageViewPercent: 80, impressions: 200, ctrPercent: 5 });
+    expect(latestStats('P/Shorts/S')).toEqual({
+      snapshot: '2026-11-21 (2)', downloadedAt: '2026-11-21T12:00:00Z', views: 58, averageViewPercent: 80,
+      impressions: 200, ctrPercent: 5, reachFrom: 'd1', reachTo: 'd2',
+    });
   });
   it('reads a changed file again', () => {
     expect(latestStats('P/Shorts/S')?.views).toBe(58);

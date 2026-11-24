@@ -91,15 +91,32 @@ function CleanupBadge({ item }: { item: VideoOverview }) {
   if (!withFiles.length) return null;
   return <span className="status-pill status-clean" title={`Clean Up would move to Trash: ${withFiles.map(([name, p]) => `${name}: ${p.files} ${p.files === 1 ? 'file' : 'files'} (${formatSize(p.bytes)})`).join('; ')}`}>Can Clean Up</span>;
 }
-/** The newest downloaded stats, lifetime to date: views, then average percentage viewed and CTR when known. */
+function shortReachDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return iso.slice(0, 10);
+  return new Date(time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' });
+}
+function formatReachRange(from: string | null | undefined, to: string | null | undefined): string {
+  const start = shortReachDate(from);
+  const end = shortReachDate(to);
+  if (!start) return end;
+  return !end || start === end ? start : `${start}–${end}`;
+}
+/** The newest downloaded stats, lifetime to date for views and % viewed, plus CTR over its reach-report dates. */
 function StatsPill({ stats }: { stats: NonNullable<VideoOverview['stats']> }) {
   const whole = new Intl.NumberFormat('en-US');
+  const reachRange = formatReachRange(stats.reachFrom, stats.reachTo);
+  const ctr = stats.ctrPercent === null ? null : `${stats.ctrPercent.toFixed(1)}% CTR${reachRange ? `, ${reachRange}` : ''}`;
   const parts = [stats.views === null ? null : `${whole.format(stats.views)} ${stats.views === 1 ? 'view' : 'views'}`,
     stats.averageViewPercent === null ? null : `${Math.round(stats.averageViewPercent)}% viewed`,
-    stats.ctrPercent === null ? null : `${stats.ctrPercent.toFixed(1)}% CTR`].filter(Boolean);
+    ctr].filter(Boolean);
   if (!parts.length) return null;
   const when = stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : stats.snapshot;
-  return <span className="status-pill status-stats" title={`Lifetime to date, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}. Open this video in Channel for analysis.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
+  const ctrNote = stats.ctrPercent !== null && stats.impressions !== null
+    ? ` CTR is from ${whole.format(stats.impressions)} impressions${reachRange ? ` (${reachRange})` : ''}.`
+    : '';
+  return <span className="status-pill status-stats" title={`Lifetime to date for views and % viewed, from the stats downloaded ${stats.downloadedAt ? new Date(stats.downloadedAt).toLocaleString() : stats.snapshot}.${ctrNote} Open this video in Channel for analysis.`}>{parts.join(' · ')} <span className="status-stats-date">({when})</span></span>;
 }
 function StatusBadges({ item, checks }: { item?: VideoOverview; checks?: YoutubeChecks }) {
   const { cleanup } = useContext(StatusContext);
