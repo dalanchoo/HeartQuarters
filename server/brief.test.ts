@@ -138,7 +138,12 @@ describe('writing the brief', () => {
     expect(writer).toContain('Record the exact phrases checked');
     expect(picker).toContain('Use the keyword results recorded in the brief');
     for (const prompt of [writer, picker]) {
-      expect(prompt).toContain('tags in Title Case');
+      expect(prompt).toContain('at least 10 comma-separated YouTube tags in Title Case');
+      expect(prompt).toContain('always including "Heart Mind Fusion"');
+      expect(prompt).toContain('3 to 5 lowercase hashtags');
+      expect(prompt).toContain('https://www.heartmindfusion.com/sdam-guide');
+      expect(prompt).toContain('https://www.eventbrite.com/e/sdam-support-group-registration-1992895106912');
+      expect(prompt).toContain('Leave AI disclosure lines out');
       expect(prompt).toContain('Leave out quotes, dialogue, title hooks');
       expect(prompt).toContain('omit exact phrases reported at zero volume or score');
       expect(prompt).toContain('never invent scores');

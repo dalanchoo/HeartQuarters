@@ -142,7 +142,9 @@ function skillFile(name: string): string {
 
 const NOTES_NOTE = "John's notes for this brief (what he wants, what he doesn't like about the current thumbnail or title, which version is on YouTube) and any research he pasted from Ask Studio or vidIQ are in notes.txt in the current folder. Read them and follow them.";
 
-const TAG_RULES = 'Write comma-separated YouTube tags in Title Case, preserving acronyms such as SDAM and KKK. Choose specific topics, names, and natural phrases a viewer would type into YouTube search. Leave out quotes, dialogue, title hooks, and near-duplicates. Prefer relevant exact phrases with positive search volume or scores from vidIQ, and omit exact phrases reported at zero volume or score. Where metrics are unavailable, use plausible search terms and never invent scores.';
+const TAG_RULES = 'Write at least 10 comma-separated YouTube tags in Title Case (ideally 10 to 15, always including "Heart Mind Fusion"), preserving acronyms such as SDAM and KKK. Choose specific topics, names, and natural phrases a viewer would type into YouTube search. Leave out quotes, dialogue, title hooks, and near-duplicates. Prefer relevant exact phrases with positive search volume or scores from vidIQ, and omit exact phrases reported at zero volume or score. Where metrics are unavailable, use plausible search terms and never invent scores.';
+
+const PACKAGING_RULES = 'Put 3 to 5 lowercase hashtags on one line inside the description. If the video is about SDAM, the description must mention the downloadable guide (https://www.heartmindfusion.com/sdam-guide) and include the Eventbrite group link (https://www.eventbrite.com/e/sdam-support-group-registration-1992895106912), while the pinned comment must point only to the downloadable guide (https://www.heartmindfusion.com/sdam-guide). Leave AI disclosure lines out of the description; John handles those with checkboxes in HeartQuarters.';
 
 export const THUMBNAIL_EXPRESSION_GUIDANCE = 'Choose a natural expression that fits the story. Avoid a strongly negative look when a more inviting expression also fits. Anger can fit a story about being consumed by rage. For a story about swinging between anger and joy, favor joy when it fits the concept and let the words or supporting image convey the contrast.';
 
@@ -170,6 +172,7 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     ...(!isShort(pieceName) ? [thumbnailComparisonNote(comparison)] : []),
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
     TAG_RULES,
+    PACKAGING_RULES,
     THUMBNAIL_EXPRESSION_GUIDANCE,
     THUMBNAIL_CONCEPT_GUIDANCE,
     'Give the thumbnail ideas different compositions. Vary the portrait crop and position, the location of the words, or which element leads the image.',
@@ -311,6 +314,7 @@ export function picksPrompt(hasNotes: boolean, comparison = ''): string {
     `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
     'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. For longform, if source-timings.srt or source-timings.vtt exists, read it and include accurate chapters based on those timestamps in the description; otherwise omit chapters. Put hashtags inside the description. Do not invent facts or timestamps.',
     TAG_RULES,
+    PACKAGING_RULES,
     'Use the keyword results recorded in the brief and any pasted research in notes.txt when available. A phrase appearing in a transcript, title, or review is not evidence of search demand.',
     "The description's first sentence must contain one of that pick's own tags word for word (ignoring capitals), within the first 200 characters, because vidIQ scores the description by this; a related word isn't enough. For example, with the tag \"Memory Condition\", open with \"With my memory condition, …\" rather than \"Sometimes I meet somebody…\". Check every pick for this before replying.",
     "Don't create or change any file, and don't use vidIQ. Reply with only this JSON, nothing before or after it:",
