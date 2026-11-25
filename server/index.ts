@@ -35,10 +35,10 @@ import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
-import { aiOverview, chooseAi, chooseAiModel } from './ai.js';
+import { aiOverview, chooseAi, chooseAiModel, parseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
-import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, startBrief, startPicks } from './brief.js';
+import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
@@ -614,10 +614,11 @@ app.get('/api/brief/source-text', async (req, res) => {
   }
 });
 
-// { piece, notes }: Claude writes the brief, then ChatGPT and Gemini review it, in the background.
+// { piece, notes, plan }: the plan's first AI writes the brief, the others review it, then its picker picks the top 3,
+// in the background.
 app.post('/api/brief/start', async (req, res) => {
   try {
-    const { job } = await startBrief(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images);
+    const { job } = await startBrief(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images, parseBriefPlan(req.body?.plan));
     res.json(job);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
@@ -696,10 +697,10 @@ app.post('/api/brief/rank-photos', handle((req, res) => {
   res.json(startRanking(String(req.body?.piece ?? '')).job);
 }));
 
-// { piece, notes }: only the last step, Claude picking the top 3 pairs, on the brief that's already there.
+// { piece, notes, picker }: only the last step, the picker AI choosing the top 3 pairs, on the brief that's already there.
 app.post('/api/brief/picks', async (req, res) => {
   try {
-    const { job } = await startPicks(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images);
+    const { job } = await startPicks(String(req.body?.piece ?? ''), String(req.body?.notes ?? ''), undefined, req.body?.images, parseAi(req.body?.picker ?? 'claude'));
     res.json(job);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });

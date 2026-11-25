@@ -15,10 +15,11 @@ import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { expressionShotSuggestions } from './expressionShotSuggestions';
 import { YouTubeOpenLink } from './YouTubeOpenLink';
+import { AI_OPTIONS, AiSelect, aiName, useRemembered } from './AiChoice';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
-// At the top, Write Brief: Claude writes Brief.md, ChatGPT and Gemini review it, and Claude picks the top 3 title and
-// thumbnail pairs (server/brief.ts). The top 3 show as cards to choose from; the full brief opens below them, then one
+// At the top, Write Brief: the AIs John chose write Brief.md and review it, each with vidIQ if ticked, and the summary
+// AI picks the top 3 title and thumbnail pairs (server/brief.ts). The top 3 show as cards to choose from; the full brief opens below them, then one
 // box per AI conversation with every image it made, newest first, and what was asked. Once a pair and its photo are
 // chosen, Make Thumbnail asks ChatGPT or Gemini for one (server/thumbnails.ts), and each draft has a box for changes.
 /** The packaging version selected on the card: where Use Thumbnail and Use Title put a draft. Locked when it's an old one. */
@@ -470,7 +471,57 @@ function BriefBox({ label, value, onText, images, onImages, placeholder }: { lab
   );
 }
 
+/** Who does the brief, as the page keeps it: three slots (the 2nd and 3rd can be empty) and the summary AI. */
+interface BriefSlots { slots: { ai: AiId | ''; vidiq: boolean }[]; picker: AiId }
+
+const DEFAULT_BRIEF_SLOTS: BriefSlots = {
+  slots: [{ ai: 'claude', vidiq: true }, { ai: 'codex', vidiq: false }, { ai: 'gemini', vidiq: false }],
+  picker: 'claude',
+};
+
+const isBriefSlots = (v: unknown): v is BriefSlots => {
+  const s = v as BriefSlots;
+  const ai = (a: unknown) => a === 'claude' || a === 'codex' || a === 'gemini';
+  return !!s && Array.isArray(s.slots) && s.slots.length === 3 && ai(s.slots[0]?.ai) && s.slots.every((x) => x && (x.ai === '' || ai(x.ai)) && typeof x.vidiq === 'boolean') && ai(s.picker);
+};
+
+/** The plan the engine wants: the chosen AIs in order, without the empty slots. */
+const briefPlan = (b: BriefSlots) => ({ steps: b.slots.filter((s) => s.ai).map((s) => ({ ai: s.ai as AiId, vidiq: s.vidiq })), picker: b.picker });
+
+const SLOT_LABELS = ['1st (Writes)', '2nd (Reviews)', '3rd (Reviews)'];
+
+/** Choose the AI for each step of the brief, whether it may use vidIQ, and who picks the top 3. */
+function BriefPlanPicker({ value, onChange }: { value: BriefSlots; onChange: (b: BriefSlots) => void }) {
+  const setSlot = (i: number, part: Partial<BriefSlots['slots'][number]>) =>
+    onChange({ ...value, slots: value.slots.map((s, j) => (j === i ? { ...s, ...part, ...(part.ai === '' ? { vidiq: false } : {}) } : s)) });
+  return (
+    <div className="brief-plan">
+      {value.slots.map((s, i) => (
+        <div key={i} className="brief-plan-step">
+          <span className="muted small-text">{SLOT_LABELS[i]}</span>
+          <select className="ai-select" value={s.ai} onChange={(e) => setSlot(i, { ai: e.target.value as AiId | '' })}>
+            {i > 0 && <option value="">None</option>}
+            {AI_OPTIONS.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <label className="small-text" title="Let this AI research with vidIQ (up to 4 calls, which cost vidIQ credits)">
+            <input type="checkbox" checked={s.vidiq} disabled={!s.ai} onChange={(e) => setSlot(i, { vidiq: e.target.checked })} /> vidIQ
+          </label>
+        </div>
+      ))}
+      <div className="brief-plan-step">
+        <span className="muted small-text">Picks Top 3</span>
+        <AiSelect value={value.picker} onChange={(picker) => onChange({ ...value, picker })} title="Which AI reads the brief and its reviews and picks the top 3 pairs" />
+      </div>
+    </div>
+  );
+}
+
 function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece: string; hasBrief: boolean; hasPicks: boolean; research?: Research; onChanged?: () => void }) {
+  const [plan, setPlan] = useRemembered<BriefSlots>('hq-brief-plan', DEFAULT_BRIEF_SLOTS, isBriefSlots);
   // Screenshots pasted into the boxes. Unlike the text, they aren't kept over a reload (too big for the browser's storage).
   const [shots, setShots] = useState<Record<BoxName, Pasted[]>>({ notes: [], vidiq: [], studio: [] });
   const images = { notes: shots.notes.map((s) => s.data), vidiq: shots.vidiq.map((s) => s.data), studio: shots.studio.map((s) => s.data) };
@@ -529,20 +580,22 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
   const start = () => {
     if (hasBrief && !window.confirm('Write a new brief? The current Brief.md is kept, renamed with its date and time.')) return;
     setError('');
-    postJson<BriefJob>('/api/brief/start', { piece, notes, images }).then(setJob, (e: Error) => setError(e.message));
+    postJson<BriefJob>('/api/brief/start', { piece, notes, images, plan: briefPlan(plan) }).then(setJob, (e: Error) => setError(e.message));
   };
-  // For a brief written before there were picks, or to pick again: only Claude's last step, about a minute.
+  // For a brief written before there were picks, or to pick again: only the last step, about a minute.
   const pick = () => {
     setError('');
-    postJson<BriefJob>('/api/brief/picks', { piece, notes, images }).then(setJob, (e: Error) => setError(e.message));
+    postJson<BriefJob>('/api/brief/picks', { piece, notes, images, picker: plan.picker }).then(setJob, (e: Error) => setError(e.message));
   };
+  const steps = briefPlan(plan).steps;
+  const usesVidiq = steps.some((s) => s.vidiq);
 
   if (source === undefined) return error ? <p className="error">{error}</p> : null;
   return (
     <div className="write-brief">
       <p className="muted small-text">
         {source
-          ? `Made from the ${source.kind}: ${source.path.split('/').pop()}. Claude writes the brief with vidIQ research (a few vidIQ credits), ChatGPT and Gemini each add a review, and Claude picks the top 3. It takes several minutes.`
+          ? `Made from the ${source.kind}: ${source.path.split('/').pop()}. ${aiName(steps[0].ai)} writes the brief${steps.length > 1 ? `, ${steps.slice(1).map((s) => aiName(s.ai)).join(' and ')} ${steps.length > 2 ? 'each add' : 'adds'} a review` : ''}, and ${aiName(plan.picker)} picks the top 3.${usesVidiq ? ' Each AI with vidIQ ticked uses a few vidIQ credits.' : ''} It takes several minutes.`
           : 'There is no transcript in Subtitles and no script (a file with "script" in its name) to make a brief from yet.'}
       </p>
       {source && !running && (
@@ -563,12 +616,13 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
           <BriefBox label="Notes for the AIs" value={boxes.notes} onText={(v) => setBox('notes', v)} images={shots.notes} onImages={(i) => setShots({ ...shots, notes: i })} placeholder="Optional: for example what you don't like about the current thumbnail, or which version is on YouTube" />
           <BriefBox label="vidIQ's answer" value={boxes.vidiq} onText={(v) => setBox('vidiq', v)} images={shots.vidiq} onImages={(i) => setShots({ ...shots, vidiq: i })} placeholder="Paste what vidIQ suggested, such as its title and tag scores" />
           <BriefBox label="Ask Studio's answer" value={boxes.studio} onText={(v) => setBox('studio', v)} images={shots.studio} onImages={(i) => setShots({ ...shots, studio: i })} placeholder="Paste what Ask Studio suggested" />
+          <BriefPlanPicker value={plan} onChange={setPlan} />
           <div className="claude-buttons">
             <button className="small" onClick={start}>
               {hasBrief ? 'Write New Brief' : 'Write Brief'}
             </button>
             {hasBrief && (
-              <button className="small" onClick={pick} title="Claude reads the brief and its reviews and picks the top 3 pairs again (about a minute)">
+              <button className="small" onClick={pick} title={`${aiName(plan.picker)} reads the brief and its reviews and picks the top 3 pairs again (about a minute)`}>
                 {hasPicks ? 'Pick Top 3 Again' : 'Pick Top 3'}
               </button>
             )}
@@ -579,7 +633,7 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
         <ul className="brief-steps">
           {job.steps.map((s, i) => (
             <li key={i} className={`brief-step brief-${s.state}`}>
-              {s.name} {s.role === 'writes' ? 'writes the brief' : s.role === 'reviews' ? 'reviews it' : 'picks the top 3'}: {STATE_WORDS[s.state]}
+              {s.name} {s.role === 'writes' ? 'writes the brief' : s.role === 'reviews' ? 'reviews it' : 'picks the top 3'}{s.vidiq ? ' (with vidIQ)' : ''}: {STATE_WORDS[s.state]}
               {s.error && <span className="error"> {s.error}</span>}
             </li>
           ))}

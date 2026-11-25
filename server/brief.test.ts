@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, type AskAi, type BriefStep } from './brief';
+import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, parseBriefPlan, DEFAULT_BRIEF_PLAN, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -114,6 +114,58 @@ describe('writing the brief', () => {
     const retry = await startPicks(LONGFORM, '', check);
     await retry.finished;
     expect(retry.job.status).toBe('done');
+  });
+
+  it('follows the plan John chose: who writes, who reviews, who may use vidIQ, and who picks', async () => {
+    const calls: { ai: string; vidiq: boolean; writing: boolean; picking: boolean; prompt: string }[] = [];
+    const ask: AskAi = async (ai, prompt, _cwd, _images, vidiq = false) => {
+      calls.push({ ai, vidiq, writing: prompt.startsWith('Write a YouTube'), picking: prompt.includes('"picks"'), prompt });
+      if (prompt.includes('"picks"')) return JSON.stringify(PICKS);
+      if (prompt.startsWith('Write a YouTube')) return '# Brief: 022\n\nMade from: transcript, 2026-11-14.\n\n## John\'s notes\n';
+      const name = ai === 'codex' ? 'ChatGPT' : ai === 'gemini' ? 'Gemini' : 'Claude';
+      return `## Review: ${name}\n- ranking`;
+    };
+    const plan = parseBriefPlan({ steps: [{ ai: 'codex', vidiq: true }, { ai: 'gemini', vidiq: true }], picker: 'gemini' });
+    const { job, finished } = await startBrief(LONGFORM, '', ask, undefined, plan);
+    await finished;
+    expect(job.status).toBe('done');
+    expect(job.steps.map((s) => [s.ai, s.role, s.vidiq])).toEqual([['codex', 'writes', true], ['gemini', 'reviews', true], ['gemini', 'picks', false]]);
+    expect(calls.map((c) => [c.ai, c.vidiq, c.writing, c.picking])).toEqual([['codex', true, true, false], ['gemini', true, false, false], ['gemini', false, false, true]]);
+    expect(calls[0].prompt).toContain('Research with vidIQ');
+    expect(calls[1].prompt).toContain('You may check the brief');
+    expect(briefText()).toContain('By: ChatGPT (brief), Gemini (reviews).');
+  });
+
+  it('tells an AI without vidIQ not to use it', async () => {
+    const prompts: string[] = [];
+    const ask: AskAi = async (ai, prompt, cwd, images, vidiq) => {
+      prompts.push(prompt);
+      expect(vidiq).toBeFalsy();
+      return fakeAi(ai, prompt, cwd, images);
+    };
+    const { finished } = await startBrief(LONGFORM, '', ask, undefined, parseBriefPlan({ steps: [{ ai: 'claude', vidiq: false }], picker: 'claude' }));
+    await finished;
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("Don't use vidIQ");
+  });
+
+  it('checks the plan the page sends', () => {
+    expect(parseBriefPlan(undefined)).toEqual(DEFAULT_BRIEF_PLAN);
+    expect(() => parseBriefPlan({ steps: [], picker: 'claude' })).toThrow(/1 to 3/);
+    expect(() => parseBriefPlan({ steps: [{ ai: 'x' }], picker: 'claude' })).toThrow(/Choose Claude/);
+    expect(() => parseBriefPlan({ steps: [1, 2, 3, 4].map(() => ({ ai: 'claude' })), picker: 'claude' })).toThrow(/1 to 3/);
+    expect(() => parseBriefPlan({ steps: [{ ai: 'claude' }], picker: 'nobody' })).toThrow(/picks the top 3/);
+    expect(parseBriefPlan({ steps: [{ ai: 'gemini', vidiq: 'yes' }], picker: 'codex' })).toEqual({ steps: [{ ai: 'gemini', vidiq: false }], picker: 'codex' });
+  });
+
+  it('picks the top 3 again with the AI John chose', async () => {
+    fs.mkdirSync(draftsDir(), { recursive: true });
+    fs.writeFileSync(path.join(draftsDir(), 'Brief.md'), '# Brief: 022\n');
+    const used: string[] = [];
+    const { job, finished } = await startPicks(LONGFORM, '', async (ai, prompt, cwd, images) => { used.push(ai); return fakeAi(ai, prompt, cwd, images); }, undefined, 'codex');
+    await finished;
+    expect(used).toEqual(['codex']);
+    expect(job.steps[0]).toMatchObject({ ai: 'codex', name: 'ChatGPT', state: 'done' });
   });
 
   it('labels an unverified local comparison and keeps a missing previous cover from selecting an unrelated episode', () => {
@@ -265,7 +317,7 @@ describe('writing the brief', () => {
     const { job, finished } = await startBrief(LONGFORM, '', badPicks);
     await finished;
     expect(job.status).toBe('done');
-    expect(job.steps[3]).toMatchObject({ state: 'failed', error: "Claude's top 3 weren't in the expected form." });
+    expect(job.steps[3]).toMatchObject({ state: 'failed', error: "The top 3 weren't in the expected form." });
     expect(briefText()).toContain('## Review: Gemini');
     expect(fs.existsSync(path.join(draftsDir(), 'Picks.json'))).toBe(false);
   });

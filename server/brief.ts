@@ -1,10 +1,9 @@
-// "Write Brief": the thumbnail and title brief for one video or Short, by three AIs in turn (see the
-// thumbnails-and-titles skill, "Writing the brief"):
-//   1. Claude reads the source and writes the brief, using vidIQ for research.
-//   2. ChatGPT reads the source and the brief, and adds its review.
-//   3. Gemini does the same.
-//   4. Claude picks the top 3 title and thumbnail pairs, saved as Picks.json for the page to show.
-// They run in turn whatever AI is picked at the top of the app. The AIs only answer: HeartQuarters writes
+// "Write Brief": the thumbnail and title brief for one video or Short, by AIs in turn (see the
+// thumbnails-and-titles skill, "Writing the brief"). John chooses each AI (a BriefPlan):
+//   1. The first AI reads the source and writes the brief, with vidIQ research if John ticked it.
+//   2. Up to two more AIs read the source and the brief, and each adds its review (also with vidIQ if ticked).
+//   3. The summary AI picks the top 3 title and thumbnail pairs, saved as Picks.json for the page to show.
+// The default plan is the old fixed order: Claude (vidIQ), ChatGPT, Gemini, then Claude picks. The AIs only answer: HeartQuarters writes
 // Packaging\Drafts\Brief.md from their answers, so no AI edits John's files. An existing Brief.md is kept, renamed
 // with its date and time. Jobs live only in the engine's memory, like conversations.
 import { createHash } from 'node:crypto';
@@ -12,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
-import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CLAUDE_VIDIQ_ENV, CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, codexVidiq, geminiVidiqAllow, isAiId, runAiProcess, type AiId } from './ai.js';
 import { stageLongformThumbnails, thumbnailComparisonNote } from './brief-thumbnail-comparison.js';
 import { appDir, config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
@@ -30,8 +29,37 @@ export interface BriefStep {
   ai: AiId;
   name: string;
   role: 'writes' | 'reviews' | 'picks';
+  /** Whether this AI may research with vidIQ. */
+  vidiq?: boolean;
   state: 'waiting' | 'working' | 'done' | 'failed' | 'skipped';
   error?: string;
+}
+
+/** Who does the brief: `steps[0]` writes it, any others review it in turn, then `picker` picks the top 3. */
+export interface BriefPlan {
+  steps: { ai: AiId; vidiq: boolean }[];
+  picker: AiId;
+}
+
+export const DEFAULT_BRIEF_PLAN: BriefPlan = {
+  steps: [{ ai: 'claude', vidiq: true }, { ai: 'codex', vidiq: false }, { ai: 'gemini', vidiq: false }],
+  picker: 'claude',
+};
+
+const MAX_BRIEF_STEPS = 3;
+
+/** The plan the page sent, checked. Nothing sent means the default plan. */
+export function parseBriefPlan(raw: unknown): BriefPlan {
+  if (raw === undefined || raw === null) return DEFAULT_BRIEF_PLAN;
+  const r = raw as { steps?: unknown; picker?: unknown };
+  if (!Array.isArray(r.steps) || !r.steps.length || r.steps.length > MAX_BRIEF_STEPS) throw new Error(`Choose 1 to ${MAX_BRIEF_STEPS} AIs for the brief.`);
+  const steps = r.steps.map((s: unknown) => {
+    const step = s as { ai?: unknown; vidiq?: unknown };
+    if (!isAiId(step?.ai)) throw new Error('Choose Claude, ChatGPT, or Gemini for each step of the brief.');
+    return { ai: step.ai, vidiq: step.vidiq === true };
+  });
+  if (!isAiId(r.picker)) throw new Error('Choose which AI picks the top 3.');
+  return { steps, picker: r.picker };
 }
 
 export interface BriefJob {
@@ -45,17 +73,16 @@ export interface BriefJob {
   error?: string;
 }
 
-/** Asks one AI one question in `cwd` and gives back its answer. Real AIs in askAi; tests pass a fake. */
-/** Asks one AI. `images` are screenshots John pasted; ChatGPT gets them attached (the others open them as files). */
-export type AskAi = (ai: AiId, prompt: string, cwd: string, images?: string[]) => Promise<string>;
+/**
+ * Asks one AI one question in `cwd` and gives back its answer. Real AIs in askAi; tests pass a fake. `images` are
+ * screenshots John pasted; ChatGPT gets them attached (the others open them as files). `vidiq` lets it use vidIQ's
+ * research tools.
+ */
+export type AskAi = (ai: AiId, prompt: string, cwd: string, images?: string[], vidiq?: boolean) => Promise<string>;
 
 const BRIEF_FILE = 'Brief.md';
-/** Each vidIQ call costs John credits, so Claude is told to keep to a few. */
+/** Each vidIQ call costs John credits, so each AI is told to keep to a few. */
 const VIDIQ_CALLS = 4;
-/** vidIQ's research tools only: nothing that could change the channel. */
-const VIDIQ_TOOLS = ['keyword_research', 'youtube_search', 'outliers', 'title_thumbnail_wins', 'similar_thumbnails', 'user_videos', 'channel_analytics'].map(
-  (t) => `mcp__claude_ai_vidIQ_for_Claude__vidiq_${t}`,
-);
 const ONE_RUN_MS = 20 * 60 * 1000;
 
 // ---- The source: the transcript, or before recording, the script --------------------------------------
@@ -161,13 +188,21 @@ export function shortNote(piece: string): string[] {
   ];
 }
 
-export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string, comparison = ''): string {
+/** What an AI is told about vidIQ: research within a budget, or don't use it at all. */
+export function vidiqNote(vidiq: boolean, writing: boolean): string {
+  if (!vidiq) return "Don't use vidIQ for this. Where keyword metrics aren't in the brief, notes or screenshots, say they are unavailable rather than guessing.";
+  return writing
+    ? `Research with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits. Prioritize keyword research for candidate tags. Record the exact phrases checked and the search volume or overall score vidIQ returns, including zero values, so the final picker can use them. If keyword metrics aren't available, write the brief anyway and say so.`
+    : `You may check the brief's titles and tags with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits. Prefer phrases the brief hasn't checked yet. Record the exact phrases checked and the search volume or overall score vidIQ returns, including zero values, so the final picker can use them.`;
+}
+
+export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: boolean, today: string, comparison = '', vidiq = true): string {
   return [
     `Write a YouTube packaging brief for the Heart Mind Fusion video "${pieceName}", following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
     ...shortNote(pieceName),
     `The source is the video's ${source.kind}, copied into source.txt in the current folder (from ${source.path}). Read all of it.`,
     ...(hasNotes ? [NOTES_NOTE] : []),
-    `Research with vidIQ, using at most ${VIDIQ_CALLS} vidIQ tool calls in total, because each costs John credits. Prioritize keyword research for candidate tags. Record the exact phrases checked and the search volume or overall score vidIQ returns, including zero values, so the final picker can use them. If keyword metrics aren't available, write the brief anyway and say so.`,
+    vidiqNote(vidiq, true),
     CATEGORIES_NOTE(),
     ...(!isShort(pieceName) ? [thumbnailComparisonNote(comparison)] : []),
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
@@ -181,12 +216,13 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
   ].join('\n\n');
 }
 
-export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false, piece = '', comparison = ''): string {
+export function reviewerPrompt(name: string, source: BriefSource, hasNotes = false, piece = '', comparison = '', vidiq = false): string {
   return [
     `Review a thumbnail and title brief for the Heart Mind Fusion channel, following the thumbnails-and-titles skill, section "Writing the brief". ${READ_SKILLS()}`,
     ...shortNote(piece),
     `Read all of the video's ${source.kind}, in source.txt in the current folder, then the brief, in brief.md in the current folder (with any earlier reviews at its end).`,
     ...(hasNotes ? [NOTES_NOTE] : []),
+    vidiqNote(vidiq, false),
     CATEGORIES_NOTE(),
     ...(piece && !isShort(piece) ? [thumbnailComparisonNote(comparison)] : []),
     THUMBNAIL_EXPRESSION_GUIDANCE,
@@ -234,17 +270,16 @@ async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.Proces
   throw new Error(res.stderr.trim().split('\n').slice(-3).join(' ') || errorInAnswer(res.stdout) || `It stopped (exit code ${res.code}).`);
 }
 
-/** The real AIs, read-only: none of them may change a file. */
-export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
+/** The real AIs, read-only: none of them may change a file. With `vidiq`, each may use vidIQ's research tools. */
+export const askAi: AskAi = async (ai, prompt, cwd, images = [], vidiq = false) => {
   const [cmd, ...pre] = aiCommand(ai);
   const modelArgs = aiModelArgs(ai);
   if (ai === 'claude') {
-    // Claude.ai's connectors (vidIQ) are only loaded in a background run when asked for.
     const out = await run(
       cmd,
-      [...pre, '-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...VIDIQ_TOOLS, '--add-dir', config.skillsDir, config.videoProjectsDir],
+      [...pre, '-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...(vidiq ? CLAUDE_VIDIQ_TOOLS : []), '--add-dir', config.skillsDir, config.videoProjectsDir],
       cwd,
-      { ...process.env, ENABLE_CLAUDEAI_MCP_SERVERS: 'true' },
+      vidiq ? { ...process.env, ...CLAUDE_VIDIQ_ENV } : undefined,
     );
     const result = JSON.parse(out) as { is_error?: boolean; result?: string };
     if (result.is_error) throw new Error(errorInAnswer(out) || 'Claude stopped with an error.');
@@ -252,10 +287,11 @@ export const askAi: AskAi = async (ai, prompt, cwd, images = []) => {
   }
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
+    fs.rmSync(answer, { force: true }); // two ChatGPT steps share the folder: never return the earlier one's answer
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...(vidiq ? codexVidiq(true) : []), '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
     return fs.readFileSync(answer, 'utf8');
   }
-  const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } };
+  const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)', ...geminiVidiqAllow(vidiq)] } };
   return run(cmd, [...pre, '-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify(settings), '--print-timeout', '1200s'], cwd);
 };
 
@@ -332,7 +368,7 @@ export function picksFromAnswer(answer: string): BriefPick[] {
   } catch {
     picks = null;
   }
-  if (!picks) throw new Error("Claude's top 3 weren't in the expected form.");
+  if (!picks) throw new Error("The top 3 weren't in the expected form.");
   for (const pick of picks) {
     if (!pick.tags) continue;
     pick.tags = pick.tags.replace(/[\p{L}\p{M}\p{N}]+(?:['’][\p{L}\p{M}\p{N}]+)*/gu, (word) =>
@@ -341,11 +377,11 @@ export function picksFromAnswer(answer: string): BriefPick[] {
   return picks;
 }
 
-/** The last step: Claude picks the top 3 pairs, saved as Picks.json (an earlier one is kept, renamed). */
+/** The last step: the summary AI picks the top 3 pairs, saved as Picks.json (an earlier one is kept, renamed). */
 async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boolean, drafts: string, when: Date, shots: string[], comparison: string): Promise<void> {
   step.state = 'working';
   try {
-    const picks = picksFromAnswer(await ask('claude', picksPrompt(hasNotes, comparison), work, shots));
+    const picks = picksFromAnswer(await ask(step.ai, picksPrompt(hasNotes, comparison), work, shots));
     if (picks.some(p => !p.description || !p.tags || !p.pinnedComment)) throw new Error('The generated package is missing a description, tags or pinned comment. Try Pick Top 3 Again.');
     keepOld(drafts, PICKS_FILE, when);
     writeFile(path.join(drafts, PICKS_FILE), JSON.stringify({ picks }, null, 2) + '\n');
@@ -419,16 +455,17 @@ function workFolder(piece: string): string {
 
 /** Puts who took part on the brief's "Made from" line. */
 export function noteWhoTookPart(brief: string, steps: BriefStep[]): string {
+  const writer = steps.find((s) => s.role === 'writes')?.name ?? 'Claude';
   const reviewed = steps.filter((s) => s.role === 'reviews' && s.state === 'done').map((s) => s.name);
-  const by = `By: Claude (brief)${reviewed.length ? `, ${reviewed.join(' and ')} (reviews)` : ''}.`;
+  const by = `By: ${writer} (brief)${reviewed.length ? `, ${reviewed.join(' and ')} (reviews)` : ''}.`;
   return brief.replace(/^(Made from:.*?)(?:\s*By:.*)?$/m, (_, start: string) => `${start} ${by}`);
 }
 
 /**
  * Starts the brief for one piece (e.g. "022 - Worth Telling Them/Longform"). Returns the job at once; `finished`
- * settles when all three AIs are done. `notes` is what John typed or pasted for the AIs, if anything.
+ * settles when all the AIs are done. `notes` is what John typed or pasted for the AIs, if anything.
  */
-export async function startBrief(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages): Promise<{ job: BriefJob; finished: Promise<void> }> {
+export async function startBrief(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages, plan: BriefPlan = DEFAULT_BRIEF_PLAN): Promise<{ job: BriefJob; finished: Promise<void> }> {
   if (jobs.get(piece)?.status === 'running') throw new Error('A brief is already being written for this video.');
   const dir = pieceFolder(piece);
   const found = findSource(dir);
@@ -436,12 +473,12 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
   const source: BriefSource = { kind: found.kind, path: rel(found.full) };
 
   // The job is registered before anything waits, so a second click can't start another brief for this video meanwhile.
-  const step = (ai: AiId, role: BriefStep['role']): BriefStep => ({ ai, name: AI_NAMES[ai], role, state: 'waiting' });
+  const step = (ai: AiId, role: BriefStep['role'], vidiq = false): BriefStep => ({ ai, name: AI_NAMES[ai], role, vidiq, state: 'waiting' });
   const job: BriefJob = {
     piece,
     status: 'running',
     source,
-    steps: [step('claude', 'writes'), step('codex', 'reviews'), step('gemini', 'reviews'), step('claude', 'picks')],
+    steps: [...plan.steps.map((s, i) => step(s.ai, i === 0 ? 'writes' : 'reviews', s.vidiq)), step(plan.picker, 'picks')],
     startedAt: new Date().toISOString(),
   };
   const before = jobs.get(piece);
@@ -481,7 +518,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     const when = new Date();
     try {
       writer.state = 'working';
-      const text = fromHeading(await ask('claude', writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10), comparison), work, shots), /^# Brief:/m, 'Claude');
+      const text = fromHeading(await ask(writer.ai, writerPrompt(piece, source, !!notes.trim(), stamp(new Date()).slice(0, 10), comparison, !!writer.vidiq), work, shots, !!writer.vidiq), /^# Brief:/m, writer.name);
       makeFolder(drafts);
       job.kept = keepOld(drafts, BRIEF_FILE, when);
       writeFile(brief, text + '\n');
@@ -492,13 +529,13 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
       writer.error = e instanceof Error ? e.message : String(e);
       for (const r of rest) r.state = 'skipped';
       job.status = 'failed';
-      job.error = "Claude couldn't write the brief, so there was nothing to review. Any earlier Brief.md is untouched.";
+      job.error = `${writer.name} couldn't write the brief, so there was nothing to review. Any earlier Brief.md is untouched.`;
       return;
     }
     for (const r of reviewers) {
       r.state = 'working';
       try {
-        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece, comparison), work, shots), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
+        const review = fromHeading(await ask(r.ai, reviewerPrompt(r.name, source, !!notes.trim(), piece, comparison, !!r.vidiq), work, shots, !!r.vidiq), new RegExp(`^## Review: ${r.name}`, 'm'), r.name);
         appendText(brief, `\n${review}\n`);
         fs.appendFileSync(path.join(work, 'brief.md'), `\n${review}\n`);
         r.state = 'done';
@@ -518,7 +555,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
 }
 
 /** Pick Top 3 for a brief written before there were picks (or again): only the last step, on the Brief.md there. */
-export async function startPicks(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages): Promise<{ job: BriefJob; finished: Promise<void> }> {
+export async function startPicks(piece: string, rawNotes: string, ask: AskAi = askAi, images?: ResearchImages, picker: AiId = 'claude'): Promise<{ job: BriefJob; finished: Promise<void> }> {
   if (jobs.get(piece)?.status === 'running') throw new Error('A brief is already being written for this video.');
   const dir = pieceFolder(piece);
   const drafts = path.join(dir, 'Packaging', DRAFTS_FOLDER);
@@ -529,7 +566,7 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     piece,
     status: 'running',
     source: found ? { kind: found.kind, path: rel(found.full) } : { kind: 'transcript', path: '' },
-    steps: [{ ai: 'claude', name: AI_NAMES.claude, role: 'picks', state: 'waiting' }],
+    steps: [{ ai: picker, name: AI_NAMES[picker], role: 'picks', state: 'waiting' }],
     startedAt: new Date().toISOString(),
   };
   jobs.set(piece, job);

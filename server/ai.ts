@@ -35,6 +35,12 @@ export function isAiId(value: unknown): value is AiId {
   return value === 'claude' || value === 'codex' || value === 'gemini';
 }
 
+/** The AI a request names, checked. */
+export function parseAi(value: unknown): AiId {
+  if (!isAiId(value)) throw new Error('Choose Claude, ChatGPT, or Gemini.');
+  return value;
+}
+
 interface StoredAiChoice {
   ai: AiId;
   models: Partial<Record<AiId, string>>;
@@ -96,11 +102,46 @@ export function aiModelArgs(ai: AiId): string[] {
   return ai === 'codex' ? ['-c', `model=${JSON.stringify(model)}`] : ['--model', model];
 }
 
+// ---- vidIQ ------------------------------------------------------------------
+
+const VIDIQ_URL = 'https://mcp.vidiq.com/mcp';
+
+/** vidIQ's research tools only: nothing that could change the channel. Each call costs John credits. */
+export const VIDIQ_RESEARCH_TOOLS = [
+  'keyword_research',
+  'youtube_search',
+  'outliers',
+  'title_thumbnail_wins',
+  'similar_thumbnails',
+  'user_videos',
+  'channel_analytics',
+  'channel_analytics_extended',
+].map((t) => `vidiq_${t}`);
+
+/** Claude's names for them, from John's claude.ai vidIQ connector. */
+export const CLAUDE_VIDIQ_TOOLS = VIDIQ_RESEARCH_TOOLS.map((t) => `mcp__claude_ai_vidIQ_for_Claude__${t}`);
+
+/** Claude only loads claude.ai's connectors (vidIQ) in a background run when this is set. */
+export const CLAUDE_VIDIQ_ENV = { ENABLE_CLAUDEAI_MCP_SERVERS: 'true' };
+
+/**
+ * Codex settings for vidIQ (added to John's Codex with `codex mcp add vidiq`). Off, Codex gets no vidIQ tools at all;
+ * on, only the research tools. CODEX_STANDARD_TIER turns it off for every call, so pass `codexVidiq(true)` after it.
+ */
+export function codexVidiq(on: boolean): string[] {
+  return ['-c', `mcp_servers.vidiq.url=${JSON.stringify(VIDIQ_URL)}`, '-c', `mcp_servers.vidiq.enabled_tools=${JSON.stringify(on ? VIDIQ_RESEARCH_TOOLS : [])}`];
+}
+
+/** Gemini's permission rules for the research tools. Without them, a background run is refused every vidIQ call. */
+export function geminiVidiqAllow(on: boolean): string[] {
+  return on ? VIDIQ_RESEARCH_TOOLS.map((t) => `mcp(vidiq/${t})`) : [];
+}
+
 /**
  * Settings for every ChatGPT (Codex) call: the normal speed tier, because John's own Codex settings may have Fast
- * mode on, which uses credits faster. Put first so a chosen model can follow it.
+ * mode on, which uses credits faster; and no vidIQ unless a job asks for it. Put first so a chosen model can follow it.
  */
-export const CODEX_STANDARD_TIER = ['-c', 'service_tier="standard"'];
+export const CODEX_STANDARD_TIER = ['-c', 'service_tier="standard"', ...codexVidiq(false)];
 
 let cachedGeminiModels: AiModelOption[] | null = null;
 
