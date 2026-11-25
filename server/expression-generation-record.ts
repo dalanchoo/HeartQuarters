@@ -4,14 +4,15 @@
 //   # Generated description: Looking straight at the camera, one eyebrow gently raised, no squint.
 //   # Generated with: LookAtCamera, RaisedBrow, MouthOpen
 //   # Generated without: Squint, EyesWide
+//   # Generated shot: 3f2c…  (the Shot List look it was made from, so a video can find pictures made for it)
 // Tag readers and the three-AI assessment skip "#" lines, so this record stays apart from what the AIs later think the
 // picture shows (their scores on the tag lines) and from John's own confirmations. Older pictures may have none.
 
-export interface GenerationRecord { by?: string; look?: string; description?: string; with?: string[]; without?: string[] }
+export interface GenerationRecord { by?: string; look?: string; description?: string; with?: string[]; without?: string[]; shot?: string }
 
 const AI_NAMES: Record<string, string> = { codex: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
-const LINE = /^#\s*Generated (by|look|description|with|without):\s*(.*)$/i;
+const LINE = /^#\s*Generated (by|look|description|with|without|shot):\s*(.*)$/i;
 
 /** The record's "#" lines, each ending in a newline; empty when there is nothing to record. */
 export function generationLines(record: GenerationRecord): string {
@@ -22,6 +23,7 @@ export function generationLines(record: GenerationRecord): string {
   add('description', record.description);
   add('with', [...new Set(record.with ?? [])].filter(Boolean).join(', '));
   add('without', [...new Set(record.without ?? [])].filter(Boolean).join(', '));
+  add('shot', record.shot);
   return lines.map(line => `${line}\n`).join('');
 }
 

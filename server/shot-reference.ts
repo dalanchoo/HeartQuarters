@@ -93,7 +93,7 @@ export function shotPictureTags(shot: ExpressionShot, ai?: ImageAi): string {
   const groups = [lines([...shot.pose, options.gaze], POSE_TAGS), lines([...shot.framing, options.framing, options.angle], FRAMING_TAGS), lines(shot.morphology, MORPHOLOGY_TAGS), lines([expression], [])].filter(group => group.length);
   const tags = [...groups.map(group => group.join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
   if (!ai) return tags;
-  return tags + generationLines({ by: ai, look: shot.title || expression, description: shot.description, with: [...shot.pose, options.gaze, ...shot.framing, options.framing, options.angle, ...shot.morphology], without: out });
+  return tags + generationLines({ by: ai, look: shot.title || expression, description: shot.description, with: [...shot.pose, options.gaze, ...shot.framing, options.framing, options.angle, ...shot.morphology], without: out, shot: shot.id });
 }
 
 /** "reference-002.png" → "reference-002.txt", the picture's tag file. */
