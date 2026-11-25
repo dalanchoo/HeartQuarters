@@ -29,6 +29,9 @@ describe("filling in a look's tags from its description", () => {
     expect(found.get(id)).toEqual({ framing: ['CloseUp'], pose: ['LookAtCamera'], morphology: ['RaisedBrow', 'Asymmetric', 'MouthOpen'], ruledOut: ['Squint', 'EyesWide'] });
     expect(found.has('unknown')).toBe(false);
     expect(() => parseShotTags('Sorry, no.', shots)).toThrow(/did not answer/);
+    // Words with braces around the JSON, and a code fence, don't get in the way.
+    const wrapped = `I used the form {"looks": [...]}. Here it is:\n\`\`\`json\n{"looks": [{"id": "${id}", "pose": ["LookUp"]}]}\n\`\`\`\nDone {ok}.`;
+    expect(parseShotTags(wrapped, shots).get(id)?.pose).toEqual(['LookUp']);
   });
 
   it('only adds tags: a look keeps its own, never gains a tag it rules out, and never rules out one it has', () => {

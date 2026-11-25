@@ -29,11 +29,17 @@ export function shotTagsPrompt(shots: ExpressionShot[]): string {
 
 /** The AI's tags for each known look, keeping only real tag words in the right list. */
 export function parseShotTags(answer: string, shots: ExpressionShot[]): Map<string, FoundTags> {
-  const start = answer.indexOf('{'); const end = answer.lastIndexOf('}');
-  let value: unknown;
-  try { value = JSON.parse(answer.slice(start, end + 1)); } catch { throw new Error('The AI did not answer with tags for the looks.'); }
-  const looks = (value as { looks?: unknown })?.looks;
-  if (start < 0 || !Array.isArray(looks)) throw new Error('The AI did not answer with tags for the looks.');
+  // The JSON may come with words or a code fence around it, and those words may hold braces of their own: try each
+  // {"looks" … } in the answer until one reads.
+  let looks: unknown;
+  for (const match of answer.matchAll(/\{\s*"looks"/g)) {
+    const tail = answer.slice(match.index);
+    for (let end = tail.lastIndexOf('}'); end > 0 && looks === undefined; end = tail.lastIndexOf('}', end - 1)) {
+      try { const value = JSON.parse(tail.slice(0, end + 1)) as { looks?: unknown }; if (Array.isArray(value?.looks)) looks = value.looks; } catch { /* a shorter end */ }
+    }
+    if (looks !== undefined) break;
+  }
+  if (!Array.isArray(looks)) throw new Error('The AI did not answer with tags for the looks.');
   const known = new Set(shots.map(s => s.id));
   const pick = (list: unknown, allowed: string[]) => {
     const names = new Map(allowed.map(tag => [tag.toLowerCase(), tag]));
