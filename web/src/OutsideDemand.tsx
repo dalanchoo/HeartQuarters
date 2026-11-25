@@ -87,8 +87,8 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
     else { setSortKey(key); setDescending(key === 'views' || key === 'publishedAt' || key === 'seconds'); }
   };
   const header = (key: SortKey, label: string) => (
-    <th aria-sort={sortKey === key ? (descending ? 'descending' : 'ascending') : undefined}>
-      <button type="button" className="sort-button" onClick={() => sortBy(key)}>{label}{sortKey === key ? (descending ? ' ▼' : ' ▲') : ''}</button>
+    <th className={key === 'views' ? 'num' : undefined} aria-sort={sortKey === key ? (descending ? 'descending' : 'ascending') : undefined}>
+      <button type="button" className="sort" onClick={() => sortBy(key)}>{label}<span className="sort-icon">{sortKey === key ? (descending ? '▼' : '▲') : ''}</span></button>
     </th>
   );
 
@@ -105,12 +105,14 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
       </p>
       <div className="outside-settings">
         <label className="outside-words">
-          <span>Search Words <span className="muted small-text">(one per line, up to 8; -word leaves a word out)</span></span>
+          <span className="outside-label">Search Words</span>
           <textarea rows={4} value={words} onChange={(e) => setWords(e.target.value)} />
+          <span className="muted small-text">One per line, up to 8. Put - before a word to leave it out.</span>
         </label>
         <label className="outside-words">
-          <span>Must Mention <span className="muted small-text">(one per line; keeps only videos whose title, description or tags contain one, as a whole word)</span></span>
+          <span className="outside-label">Must Mention</span>
           <textarea rows={4} value={mentions} placeholder="Leave empty to keep every video" onChange={(e) => setMentions(e.target.value)} />
+          <span className="muted small-text">One per line. Keeps only videos whose title, description or tags contain one as a whole word.</span>
         </label>
         <div className="outside-options">
           <fieldset>
@@ -143,14 +145,18 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
 
       {latest ? (
         <>
-          <button type="button" className="research-toggle small-text" aria-expanded={showVideos} onClick={() => setShowVideos(!showVideos)}>
-            {showVideos ? '▼' : '▶'} Last Scan {new Date(latest.scannedAt).toLocaleString()}: {latest.videos.length} Found
-            {latest.removed ? `, ${latest.kept} Kept, ${latest.removed} Removed by Must Mention` : ''} ({keptVideos.length - shorts} Longform, {shorts} Shorts Kept)
-            {overview.scans.length > 1 ? ` · ${overview.scans.length - 1} Older Scans Saved` : ''}
-          </button>
-          {showVideos && (
+          <details className="yt-section research-sub" open={showVideos} onToggle={(e) => setShowVideos(e.currentTarget.open)}>
+            <summary>
+              Last Scan{' '}
+              <span className="muted">
+                {new Date(latest.scannedAt).toLocaleString()} · {latest.videos.length} found
+                {latest.removed ? `, ${latest.kept} kept, ${latest.removed} removed by Must Mention` : ''} · {keptVideos.length - shorts} longform, {shorts} Shorts kept
+                {overview.scans.length > 1 ? ` · ${overview.scans.length - 1} older scans saved` : ''}
+              </span>
+            </summary>
+            {showVideos && (
             <>
-              <div className="outside-filters small-text">
+              <div className="outside-filters">
                 <label>Show{' '}
                   <select value={keptFilter} onChange={(e) => setKeptFilter(e.target.value as KeptFilter)}>
                     <option value="kept">Kept ({latest.kept})</option>
@@ -168,7 +174,7 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
                 <span className="muted">{shown.length} Videos</span>
               </div>
               <div className="outside-videos-scroll">
-                <table className="outside-videos small-text">
+                <table className="channel-table outside-videos">
                   <thead>
                     <tr>
                       {header('title', 'Video')}
@@ -186,7 +192,7 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
                         <td><a href={`https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}`} target="_blank" rel="noreferrer">{v.title}</a>{v.language && !v.language.startsWith('en') ? <span className="muted"> ({v.language})</span> : null}</td>
                         <td>{v.channelTitle}</td>
                         <td>{v.kind === 'short' ? 'Short' : 'Longform'} <span className="muted">{formatLength(v.seconds)}</span></td>
-                        <td className="number">{formatNumber(v.views)}</td>
+                        <td className="num">{formatNumber(v.views)}</td>
                         <td>{v.publishedAt.slice(0, 10)}</td>
                         <td>{v.mentions.join(', ') || <span className="muted">—</span>}</td>
                         <td className="muted">{v.foundBy.join(', ')}</td>
@@ -196,7 +202,8 @@ export function OutsideDemand({ topic }: { topic: ResearchTopic }) {
                 </table>
               </div>
             </>
-          )}
+            )}
+          </details>
         </>
       ) : <p className="muted small-text">No scans yet.</p>}
     </div>

@@ -26,7 +26,6 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
   const [asking, setAsking] = useState<AiId | null>(null);
   const [chatting, setChatting] = useState(false);
   const busy = !!asking || chatting;
-  const [showVideos, setShowVideos] = useState(false);
   const [error, setError] = useState('');
   const topic = counts?.some((c) => c.topic === rawTopic) ? rawTopic as ResearchTopic : undefined;
 
@@ -61,14 +60,21 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
   };
 
   return (
-    <section className="channel-research">
+    <section className="channel-research card">
       <h2>Topic Research</h2>
       <nav className="research-topics" aria-label="Research Topics">
         {counts === null && !error && <span className="muted small-text">Loading Topics…</span>}
         {counts?.map((c) => (
-          <a key={c.topic} href={researchHash(c.topic)} className="small" aria-current={c.topic === topic ? 'page' : undefined}>
-            {TOPIC_LABELS[c.topic]} <span className="muted">({c.videos} Videos, {c.comments} Comments)</span>
-          </a>
+          <button
+            key={c.topic}
+            type="button"
+            className={c.topic === topic ? 'small active' : 'small'}
+            aria-current={c.topic === topic ? 'page' : undefined}
+            title={`${c.videos} videos, ${c.comments} viewer comments`}
+            onClick={() => { window.location.hash = researchHash(c.topic); }}
+          >
+            {TOPIC_LABELS[c.topic]} <span className="topic-count">{c.videos}</span>
+          </button>
         ))}
       </nav>
       {error && <p className="error" role="alert">{error}</p>}
@@ -85,11 +91,11 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
             {evidence === null && !error && <p className="muted small-text">Gathering Evidence…</p>}
             {evidence && (
               <>
-                <button type="button" className="research-toggle small-text" aria-expanded={showVideos} onClick={() => setShowVideos(!showVideos)}>
-                  {showVideos ? '▼' : '▶'} {evidence.videos.length} Videos · {evidence.commentCount} Viewer Comments · {evidence.transcriptCount} Transcripts
-                </button>
-                {showVideos && (
-                  <ul className="research-videos small-text">
+                <details className="yt-section research-sub">
+                  <summary>
+                    Videos Used <span className="muted">{evidence.videos.length} videos · {evidence.commentCount} viewer comments · {evidence.transcriptCount} transcripts</span>
+                  </summary>
+                  <ul className="research-videos">
                     {evidence.videos.map((v) => (
                       <li key={v.id}>
                         {v.title} <span className="muted">({v.kind === 'short' ? 'Short' : 'Longform'}, {v.comments} comments{v.transcript ? '' : ', no transcript'})</span>{' '}
@@ -97,7 +103,7 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
                       </li>
                     ))}
                   </ul>
-                )}
+                </details>
                 <textarea
                   rows={2}
                   className="research-focus"
