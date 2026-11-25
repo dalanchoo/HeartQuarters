@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { COMMENTS_DIR, type StoredCommentThread, type VideoCommentsFile } from './channel-comments';
-import { RESEARCH_DIR, gatherTopicEvidence, readTopicResearch, runTopicResearch, topicCounts, topicLabel, topicVideos } from './channel-research';
+import { RESEARCH_DIR, gatherTopicEvidence, readTopicResearch, runTopicResearch, sendResearchMessage, topicCounts, topicLabel, topicVideos } from './channel-research';
 import type { ChannelVideo } from './channel-videos';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
@@ -99,6 +99,37 @@ describe('channel research', () => {
     expect(result.reports[0]).toMatchObject({ ai: 'claude', focus: 'What about dreams?', commentCount: 1, transcriptCount: 1, text: '## Unanswered Questions\nNone yet.' });
     expect(fs.existsSync(path.join(config.videoProjectsDir, RESEARCH_DIR, 'sdam.json'))).toBe(true);
     expect(readTopicResearch('sdam').reports[0].id).toBe(result.reports[0].id);
+  });
+
+  it('continues the conversation about a report with any AI, saving each turn', async () => {
+    const first = await runTopicResearch('sdam', 'claude', '', async () => 'Report by Claude', videos());
+    const reportId = first.reports[0].id;
+    expect(first.reports[0].messages).toEqual([]);
+
+    const prompts: { ai: string; prompt: string; files: string[] }[] = [];
+    const fakeAsk = async (ai: 'claude' | 'codex' | 'gemini', prompt: string, cwd: string) => {
+      prompts.push({ ai, prompt, files: fs.readdirSync(cwd) });
+      return `Reply from ${ai}`;
+    };
+    await sendResearchMessage('sdam', reportId, 'gemini', 'Which idea first?', fakeAsk, videos());
+    const after = await sendResearchMessage('sdam', reportId, 'codex', 'And a title?', fakeAsk, videos());
+
+    expect(after.reports[0].messages.map((m) => [m.from, m.text])).toEqual([
+      ['john', 'Which idea first?'], ['gemini', 'Reply from gemini'], ['john', 'And a title?'], ['codex', 'Reply from codex'],
+    ]);
+    expect(prompts[1].prompt).toContain('Report by Claude');
+    expect(prompts[1].prompt).toContain('[Gemini]\nReply from gemini');
+    expect(prompts[1].prompt).toContain("--- JOHN'S NEW MESSAGE ---\nAnd a title?");
+    expect(prompts[1].files).toHaveLength(2);
+    expect(readTopicResearch('sdam').reports[0].messages).toHaveLength(4);
+  });
+
+  it('keeps John\'s follow-up when the AI fails, and rejects unknown reports', async () => {
+    const first = await runTopicResearch('sdam', 'claude', '', async () => 'Report', videos());
+    await expect(sendResearchMessage('sdam', first.reports[0].id, 'claude', 'Hello?', async () => { throw new Error('AI down'); }, videos())).rejects.toThrow('AI down');
+    expect(readTopicResearch('sdam').reports[0].messages.map((m) => m.from)).toEqual(['john']);
+    await expect(sendResearchMessage('sdam', 'missing', 'claude', 'Hi', async () => 'x', videos())).rejects.toThrow('no longer saved');
+    await expect(sendResearchMessage('sdam', first.reports[0].id, 'claude', '   ', async () => 'x', videos())).rejects.toThrow('Type a message');
   });
 
   it('refuses to run for a topic with no videos and writes nothing', async () => {

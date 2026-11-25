@@ -21,6 +21,7 @@ export type ResearchTopic = Exclude<Topic, 'unassigned'>;
 export const RESEARCH_TOPICS = TOPICS.filter((t): t is ResearchTopic => t !== 'unassigned');
 
 const FOCUS_MAX = 2_000;
+const MESSAGE_MAX = 20_000;
 const REPORTS_KEPT = 20;
 const COMMENT_TEXT_MAX = 2_000;
 const THREADS_PER_VIDEO_MAX = 300;
@@ -50,6 +51,13 @@ export interface TopicCount {
   comments: number;
 }
 
+export interface ResearchMessage {
+  id: string;
+  from: 'john' | AiId;
+  text: string;
+  at: string;
+}
+
 export interface ResearchReport {
   id: string;
   ai: AiId;
@@ -60,6 +68,8 @@ export interface ResearchReport {
   commentCount: number;
   transcriptCount: number;
   text: string;
+  /** The follow-up conversation about this report; any AI can answer any turn. */
+  messages: ResearchMessage[];
 }
 
 export interface TopicResearch {
@@ -194,6 +204,16 @@ function validReport(r: unknown): r is ResearchReport {
     && typeof item.text === 'string' && Array.isArray(item.videos);
 }
 
+function validMessage(m: unknown): m is ResearchMessage {
+  const item = m as ResearchMessage;
+  return !!item && typeof item.id === 'string' && (item.from === 'john' || isAiId(item.from))
+    && typeof item.text === 'string' && typeof item.at === 'string';
+}
+
+function saveTopicResearch(data: TopicResearch) {
+  writeFile(researchFile(data.topic, true), JSON.stringify(data, null, 2) + '\n');
+}
+
 /** Reads the saved reports for a topic, newest first; empty when none were made yet. */
 export function readTopicResearch(rawTopic: unknown): TopicResearch {
   const topic = checkTopic(rawTopic);
@@ -208,7 +228,15 @@ export function readTopicResearch(rawTopic: unknown): TopicResearch {
   if (parsed?.version !== 1 || !Array.isArray(parsed.reports) || !parsed.reports.every(validReport)) {
     throw new Error('The research file has an unexpected format. Nothing was changed.');
   }
-  return { version: 1, topic, reports: parsed.reports.map((r) => ({ ...r, focus: typeof r.focus === 'string' ? r.focus : '' })) };
+  return {
+    version: 1,
+    topic,
+    reports: parsed.reports.map((r) => ({
+      ...r,
+      focus: typeof r.focus === 'string' ? r.focus : '',
+      messages: Array.isArray(r.messages) ? r.messages.filter(validMessage) : [],
+    })),
+  };
 }
 
 export function buildResearchPrompt(label: string, evidence: TopicEvidence, focus: string, ai: AiId): string {
@@ -256,11 +284,71 @@ export async function runTopicResearch(
     const current = readTopicResearch(topic);
     const report: ResearchReport = {
       id: randomUUID(), ai: rawAi, at: new Date().toISOString(), focus,
-      videos: evidence.videos, commentCount: evidence.commentCount, transcriptCount: evidence.transcriptCount, text: answer,
+      videos: evidence.videos, commentCount: evidence.commentCount, transcriptCount: evidence.transcriptCount, text: answer, messages: [],
     };
     const saved: TopicResearch = { version: 1, topic, reports: [report, ...current.reports].slice(0, REPORTS_KEPT) };
-    writeFile(researchFile(topic, true), JSON.stringify(saved, null, 2) + '\n');
+    saveTopicResearch(saved);
     return saved;
+  } finally {
+    activeResearch.delete(topic);
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+const speaker = (from: ResearchMessage['from']) => (from === 'john' ? 'John' : AI_NAMES[from]);
+
+/** The prompt for a follow-up turn: the evidence files again, the original report and the whole conversation. */
+export function buildFollowUpPrompt(label: string, report: ResearchReport, history: ResearchMessage[], message: string, ai: AiId): string {
+  const thread = history.length ? history.map((m) => `[${speaker(m.from)}]\n${m.text}`).join('\n\n') : '(no follow-up messages yet)';
+  return [
+    `You are ${AI_NAMES[ai]}, continuing a conversation with John (creator of Heart Mind Fusion) about research on the topic “${label}”.`,
+    "John's voice is calm, honest, personal, and plain-spoken. Be specific and skip generic YouTube advice.",
+    'Your working folder has one Markdown file per video on this topic (numbers, viewer comments, transcript). Read them when the answer needs evidence; quote short comments and name the video.',
+    'This is evidence from Heart Mind Fusion\'s own audience only. Do not present it as wider demand.',
+    'Do not create, edit, or delete any files. Reply directly in Markdown.',
+    `--- ORIGINAL REPORT (by ${AI_NAMES[report.ai]}${report.focus ? `, asked: ${report.focus}` : ''}) ---\n${report.text}`,
+    `--- CONVERSATION SO FAR ---\n${thread}`,
+    `--- JOHN'S NEW MESSAGE ---\n${message}`,
+  ].join('\n\n');
+}
+
+/** Sends John's follow-up about a report to the chosen AI and saves both turns to Drive. */
+export async function sendResearchMessage(
+  rawTopic: unknown,
+  rawReportId: unknown,
+  rawAi: unknown,
+  rawMessage: unknown,
+  ask: AskAi = askReadOnlyImage,
+  videos?: ChannelVideo[],
+): Promise<TopicResearch> {
+  const topic = checkTopic(rawTopic);
+  if (!isAiId(rawAi)) throw new Error('Choose Claude, ChatGPT, or Gemini.');
+  if (typeof rawMessage !== 'string' || !rawMessage.trim()) throw new Error('Type a message first.');
+  const message = rawMessage.trim();
+  if (message.length > MESSAGE_MAX) throw new Error('That message is too long.');
+  const find = (data: TopicResearch) => data.reports.find((r) => r.id === rawReportId);
+  if (!find(readTopicResearch(topic))) throw new Error('That report is no longer saved. Reload and try again.');
+  if (activeResearch.has(topic)) throw new Error('An AI is already working on this topic. Wait for it to finish.');
+  activeResearch.add(topic);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-research-'));
+  try {
+    // John's message is saved first, so it is kept even if the AI call fails.
+    const before = readTopicResearch(topic);
+    const report = find(before)!;
+    const history = [...report.messages];
+    report.messages.push({ id: randomUUID(), from: 'john', text: message, at: new Date().toISOString() });
+    saveTopicResearch(before);
+
+    await gatherTopicEvidence(topic, work, videos);
+    const answer = (await ask(rawAi, buildFollowUpPrompt(topicLabel(topic), report, history, message, rawAi), work)).trim();
+    if (!answer) throw new Error(`${AI_NAMES[rawAi]} returned an empty reply.`);
+
+    const latest = readTopicResearch(topic);
+    const target = find(latest);
+    if (!target) throw new Error('That report was removed while the AI was replying.');
+    target.messages.push({ id: randomUUID(), from: rawAi, text: answer, at: new Date().toISOString() });
+    saveTopicResearch(latest);
+    return latest;
   } finally {
     activeResearch.delete(topic);
     fs.rmSync(work, { recursive: true, force: true });

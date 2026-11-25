@@ -80,7 +80,7 @@ import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
 import { listStoredComments, moderateComment, replyToComment, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
-import { gatherTopicEvidence, readTopicResearch, runTopicResearch, topicCounts } from './channel-research.js';
+import { gatherTopicEvidence, readTopicResearch, runTopicResearch, sendResearchMessage, topicCounts } from './channel-research.js';
 
 const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
@@ -130,6 +130,10 @@ app.get('/api/channel/research/topics', handle((_req, res) => { res.json(topicCo
 app.get('/api/channel/research', (req, res) => {
   gatherTopicEvidence(req.query.topic)
     .then((evidence) => res.json({ evidence, research: readTopicResearch(evidence.topic) }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/research/message', (req, res) => {
+  sendResearchMessage(req.body?.topic, req.body?.reportId, req.body?.ai, req.body?.message)
+    .then((research) => res.json(research), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/research/run', (req, res) => {
   runTopicResearch(req.body?.topic, req.body?.ai, req.body?.focus)

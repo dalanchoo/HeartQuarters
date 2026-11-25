@@ -1008,6 +1008,8 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .research-toggle { background: none; border: 0; padding: 0; color: var(--text); cursor: pointer; margin: 0.2rem 0; }
 .research-videos { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; }
 .research-focus { width: 100%; box-sizing: border-box; margin: 0.3rem 0; }
+.research-chat { display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--line); margin-top: 0.5rem; padding-top: 0.4rem; }
+.research-chat h3 { font-size: 0.95rem; margin: 0; }
 .research-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
 .channel-performance h2, .channel-video-view h2 { font-size: 1.05rem; margin: 0; }
 .channel-metrics { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.4rem 0; }

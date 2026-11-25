@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getJson, postJson } from './api';
 import type { AiId } from '../../server/ai';
-import type { ResearchTopic, TopicCount, TopicEvidence, TopicResearch } from '../../server/channel-research';
+import type { ResearchReport, ResearchTopic, TopicCount, TopicEvidence, TopicResearch } from '../../server/channel-research';
 import { TOPIC_LABELS } from './videoProfile';
 
 const AIS: { id: AiId; name: string }[] = [{ id: 'claude', name: 'Claude' }, { id: 'codex', name: 'ChatGPT' }, { id: 'gemini', name: 'Gemini' }];
@@ -23,6 +23,8 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
   const [research, setResearch] = useState<TopicResearch | null>(null);
   const [focus, setFocus] = useState('');
   const [asking, setAsking] = useState<AiId | null>(null);
+  const [chatting, setChatting] = useState(false);
+  const busy = !!asking || chatting;
   const [showVideos, setShowVideos] = useState(false);
   const [error, setError] = useState('');
   const topic = counts?.some((c) => c.topic === rawTopic) ? rawTopic as ResearchTopic : undefined;
@@ -45,7 +47,7 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
   }, [topic]);
 
   const run = async (ai: AiId) => {
-    if (!topic || asking) return;
+    if (!topic || busy) return;
     setAsking(ai);
     setError('');
     try {
@@ -105,7 +107,7 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
                 />
                 <div className="research-actions">
                   {AIS.map((ai) => (
-                    <button key={ai.id} type="button" className="small" disabled={!!asking || !evidence.videos.length} onClick={() => void run(ai.id)}>
+                    <button key={ai.id} type="button" className="small" disabled={busy || !evidence.videos.length} onClick={() => void run(ai.id)}>
                       {asking === ai.id ? `${ai.name} Is Researching…` : `Research With ${ai.name}`}
                     </button>
                   ))}
@@ -121,6 +123,7 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
                 </summary>
                 {r.focus && <p className="muted small-text">Question: {r.focus}</p>}
                 <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{r.text}</ReactMarkdown></div>
+                <ReportConversation topic={topic} report={r} busy={busy} setBusy={setChatting} onSaved={setResearch} />
               </details>
             ))}
           </details>
@@ -134,5 +137,67 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
         </>
       )}
     </section>
+  );
+}
+
+/** The follow-up conversation under a report: John writes, then picks which AI answers this turn. */
+function ReportConversation({ topic, report, busy, setBusy, onSaved }: {
+  topic: ResearchTopic; report: ResearchReport; busy: boolean; setBusy: (busy: boolean) => void; onSaved: (research: TopicResearch) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [asking, setAsking] = useState<AiId | null>(null);
+  const [error, setError] = useState('');
+
+  const send = async (ai: AiId) => {
+    const message = draft.trim();
+    if (!message || busy) return;
+    setAsking(ai);
+    setBusy(true);
+    setError('');
+    try {
+      onSaved(await postJson<TopicResearch>('/api/channel/research/message', { topic, reportId: report.id, ai, message }));
+      setDraft('');
+    } catch (e) {
+      setError((e as Error).message);
+      // John's message may have been saved before the AI failed, so show what Drive has now.
+      void getJson<{ research: TopicResearch }>(`/api/channel/research?topic=${encodeURIComponent(topic)}`).then((data) => onSaved(data.research), () => {});
+    } finally {
+      setAsking(null);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="research-chat">
+      <h3>Discuss This Report</h3>
+      {report.messages.map((m) => (
+        <div key={m.id} className={`brainstorm-msg brainstorm-msg--${m.from}`}>
+          <div className="brainstorm-msg-head">
+            <strong>{m.from === 'john' ? 'John' : aiName(m.from)}</strong>
+            <span className="muted small-text">{formatWhen(m.at)}</span>
+          </div>
+          {m.from === 'john'
+            ? <div className="brainstorm-msg-text">{m.text}</div>
+            : <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown></div>}
+        </div>
+      ))}
+      {error && <p className="error" role="alert">{error}</p>}
+      <textarea
+        rows={2}
+        className="research-focus"
+        placeholder="Ask a follow-up, push back, or try an idea of your own…"
+        value={draft}
+        maxLength={20000}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div className="research-actions">
+        {AIS.map((ai) => (
+          <button key={ai.id} type="button" className="small" disabled={busy || !draft.trim()} onClick={() => void send(ai.id)}>
+            {asking === ai.id ? `${ai.name} Is Replying…` : `Send to ${ai.name}`}
+          </button>
+        ))}
+      </div>
+      {asking && <p className="muted small-text" role="status">The AI rereads the evidence, so a reply can take a few minutes.</p>}
+    </div>
   );
 }
