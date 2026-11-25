@@ -61,11 +61,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     try {
       const result = await postJson<{ path: string }>('/api/expressions/shot-list/reference/copy-to-inbox', { id: shot.id, name });
       setCopied(current => ({ ...current, [`${shot.id}\0${name}`]: `Copied to the Expression Inbox: ${result.path}` }));
+      // The look stays where it is: John moves it to Photographed himself (2026-11-25).
       window.dispatchEvent(new Event('hq-expression-inbox-changed'));
-      if (!shot.done) {
-        setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/status', { id: shot.id, done: true }));
-        window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
-      }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
   };
