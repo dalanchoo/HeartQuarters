@@ -11,6 +11,8 @@ import {
   type ExpressionIndex,
   type ExpressionPhoto,
 } from './api';
+import { AI_OPTIONS, aiName, useRemembered } from './AiChoice';
+import type { AiId } from './api';
 import { CopyButton } from './PackagingDoc';
 import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences, readChosenLikeness, saveChosenLikeness } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
@@ -25,6 +27,8 @@ import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode 
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 import { matchesMarkFilter, matchesRatingFilter, ratingSearchWords, type Rating, type RatingChoice } from './expressionRating';
 import { PhotoMarkFilters, PhotoMarks } from './PhotoMarks';
+
+const isAiList = (v: unknown): v is AiId[] => Array.isArray(v) && v.length > 0 && v.every(x => x === 'claude' || x === 'codex' || x === 'gemini');
 
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
@@ -511,14 +515,16 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
     onRate(rating).catch((e: unknown) => setConfirmError(`The rating could not be saved: ${e instanceof Error ? e.message : String(e)}`));
   };
   const [assessmentId, setAssessmentId] = useState(''); const [assessmentMessage, setAssessmentMessage] = useState(''); const [assessmentBusy, setAssessmentBusy] = useState(false);
+  // Which AIs assess, remembered in this browser. All three by default.
+  const [assessAis, setAssessAis] = useRemembered<AiId[]>('hq-assess-ais', ['claude', 'codex', 'gemini'], isAiList);
   useEffect(() => { setAssessmentId(''); setAssessmentMessage(''); setAssessmentBusy(false); }, [photo.path]);
   useEffect(() => {
     if (!assessmentId) return;
     let alive = true;
-    const check = async () => { try { const job = await getJson<{ state: 'working' | 'done' | 'failed'; error?: string; models: Record<'claude' | 'codex' | 'gemini', string> }>(`/api/expressions/assessment?id=${encodeURIComponent(assessmentId)}`); if (!alive) return; if (job.state === 'working') { setAssessmentMessage(`Assessing: Claude ${job.models.claude}, ChatGPT ${job.models.codex}, Gemini ${job.models.gemini}.`); return; } setAssessmentId(''); setAssessmentBusy(false); if (job.state === 'done') { setAssessmentMessage('All three assessments are complete. Unconfirmed guesses below 75% were omitted; confirmed and disconfirmed attributes were kept.'); onAssessmentDone?.(); } else setAssessmentMessage(job.error ?? 'Assessment failed.'); } catch (e) { if (alive) { setAssessmentId(''); setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } } };
+    const check = async () => { try { const job = await getJson<{ state: 'working' | 'done' | 'failed'; error?: string; models: Record<'claude' | 'codex' | 'gemini', string> }>(`/api/expressions/assessment?id=${encodeURIComponent(assessmentId)}`); if (!alive) return; if (job.state === 'working') { setAssessmentMessage(`Assessing: ${AI_OPTIONS.filter(a => job.models[a.id] !== 'skipped').map(a => `${a.name} ${job.models[a.id]}`).join(', ')}.`); return; } setAssessmentId(''); setAssessmentBusy(false); if (job.state === 'done') { setAssessmentMessage(`${AI_OPTIONS.filter(a => job.models[a.id] !== 'skipped').length === 3 ? 'All three assessments are' : 'The assessment is'} complete. Unconfirmed guesses below 75% were omitted; confirmed and disconfirmed attributes were kept.`); onAssessmentDone?.(); } else setAssessmentMessage(job.error ?? 'Assessment failed.'); } catch (e) { if (alive) { setAssessmentId(''); setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } } };
     void check(); const timer = setInterval(() => void check(), 3000); return () => { alive = false; clearInterval(timer); };
   }, [assessmentId]);
-  const assess = async () => { setAssessmentBusy(true); setAssessmentMessage('Preparing a blind assessment…'); try { const job = await postJson<{ id: string }>('/api/expressions/assess', { photo: photo.path }); setAssessmentId(job.id); onAssessmentStarted?.(job.id); setAssessmentMessage('Assessing photo… You can leave this view while it runs.'); } catch (e) { setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } };
+  const assess = async () => { setAssessmentBusy(true); setAssessmentMessage('Preparing a blind assessment…'); try { const job = await postJson<{ id: string }>('/api/expressions/assess', { photo: photo.path, ais: assessAis }); setAssessmentId(job.id); onAssessmentStarted?.(job.id); setAssessmentMessage('Assessing photo… You can leave this view while it runs.'); } catch (e) { setAssessmentBusy(false); setAssessmentMessage(e instanceof Error ? e.message : String(e)); } };
 
   const [newFraming, setNewFraming] = useState('');
   const [newPose, setNewPose] = useState('');
@@ -634,7 +640,7 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
               <strong>{photo.name}</strong>
               <span className="muted">{photo.category.split('/').join(' › ')}</span>
             </div>
-            {detailsExpanded && onTagAction && <button className="expression-assess" type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()}>Reassess With All Three AIs</button>}
+            {detailsExpanded && onTagAction && <span className="expression-assess analysis-plan small-text">{AI_OPTIONS.map(a => <label key={a.id}><input type="checkbox" checked={assessAis.includes(a.id)} onChange={e => { const next = AI_OPTIONS.map(o => o.id).filter(id => id === a.id ? e.target.checked : assessAis.includes(id)); if (next.length) setAssessAis(next); }} /> {a.name}</label>)}<button type="button" disabled={assessmentBusy || savingTag} onClick={() => void assess()} title="A blind assessment by the ticked AIs. Only all three mark the photo as assessed by all three.">{assessAis.length === 3 ? 'Reassess With All Three AIs' : `Reassess With ${assessAis.map(aiName).join(' and ')}`}</button></span>}
             {detailsExpanded && !imageUrl && <button type="button" className="small" onClick={() => void openInExplorer('expressions', photo.path)}>Select in Explorer</button>}
             <button type="button" aria-expanded={detailsExpanded} aria-controls="expression-photo-details" onClick={() => { const el = viewport.current; if (el) center.current = { x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight }; setDetailsExpanded(open => !open); }}>{detailsExpanded ? 'Hide Details' : 'Show Details'}</button>
           </div>

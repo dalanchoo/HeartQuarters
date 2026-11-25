@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
-import { assessmentJob, assessmentPrompt, mergeAssessment, mergeModelAssessments, parseAssessment, readAssessmentReferences, startAssessment } from './expression-assessment';
+import { assessmentJob, assessmentPrompt, mergeAssessment, mergeModelAssessments, parseAssessment, parseAssessmentAis, readAssessmentReferences, startAssessment } from './expression-assessment';
 import { buildExpressionIndex } from './expressions';
 import { makeTree, removeTree } from './testing';
 
@@ -65,6 +65,21 @@ describe('blind expression assessment', () => {
     await vi.waitFor(() => expect(assessmentJob(job.id).state).not.toBe('working'));
     expect(assessmentJob(job.id).state).toBe('done'); expect(models).toEqual(new Set(['claude', 'codex', 'gemini'])); expect(prompts.size).toBe(1);
     expect(fs.readFileSync(path.join(root, 'Positive/Warmth/Warmth_001.txt'), 'utf8')).toContain('Smile, 91%, UNCONFIRMED');
+  });
+  it('asks only the AIs John ticked, and only all three mark the photo as assessed by all three', async () => {
+    const models: string[] = [];
+    const job = startAssessment('Positive/Warmth/Warmth_001.jpg', async (ai) => { models.push(ai); return '[{"tag":"Smile","confidence":91}]'; }, async (_source, dest) => { fs.writeFileSync(dest, 'image'); }, parseAssessmentAis(['gemini']));
+    expect(job.models).toMatchObject({ claude: 'skipped', codex: 'skipped' });
+    await vi.waitFor(() => expect(assessmentJob(job.id).state).not.toBe('working'));
+    expect(job.state).toBe('done'); expect(models).toEqual(['gemini']);
+    const text = fs.readFileSync(path.join(root, 'Positive/Warmth/Warmth_001.txt'), 'utf8');
+    expect(text).toContain('Smile, 91%, UNCONFIRMED, gemini=91%'); expect(text).not.toContain('AssessedWithAllThreeAIs');
+  });
+  it('checks which AIs the page sends', () => {
+    expect(parseAssessmentAis(undefined)).toEqual(['claude', 'codex', 'gemini']);
+    expect(parseAssessmentAis(['gemini', 'claude'])).toEqual(['claude', 'gemini']);
+    expect(() => parseAssessmentAis([])).toThrow(/at least one/);
+    expect(() => parseAssessmentAis(['bard'])).toThrow(/Choose which AIs/);
   });
   it('does not overwrite edits made while the AI is working', async () => {
     const file = path.join(root, 'Positive/Warmth/Warmth_001.txt');

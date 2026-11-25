@@ -14,7 +14,7 @@ import { savePackagingText, saveVersionNotes } from './metadata.js';
 import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
 import { draftHtml, listWriting, readWriting } from './writing.js';
-import { assessmentJob, startAssessment } from './expression-assessment.js';
+import { assessmentJob, parseAssessmentAis, startAssessment } from './expression-assessment.js';
 import { slowRequestLogger, watchEngineStalls } from './slow-watch.js';
 import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
@@ -392,7 +392,8 @@ app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octe
 app.post('/api/expressions/videos/rename', handle((req, res) => { res.json(renameGeneratedVideo(req.body?.name, req.body?.newName)); }));
 app.post('/api/expressions/videos/trash', handle((req, res) => { res.json(trashGeneratedVideo(req.body?.name)); }));
 app.get('/api/expressions/videos/file', handle((req, res) => { sandboxHeaders(res); res.sendFile(generatedVideoFile(req.query.name)); }));
-app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''))); }));
+// { photo, ais?: ["claude", ...] }: a blind assessment by the chosen AIs (all three when none are given).
+app.post('/api/expressions/assess', handle((req, res) => { res.json(startAssessment(String(req.body?.photo ?? ''), undefined, undefined, parseAssessmentAis(req.body?.ais))); }));
 app.get('/api/expressions/assessment', handle((req, res) => { res.json(assessmentJob(String(req.query.id ?? ''))); }));
 app.post('/api/expressions/rating', handle((req, res) => { setExpressionRating(String(req.body?.photo ?? ''), req.body?.rating ?? null); res.json({ ok: true }); }));
 app.post('/api/expressions/mark-ai', handle((req, res) => { markExpressionAi(String(req.body?.photo ?? '')); res.json({ ok: true }); }));
