@@ -14,6 +14,9 @@ export const aiName = (id: AiId) => AI_OPTIONS.find((a) => a.id === id)?.name ??
 
 const isAiId = (v: unknown): v is AiId => v === 'claude' || v === 'codex' || v === 'gemini';
 
+/** The AIs that can make images. Claude can't. */
+export const IMAGE_AIS: AiId[] = ['codex', 'gemini'];
+
 /** A value kept in this browser under `key`, or `initial` until there is one (or when it can't be read). */
 export function useRemembered<T>(key: string, initial: T, valid: (v: unknown) => v is T): [T, (v: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -36,16 +39,19 @@ export function useRemembered<T>(key: string, initial: T, valid: (v: unknown) =>
   return [value, set];
 }
 
-/** The AI one button uses, remembered for that button (`job`, e.g. "edit" or "ai-writing"). */
-export function useAiFor(job: string, initial: AiId = 'claude'): [AiId, (ai: AiId) => void] {
-  return useRemembered<AiId>(`hq-ai:${job}`, initial, isAiId);
+/**
+ * The AI one button uses, remembered for that button (`job`, e.g. "edit" or "ai-writing"). `only` limits it to the AIs
+ * that can do the job, such as IMAGE_AIS.
+ */
+export function useAiFor(job: string, initial: AiId = 'claude', only: AiId[] = AI_OPTIONS.map((a) => a.id)): [AiId, (ai: AiId) => void] {
+  return useRemembered<AiId>(`hq-ai:${job}`, initial, (v): v is AiId => isAiId(v) && only.includes(v));
 }
 
 /** A small dropdown of the three AIs. `disabled` lists ones that can't do this job, with the reason as a tooltip. */
-export function AiSelect({ value, onChange, disabled = {}, title = 'Which AI does this', label }: { value: AiId; onChange: (ai: AiId) => void; disabled?: Partial<Record<AiId, string>>; title?: string; label?: string }) {
+export function AiSelect({ value, onChange, disabled = {}, title = 'Which AI does this', label, only }: { value: AiId; onChange: (ai: AiId) => void; disabled?: Partial<Record<AiId, string>>; title?: string; label?: string; only?: AiId[] }) {
   const select = (
     <select className="ai-select" value={value} title={disabled[value] ?? title} onChange={(e) => onChange(e.target.value as AiId)}>
-      {AI_OPTIONS.map((a) => (
+      {AI_OPTIONS.filter((a) => !only || only.includes(a.id)).map((a) => (
         <option key={a.id} value={a.id} disabled={!!disabled[a.id]} title={disabled[a.id]}>
           {a.name}
         </option>

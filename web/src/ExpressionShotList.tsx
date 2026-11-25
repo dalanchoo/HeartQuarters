@@ -3,6 +3,7 @@ import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import type { ShotReference } from '../../server/shot-reference';
 import { ExpressionVideos } from './ExpressionVideos';
+import { AiSelect, IMAGE_AIS, aiName, useAiFor } from './AiChoice';
 
 export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
@@ -12,6 +13,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const [copied, setCopied] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  // Which AI makes reference pictures: any that can make images. Remembered in this browser.
+  const [imageAi, setImageAi] = useAiFor('shot-picture', 'codex', IMAGE_AIS);
 
   useEffect(() => {
     if (!active) return;
@@ -34,7 +37,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
 
   const makePicture = async (shot: ExpressionShot) => {
     setError('');
-    try { const job = await postJson<ShotReference>('/api/expressions/shot-list/reference/start', { id: shot.id }); setPictures(current => ({ ...current, [shot.id]: job })); }
+    try { const job = await postJson<ShotReference>('/api/expressions/shot-list/reference/start', { id: shot.id, ai: imageAi }); setPictures(current => ({ ...current, [shot.id]: job })); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -89,11 +92,12 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           {tags.length > 0 && <p className="expression-shot-tags">{tags.map(([label, list]) => <span key={label}><strong>{label}:</strong> {list.join(', ')}</span>)}</p>}
           {shot.alsoFits.length > 0 && <p className="muted small-text">Also Fits: {shot.alsoFits.map(folderLabel).join(', ')}</p>}
           <div className="expression-shot-actions">
+            {!shot.done && picture?.state !== 'working' && <AiSelect value={imageAi} onChange={setImageAi} only={IMAGE_AIS} title="Which AI makes the picture" />}
             {!shot.done && <button className="small" disabled={!known.has(shot.category) || picture?.state === 'working'} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => void makePicture(shot)}>{picture?.state === 'working' ? 'Generating…' : pictureUrl ? 'Generate Another' : 'Generate Reference With AI'}</button>}
             <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Move to Photographed'}</button>
             <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
           </div>
-          {picture?.state === 'working' && <p className="muted small-text" role="status">ChatGPT is making the picture. This can take a few minutes.</p>}
+          {picture?.state === 'working' && <p className="muted small-text" role="status">{aiName(picture.ai ?? 'codex')} is making the picture. This can take a few minutes.</p>}
           {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
         </div>
         {pictureUrl && <div className="expression-shot-pictures">

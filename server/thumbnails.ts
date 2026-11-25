@@ -14,7 +14,14 @@ import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './proj
 import { archiveDraftRound } from './packaging-version.js';
 import { appendText, makeFolder, writable, writeFile } from './safe-files.js';
 
+/** The AIs that can make images. Claude can't. */
 export type ImageAi = Extract<AiId, 'codex' | 'gemini'>;
+
+/** The image AI a request names, checked. */
+export function parseImageAi(value: unknown): ImageAi {
+  if (value !== 'codex' && value !== 'gemini') throw new Error('Choose ChatGPT or Gemini to make the image.');
+  return value;
+}
 
 export interface ThumbJob {
   /** The conversation folder, relative to the Video Projects folder. */

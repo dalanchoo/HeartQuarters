@@ -39,7 +39,7 @@ import { aiOverview, chooseAiModel, parseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
-import { changeThumbnail, startThumbnail, thumbJobs } from './thumbnails.js';
+import { changeThumbnail, parseImageAi, startThumbnail, thumbJobs } from './thumbnails.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
 import {
@@ -381,7 +381,8 @@ app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addEx
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
 app.post('/api/expressions/shot-list/delete', handle((req, res) => { const shots = deleteShot(req.body?.id); removeShotReference(String(req.body?.id)); res.json(shots); }));
 app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.json(shotReferences()); }));
-app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id).job); }));
+// { id, ai: "codex" | "gemini" }: a reference picture for one shot, by the image AI John chose (ChatGPT if none).
+app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id, undefined, parseImageAi(req.body?.ai ?? 'codex')).job); }));
 app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''), String(req.query.name ?? ''))); }));
 app.post('/api/expressions/shot-list/reference/copy-to-inbox', handle((req, res) => { res.json(copyShotReferenceToInbox(req.body?.id, req.body?.name)); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));

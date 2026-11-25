@@ -7,7 +7,7 @@ import { saveExpressionReferences } from './expression-references';
 import { readShotList, seedShotList } from './expression-shot-list';
 import { clearExpressionIndex } from './expressions';
 import { copyShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
-import type { MakeImage } from './thumbnails';
+import { parseImageAi, type MakeImage } from './thumbnails';
 
 let tmp: string; let oldRoot: string; const env = ['HQ_EXPRESSION_REFS_FILE', 'HQ_SHOT_REFERENCES'] as const; let oldEnv: (string | undefined)[];
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
@@ -34,6 +34,17 @@ describe('shot reference pictures', () => {
     expect(shotReferences()[shot.id]).toMatchObject({ state: 'ready', pictures: ['reference-001.png'] });
     expect(fs.readFileSync(shotReferenceFile(shot.id, 'reference-001.png'))).toEqual(png);
     expect(fs.readdirSync(path.join(tmp, 'Expressions/Positive/Relief'))).toEqual(['Relief.txt']);
+  });
+  it('makes the picture with the image AI John chose, and refuses Claude, which cannot make images', async () => {
+    const [shot] = seedShotList(); let used = '';
+    const make: MakeImage = async (ai, ...rest) => { used = ai; return making(png)(ai, ...rest); };
+    const { job, finished } = startShotReference(shot.id, make, 'gemini');
+    expect(job.ai).toBe('gemini');
+    await finished;
+    expect(used).toBe('gemini');
+    expect(shotReferences()[shot.id]).toMatchObject({ state: 'ready', ai: 'gemini' });
+    expect(parseImageAi('codex')).toBe('codex');
+    expect(() => parseImageAi('claude')).toThrow(/ChatGPT or Gemini/);
   });
   it('uses Neutral photos when nothing is starred, and keeps every picture, newest first', async () => {
     const [shot] = seedShotList(); const seen: { refs?: string[] } = {};

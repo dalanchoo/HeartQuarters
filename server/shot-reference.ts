@@ -6,7 +6,7 @@ import { buildExpressionIndex } from './expressions.js';
 import { expressionPrompt, imageFormat, type Options } from './expression-generation.js';
 import { readLikenessReferences } from './expression-references.js';
 import { readShotList, type ExpressionShot } from './expression-shot-list.js';
-import { makeImage, type MakeImage } from './thumbnails.js';
+import { makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 import { writable } from './safe-files.js';
 import { copyAiImageToInbox } from './expression-inbox.js';
@@ -17,7 +17,8 @@ import { copyAiImageToInbox } from './expression-inbox.js';
  * _ShotReferences\<shot id>\ (the leading "_" keeps the library from treating it as a category). `pictures` lists them
  * newest first. They used to be in data/shot-references; the first read copies those across.
  */
-export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[] };
+/** `ai` is the AI that made (or is making) the latest picture; older job files have none and were ChatGPT's. */
+export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[]; ai?: ImageAi };
 const PICTURE = /^reference(?:-(\d{3}))?\.(png|jpg|webp)$/;
 
 export const SHOT_REFERENCES_FOLDER = '_ShotReferences';
@@ -82,7 +83,7 @@ function readJob(shotId: string): ShotReference | null {
   try {
     const job = JSON.parse(fs.readFileSync(file, 'utf8')) as ShotReference;
     if (job.shotId !== shotId || !['working', 'ready', 'failed'].includes(job.state)) return null;
-    const result = { shotId, state: job.state, prompt: job.prompt, createdAt: job.createdAt, pictures: listPictures(shotId), ...(job.error ? { error: job.error } : {}) };
+    const result = { shotId, state: job.state, prompt: job.prompt, createdAt: job.createdAt, pictures: listPictures(shotId), ...(job.error ? { error: job.error } : {}), ...(job.ai === 'codex' || job.ai === 'gemini' ? { ai: job.ai } : {}) };
     // A job still marked working that no longer runs was cut off when HeartQuarters stopped.
     if (job.state === 'working' && !running.has(shotId)) return { ...result, state: 'failed', error: 'Generation was interrupted when HeartQuarters stopped. Try again.' };
     return result;
@@ -111,8 +112,8 @@ function likenessPhotos(): string[] {
   return chosen;
 }
 
-/** Start making a reference picture for one look. Nothing to choose: the look itself says what is needed. */
-export function startShotReference(shotId: unknown, make: MakeImage = makeImage): { job: ShotReference; finished: Promise<void> } {
+/** Start making a reference picture for one look, with the image AI John chose. The look itself says what is needed. */
+export function startShotReference(shotId: unknown, make: MakeImage = makeImage, ai: ImageAi = 'codex'): { job: ShotReference; finished: Promise<void> } {
   if (typeof shotId !== 'string') throw new Error('Choose a valid shot.');
   const dir = folder(shotId);
   if (running.has(shotId)) throw new Error('A reference picture for this shot is already being made.');
@@ -123,12 +124,12 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage)
   const files = likenessPhotos().map(p => safeResolve('expressions', p));
   const prompt = expressionPrompt(category.name, category.definition, shotOptions(shot), shotLook(shot));
   fs.mkdirSync(dir, { recursive: true });
-  const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), pictures: listPictures(shotId) };
+  const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), pictures: listPictures(shotId), ai };
   saveJob(job); running.add(shotId);
   const work = path.join(dir, `work-${randomUUID()}`);
   const finished = (async () => {
     fs.mkdirSync(work);
-    const answer = await make('codex', prompt, work, 'candidate.png', { photo: files[0], refs: files.slice(1) });
+    const answer = await make(ai, prompt, work, 'candidate.png', { photo: files[0], refs: files.slice(1) });
     const data = fs.readFileSync(answer.image); const format = imageFormat(data);
     if (!format) throw new Error('The generated image was not a PNG, JPEG or WebP.');
     // Add it as the next number; earlier pictures are kept.
