@@ -133,7 +133,22 @@ export function ExpressionsPage() {
       const result = await postJson<{ path: string }>('/api/expressions/confirm-expression', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence });
       newPath = result.path;
     } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : action.kind === 'disconfirm' ? '/api/expressions/disconfirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed, disconfirmed: !!action.tag.disconfirmed });
-    if (photo.category === '_Inbox') { refreshInbox(); if (newPath !== photo.path) { setPreview(null); setChangeMessage(`Photo filed as ${newPath}.`); void getJson<ExpressionIndex>('/api/expressions').then(setIndex); } return; }
+    if (photo.category === '_Inbox') {
+      refreshInbox();
+      if (newPath !== photo.path) {
+        setChangeMessage(`Photo filed as ${newPath}.`);
+        // Confirming the expression files the photo; the viewer stays on it in its new folder, so its framing, pose and
+        // morphology can still be confirmed (John, 2026-11-25). Previous and next still step through the Inbox.
+        const rest = inbox.filter(p => p.path !== photo.path);
+        const at = Math.max(0, inbox.findIndex(p => p.path === photo.path));
+        const steps = rest.length ? { onPrev: () => setPreview({ photo: rest[(at - 1 + rest.length) % rest.length] }), onNext: () => setPreview({ photo: rest[at % rest.length] }) } : undefined;
+        const updated = await getJson<ExpressionIndex>('/api/expressions');
+        setIndex(updated);
+        const filed = updated.photos.find(p => p.path === newPath);
+        setPreview(filed ? { photo: filed, steps } : null);
+      }
+      return;
+    }
     const [updated, refs] = await Promise.all([getJson<ExpressionIndex>('/api/expressions'), newPath !== photo.path ? getJson<{ paths: string[] }>('/api/expression-references').catch(() => null) : Promise.resolve(null)]);
     setIndex(updated);
     if (newPath !== photo.path) {
