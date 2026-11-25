@@ -3,9 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
 import { writeFileSafely } from './files.js';
+import { POSE_TAGS, THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 
-/** Where a suggestion came from, and the exact words it used (kept so it is never added twice). */
-export interface ShotSource { piece: string; context: string; text?: string }
+/**
+ * Where a suggestion came from, and the exact words it used (kept so it is never added twice). `cues` are the gaze and
+ * mouth the packaging asked for (photoAttributes): the same words with other cues are a different look (John, 2026-11-25).
+ */
+export interface ShotSource { piece: string; context: string; text?: string; cues?: string[] }
 /**
  * One look to photograph. `category` is the main expression folder ("Composure/Calm"),
  * `description` says what the face should do, and the tag lists use the library's vocabulary.
@@ -55,7 +59,7 @@ function location() {
 }
 
 const strings = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
-const validSources = (value: unknown) => Array.isArray(value) && value.every(s => s && typeof s.piece === 'string' && typeof s.context === 'string' && (s.text === undefined || typeof s.text === 'string'));
+const validSources = (value: unknown) => Array.isArray(value) && value.every(s => s && typeof s.piece === 'string' && typeof s.context === 'string' && (s.text === undefined || typeof s.text === 'string') && (s.cues === undefined || strings(s.cues)));
 
 function load(): { shots: ExpressionShot[]; original: string | null } {
   const file = location();
@@ -100,11 +104,21 @@ export function seedShotList(): ExpressionShot[] {
   return shots;
 }
 
-/** Has this exact suggestion (ignoring case and spacing) already been added to a look? */
-export const shotHasSuggestion = (shot: ExpressionShot, text: string) => shot.sources.some(s => s.text !== undefined && shotKey(s.text) === shotKey(text));
+/** The cues as one comparable string: order and repeats don't matter. */
+export const cueKey = (cues?: string[]) => [...new Set(cues ?? [])].sort().join(',');
 
-/** A new look made from one suggestion's words. */
-export const shotFromSuggestion = (text: string, source: ShotSource): ExpressionShot => fromText(text, [source], new Date().toISOString(), false);
+/** Has this exact suggestion (ignoring case and spacing), with the same cues, already been added to a look? */
+export const shotHasSuggestion = (shot: ExpressionShot, text: string, cues?: string[]) =>
+  shot.sources.some(s => s.text !== undefined && shotKey(s.text) === shotKey(text) && cueKey(s.cues) === cueKey(cues));
+
+/** A new look made from one suggestion's words. Its cues become the look's gaze (Pose) and mouth (Morphology) tags. */
+export const shotFromSuggestion = (text: string, source: ShotSource): ExpressionShot => {
+  const shot = fromText(text, [source], new Date().toISOString(), false);
+  const cues = [...new Set(source.cues ?? [])];
+  shot.pose = cues.filter(cue => POSE_TAGS.includes(cue));
+  shot.morphology = cues.filter(cue => !POSE_TAGS.includes(cue));
+  return shot;
+};
 
 /** Reads the list, lets `change` edit it, and saves it (refused if the file changed meanwhile). */
 export function changeShotList(change: (shots: ExpressionShot[]) => void): ExpressionShot[] {
@@ -116,21 +130,22 @@ export function changeShotList(change: (shots: ExpressionShot[]) => void): Expre
  * done: being suggested again doesn't make it needed again. Returns false when no look has these words.
  */
 export function addToMatchingShot(shots: ExpressionShot[], source: ShotSource & { text: string }): boolean {
-  const existing = shots.find(shot => shotHasSuggestion(shot, source.text));
+  const existing = shots.find(shot => shotHasSuggestion(shot, source.text, source.cues));
   if (!existing) return false;
   if (!existing.sources.some(s => s.piece === source.piece && s.context === source.context)) existing.sources.push(source);
   return true;
 }
 
 /** Checks a video's suggestions before anything is added. */
-export function checkShotSuggestions(piece: string, input: unknown): { expression: string; context: string }[] {
+export function checkShotSuggestions(piece: string, input: unknown): { expression: string; context: string; cues?: string[] }[] {
   const folder = safeResolve('projects', piece);
   const packaging = safeResolve('projects', path.join(piece, 'Packaging'));
   if (!piece || !fs.statSync(packaging, { throwIfNoEntry: false })?.isDirectory() || fs.lstatSync(packaging).isSymbolicLink() || fs.lstatSync(folder).isSymbolicLink()) throw new Error('Choose a video with packaging.');
   if (!Array.isArray(input) || !input.length || input.length > 100) throw new Error('Choose one or more expressions.');
-  return input.map((item: { expression?: unknown; context?: unknown }) => {
+  return input.map((item: { expression?: unknown; context?: unknown; cues?: unknown }) => {
     if (!item || typeof item.expression !== 'string' || !item.expression.trim() || item.expression.length > 2000 || typeof item.context !== 'string' || item.context.length > 500) throw new Error('An expression suggestion is invalid.');
-    return { expression: item.expression.trim(), context: item.context.trim() };
+    const cues = Array.isArray(item.cues) ? item.cues.filter((cue): cue is string => typeof cue === 'string' && THUMBNAIL_PHOTO_ATTRIBUTES.includes(cue)) : [];
+    return { expression: item.expression.trim(), context: item.context.trim(), ...(cues.length ? { cues } : {}) };
   });
 }
 
@@ -139,7 +154,7 @@ export function addExpressionShots(piece: string, input: unknown): ExpressionSho
   const items = checkShotSuggestions(piece, input);
   return changeShotList(shots => {
     for (const item of items) {
-      const source = { piece, context: item.context, text: item.expression };
+      const source = { piece, context: item.context, text: item.expression, ...(item.cues ? { cues: item.cues } : {}) };
       if (!addToMatchingShot(shots, source)) shots.push(shotFromSuggestion(item.expression, source));
     }
   });

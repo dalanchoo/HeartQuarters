@@ -265,6 +265,15 @@ describe('generating a photo for the chosen pair', () => {
     expect(shots).toHaveLength(1);
     expect(shots[0]).toMatchObject({ id, category: 'Positive/Warmth', sources: [{ piece: PIECE, text: PICK.expression }] });
   });
+  it("gives the pair's look its photo cues, and adds a specific look beside one without them", () => {
+    choose();
+    const plain = pairShot(PIECE);
+    choose({ ...PICK, photoAttributes: ['LookRight'] });
+    const cued = pairShot(PIECE);
+    expect(cued.id).not.toBe(plain.id);
+    expect(readShotList().find(s => s.id === cued.id)).toMatchObject({ pose: ['LookRight'], sources: [{ cues: ['LookRight'] }] });
+    expect(pairShot(PIECE).id).toBe(cued.id);
+  });
   it('ranks a confirmed picture generated from that look first, as a normal candidate', async () => {
     choose();
     const { id } = pairShot(PIECE);

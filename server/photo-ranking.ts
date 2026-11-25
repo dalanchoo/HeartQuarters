@@ -143,14 +143,15 @@ export function pairShot(piece: string): { id: string } {
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   const text = choice.pick.expression.trim();
   if (!text) throw new Error('This pair names no expression to generate.');
-  const mine = (shot: ExpressionShot) => shotHasSuggestion(shot, text) && shot.sources.some(source => source.piece === piece);
+  const cues = choice.pick.photoAttributes ?? [];
+  const mine = (shot: ExpressionShot) => shotHasSuggestion(shot, text, cues) && shot.sources.some(source => source.piece === piece);
   const found = readShotList().find(mine);
   if (found) return { id: found.id };
   let id = '';
   changeShotList(shots => {
     const again = shots.find(mine);
     if (again) { id = again.id; return; }
-    const shot = shotFromSuggestion(text, { piece, context: `Chosen: ${choice.pick.title}`, text });
+    const shot = shotFromSuggestion(text, { piece, context: `Chosen: ${choice.pick.title}`, text, ...(cues.length ? { cues } : {}) });
     shots.push(shot); id = shot.id;
   });
   return { id };
