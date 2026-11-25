@@ -81,6 +81,7 @@ import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
 import { listStoredComments, moderateComment, replyToComment, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
 import { gatherTopicEvidence, readTopicResearch, runTopicResearch, sendResearchMessage, topicCounts } from './channel-research.js';
+import { outsideOverview, runYoutubeScan, saveScanSettings } from './outside-youtube.js';
 
 const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
@@ -130,6 +131,12 @@ app.get('/api/channel/research/topics', handle((_req, res) => { res.json(topicCo
 app.get('/api/channel/research', (req, res) => {
   gatherTopicEvidence(req.query.topic)
     .then((evidence) => res.json({ evidence, research: readTopicResearch(evidence.topic) }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.get('/api/channel/research/outside', handle((req, res) => { res.json(outsideOverview(req.query.topic)); }));
+app.post('/api/channel/research/outside/settings', handle((req, res) => { saveScanSettings(req.body?.topic, req.body?.settings); res.json(outsideOverview(req.body?.topic)); }));
+app.post('/api/channel/research/outside/scan', (req, res) => {
+  runYoutubeScan(req.body?.topic)
+    .then(() => res.json(outsideOverview(req.body?.topic)), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/research/message', (req, res) => {
   sendResearchMessage(req.body?.topic, req.body?.reportId, req.body?.ai, req.body?.message)

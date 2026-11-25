@@ -1,11 +1,12 @@
 // Channel -> Research: topic-level research. "Your Channel Evidence" (comments + transcripts of videos tagged with a
-// topic) is kept apart from "Outside Demand" (Reddit, news, vidIQ), which is not built yet.
+// topic) is kept apart from "Outside Demand" (what other YouTube channels made on the topic).
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getJson, postJson } from './api';
 import type { AiId } from '../../server/ai';
 import type { ResearchReport, ResearchTopic, TopicCount, TopicEvidence, TopicResearch } from '../../server/channel-research';
+import { OutsideDemand } from './OutsideDemand';
 import { TOPIC_LABELS } from './videoProfile';
 
 const AIS: { id: AiId; name: string }[] = [{ id: 'claude', name: 'Claude' }, { id: 'codex', name: 'ChatGPT' }, { id: 'gemini', name: 'Gemini' }];
@@ -130,9 +131,7 @@ export function ChannelResearch({ topic: rawTopic }: { topic?: string }) {
 
           <details className="yt-section">
             <summary>Outside Demand</summary>
-            <p className="muted small-text">
-              Kept separate from your channel evidence. Planned sources: Reddit (for example r/SDAM), news, vidIQ, and Ask Studio.
-            </p>
+            <OutsideDemand key={topic} topic={topic} />
           </details>
         </>
       )}

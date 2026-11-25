@@ -9,6 +9,7 @@ describe('YouTube quota', () => {
   it("knows YouTube's published cost of each request", () => {
     const api = 'https://www.googleapis.com/youtube/v3';
     expect(youtubeCost(`${api}/videos?id=x`)).toBe(1);
+    expect(youtubeCost(`${api}/search?q=x`)).toBe(100);
     expect(youtubeCost(`${api}/videos?part=snippet`, 'PUT')).toBe(50);
     expect(youtubeCost(`${api}/captions?videoId=x`)).toBe(50);
     expect(youtubeCost(`${api}/captions/abc123?tfmt=srt`)).toBe(200); // downloading a track

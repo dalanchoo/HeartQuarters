@@ -70,6 +70,7 @@ export function youtubeCost(url: string, method = 'GET'): number {
   // captions/<id> is a download (200 units); captions alone lists a video's tracks (50).
   if (resource === 'captions') return m === 'GET' ? (/\/captions\/[^/]+$/.test(u.pathname) ? 200 : 50) : m === 'POST' ? 400 : m === 'PUT' ? 450 : 50;
   if (resource === 'thumbnails') return 50;
+  if (resource === 'search') return 100;
   if (['videos', 'playlistItems', 'playlists', 'channels'].includes(resource)) return m === 'GET' ? 1 : 50;
   return 1; // anything else: YouTube charges every request at least 1
 }
