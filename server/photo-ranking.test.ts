@@ -231,7 +231,29 @@ describe('ranking the photos for the chosen pair', () => {
     expect(calls).toBe(1);
     expect(readRanking(PIECE)).toMatchObject({ cameraFirst: true, ranked });
   });
+  it('keeps one ranking per pair, so going back to a pair asks no AI, and says when its photos changed', async () => {
+    let calls = 0;
+    const ask: AskAi = async () => { calls++; return JSON.stringify({ ranked: [{ photo: PHOTOS[0].path, why: 'warm' }] }); };
+    const OTHER = { ...PICK, title: 'Another Pair', expression: 'Positive > Warmth (a broad grin)' };
+    choose();
+    await startRanking(PIECE, { ask, starred: () => [], small }).finished;
+    choose(OTHER);
+    expect(readRanking(PIECE)).toBeNull();
+    await startRanking(PIECE, { ask, starred: () => [], small }).finished;
+    choose();
+    // The first pair's ranking is still there, unchanged, without asking again.
+    expect(readRanking(PIECE)).toMatchObject({ title: PICK.title, ranked: [{ photo: PHOTOS[0].path }], offered: expect.any(Array) });
+    expect(readRanking(PIECE)?.changed).toBeUndefined();
+    expect(calls).toBe(2);
+    // A new photo in the pair's folder changes what it would be shown.
+    fs.writeFileSync(path.join(tmp, 'Expressions', 'Positive', 'Warmth', 'Warm_New.jpg'), 'fake photo');
+    clearExpressionIndex();
+    expect(readRanking(PIECE)?.changed).toBe(true);
+    choose(OTHER);
+    expect(readRanking(PIECE)).toMatchObject({ title: 'Another Pair' });
+  });
   it('updates saved recommendations when ratings change without rewriting the saved ranking', () => {
+    choose();
     const file = path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', RANKING_FILE);
     const ranked = PHOTOS.slice(0, 2).map(photo => ({ photo: photo.path, why: 'warm' }));
     const saved = JSON.stringify({ title: PICK.title, thumbnailText: PICK.thumbnailText, looked: 2, ranked });

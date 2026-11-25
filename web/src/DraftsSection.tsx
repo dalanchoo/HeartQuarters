@@ -246,7 +246,8 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
   }, []);
-  // Best Photos for This Pair: the chosen AI ranks the photos once per pair (saved in Drafts), started here when there's none.
+  // Best Photos for This Pair: the chosen AI ranks the photos once per pair (each pair's ranking is saved in Drafts), started
+  // here only when this pair has none. Going back to a pair shows its saved ranking; only Rank Again asks again.
   const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null; madeFor?: string[] } | null>(null);
   const [rankAi, setRankAi] = useAiFor('rank-photos');
   const loadRanking = (isActive?: () => boolean) =>
@@ -261,7 +262,10 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     return () => { active = false; };
   }, [piece, choice.pick.title]);
   const ranked = ranking?.ranking && ranking.ranking.title === choice.pick.title ? ranking.ranking : null;
-  const rankingNow = ranking?.job?.state === 'working';
+  // A job belongs to the pair it was started for; one for another pair only means this pair has to wait.
+  const forThisPair = !ranking?.job?.title || ranking.job.title === choice.pick.title;
+  const anyRanking = ranking?.job?.state === 'working';
+  const rankingNow = anyRanking && forThisPair;
   const rank = () => {
     setError('');
     postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job, madeFor: r?.madeFor })), (e: Error) => setError(e.message));
@@ -282,16 +286,16 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   const madeFor = library ?(ranking?.madeFor ?? []).map(path => library.photos.find(p => p.path === path)).filter((p): p is NonNullable<typeof p> => !!p) : [];
   const asked = useRef('');
   useEffect(() => {
-    if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
+    if (!ranking || ranked || anyRanking || (ranking.job?.state === 'failed' && forThisPair) || asked.current === choice.pick.title) return;
     asked.current = choice.pick.title;
     rank();
-  }, [ranking, ranked, rankingNow, choice.pick.title]);
+  }, [ranking, ranked, anyRanking, choice.pick.title]);
   useEffect(() => {
-    if (!rankingNow) return;
+    if (!anyRanking) return;
     let active = true;
     const timer = setInterval(() => void loadRanking(() => active), 3000);
     return () => { active = false; clearInterval(timer); };
-  }, [rankingNow, piece]);
+  }, [anyRanking, piece]);
   // The pair's own categories first, then any John adds from the whole library.
   const [added, setAdded] = useState<string[]>([]);
   const categories = [...categoriesIn(choice.pick.expression), ...added.filter((c) => !categoriesIn(choice.pick.expression).includes(c))];
@@ -348,7 +352,9 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
         </p>
         {!!choice.pick.photoAttributes?.length && <p className="muted small-text">Photo Cues: {choice.pick.photoAttributes.map(tag => tag.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}</p>}
         {rankingNow && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
-        {ranking?.job?.state === 'failed' && !rankingNow && (
+        {anyRanking && !forThisPair && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is still ranking photos for another pair. This pair's ranking starts when it's done.</p>}
+        {ranked?.changed && !rankingNow && <p className="muted small-text">The photos for this pair have changed since this ranking (added, removed, re-rated or re-tagged). Use Rank Again to include the changes.</p>}
+        {ranking?.job?.state === 'failed' && forThisPair && !rankingNow && (
           <p className="error small-text">
             {ranking.job.error}{' '}
             <button className="small" onClick={rank}>

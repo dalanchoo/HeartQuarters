@@ -110,6 +110,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   with their rank or "Not Ranked". They are offered to the ranking first as normal candidates, not
   AI fallbacks. A pick's photo cues travel into its look (Pose/Morphology tags) and the image
   prompt; looks with a different gaze are never merged.
+  Rankings are saved per pair: switching pairs never asks an AI again, only Rank Again does. A
+  ranking remembers the photos it was shown, and the picker notes when they have changed since.
 
 ---
 
