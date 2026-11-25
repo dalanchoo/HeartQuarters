@@ -247,10 +247,10 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
   }, []);
   // Best Photos for This Pair: the chosen AI ranks the photos once per pair (saved in Drafts), started here when there's none.
-  const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null } | null>(null);
+  const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null; madeFor?: string[] } | null>(null);
   const [rankAi, setRankAi] = useAiFor('rank-photos');
   const loadRanking = (isActive?: () => boolean) =>
-    getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
+    getJson<{ ranking: PhotoRanking | null; job: RankingJob | null; madeFor?: string[] }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
       (r) => { if (!isActive || isActive()) setRanking(r); },
       (e: Error) => { if (!isActive || isActive()) setError(e.message); },
     );
@@ -264,8 +264,17 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   const rankingNow = ranking?.job?.state === 'working';
   const rank = () => {
     setError('');
-    postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job })), (e: Error) => setError(e.message));
+    postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job, madeFor: r?.madeFor })), (e: Error) => setError(e.message));
   };
+  // Generate a Look for This Pair: opens the pair's look on the Shot List, where pictures are made, moved to the
+  // Inbox and confirmed. Confirmed ones come back here under Made for This Video.
+  const [opening, setOpening] = useState(false);
+  const generateLook = () => {
+    setOpening(true);
+    setError('');
+    postJson<{ id: string }>('/api/brief/pair-shot', { piece }).then(({ id }) => { location.hash = `#Expressions/~shot/${id}`; }, (e: Error) => setError(e.message)).finally(() => setOpening(false));
+  };
+  const madeFor = library ? (ranking?.madeFor ?? []).map(path => library.photos.find(p => p.path === path)).filter((p): p is NonNullable<typeof p> => !!p) : [];
   const asked = useRef('');
   useEffect(() => {
     if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
@@ -325,7 +334,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           {ranked && <span className="muted">· {ranked.by ?? 'Claude'} looked at {ranked.looked} photos</span>}
           {ranked && !rankingNow && <AiSelect value={rankAi} onChange={setRankAi} title="Which AI ranks the photos" />}
           {ranked && !rankingNow && (
-            <button className="small" onClick={rank} title="Searches the library using current expression tags, folders, ratings and stars">
+            <button className="small" onClick={rank} title="Searches the library again using current expression tags, folders, cues, ratings and pictures made for this video">
               Rank Again
             </button>
           )}
@@ -340,18 +349,27 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           </p>
         )}
-        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. You can choose a photo below or add the expression to the Shot List.</p>}
+        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. Choose a photo below, or generate one for this pair.</p>}
         {ranked && !ranked.cameraFirst && !rankingNow && <p className="muted small-text">Use Rank Again to check this older ranking with camera photos first.</p>}
         {ranked && library && (
           <div className="photo-grid">
             {ranked.ranked.map((r, i) => {
               const found = library.photos.find((p) => p.path === r.photo);
               if (!found) return null;
-              const aiLabel = isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
+              const aiLabel = ranking?.madeFor?.includes(found.path) ? 'Made for This Video' : isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
               return tile(found, i + 1, r.why, aiLabel);
             })}
           </div>
         )}
+      </div>
+      <div className="photo-group">
+        <p className="small-text">
+          <strong>Made for This Video</strong> <span className="muted">· {madeFor.length ? `${madeFor.length} confirmed` : 'none yet'}</span>{' '}
+          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here and is ranked first.">
+            {opening ? 'Opening…' : 'Generate a Look for This Pair'}
+          </button>
+        </p>
+        {madeFor.length > 0 && <div className="photo-grid">{madeFor.map(p => tile(p))}</div>}
       </div>
       {library && <details className="photo-group"><summary>Starred Photos ({library.photos.filter(p => stars.includes(p.path)).length})</summary>
         <div className="photo-grid">{library.photos.filter(p => stars.includes(p.path)).map((p) => tile(p))}</div>

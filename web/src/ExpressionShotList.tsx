@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import type { ShotReference } from '../../server/shot-reference';
@@ -7,8 +7,18 @@ import { ExpressionVideos } from './ExpressionVideos';
 import { AiSelect, IMAGE_AIS, aiName, useAiFor } from './AiChoice';
 import { byNeed, coverageText, folderCoverage, isWellCovered, WELL_COVERED } from './shotCoverage';
 
-export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string, tags: Tag[]) => void }) {
+export function ExpressionShotList({ active, index, focus, onViewImage }: { active: boolean; index: ExpressionIndex | null; focus?: string; onViewImage: (imageUrl: string, name: string, category: string, tags: Tag[]) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
+  // Opened from Pick the Photo: open that look (and the folders around it) and bring it into view, once per link.
+  const focused = useRef('');
+  useEffect(() => {
+    if (!active || !focus || !shots || focused.current === focus) return;
+    const card = document.getElementById(`expression-shot-${focus}`);
+    if (!card) return;
+    focused.current = focus;
+    for (let el: HTMLElement | null = card; el; el = el.parentElement) if (el instanceof HTMLDetailsElement) el.open = true;
+    card.scrollIntoView({ block: 'center' });
+  }, [active, focus, shots]);
   const [pictures, setPictures] = useState<Record<string, ShotReference>>({});
   // The picture John picked for each shot; a newly made picture takes over again.
   const [chosen, setChosen] = useState<Record<string, { name: string; count: number }>>({});
@@ -121,7 +131,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     const pictureUrl = pick ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(pick)}` : '';
     const pictureLabel = (name: string) => `AI ${String(list.length - list.indexOf(name)).padStart(2, '0')}${name === list[0] ? ' (Newest)' : ''}`;
     const name = shot.title || shot.description || 'Untitled Shot';
-    return <details className="expression-shot" key={shot.id}>
+    return <details className={`expression-shot${shot.id === focus ? ' focused' : ''}`} id={`expression-shot-${shot.id}`} key={shot.id}>
       <summary><strong>{name}</strong></summary>
       <div className="expression-shot-body">
         <div>

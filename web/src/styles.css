@@ -476,6 +476,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot { padding: .3rem .65rem; margin: .3rem 0; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
 .expression-shot p { margin: .3rem 0; }
 .expression-shot[open] { padding-bottom: .5rem; }
+.expression-shot.focused { border-color: var(--accent); background: var(--accent-soft); }
 .expression-shot-group.yt-section { margin: .35rem 0; padding: .35rem .65rem; }
 .expression-shot > summary { cursor: pointer; display: flex; align-items: center; gap: 0.45rem; list-style: none; }
 .expression-shot > summary::-webkit-details-marker { display: none; }

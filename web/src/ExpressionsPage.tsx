@@ -33,7 +33,13 @@ const isAiList = (v: unknown): v is AiId[] => Array.isArray(v) && v.length > 0 &
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
+// #Expressions/~shot/<id> opens the Shot List at one look instead (from Pick the Photo), leaving the category as it was.
+const SHOT_LINK = /^#Expressions\/~shot\/([^/]+)$/;
+function shotFromHash(): string {
+  return SHOT_LINK.exec(location.hash)?.[1] ?? '';
+}
 function categoryFromHash(): string {
+  if (shotFromHash()) return '';
   return decodeURIComponent(location.hash.slice(1).split('/').slice(1).join('/'));
 }
 
@@ -54,7 +60,8 @@ export function ExpressionsPage() {
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
-  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>(() => shotFromHash() ? 'shots' : 'library');
+  const [focusShot, setFocusShot] = useState(shotFromHash);
   const [generationCategory, setGenerationCategory] = useState('');
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
@@ -194,6 +201,8 @@ export function ExpressionsPage() {
     // Another tab's address isn't for this page: it stays as it was while hidden.
     const onHash = () => {
       if (!/^#Expressions(\/|$)/.test(location.hash)) return;
+      const shot = shotFromHash();
+      if (shot) { setFocusShot(shot); setActiveTab('shots'); setPreview(null); return; }
       setSelected(categoryFromHash());
       setOpen(null);
     };
@@ -275,7 +284,7 @@ export function ExpressionsPage() {
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
         <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} onRate={rate} /></div>
-        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onViewImage={(imageUrl, name, category, tags) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl, note: 'These tags are suggested from the look. Confirm them after moving the picture to the Expression Inbox.' })} /></div>
+        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} focus={focusShot} onViewImage={(imageUrl, name, category, tags) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl, note: 'These tags are suggested from the look. Confirm them after moving the picture to the Expression Inbox.' })} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="generation-top">
         <div className="expression-planning">
