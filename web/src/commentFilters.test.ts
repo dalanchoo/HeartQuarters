@@ -119,21 +119,21 @@ describe('channelComments helpers', () => {
     const rows = flattenComments(summary, videos);
     expect(rows).toHaveLength(3);
 
-    expect(filterAndSortComments(rows, DEFAULT_COMMENT_FILTERS).map((r) => r.thread.id)).toEqual(['t3', 't1']);
+    expect(filterAndSortComments(rows, DEFAULT_COMMENT_FILTERS, videos).map((r) => r.thread.id)).toEqual(['t3', 't1']);
     expect(
-      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'responded' }).map((r) => r.thread.id),
+      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'responded' }, videos).map((r) => r.thread.id),
     ).toEqual(['t2']);
     expect(
-      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', topic: 'sdam' }).map((r) => r.thread.id),
+      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', topic: 'sdam' }, videos).map((r) => r.thread.id),
     ).toEqual(['t2', 't1']);
     expect(
-      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', kind: 'short' }).map((r) => r.thread.id),
+      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', kind: 'short' }, videos).map((r) => r.thread.id),
     ).toEqual(['t3']);
     expect(
-      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', text: 'birthdays' }).map((r) => r.thread.id),
+      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', text: 'birthdays' }, videos).map((r) => r.thread.id),
     ).toEqual(['t1']);
     expect(
-      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', sort: 'likes' }).map((r) => r.thread.id),
+      filterAndSortComments(rows, { ...DEFAULT_COMMENT_FILTERS, status: 'all', sort: 'likes' }, videos).map((r) => r.thread.id),
     ).toEqual(['t2', 't1', 't3']);
   });
 });

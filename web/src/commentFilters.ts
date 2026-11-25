@@ -1,25 +1,23 @@
 // Pure helpers for filtering, sorting, and joining stored YouTube comments with channel video metadata.
 import type { StoredCommentThread, StoredCommentsSummary } from '../../server/channel-comments';
 import type { ChannelVideo } from '../../server/channel-videos';
-import type { Topic } from '../../server/video-profile';
+import { channelRows } from './channelRows';
+import { ALL_VIDEO_FACETS, type VideoFacets } from './VideoFinder';
 
 export type CommentStatusFilter = 'unresponded' | 'all' | 'responded';
 export type CommentSortKey = 'newest' | 'likes' | 'replies';
 
-export interface CommentFilterState {
+export interface CommentFilterState extends VideoFacets {
   status: CommentStatusFilter;
   videoId: string;
-  topic: 'all' | Topic;
-  kind: 'all' | 'longform' | 'short';
   sort: CommentSortKey;
   text: string;
 }
 
 export const DEFAULT_COMMENT_FILTERS: CommentFilterState = {
+  ...ALL_VIDEO_FACETS,
   status: 'unresponded',
   videoId: 'all',
-  topic: 'all',
-  kind: 'all',
   sort: 'newest',
   text: '',
 };
@@ -27,10 +25,8 @@ export const DEFAULT_COMMENT_FILTERS: CommentFilterState = {
 export interface CommentRow {
   videoId: string;
   videoTitle: string;
+  videoPiece: string | null;
   videoThumbnail?: string;
-  videoKind?: 'longform' | 'short';
-  videoTopic?: Topic;
-  videoTopic2?: Topic;
   thread: StoredCommentThread;
 }
 
@@ -47,10 +43,8 @@ export function flattenComments(
       rows.push({
         videoId: file.videoId,
         videoTitle: video?.title ?? file.videoId,
+        videoPiece: video?.piece ?? null,
         videoThumbnail: video?.thumbnail,
-        videoKind: video?.kind,
-        videoTopic: video?.topic,
-        videoTopic2: video?.topic2,
         thread,
       });
     }
@@ -58,21 +52,30 @@ export function flattenComments(
   return rows;
 }
 
-export function filterAndSortComments(rows: CommentRow[], filters: CommentFilterState): CommentRow[] {
+export function filterAndSortComments(
+  rows: CommentRow[],
+  filters: CommentFilterState,
+  videos?: ChannelVideo[],
+  videoText = '',
+): CommentRow[] {
+  const facetFiltering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!videoText.trim();
+  const allowedVideoIds =
+    facetFiltering && videos
+      ? new Set(channelRows(videos, { kind: filters.kind, topic: filters.topic, angle: filters.angle, text: videoText }, 'publishedAt', true).map((v) => v.id))
+      : null;
+
   const query = filters.text.trim().toLowerCase();
   const filtered = rows.filter((row) => {
     if (filters.status === 'unresponded' && row.thread.ownerReplied) return false;
     if (filters.status === 'responded' && !row.thread.ownerReplied) return false;
     if (filters.videoId !== 'all' && row.videoId !== filters.videoId) return false;
-    if (filters.kind !== 'all' && row.videoKind !== filters.kind) return false;
-    if (filters.topic !== 'all' && row.videoTopic !== filters.topic && row.videoTopic2 !== filters.topic) {
-      return false;
-    }
+    if (allowedVideoIds && !allowedVideoIds.has(row.videoId)) return false;
     if (query) {
       const hay = [
         row.thread.author,
         row.thread.text,
         row.videoTitle,
+        row.videoPiece ?? '',
         ...row.thread.replies.map((r) => `${r.author} ${r.text}`),
       ]
         .join(' ')

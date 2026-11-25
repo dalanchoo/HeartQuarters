@@ -11,7 +11,7 @@ import { ChannelComments } from './ChannelComments';
 import { ReachSetup } from './ReachSetup';
 import { SidebarResizer } from './SidebarResizer';
 import { VideoPreview } from './VideoPreview';
-import { ALL_VIDEO_FACETS, ALL_VIDEO_FILTERS, VideoFacetControls, VideoFilterBar } from './VideoFinder';
+import { ALL_VIDEO_FACETS, ALL_VIDEO_FILTERS, VideoFacetControls, VideoSidebar } from './VideoFinder';
 
 type Overview = NonNullable<ReturnType<typeof channelOverview>>;
 const videoHash = (id: string) => `#Channel/Video/${encodeURIComponent(id)}`;
@@ -33,16 +33,13 @@ export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; i
   };
 
   return <div className="channel-video-browser">
-    <aside aria-label="Video Browser" className="channel-video-sidebar">
-      <VideoFilterBar filters={filters} onChange={applyFilters} />
-      <p className="muted small-text" role="status">
-        {videos ? `${matching.length} ${filtering ? 'Matching ' : ''}${matching.length === 1 ? 'Video' : 'Videos'}` : 'Use Refresh YouTube Data to load the video list.'}
-      </p>
-      <nav aria-label="Matching Videos" className="channel-video-list">
-        {matching.map(video => <a className={`project-link${video.id === openId ? ' active' : ''}`} key={video.id} href={videoHash(video.id)}
-          aria-current={video.id === openId ? 'page' : undefined} title={video.title}>{rowName(video)}</a>)}
-      </nav>
-    </aside>
+    <VideoSidebar
+      videos={videos}
+      selectedId={openId}
+      filters={filters}
+      onFiltersChange={applyFilters}
+      videoHref={videoHash}
+    />
     <SidebarResizer />
     <div className="channel-video-detail">
       {openId ? <ChannelVideoView key={openId} id={openId} video={selected} /> : matching.length > 0

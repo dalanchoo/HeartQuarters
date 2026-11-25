@@ -99,10 +99,13 @@ it('shows and announces the direction only on the active heading', () => {
   expect(fewest).toMatch(/Published<span[^>]*>↕/);
 });
 
-it('shows the Comments tab, filter controls, and Sync Comments button', () => {
+it('shows the Comments tab with VideoSidebar and Sync Comments button', () => {
   const html = renderToStaticMarkup(createElement(ChannelComments, { videos: [short] }));
   expect(html).toContain('<h2>Comments</h2>');
   expect(html).toContain('Sync Comments');
   expect(html).toContain('aria-label="Response Status"');
-  expect(html).toContain('aria-label="Topic"');
+  expect(html).toContain('aria-label="Video Browser"');
+  expect(html).toContain('All Videos (0)');
+  expect(html).toContain('>All Topics</option>');
+  expect(html).toContain('>All Angles</option>');
 });

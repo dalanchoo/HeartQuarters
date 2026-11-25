@@ -1,11 +1,68 @@
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
-import type { RowFilters } from './channelRows';
+import { channelRows, rowName, type RowFilters } from './channelRows';
+import type { ChannelVideo } from '../../server/channel-videos';
 
 export type VideoFacets = Pick<RowFilters, 'kind' | 'topic' | 'angle'>;
 export type VideoSearchFilters = Pick<RowFilters, 'kind' | 'topic' | 'angle' | 'text'>;
 
 export const ALL_VIDEO_FACETS: VideoFacets = { kind: 'all', topic: 'all', angle: 'all' };
 export const ALL_VIDEO_FILTERS: VideoSearchFilters = { ...ALL_VIDEO_FACETS, text: '' };
+
+/** Reusable sidebar with Find a Video filters and a newest-first list of matching videos. */
+export function VideoSidebar({
+  videos,
+  selectedId,
+  filters,
+  onFiltersChange,
+  videoHref,
+  allItem,
+  counts,
+}: {
+  videos?: ChannelVideo[];
+  selectedId?: string;
+  filters: VideoSearchFilters;
+  onFiltersChange: (filters: VideoSearchFilters) => void;
+  videoHref: (videoId: string) => string;
+  allItem?: { label: string; href: string; active: boolean };
+  counts?: ReadonlyMap<string, number>;
+}) {
+  const catalog = videos ?? [];
+  const matching = channelRows(catalog, filters, 'publishedAt', true);
+  const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
+  return (
+    <aside aria-label="Video Browser" className="channel-video-sidebar">
+      <VideoFilterBar filters={filters} onChange={onFiltersChange} />
+      <p className="muted small-text" role="status">
+        {videos ? `${matching.length} ${filtering ? 'Matching ' : ''}${matching.length === 1 ? 'Video' : 'Videos'}` : 'Use Refresh YouTube Data to load the video list.'}
+      </p>
+      <nav aria-label="Matching Videos" className="channel-video-list">
+        {allItem && (
+          <a
+            className={`project-link${allItem.active ? ' active' : ''}`}
+            href={allItem.href}
+            aria-current={allItem.active ? 'page' : undefined}
+          >
+            {allItem.label}
+          </a>
+        )}
+        {matching.map((video) => {
+          const count = counts?.get(video.id);
+          return (
+            <a
+              className={`project-link${video.id === selectedId ? ' active' : ''}`}
+              key={video.id}
+              href={videoHref(video.id)}
+              aria-current={video.id === selectedId ? 'page' : undefined}
+              title={video.title}
+            >
+              {rowName(video)}{count !== undefined ? ` (${count})` : ''}
+            </a>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
 
 /** Kind, Topic, and Angle dropdowns shared by Channel and Ideas. */
 export function VideoFacetControls({ filters, onChange }: { filters: VideoFacets; onChange: (filters: VideoFacets) => void }) {

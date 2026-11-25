@@ -1215,6 +1215,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .comments-title-group h2 { margin: 0; }
 .comments-head-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .comments-filters { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.comments-filters label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.84rem; color: var(--muted); }
 .comments-filters select { min-height: 28px; font-size: 0.84rem; max-width: 18rem; }
 .comments-filters input[type="search"] { flex: 1 1 12rem; min-width: 10rem; min-height: 28px; font-size: 0.85rem; }
 .comments-list { display: flex; flex-direction: column; gap: 0.5rem; }
