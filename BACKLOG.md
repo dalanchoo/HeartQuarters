@@ -100,6 +100,14 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   use the current episode's thumbnail as revision context. Each idea includes a supporting visual
   that helps tell the story. The top three use distinct compositions, and image generation follows
   the chosen concept's layout.
+- **Best Photos filter by expression, not stars (2026-11-25).** The candidates are the pair's
+  expression (confirmed tag, folder, suggested tag). Stars only break ties; starred photos of other
+  expressions are no longer added. Thumbs-down photos are left out, and so are photos where John
+  marked a requested cue as not there (DISCONFIRMED) or confirmed an opposite gaze. Untagged photos
+  stay in. When nothing fits, **Generate a Look for This Pair** opens the pair's Shot List look.
+  Pictures made there carry `# Generated shot: <id>` in their tag file. Once moved to the Inbox and
+  confirmed, they show under **Made for This Video** and are ranked first as normal candidates,
+  not AI fallbacks.
 
 ---
 
