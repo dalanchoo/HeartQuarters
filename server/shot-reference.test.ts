@@ -6,10 +6,10 @@ import { makeTree, removeTree } from './testing';
 import { saveExpressionReferences } from './expression-references';
 import { readShotList, seedShotList } from './expression-shot-list';
 import { clearExpressionIndex } from './expressions';
-import { copyShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
+import { copyShotReferenceToInbox, deleteShotPicture, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
 import { parseImageAi, type MakeImage } from './thumbnails';
 
-let tmp: string; let oldRoot: string; const env = ['HQ_EXPRESSION_REFS_FILE', 'HQ_SHOT_REFERENCES'] as const; let oldEnv: (string | undefined)[];
+let tmp: string; let oldRoot: string; let oldTrash: string; const env = ['HQ_EXPRESSION_REFS_FILE', 'HQ_SHOT_REFERENCES'] as const; let oldEnv: (string | undefined)[];
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
 const jpg = Buffer.from([0xff, 0xd8, 0xff, 1]);
 const making = (data: Buffer, seen: { prompt?: string; refs?: string[] } = {}): MakeImage => async (_ai, prompt, cwd, out, opts) => {
@@ -19,10 +19,11 @@ const making = (data: Buffer, seen: { prompt?: string; refs?: string[] } = {}): 
 beforeEach(() => {
   tmp = makeTree({ 'Expressions/Positive/Relief/Relief.txt': 'Release after strain', 'Expressions/Neutral/Neutral_001.jpg': 'photo', 'Expressions/Neutral/Neutral_002.jpg': 'photo' });
   oldRoot = config.expressionsDir; config.expressionsDir = path.join(tmp, 'Expressions'); clearExpressionIndex();
+  oldTrash = config.trashDir; config.trashDir = path.join(tmp, 'Trash'); // never the real Trash
   oldEnv = env.map(name => process.env[name]);
   process.env.HQ_EXPRESSION_REFS_FILE = path.join(tmp, 'refs.json'); process.env.HQ_SHOT_REFERENCES = path.join(tmp, 'shot-references');
 });
-afterEach(() => { config.expressionsDir = oldRoot; clearExpressionIndex(); env.forEach((name, i) => { if (oldEnv[i] === undefined) delete process.env[name]; else process.env[name] = oldEnv[i]; }); removeTree(tmp); });
+afterEach(() => { config.expressionsDir = oldRoot; config.trashDir = oldTrash; clearExpressionIndex(); env.forEach((name, i) => { if (oldEnv[i] === undefined) delete process.env[name]; else process.env[name] = oldEnv[i]; }); removeTree(tmp); });
 
 describe('shot reference pictures', () => {
   it('makes a picture from the look alone, using starred photos for likeness, and keeps it out of the library', async () => {
@@ -89,10 +90,25 @@ describe('shot reference pictures', () => {
     const data = JSON.parse(fs.readFileSync(file, 'utf8')); data.shots[1].category = ''; fs.writeFileSync(file, JSON.stringify(data));
     expect(() => startShotReference(readShotList()[1].id, making(png))).toThrow(/expression folder/);
   });
-  it('removes a deleted shot\'s picture', async () => {
+  it("moves a deleted shot's pictures to Trash", async () => {
     const [shot] = seedShotList();
     await startShotReference(shot.id, making(png)).finished;
-    removeShotReference(shot.id);
+    removeShotReference(shot.id, 'Relief: "after" strain?');
     expect(shotReferences()[shot.id]).toBeUndefined();
+    const [slot] = fs.readdirSync(config.trashDir);
+    expect(slot).toMatch(/ - Shot List - Relief after strain \(deleted look\)$/);
+    expect(fs.readdirSync(path.join(config.trashDir, slot, shot.id))).toContain('reference-001.png');
+  });
+  it('Delete Picture moves one picture to Trash and keeps the others', async () => {
+    const [shot] = seedShotList();
+    await startShotReference(shot.id, making(png)).finished;
+    await startShotReference(shot.id, making(jpg)).finished;
+    expect(deleteShotPicture(shot.id, 'reference-001.png')?.pictures).toEqual(['reference-002.jpg']);
+    const [slot] = fs.readdirSync(config.trashDir);
+    expect(slot).toMatch(/\(picture\)$/);
+    expect(fs.readdirSync(path.join(config.trashDir, slot))).toEqual(['reference-001.png']);
+    expect(() => deleteShotPicture(shot.id, 'reference-001.png')).toThrow(/no longer there/);
+    expect(() => deleteShotPicture(shot.id, '../Expression Shot List.json')).toThrow(/no longer there/);
+    expect(() => deleteShotPicture('../../elsewhere', 'reference-002.jpg')).toThrow(/valid shot/);
   });
 });

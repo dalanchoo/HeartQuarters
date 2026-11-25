@@ -22,7 +22,7 @@ import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js
 import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
-import { copyShotReferenceToInbox, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
+import { copyShotReferenceToInbox, deleteShotPicture, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -391,7 +391,14 @@ app.post('/api/expressions/shot-list/merge', (req, res) => {
   run.then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
-app.post('/api/expressions/shot-list/delete', handle((req, res) => { const shots = deleteShot(req.body?.id); removeShotReference(String(req.body?.id)); res.json(shots); }));
+app.post('/api/expressions/shot-list/delete', handle((req, res) => {
+  const shot = readShotList().find(s => s.id === req.body?.id);
+  const shots = deleteShot(req.body?.id);
+  removeShotReference(String(req.body?.id), shot?.title || shot?.description); // its pictures go to Trash
+  res.json(shots);
+}));
+// { id, name }: one of a look's pictures goes to Trash.
+app.post('/api/expressions/shot-list/reference/delete', handle((req, res) => { res.json(deleteShotPicture(req.body?.id, req.body?.name)); }));
 app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.json(shotReferences()); }));
 // { id, ai: "codex" | "gemini" }: a reference picture for one shot, by the image AI John chose (ChatGPT if none).
 app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id, undefined, parseImageAi(req.body?.ai ?? 'codex')).job); }));

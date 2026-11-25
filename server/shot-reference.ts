@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { appDir, isInside, rootDir, safeResolve } from './config.js';
+import { appDir, config, isInside, rootDir, safeResolve } from './config.js';
 import { buildExpressionIndex } from './expressions.js';
 import { expressionPrompt, imageFormat, type Options } from './expression-generation.js';
 import { readLikenessReferences } from './expression-references.js';
@@ -10,6 +10,7 @@ import { makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 import { writable } from './safe-files.js';
 import { copyAiImageToInbox } from './expression-inbox.js';
+import { trashSlot } from './manage.js';
 
 /**
  * AI pictures of what a Shot List look should be, so John can see the target before photographing it.
@@ -184,8 +185,45 @@ export function copyShotPictures(fromId: string, toId: string): number {
   return pictures.length;
 }
 
-/** Remove a deleted shot's pictures. Leaves it alone while one is still being made. */
-export function removeShotReference(shotId: string): void {
-  if (!UUID.test(shotId) || running.has(shotId)) return;
-  fs.rmSync(folder(shotId), { recursive: true, force: true });
+/** The Trash folder's name for a look's pictures: "Shot List - Direct and Assured (picture)". */
+function trashName(label: string, what: string): string {
+  const clean = label.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60).replace(/[. ]+$/, '');
+  return `Shot List - ${clean || 'Look'} (${what})`;
+}
+
+/** Moves a file or folder into Trash; when Trash is on another drive, copies it there first, then removes it. */
+function moveToTrash(from: string, to: string): void {
+  try { fs.renameSync(from, to); }
+  catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e;
+    fs.cpSync(from, to, { recursive: true, errorOnExist: true, force: false });
+    fs.rmSync(from, { recursive: true });
+  }
+}
+
+/**
+ * Delete Picture: moves one of a look's pictures to HeartQuarters Trash, so it can be put back. The look keeps its
+ * other pictures. Returns the look's pictures as they are now.
+ */
+export function deleteShotPicture(shotId: unknown, name: unknown): ShotReference | null {
+  if (typeof shotId !== 'string' || typeof name !== 'string') throw new Error('Choose a valid picture.');
+  const dir = folder(shotId);
+  if (running.has(shotId)) throw new Error('Wait until the picture being made is ready, then delete.');
+  if (!PICTURE.test(name) || !listPictures(shotId).includes(name)) throw new Error('That picture is no longer there.');
+  if (!config.trashDir) throw new Error('No trash folder is set in config.json. Nothing was changed.');
+  const shot = readShotList().find(s => s.id === shotId);
+  const slot = trashSlot(trashName(shot?.title || shot?.description || '', 'picture'));
+  moveToTrash(checked(path.join(dir, name)), path.join(slot, name));
+  return readJob(shotId);
+}
+
+/**
+ * A deleted look's pictures go to HeartQuarters Trash, folder and all. Leaves them where they are while one is still
+ * being made, or when no trash folder is set (the library ignores _ShotReferences, so nothing shows them).
+ */
+export function removeShotReference(shotId: string, label = ''): void {
+  if (!UUID.test(shotId) || running.has(shotId) || !config.trashDir) return;
+  const dir = folder(shotId);
+  if (!fs.existsSync(dir)) return;
+  moveToTrash(dir, path.join(trashSlot(trashName(label, 'deleted look')), shotId));
 }

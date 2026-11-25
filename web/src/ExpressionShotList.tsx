@@ -67,6 +67,16 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     finally { setBusy(''); }
   };
 
+  /** Delete Picture: only the picture shown goes to HeartQuarters Trash; the look and its other pictures stay. */
+  const deletePicture = async (shot: ExpressionShot, name: string) => {
+    setBusy(shot.id); setError('');
+    try {
+      const job = await postJson<ShotReference | null>('/api/expressions/shot-list/reference/delete', { id: shot.id, name });
+      setPictures(current => { const next = { ...current }; if (job) next[shot.id] = job; else delete next[shot.id]; return next; });
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(''); }
+  };
+
   const setDone = async (shot: ExpressionShot, done: boolean) => {
     setBusy(shot.id); setError('');
     try { setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/status', { id: shot.id, done })); window.dispatchEvent(new Event('hq-expression-shot-list-changed')); }
@@ -75,7 +85,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   };
 
   const remove = async (shot: ExpressionShot) => {
-    if (!window.confirm(`Delete “${shot.title || shot.description}” from the Shot List? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete the look “${shot.title || shot.description}” from the Shot List? Its AI pictures go to HeartQuarters Trash.`)) return;
     setBusy(shot.id); setError('');
     try { setShots(await postJson<ExpressionShot[]>('/api/expressions/shot-list/delete', { id: shot.id })); window.dispatchEvent(new Event('hq-expression-shot-list-changed')); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -107,7 +117,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
             {!shot.done && picture?.state !== 'working' && <AiSelect value={imageAi} onChange={setImageAi} only={IMAGE_AIS} title="Which AI makes the picture" />}
             {!shot.done && <button className="small" disabled={!known.has(shot.category) || picture?.state === 'working'} title={known.has(shot.category) ? undefined : 'Sort this shot into an expression folder first.'} onClick={() => void makePicture(shot)}>{picture?.state === 'working' ? 'Generating…' : pictureUrl ? 'Generate Another' : 'Generate Reference With AI'}</button>}
             <button className="small" disabled={!!busy} onClick={() => void setDone(shot, !shot.done)}>{shot.done ? 'Move Back to To Photograph' : 'Move to Photographed'}</button>
-            <button className="small" disabled={!!busy} onClick={() => void remove(shot)}>Delete</button>
+            <button className="small" disabled={!!busy} onClick={() => void remove(shot)} title="Removes this whole look from the Shot List; its AI pictures go to HeartQuarters Trash">Delete Look</button>
           </div>
           {picture?.state === 'working' && <p className="muted small-text" role="status">{aiName(picture.ai ?? 'codex')} is making the picture. This can take a few minutes.</p>}
           {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
@@ -116,6 +126,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
           {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
           <button className="small" disabled={!!busy || !!copiedMessage} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
+          <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void deletePicture(shot, pick)} title="Moves only this picture to HeartQuarters Trash">Delete Picture</button>
           {copiedMessage && <p className="muted small-text" role="status">{copiedMessage}</p>}
         </div>}
       </div>
