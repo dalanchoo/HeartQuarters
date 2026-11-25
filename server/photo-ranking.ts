@@ -12,7 +12,7 @@ import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences } from './expression-references.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { expressionIndex, type ExpressionPhoto } from './expressions.js';
-import { readShotList, type ExpressionShot } from './expression-shot-list.js';
+import { changeShotList, readShotList, shotFromSuggestion, shotHasSuggestion, type ExpressionShot } from './expression-shot-list.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefPick } from './projects.js';
 import { readable, readText, writeFile } from './safe-files.js';
 import { thumbnail } from './thumbs.js';
@@ -126,6 +126,34 @@ function attributeScore(photo: ExpressionPhoto, attributes: string[]): number {
 export function photosMadeFor(piece: string, photos: ExpressionPhoto[], shots: ExpressionShot[]): Set<string> {
   const looks = new Set(shots.filter(shot => shot.sources.some(source => source.piece === piece)).map(shot => shot.id));
   return new Set(photos.filter(photo => photo.generation?.shot && looks.has(photo.generation.shot)).map(photo => photo.path));
+}
+
+/** The library photos generated for this video, for the photo picker. An unreadable Shot List means none. */
+export function readMadeFor(piece: string): string[] {
+  draftsOf(piece);
+  try { return [...photosMadeFor(piece, expressionIndex().photos, readShotList())]; } catch { return []; }
+}
+
+/**
+ * The Shot List look for the chosen pair's expression, so John can generate a picture of it. The brief normally added
+ * it already (matched by the pick's exact words, even after a merge); an older brief gets it added now.
+ */
+export function pairShot(piece: string): { id: string } {
+  const choice = readChoice(readable(path.join(draftsOf(piece), CHOICE_FILE)));
+  if (!choice) throw new Error('Choose one of the top 3 pairs first.');
+  const text = choice.pick.expression.trim();
+  if (!text) throw new Error('This pair names no expression to generate.');
+  const mine = (shot: ExpressionShot) => shotHasSuggestion(shot, text) && shot.sources.some(source => source.piece === piece);
+  const found = readShotList().find(mine);
+  if (found) return { id: found.id };
+  let id = '';
+  changeShotList(shots => {
+    const again = shots.find(mine);
+    if (again) { id = again.id; return; }
+    const shot = shotFromSuggestion(text, { piece, context: `Chosen: ${choice.pick.title}`, text });
+    shots.push(shot); id = shot.id;
+  });
+  return { id };
 }
 
 type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; aiGenerated: boolean; madeForThisVideo?: boolean; rating?: ExpressionPhoto['rating'] };

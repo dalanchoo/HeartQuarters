@@ -4,9 +4,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { MAX_CANDIDATES, RANKING_FILE, photosMadeFor, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
+import { MAX_CANDIDATES, RANKING_FILE, pairShot, photosMadeFor, pickCategories, readMadeFor, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
 import { setExpressionRating } from './expression-rating';
 import { clearExpressionIndex, type ExpressionPhoto } from './expressions';
+import { readShotList } from './expression-shot-list';
 import type { AskAi } from './brief';
 import type { BriefPick } from './projects';
 
@@ -251,5 +252,33 @@ describe('ranking the photos for the chosen pair', () => {
     expect(job).toMatchObject({ state: 'failed', error: expect.stringMatching(/expected form/) });
     expect(readRanking(PIECE)).toBeNull();
     expect(() => startRanking('../outside', { photos: () => PHOTOS, starred: () => [], small })).toThrow();
+  });
+});
+
+describe('generating a photo for the chosen pair', () => {
+  it("finds the pair's look on the Shot List, or adds it once for an older brief", () => {
+    expect(() => pairShot(PIECE)).toThrow(/Choose one of the top 3/);
+    choose();
+    const { id } = pairShot(PIECE);
+    expect(pairShot(PIECE).id).toBe(id);
+    const shots = readShotList();
+    expect(shots).toHaveLength(1);
+    expect(shots[0]).toMatchObject({ id, category: 'Positive/Warmth', sources: [{ piece: PIECE, text: PICK.expression }] });
+  });
+  it('ranks a confirmed picture generated from that look first, as a normal candidate', async () => {
+    choose();
+    const { id } = pairShot(PIECE);
+    // A picture confirmed into another folder, with the record line its tag file got when it was made.
+    const made = 'Doubt/Unsure/Made_AI_001.jpg';
+    fs.writeFileSync(path.join(tmp, 'Expressions', made), 'fake photo');
+    fs.writeFileSync(path.join(tmp, 'Expressions', made.replace(/\.jpg$/, '.txt')), `AIGenerated, N/A, CONFIRMED\n# Generated shot: ${id}\n`);
+    clearExpressionIndex();
+    expect(readMadeFor(PIECE)).toEqual([made]);
+    let seen = '';
+    const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked: [{ photo: made, why: 'made for it' }, { photo: PHOTOS[0].path, why: 'warm' }] }); };
+    const { finished } = startRanking(PIECE, { ask, starred: () => [], small });
+    await finished;
+    expect(seen).toContain(`- 01.jpg: ${made} (Doubt > Unsure, made for this video`);
+    expect(readRanking(PIECE)?.ranked.map(r => r.photo)).toEqual([made, PHOTOS[0].path]);
   });
 });

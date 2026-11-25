@@ -33,7 +33,7 @@ import { applyExpressionChange, previewExpressionChange } from './expression-man
 import { readExpressionReferences, readLikenessReferences, saveExpressionReferences, saveLikenessReferences } from './expression-references.js';
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
-import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
+import { pairShot, rankingJob, readMadeFor, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
@@ -717,10 +717,15 @@ app.get('/api/cleanup/status', handle((_req, res) => {
 // ?piece=: the saved photo ranking for the chosen pair, and whether Claude is ranking now. See photo-ranking.ts.
 app.get('/api/brief/ranking', handle((req, res) => {
   const piece = String(req.query.piece ?? '');
-  res.json({ ranking: readRanking(piece), job: rankingJob(piece) });
+  res.json({ ranking: readRanking(piece), job: rankingJob(piece), madeFor: readMadeFor(piece) });
 }));
 
-// { piece }: Claude looks at the pair's category photos and the starred ones, and ranks the best five.
+// { piece }: the Shot List look for the chosen pair's expression (added if the brief didn't), to generate a picture of it.
+app.post('/api/brief/pair-shot', handle((req, res) => {
+  res.json(pairShot(String(req.body?.piece ?? '')));
+}));
+
+// { piece }: the chosen AI looks at the pair's category photos and those generated for this video, and ranks the best five.
 app.post('/api/brief/rank-photos', handle((req, res) => {
   res.json(startRanking(String(req.body?.piece ?? ''), undefined, parseAi(req.body?.ai ?? 'claude')).job);
 }));
