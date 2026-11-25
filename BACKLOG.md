@@ -36,7 +36,13 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   outside the results. The list uses the shared sidebar width and linked
   videos can play their local exports in place from the Published Packaging
   thumbnail.
-  Research is reserved for vidIQ, Ask Studio, Reddit, and news. Keep outside
+  Research is topic-level (`#Channel/Research/<topic>`, using the existing
+  Topic values). **Your Channel Evidence** is built: it gathers downloaded
+  viewer comments and transcripts for every video tagged with the topic, and
+  Claude, ChatGPT or Gemini writes a report (Unanswered Questions, What
+  Resonates, Gaps, Video Ideas, Evidence Limits), saved in
+  `_HeartQuarters\Research\<topic>.json`. **Outside Demand** (Reddit, news,
+  vidIQ, Ask Studio) is next and stays a separate section: keep outside
   demand distinct from what Heart Mind Fusion's own viewers watch.
   Analyses run in the engine while you browse other tabs. Incomplete runs
   explain how to start again and show the failed stage when it was recorded.

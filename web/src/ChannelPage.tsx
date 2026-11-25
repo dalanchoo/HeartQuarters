@@ -8,6 +8,7 @@ import { channelKindLabel, channelRows, formatMinutes, longformLabel, rowName, v
 import type { channelOverview, channelVideoDetail, refreshChannelWorkspace } from '../../server/channel-workspace';
 import { AnalyticsAnalysis } from './AnalyticsAnalysis';
 import { ChannelComments } from './ChannelComments';
+import { ChannelResearch } from './ChannelResearch';
 import { ReachSetup } from './ReachSetup';
 import { SidebarResizer } from './SidebarResizer';
 import { VideoPreview } from './VideoPreview';
@@ -292,7 +293,7 @@ export function ChannelPage() {
         <a href="#Channel/Recommendations" aria-current={view === 'Recommendations' ? 'page' : undefined}>What to Make Next</a>
         <a href={id && view === 'Video' ? videoHash(id) : '#Channel/Video'} aria-current={view === 'Video' ? 'page' : undefined}>Video Detail</a>
         <a href="#Channel/Comments" aria-current={view === 'Comments' ? 'page' : undefined}>Comments</a>
-        <a href="#Channel/Research" aria-current={view === 'Research' ? 'page' : undefined}>Research</a>
+        <a href={id && view === 'Research' ? `#Channel/Research/${encodeURIComponent(id)}` : '#Channel/Research'} aria-current={view === 'Research' ? 'page' : undefined}>Research</a>
       </nav>
       {error && <p className="error" role="alert">{error}</p>}
       {view === 'Recommendations' && <AnalyticsAnalysis piece="" refresh={refreshCount} evidenceName={(id) => {
@@ -301,7 +302,7 @@ export function ChannelPage() {
       }} />}
       {view === 'Video' && <ChannelVideoBrowser videos={data?.videos} id={id} />}
       {view === 'Comments' && <ChannelComments videos={data?.videos} videoId={id} />}
-      {view === 'Research' && <section><h2>Research Sources</h2><p className="muted">Planned sources include vidIQ, Ask Studio, Reddit, and news.</p></section>}
+      {view === 'Research' && <ChannelResearch topic={id} />}
       {view === 'Overview' && <>
       {overview && (!data || reach) && <ChannelPerformance overview={overview} />}
       <ReachSetup />

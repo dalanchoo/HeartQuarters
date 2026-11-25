@@ -1001,6 +1001,14 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .channel-nav a { padding: 0.25rem 0.6rem; text-decoration: none; color: var(--text); }
 .channel-nav a[aria-current] { color: var(--accent); background: var(--accent-soft); border-radius: 5px 5px 0 0; font-weight: 600; }
 .channel-performance { margin-bottom: 0.65rem; }
+.channel-research h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+.research-topics { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
+.research-topics a { padding: 0.2rem 0.55rem; border: 1px solid var(--line); border-radius: 5px; text-decoration: none; color: var(--text); }
+.research-topics a[aria-current] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.research-toggle { background: none; border: 0; padding: 0; color: var(--text); cursor: pointer; margin: 0.2rem 0; }
+.research-videos { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; }
+.research-focus { width: 100%; box-sizing: border-box; margin: 0.3rem 0; }
+.research-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
 .channel-performance h2, .channel-video-view h2 { font-size: 1.05rem; margin: 0; }
 .channel-metrics { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.4rem 0; }
 .channel-metrics dt { color: var(--muted); font-size: 0.85rem; }

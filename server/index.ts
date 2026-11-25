@@ -80,6 +80,7 @@ import { checkAiWriting } from './ai-writing.js';
 import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
 import { listStoredComments, moderateComment, replyToComment, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
+import { gatherTopicEvidence, readTopicResearch, runTopicResearch, topicCounts } from './channel-research.js';
 
 const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
@@ -124,6 +125,15 @@ app.post('/api/channel/comments/reply', (req, res) => {
 app.post('/api/channel/comments/moderate', (req, res) => {
   moderateComment(req.body?.videoId, req.body?.commentId, req.body?.action)
     .then((file) => res.json({ file, stored: listStoredComments() }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.get('/api/channel/research/topics', handle((_req, res) => { res.json(topicCounts()); }));
+app.get('/api/channel/research', (req, res) => {
+  gatherTopicEvidence(req.query.topic)
+    .then((evidence) => res.json({ evidence, research: readTopicResearch(evidence.topic) }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/research/run', (req, res) => {
+  runTopicResearch(req.body?.topic, req.body?.ai, req.body?.focus)
+    .then((research) => res.json(research), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/video-analysis', (req, res) => {
   startChannelVideoAnalysis(String(req.body?.videoId ?? '')).then(result => res.json(result), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
