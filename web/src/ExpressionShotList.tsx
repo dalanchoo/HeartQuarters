@@ -11,7 +11,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const [pictures, setPictures] = useState<Record<string, ShotReference>>({});
   // The picture John picked for each shot; a newly made picture takes over again.
   const [chosen, setChosen] = useState<Record<string, { name: string; count: number }>>({});
-  const [copied, setCopied] = useState<Record<string, string>>({});
+  // What the last Move to Expression Inbox did, per look.
+  const [moved, setMoved] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   // Which AI makes reference pictures: any that can make images. Remembered in this browser.
@@ -56,12 +57,13 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
-  const copyToInbox = async (shot: ExpressionShot, name: string) => {
+  /** The picture leaves the look for the Inbox. The look stays where it is: John moves it to Photographed himself. */
+  const moveToInbox = async (shot: ExpressionShot, name: string) => {
     setBusy(shot.id); setError('');
     try {
-      const result = await postJson<{ path: string }>('/api/expressions/shot-list/reference/copy-to-inbox', { id: shot.id, name });
-      setCopied(current => ({ ...current, [`${shot.id}\0${name}`]: `Copied to the Expression Inbox: ${result.path}` }));
-      // The look stays where it is: John moves it to Photographed himself (2026-11-25).
+      const result = await postJson<{ path: string; pictures: ShotReference | null }>('/api/expressions/shot-list/reference/move-to-inbox', { id: shot.id, name });
+      setPictures(current => { const next = { ...current }; if (result.pictures) next[shot.id] = result.pictures; else delete next[shot.id]; return next; });
+      setMoved(current => ({ ...current, [shot.id]: `Moved to the Expression Inbox: ${result.path}` }));
       window.dispatchEvent(new Event('hq-expression-inbox-changed'));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
@@ -104,7 +106,6 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     const pick = chosen[shot.id]?.count === list.length && list.includes(chosen[shot.id].name) ? chosen[shot.id].name : list[0];
     const pictureUrl = pick ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(pick)}` : '';
     const pictureLabel = (name: string) => `AI ${String(list.length - list.indexOf(name)).padStart(2, '0')}${name === list[0] ? ' (Newest)' : ''}`;
-    const copiedMessage = pick ? copied[`${shot.id}\0${pick}`] : '';
     const name = shot.title || shot.description || 'Untitled Shot';
     return <details className="expression-shot" key={shot.id}>
       <summary><strong>{name}</strong></summary>
@@ -121,13 +122,13 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           </div>
           {picture?.state === 'working' && <p className="muted small-text" role="status">{aiName(picture.ai ?? 'codex')} is making the picture. This can take a few minutes.</p>}
           {picture?.state === 'failed' && <p className="error small-text">{picture.error}</p>}
+          {moved[shot.id] && <p className="muted small-text" role="status">{moved[shot.id]}</p>}
         </div>
         {pictureUrl && <div className="expression-shot-pictures">
           <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
           {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
-          <button className="small" disabled={!!busy || !!copiedMessage} onClick={() => void copyToInbox(shot, pick)}>Copy to Expression Inbox</button>
+          <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void moveToInbox(shot, pick)} title="Moves this picture to the Expression Inbox; the look keeps its other pictures">Move to Expression Inbox</button>
           <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void deletePicture(shot, pick)} title="Moves only this picture to HeartQuarters Trash">Delete Picture</button>
-          {copiedMessage && <p className="muted small-text" role="status">{copiedMessage}</p>}
         </div>}
       </div>
     </details>;

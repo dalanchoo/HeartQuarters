@@ -22,7 +22,7 @@ import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js
 import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
-import { copyShotReferenceToInbox, deleteShotPicture, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
+import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
 import { addExpressionTag, confirmExpressionTag, disconfirmExpressionTag, removeExpressionTag } from './confirm-expression-tag.js';
@@ -403,7 +403,8 @@ app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.jso
 // { id, ai: "codex" | "gemini" }: a reference picture for one shot, by the image AI John chose (ChatGPT if none).
 app.post('/api/expressions/shot-list/reference/start', handle((req, res) => { res.json(startShotReference(req.body?.id, undefined, parseImageAi(req.body?.ai ?? 'codex')).job); }));
 app.get('/api/expressions/shot-list/reference/image', handle((req, res) => { sandboxHeaders(res); res.sendFile(shotReferenceFile(String(req.query.id ?? ''), String(req.query.name ?? ''))); }));
-app.post('/api/expressions/shot-list/reference/copy-to-inbox', handle((req, res) => { res.json(copyShotReferenceToInbox(req.body?.id, req.body?.name)); }));
+// { id, name }: the picture moves to the Expression Inbox and leaves the look.
+app.post('/api/expressions/shot-list/reference/move-to-inbox', handle((req, res) => { res.json(moveShotReferenceToInbox(req.body?.id, req.body?.name)); }));
 app.get('/api/expressions/videos', handle((_req, res) => { res.json(listGeneratedVideos()); }));
 app.post('/api/expressions/videos/open', handle((_req, res) => { res.json({ ok: true, path: ensureGeneratedVideosDir() }); }));
 app.post('/api/expressions/videos/upload', express.raw({ type: 'application/octet-stream', limit: '250mb' }), handle((req, res) => {

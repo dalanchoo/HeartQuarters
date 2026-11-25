@@ -6,7 +6,7 @@ import { makeTree, removeTree } from './testing';
 import { saveExpressionReferences } from './expression-references';
 import { readShotList, seedShotList } from './expression-shot-list';
 import { clearExpressionIndex } from './expressions';
-import { copyShotReferenceToInbox, deleteShotPicture, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
+import { deleteShotPicture, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference';
 import { parseImageAi, type MakeImage } from './thumbnails';
 
 let tmp: string; let oldRoot: string; let oldTrash: string; const env = ['HQ_EXPRESSION_REFS_FILE', 'HQ_SHOT_REFERENCES'] as const; let oldEnv: (string | undefined)[];
@@ -70,15 +70,18 @@ describe('shot reference pictures', () => {
     expect(() => shotReferenceFile(shot.id, 'job.json')).toThrow(/no longer there/);
     expect(() => shotReferenceFile(shot.id, '../../refs.json')).toThrow(/no longer there/);
   });
-  it('copies a chosen picture into the Expression Inbox as an AI image, keeping the original', async () => {
+  it('moves a chosen picture into the Expression Inbox as an AI image; the look keeps its other pictures', async () => {
     const [shot] = seedShotList();
     await startShotReference(shot.id, making(png)).finished;
     await startShotReference(shot.id, making(jpg)).finished;
-    const result = copyShotReferenceToInbox(shot.id, 'reference-001.png');
+    const result = moveShotReferenceToInbox(shot.id, 'reference-001.png');
     expect(result.path).toBe('_Inbox/Shot List - AI Reference 01.png');
     expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path))).toEqual(png);
     expect(fs.readFileSync(path.join(tmp, 'Expressions/_Inbox/Shot List - AI Reference 01.txt'), 'utf8')).toContain('AIGenerated');
-    expect(shotReferences()[shot.id].pictures).toHaveLength(2);
+    expect(result.pictures?.pictures).toEqual(['reference-002.jpg']);
+    expect(shotReferences()[shot.id].pictures).toEqual(['reference-002.jpg']);
+    expect(readShotList()[0].done).toBe(false);
+    expect(() => moveShotReferenceToInbox(shot.id, 'reference-001.png')).toThrow(/no longer there/);
   });
   it('refuses a second start while one runs, an unsorted shot and a bad id', async () => {
     const [shot] = seedShotList();

@@ -152,13 +152,20 @@ export function shotReferenceFile(shotId: string, name: string): string {
   return file;
 }
 
-/** Copy one picture into the Expression Inbox as an AI image; the picture itself stays here. */
-export function copyShotReferenceToInbox(shotId: unknown, name: unknown): { path: string } {
+/**
+ * Move to Expression Inbox: the picture goes to the Inbox as an AI image and leaves the look, which keeps its other
+ * pictures and stays where it is (John, 2026-11-25). It's removed here only once the Inbox has its copy.
+ * Returns the Inbox path and the look's pictures as they are now.
+ */
+export function moveShotReferenceToInbox(shotId: unknown, name: unknown): { path: string; pictures: ShotReference | null } {
   if (typeof shotId !== 'string' || typeof name !== 'string') throw new Error('Choose a picture.');
   const file = shotReferenceFile(shotId, name);
+  if (running.has(shotId)) throw new Error('Wait until the picture being made is ready, then move this one.');
   const shot = readShotList().find(s => s.id === shotId);
   const number = listPictures(shotId).length - listPictures(shotId).indexOf(name);
-  return copyAiImageToInbox(`${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`, file);
+  const { path: inboxPath } = copyAiImageToInbox(`${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`, file);
+  fs.rmSync(checked(file));
+  return { path: inboxPath, pictures: readJob(shotId) };
 }
 
 /**
