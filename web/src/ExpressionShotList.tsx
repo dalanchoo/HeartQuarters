@@ -5,9 +5,13 @@ import type { ShotReference } from '../../server/shot-reference';
 import type { Tag } from '../../server/expressions';
 import { ExpressionVideos } from './ExpressionVideos';
 import { AiSelect, IMAGE_AIS, aiName, useAiFor } from './AiChoice';
+import { stepPicture } from './shotPictures';
 import { byNeed, coverageText, folderCoverage, isWellCovered, WELL_COVERED } from './shotCoverage';
 
-export function ExpressionShotList({ active, index, focus, onViewImage }: { active: boolean; index: ExpressionIndex | null; focus?: string; onViewImage: (imageUrl: string, name: string, category: string, tags: Tag[]) => void }) {
+/** Previous and next in the viewer: the look's other pictures. */
+export type ViewerSteps = { onPrev: () => void; onNext: () => void };
+
+export function ExpressionShotList({ active, index, focus, onViewImage }: { active: boolean; index: ExpressionIndex | null; focus?: string; onViewImage: (imageUrl: string, name: string, category: string, tags: Tag[], steps?: ViewerSteps) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
   // Opened from Pick the Photo: open that look (and the folders around it) and bring it into view, once per link.
   const focused = useRef('');
@@ -131,6 +135,14 @@ export function ExpressionShotList({ active, index, focus, onViewImage }: { acti
     const pictureUrl = pick ? `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(pick)}` : '';
     const pictureLabel = (name: string) => `AI ${String(list.length - list.indexOf(name)).padStart(2, '0')}${name === list[0] ? ' (Newest)' : ''}`;
     const name = shot.title || shot.description || 'Untitled Shot';
+    const urlOf = (item: string) => `/api/expressions/shot-list/reference/image?id=${encodeURIComponent(shot.id)}&name=${encodeURIComponent(item)}`;
+    const show = (item: string) => setChosen(current => ({ ...current, [shot.id]: { name: item, count: list.length } }));
+    // The viewer steps through this look's pictures, and the card follows along.
+    const view = (item: string) => {
+      show(item);
+      onViewImage(urlOf(item), `${name} · ${pictureLabel(item)}`, shot.category, picture?.tags?.[item] ?? [],
+        list.length > 1 ? { onPrev: () => view(stepPicture(list, item, -1)), onNext: () => view(stepPicture(list, item, 1)) } : undefined);
+    };
     return <details className={`expression-shot${shot.id === focus ? ' focused' : ''}`} id={`expression-shot-${shot.id}`} key={shot.id}>
       <summary><strong>{name}</strong></summary>
       <div className="expression-shot-body">
@@ -149,8 +161,12 @@ export function ExpressionShotList({ active, index, focus, onViewImage }: { acti
           {moved[shot.id] && <p className="muted small-text" role="status">{moved[shot.id]}</p>}
         </div>
         {pictureUrl && <div className="expression-shot-pictures">
-          <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category, picture?.tags?.[pick] ?? [])} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
-          {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
+          <div className="expression-shot-stepper">
+            {list.length > 1 && <button type="button" className="small" title="Previous picture" aria-label="Previous picture" onClick={() => show(stepPicture(list, pick, -1))}>‹</button>}
+            <button type="button" className="expression-view-image expression-shot-picture" onClick={() => view(pick)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
+            {list.length > 1 && <button type="button" className="small" title="Next picture" aria-label="Next picture" onClick={() => show(stepPicture(list, pick, 1))}>›</button>}
+          </div>
+          {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => show(e.target.value)}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
           <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void moveToInbox(shot, pick)} title="Moves this picture to the Expression Inbox; the look keeps its other pictures">Move to Expression Inbox</button>
           <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void deletePicture(shot, pick)} title="Moves only this picture to HeartQuarters Trash">Delete Picture</button>
         </div>}
