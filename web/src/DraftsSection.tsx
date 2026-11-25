@@ -15,7 +15,7 @@ import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import { expressionShotSuggestions } from './expressionShotSuggestions';
 import { YouTubeOpenLink } from './YouTubeOpenLink';
-import { AI_OPTIONS, AiSelect, aiName, useRemembered } from './AiChoice';
+import { AI_OPTIONS, AiSelect, aiName, useAiFor, useRemembered } from './AiChoice';
 
 // The card's "Thumbnail & Title Drafts" section: the brainstorming in Packaging\Drafts before a version is made.
 // At the top, Write Brief: the AIs John chose write Brief.md and review it, each with vidIQ if ticked, and the summary
@@ -232,8 +232,9 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
   }, []);
-  // Best Photos for This Pair: Claude ranks the photos once per pair (saved in Drafts), started here when there's none.
+  // Best Photos for This Pair: the chosen AI ranks the photos once per pair (saved in Drafts), started here when there's none.
   const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null } | null>(null);
+  const [rankAi, setRankAi] = useAiFor('rank-photos');
   const loadRanking = (isActive?: () => boolean) =>
     getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
       (r) => { if (!isActive || isActive()) setRanking(r); },
@@ -249,7 +250,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   const rankingNow = ranking?.job?.state === 'working';
   const rank = () => {
     setError('');
-    postJson<RankingJob>('/api/brief/rank-photos', { piece }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job })), (e: Error) => setError(e.message));
+    postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job })), (e: Error) => setError(e.message));
   };
   const asked = useRef('');
   useEffect(() => {
@@ -307,7 +308,8 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
       <div className="photo-group">
         <p className="small-text">
           <strong>Best Photos for This Pair</strong>{' '}
-          {ranked && <span className="muted">· Claude looked at {ranked.looked} photos</span>}
+          {ranked && <span className="muted">· {ranked.by ?? 'Claude'} looked at {ranked.looked} photos</span>}
+          {ranked && !rankingNow && <AiSelect value={rankAi} onChange={setRankAi} title="Which AI ranks the photos" />}
           {ranked && !rankingNow && (
             <button className="small" onClick={rank} title="Searches the library using current expression tags, folders, ratings and stars">
               Rank Again
@@ -315,7 +317,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           )}
         </p>
         {!!choice.pick.photoAttributes?.length && <p className="muted small-text">Photo Cues: {choice.pick.photoAttributes.map(tag => tag.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}</p>}
-        {rankingNow && <p className="brief-working small-text">Claude is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
+        {rankingNow && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
         {ranking?.job?.state === 'failed' && !rankingNow && (
           <p className="error small-text">
             {ranking.job.error}{' '}

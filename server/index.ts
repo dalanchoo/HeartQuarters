@@ -695,7 +695,7 @@ app.get('/api/brief/ranking', handle((req, res) => {
 
 // { piece }: Claude looks at the pair's category photos and the starred ones, and ranks the best five.
 app.post('/api/brief/rank-photos', handle((req, res) => {
-  res.json(startRanking(String(req.body?.piece ?? '')).job);
+  res.json(startRanking(String(req.body?.piece ?? ''), undefined, parseAi(req.body?.ai ?? 'claude')).job);
 }));
 
 // { piece, notes, picker }: only the last step, the picker AI choosing the top 3 pairs, on the brief that's already there.

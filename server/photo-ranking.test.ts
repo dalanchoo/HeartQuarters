@@ -128,6 +128,23 @@ describe('ranking the photos for the chosen pair', () => {
     expect(seen).not.toContain(disliked.path);
     expect(readRanking(PIECE)?.ranked).toEqual(ranked);
   });
+  it('ranks with the AI John chose, attaching the previews, and says who ranked them', async () => {
+    choose();
+    let asked = '';
+    let images: string[] = [];
+    const ask: AskAi = async (ai, _prompt, _cwd, imgs = []) => {
+      asked = ai;
+      images = imgs.map((i) => path.basename(i));
+      return JSON.stringify({ ranked: [{ photo: PHOTOS[0].path, why: 'warm' }] });
+    };
+    const { job, finished } = startRanking(PIECE, { ask, starred: () => [PHOTOS[0].path], small }, 'codex');
+    expect(job.ai).toBe('codex');
+    await finished;
+    expect(job.state).toBe('done');
+    expect(asked).toBe('codex');
+    expect(images[0]).toBe('01.jpg');
+    expect(readRanking(PIECE)).toMatchObject({ by: 'ChatGPT' });
+  });
   it('shows Claude one set of labeled previews and saves only suitable camera photos from a mixed answer', async () => {
     choose();
     setExpressionRating(PHOTOS[0].path, 'liked');

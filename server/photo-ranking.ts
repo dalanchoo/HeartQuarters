@@ -1,10 +1,11 @@
-// Best Photos for This Pair: Claude looks at the photos of John that could go with the chosen title and thumbnail pair
+// Best Photos for This Pair: the AI John chose (Claude unless he picks another) looks at the photos of John that could go with the chosen title and thumbnail pair
 // (from expression tags, category folders, and stars) and ranks up to five, with a reason for each. The
 // ranking is saved in Packaging\Drafts\Photo Ranking.json so it's there next time; picking a photo stays John's.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appDir, config, safeResolve } from './config.js';
+import { AI_NAMES, type AiId } from './ai.js';
 import { askAi, THUMBNAIL_EXPRESSION_GUIDANCE, type AskAi } from './brief.js';
 import { OPEN_MOUTH_TAGS } from './expression-attribute-vocabulary.js';
 import { isAiExpression } from './expression-origin.js';
@@ -16,7 +17,7 @@ import { readable, readText, writeFile } from './safe-files.js';
 import { thumbnail } from './thumbs.js';
 
 export const RANKING_FILE = 'Photo Ranking.json';
-/** At most this many photos are shown to Claude, so a ranking takes a minute or two, not ten. */
+/** At most this many photos are shown to the AI, so a ranking takes a minute or two, not ten. */
 export const MAX_CANDIDATES = 40;
 const TOP = 5;
 
@@ -27,11 +28,13 @@ export interface PhotoRanking {
   thumbnailText: string;
   ranked: RankedPhoto[];
   cameraFirst?: true;
-  /** How many photos Claude looked at. */
+  /** How many photos the AI looked at. */
   looked: number;
   at: string;
+  /** Which AI ranked them. Rankings saved before there was a choice are Claude's. */
+  by?: string;
 }
-export interface RankingJob { piece: string; state: 'working' | 'done' | 'failed'; looked: number; error?: string }
+export interface RankingJob { piece: string; state: 'working' | 'done' | 'failed'; looked: number; error?: string; ai?: AiId }
 
 /** The library categories a pair's expression names, as folder paths ("Positive > Relief" is "Positive/Relief"). */
 export function pickCategories(expression: string): string[] {
@@ -115,8 +118,8 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
   ].join('\n\n');
 }
 
-/** The ranking in Claude's answer: only photos that were offered, in its order, at most five. */
-export function rankingFromAnswer(answer: string, offered: string[], aiPhotos: ReadonlySet<string> = new Set()): RankedPhoto[] {
+/** The ranking in the AI's answer: only photos that were offered, in its order, at most five. */
+export function rankingFromAnswer(answer: string, offered: string[], aiPhotos: ReadonlySet<string> = new Set(), name = 'Claude'): RankedPhoto[] {
   const start = answer.indexOf('{');
   const end = answer.lastIndexOf('}');
   let ranked: unknown;
@@ -125,13 +128,13 @@ export function rankingFromAnswer(answer: string, offered: string[], aiPhotos: R
   } catch {
     ranked = null;
   }
-  if (!Array.isArray(ranked)) throw new Error("Claude's ranking wasn't in the expected form.");
+  if (!Array.isArray(ranked)) throw new Error(`${name}'s ranking wasn't in the expected form.`);
   const out: RankedPhoto[] = [];
   for (const r of ranked as { photo?: unknown; why?: unknown }[]) {
     const photo = typeof r?.photo === 'string' ? r.photo.replace(/\\/g, '/') : '';
     if (offered.includes(photo) && !out.some((o) => o.photo === photo)) out.push({ photo, why: typeof r.why === 'string' ? r.why.trim() : '' });
   }
-  if (ranked.length && !out.length) throw new Error('Claude named none of the photos it was shown.');
+  if (ranked.length && !out.length) throw new Error(`${name} named none of the photos it was shown.`);
   const camera = out.filter(r => !aiPhotos.has(r.photo));
   return (camera.length ? camera : out).slice(0, TOP);
 }
@@ -167,18 +170,18 @@ export interface RankingDeps {
   small?: (full: string) => Promise<string>;
 }
 
-/** Starts a ranking for the chosen pair. Returns the job at once; `finished` settles when Claude is done. */
-export function startRanking(piece: string, deps: RankingDeps = {}): { job: RankingJob; finished: Promise<void> } {
+/** Starts a ranking for the chosen pair. Returns the job at once; `finished` settles when the AI is done. */
+export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = 'claude'): { job: RankingJob; finished: Promise<void> } {
   const ask = deps.ask ?? askAi;
   const drafts = draftsOf(piece);
-  if (jobs.get(piece)?.state === 'working') throw new Error('Claude is already looking at the photos for this video.');
+  if (jobs.get(piece)?.state === 'working') throw new Error('An AI is already looking at the photos for this video.');
   const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   const photos = (deps.photos ?? (() => expressionIndex().photos))();
   const starred = (deps.starred ?? (() => readExpressionReferences().paths))();
   const candidates = rankingCandidates(photos, pickCategories(choice.pick.expression), starred, choice.pick.photoAttributes);
   if (!candidates.length) throw new Error("No eligible photos matched this pair's expression tags, folders, or your starred photos. Thumbs-down photos are excluded.");
-  const job: RankingJob = { piece, state: 'working', looked: candidates.length };
+  const job: RankingJob = { piece, state: 'working', looked: candidates.length, ai };
   jobs.set(piece, job);
   const small = deps.small ?? ((full: string) => thumbnail(full, 512));
   const finished = (async () => {
@@ -194,8 +197,9 @@ export function startRanking(piece: string, deps: RankingDeps = {}): { job: Rank
     const skill = path.join(config.skillsDir, 'HMF_Skills', 'thumbnails-and-titles', 'SKILL.md');
     const short = /(^|\/)Shorts\//i.test(piece) || /^999 - Shorts\//i.test(piece);
     const aiPhotos = new Set(list.filter(c => c.aiGenerated).map(c => c.photo));
-    const ranked = rankingFromAnswer(await ask('claude', rankingPrompt(choice.pick, short, list, skill), work), list.map(c => c.photo), aiPhotos);
-    const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, cameraFirst: true, looked: list.length, at: new Date().toISOString() };
+    // The photos go along as images too: ChatGPT only sees images attached to the request.
+    const ranked = rankingFromAnswer(await ask(ai, rankingPrompt(choice.pick, short, list, skill), work, list.map(c => path.join(work, c.file))), list.map(c => c.photo), aiPhotos, AI_NAMES[ai]);
+    const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, cameraFirst: true, looked: list.length, at: new Date().toISOString(), by: AI_NAMES[ai] };
     writeFile(path.join(drafts, RANKING_FILE), JSON.stringify(ranking, null, 2) + '\n');
     fs.rmSync(work, { recursive: true, force: true });
   })().then(
