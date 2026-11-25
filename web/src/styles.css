@@ -726,6 +726,8 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .brief-plan-step { display: flex; flex-direction: column; gap: 0.15rem; }
 .brief-plan-step label { display: flex; align-items: center; gap: 0.25rem; }
 .ai-select { font: inherit; font-size: 0.85rem; }
+.analysis-plan { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
+.analysis-plan label { display: inline-flex; align-items: center; gap: 0.2rem; }
 .ai-with-button { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: auto; }
 .ai-select-label { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 .brief-working { font-weight: 600; }

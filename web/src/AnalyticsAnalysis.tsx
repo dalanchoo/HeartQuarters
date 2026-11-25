@@ -5,6 +5,32 @@ import { getJson, openInExplorer, postJson } from './api';
 import type { AnalysisJob } from '../../server/analytics-analysis';
 import { analyticsSummarySections } from './analyticsSummary';
 import { VideoStats } from './VideoStats';
+import { AI_OPTIONS, AiSelect, aiName, useRemembered } from './AiChoice';
+import type { AiId } from './api';
+
+/** Which AIs review independently, and which one combines their reviews into recommendations (and writes the summary). */
+type AnalysisPlan = { reviewers: AiId[]; combiner: AiId };
+const DEFAULT_PLAN: AnalysisPlan = { reviewers: ['claude', 'codex', 'gemini'], combiner: 'claude' };
+const isAi = (v: unknown): v is AiId => v === 'claude' || v === 'codex' || v === 'gemini';
+const isPlan = (v: unknown): v is AnalysisPlan => !!v && Array.isArray((v as AnalysisPlan).reviewers) && (v as AnalysisPlan).reviewers.length > 0 && (v as AnalysisPlan).reviewers.every(isAi) && isAi((v as AnalysisPlan).combiner);
+
+function AnalysisPlanPicker({ plan, onChange }: { plan: AnalysisPlan; onChange: (p: AnalysisPlan) => void }) {
+  const toggle = (ai: AiId, on: boolean) => {
+    const reviewers = AI_OPTIONS.map((a) => a.id).filter((id) => (id === ai ? on : plan.reviewers.includes(id)));
+    if (reviewers.length) onChange({ ...plan, reviewers });
+  };
+  return (
+    <span className="analysis-plan small-text">
+      <span className="muted">Reviews:</span>
+      {AI_OPTIONS.map((a) => (
+        <label key={a.id} title={plan.reviewers.length === 1 && plan.reviewers[0] === a.id ? 'At least one AI must review' : `${a.name} reviews the data on its own`}>
+          <input type="checkbox" checked={plan.reviewers.includes(a.id)} onChange={(e) => toggle(a.id, e.target.checked)} /> {a.name}
+        </label>
+      ))}
+      <AiSelect value={plan.combiner} onChange={(combiner) => onChange({ ...plan, combiner })} label="Combines:" title="Which AI combines the reviews into recommendations and writes the summary" />
+    </span>
+  );
+}
 
 type Run = { id: string; claude: string | null; codex: string | null; gemini: string | null; recommendations: string | null; summary: string | null; evidenceIds?: string[]; job: AnalysisJob | null; failure: string | null; summaryJob: { state: string; error?: string } | null };
 export function AnalyticsAnalysis({ piece, videoId, refresh = 0, evidenceName }: { piece: string; videoId?: string; refresh?: number; evidenceName?: (id: string) => string | undefined }) {
@@ -14,6 +40,7 @@ export function AnalyticsAnalysis({ piece, videoId, refresh = 0, evidenceName }:
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [tick, setTick] = useState(0);
+  const [plan, setPlan] = useRemembered<AnalysisPlan>('hq-analysis-plan', DEFAULT_PLAN, isPlan);
   useEffect(() => {
     let active = true;
     const params = new URLSearchParams({ piece, ...(videoId ? { videoId } : {}) });
@@ -32,21 +59,22 @@ export function AnalyticsAnalysis({ piece, videoId, refresh = 0, evidenceName }:
     setStarting(true); setError('');
     try {
       if (videoId) {
-        const { snapshot } = await postJson<{ snapshot: string }>('/api/channel/video-analysis', { videoId });
+        const { snapshot } = await postJson<{ snapshot: string }>('/api/channel/video-analysis', { videoId, plan });
         setSelected(snapshot);
         setSnapshots(list => list.includes(snapshot) ? list : [snapshot, ...list]);
         setTick(n => n + 1);
         window.dispatchEvent(new CustomEvent('hq-video-status-changed', { detail: piece }));
-      } else await postJson('/api/youtube/analytics/analyze', { piece, snapshot: selected });
+      } else await postJson('/api/youtube/analytics/analyze', { piece, snapshot: selected, plan });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setStarting(false); }
   };
-  const summarize = async (id: string) => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/summarize', { piece, snapshot: selected, id }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
+  const summarize = async (id: string) => { setStarting(true); setError(''); try { await postJson('/api/youtube/analytics/summarize', { piece, snapshot: selected, id, ai: plan.combiner }); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setStarting(false); } };
   const running = runs.some(run => run.job?.state === 'working');
   const startLabel = videoId ? 'Analyze Video' : 'Find What to Make Next';
   return <section aria-label={piece ? 'Video Analysis' : 'What to Make Next'}>
     {!videoId && !snapshots.length ? <p>Use Refresh YouTube Data to get a channel snapshot first.</p> :
       <div className="yt-linkbar-row">
+        <AnalysisPlanPicker plan={plan} onChange={setPlan} />
         <button type="button" disabled={(!videoId && !selected) || starting || running} onClick={() => void start()}>{starting ? (videoId ? 'Preparing Video Stats…' : 'Starting Analysis…') : startLabel}</button>
         {!!snapshots.length && <label>Saved Snapshot <select value={selected} onChange={e => { setRuns([]); setSelected(e.target.value); }}>{snapshots.map(name => <option key={name}>{name}</option>)}</select></label>}
       </div>}
@@ -54,7 +82,7 @@ export function AnalyticsAnalysis({ piece, videoId, refresh = 0, evidenceName }:
     {piece && selected && <VideoStats key={selected} piece={piece} snapshot={selected} />}
     {error && <p className="error" role="alert">{error}</p>}
     {runs.map((run, index) => <details className="yt-section" key={run.id} open={index === 0 ? true : undefined}><summary style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}><span>Analysis {runs.length - index} · Snapshot {selected} {run.job?.state === 'working' ? '· Running' : run.recommendations ? '· Complete' : '· Incomplete'}</span><button type="button" style={{ marginLeft: 'auto' }} onClick={event => { event.stopPropagation(); void openInExplorer('projects', `${piece ? `${piece}/` : ''}Analytics/${selected}/Analysis/${run.id}`); }}>Open Analysis Folder</button></summary>
-      {run.job && <p className="small-text">Claude: {run.job.models.claude.state}; ChatGPT: {run.job.models.codex.state}; Gemini: {run.job.models.gemini.state}; Recommendations: {run.job.synthesis.state}.</p>}
+      {run.job && <p className="small-text">{AI_OPTIONS.filter((a) => run.job!.models[a.id].state !== 'skipped').map((a) => `${a.name}: ${run.job!.models[a.id].state}; `).join('')}Recommendations{run.job.combiner ? ` (${aiName(run.job.combiner)})` : ''}: {run.job.synthesis.state}.</p>}
       {run.job && [run.job.models.claude.error, run.job.models.codex.error, run.job.models.gemini.error, run.job.synthesis.error].filter(Boolean).map((message, i) => <p key={i} className="error">{message}</p>)}
       {!run.recommendations && run.job?.state !== 'working' && <p className="small-text">
         {!run.job && (run.failure?.trim() || 'This run ended before recommendations were saved. The cause is unknown.')} {'Use '}<strong>{startLabel}</strong> to start a fresh run.

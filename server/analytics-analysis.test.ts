@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyticsAnalysis, analyticsSnapshots, prepareVideoSnapshot, startAnalyticsAnalysis, startAnalyticsSummary, videoSnapshotNames } from './analytics-analysis.js';
+import { analyticsAnalysis, analyticsSnapshots, parseAnalysisPlan, prepareVideoSnapshot, startAnalyticsAnalysis, startAnalyticsSummary, videoSnapshotNames } from './analytics-analysis.js';
 import { config } from './config.js';
 import { makeTree, removeTree } from './testing.js';
 import type { AskAi } from './brief.js';
@@ -134,6 +134,28 @@ describe('analytics analysis', () => {
     expect(() => startAnalyticsSummary('Video/Longform', '2026-11-18', job.id, ask)).toThrow('already has a summary');
     expect(fs.readFileSync(path.join(root, 'Video/Longform/Analytics/2026-11-18/Stats.json'), 'utf8')).toContain('periods');
   });
+  it('uses only the reviewers John chose, and the AI he chose to combine and summarize', async () => {
+    const calls: { ai: string; files: string[] }[] = [];
+    const ask: AskAi = async (ai, _prompt, cwd) => { calls.push({ ai, files: fs.readdirSync(cwd).sort() }); return `${ai} answer`; };
+    const plan = parseAnalysisPlan({ reviewers: ['gemini', 'codex'], combiner: 'codex' });
+    const { job, finished } = startAnalyticsAnalysis('Video/Longform', '2026-11-18', ask, undefined, plan);
+    await finished;
+    expect(job.state).toBe('done');
+    expect(job.models.claude.state).toBe('skipped');
+    expect(job.combiner).toBe('codex');
+    expect(calls.map((c) => c.ai)).toEqual(['codex', 'gemini', 'codex', 'codex']);
+    expect(calls[2].files).toEqual(['ChatGPT.md', 'Context.txt', 'Gemini.md', 'Stats.json']);
+    expect(analyticsAnalysis('Video/Longform', '2026-11-18')[0]).toMatchObject({ claude: null, codex: 'codex answer\n', gemini: 'gemini answer\n', recommendations: 'codex answer\n', summary: 'codex answer\n' });
+  });
+
+  it('checks the plan the page sends', () => {
+    expect(parseAnalysisPlan(undefined)).toEqual({ reviewers: ['claude', 'codex', 'gemini'], combiner: 'claude' });
+    expect(parseAnalysisPlan({ reviewers: ['gemini', 'claude', 'gemini'], combiner: 'gemini' })).toEqual({ reviewers: ['claude', 'gemini'], combiner: 'gemini' });
+    expect(() => parseAnalysisPlan({ reviewers: [], combiner: 'claude' })).toThrow(/at least one/);
+    expect(() => parseAnalysisPlan({ reviewers: ['bard'], combiner: 'claude' })).toThrow(/Choose which AIs/);
+    expect(() => parseAnalysisPlan({ reviewers: ['claude'], combiner: 'x' })).toThrow(/Choose Claude/);
+  });
+
   it('keeps successful reviews and does not synthesize when one AI fails', async () => {
     const calls: string[] = [];
     const { job, finished } = startAnalyticsAnalysis('', '2026-11-18', async ai => { calls.push(ai); if (ai === 'gemini') throw new Error('Unavailable'); return ai; });

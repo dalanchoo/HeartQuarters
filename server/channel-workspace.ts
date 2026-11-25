@@ -1,4 +1,4 @@
-import { analyticsSnapshots, prepareVideoSnapshot, readAnalyticsSnapshot, startAnalyticsAnalysis } from './analytics-analysis.js';
+import { analyticsSnapshots, parseAnalysisPlan, prepareVideoSnapshot, readAnalyticsSnapshot, startAnalyticsAnalysis } from './analytics-analysis.js';
 import { readAnalysisTranscript } from './analytics-context.js';
 import { reachTotals, summarizeSnapshot, type ReachTotals } from './analytics-summary.js';
 import { downloadChannelAnalytics, type ChannelSnapshot } from './channel-analytics.js';
@@ -59,7 +59,9 @@ export async function channelVideoDetail(videoId: string) {
   return { piece, exports: piece ? projectExports(piece) : [], transcript: piece ? await readAnalysisTranscript(piece) : null };
 }
 
-export async function startChannelVideoAnalysis(videoId: string) {
+/** `rawPlan` is which AIs review and which combines, as the page sent it (checked here). */
+export async function startChannelVideoAnalysis(videoId: string, rawPlan?: unknown) {
+  const plan = parseAnalysisPlan(rawPlan);
   const piece = linkedPiece(videoId);
   if (!piece) throw new Error('Link this video in Video Projects to analyze it.');
   const recentChannel = analyticsSnapshots('')[0];
@@ -67,5 +69,5 @@ export async function startChannelVideoAnalysis(videoId: string) {
   const catalog = readChannelVideos();
   const reach = channel && Date.now() - Date.parse(channel.downloadedAt) < RECENT_MS && channel.reach?.status === 'ready' && !channel.reach.truncated && catalog?.channel.id === channel.channel.id ? channel.reach : undefined;
   const snapshot = await prepareVideoSnapshot(piece, videoId, reach);
-  return { snapshot, job: startAnalyticsAnalysis(piece, snapshot).job };
+  return { snapshot, job: startAnalyticsAnalysis(piece, snapshot, undefined, undefined, plan).job };
 }
