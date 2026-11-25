@@ -1,6 +1,6 @@
 // vidIQ settings for each AI's command line, and checking which AI a request names. No AI runs.
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, VIDIQ_RESEARCH_TOOLS, codexVidiq, geminiVidiqAllow, parseAi, runAiProcess } from './ai';
+import { CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, VIDIQ_RESEARCH_TOOLS, codexVidiq, geminiAnswer, geminiStdin, geminiVidiqAllow, parseAi, runAiProcess } from './ai';
 
 describe('vidIQ', () => {
   it('offers only research tools, never ones that change the channel', () => {
@@ -28,6 +28,22 @@ describe('running an AI program', () => {
     const res = await runAiProcess(process.execPath, ['-e', "let n=0;process.stdin.on('data',c=>n+=c.length).on('end',()=>console.log(n))"], { cwd: process.cwd(), timeoutMs: 20_000, input: prompt });
     expect(res.code).toBe(0);
     expect(res.stdout.trim()).toBe('40000');
+  });
+});
+
+describe("Gemini's prompt through stdin", () => {
+  it('sends one JSON user message and reads the last result', () => {
+    const { args, input } = geminiStdin('Say "hi"\nplease');
+    expect(args).toEqual(['--input-format', 'stream-json', '--output-format', 'stream-json', '--print=']);
+    expect(JSON.parse(input)).toEqual({ event: 'user', message: { role: 'user', content: 'Say "hi"\nplease' } });
+    expect(input.trim().split('\n')).toHaveLength(1);
+    const out = ['{"event":"init"}', 'not json', '{"event":"result","result":{"status":"SUCCESS","response":"hi\\n"}}'].join('\n');
+    expect(geminiAnswer(out)).toBe('hi\n');
+  });
+
+  it("passes on Gemini's error, or says there was no answer", () => {
+    expect(() => geminiAnswer('{"event":"result","result":{"status":"ERROR","error":"not signed in"}}')).toThrow('not signed in');
+    expect(() => geminiAnswer('{"event":"init"}')).toThrow(/without an answer/);
   });
 });
 

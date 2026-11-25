@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, isAiId, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, geminiAnswer, geminiStdin, isAiId, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
@@ -144,15 +144,16 @@ export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
   const modelArgs = aiModelArgs(ai);
-  // ChatGPT reads the prompt from stdin ("-"): the assessment prompt is too long for a Windows command line.
+  // Every AI reads the prompt from stdin: the assessment prompt is too long for a Windows command line.
+  const gemini = geminiStdin(prompt);
   const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-s', 'read-only', '-o', output, '-', ...images.flatMap(image => ['-i', image])]
-    : ai === 'claude' ? ['-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
-    : ['-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
-  const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000, ...(ai === 'codex' ? { input: prompt } : {}) });
+    : ai === 'claude' ? ['-p', ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
+    : [...gemini.args, ...modelArgs, '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
+  const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000, input: ai === 'gemini' ? gemini.input : prompt });
   if (res.startError) throw new Error(`Could not start the AI: ${res.startError}`);
   if (res.code !== 0) throw new Error(res.timedOut ? 'The assessment timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);
   const out = res.stdout;
   if (ai === 'codex') return fs.readFileSync(output, 'utf8');
   if (ai === 'claude') { const result = JSON.parse(out) as { is_error?: boolean; result?: string }; if (result.is_error || !result.result) throw new Error(result.result || 'Claude could not assess the image.'); return result.result; }
-  return out;
+  return geminiAnswer(out);
 };

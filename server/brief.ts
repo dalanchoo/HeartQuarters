@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mammoth from 'mammoth';
-import { AI_NAMES, CLAUDE_VIDIQ_ENV, CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, codexVidiq, geminiVidiqAllow, isAiId, runAiProcess, type AiId } from './ai.js';
+import { AI_NAMES, CLAUDE_VIDIQ_ENV, CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, codexVidiq, geminiAnswer, geminiStdin, geminiVidiqAllow, isAiId, runAiProcess, type AiId } from './ai.js';
 import { stageLongformThumbnails, thumbnailComparisonNote } from './brief-thumbnail-comparison.js';
 import { appDir, config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
@@ -270,16 +270,20 @@ async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.Proces
   throw new Error(res.stderr.trim().split('\n').slice(-3).join(' ') || errorInAnswer(res.stdout) || `It stopped (exit code ${res.code}).`);
 }
 
-/** The real AIs, read-only: none of them may change a file. With `vidiq`, each may use vidIQ's research tools. */
+/**
+ * The real AIs, read-only: none of them may change a file. With `vidiq`, each may use vidIQ's research tools. Each
+ * gets the prompt on stdin, so a long one can't go past Windows' command-line limit (see ai.ts).
+ */
 export const askAi: AskAi = async (ai, prompt, cwd, images = [], vidiq = false) => {
   const [cmd, ...pre] = aiCommand(ai);
   const modelArgs = aiModelArgs(ai);
   if (ai === 'claude') {
     const out = await run(
       cmd,
-      [...pre, '-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...(vidiq ? CLAUDE_VIDIQ_TOOLS : []), '--add-dir', config.skillsDir, config.videoProjectsDir],
+      [...pre, '-p', ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read', 'Glob', 'Grep', 'Skill', ...(vidiq ? CLAUDE_VIDIQ_TOOLS : []), '--add-dir', config.skillsDir, config.videoProjectsDir],
       cwd,
       vidiq ? { ...process.env, ...CLAUDE_VIDIQ_ENV } : undefined,
+      prompt,
     );
     const result = JSON.parse(out) as { is_error?: boolean; result?: string };
     if (result.is_error) throw new Error(errorInAnswer(out) || 'Claude stopped with an error.');
@@ -288,11 +292,12 @@ export const askAi: AskAi = async (ai, prompt, cwd, images = [], vidiq = false) 
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
     fs.rmSync(answer, { force: true }); // two ChatGPT steps share the folder: never return the earlier one's answer
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...(vidiq ? codexVidiq(true) : []), '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, '-', ...images.flatMap((i) => ['-i', i])], cwd, undefined, prompt); // the prompt via stdin: no command-line length limit
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...(vidiq ? codexVidiq(true) : []), '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, '-', ...images.flatMap((i) => ['-i', i])], cwd, undefined, prompt);
     return fs.readFileSync(answer, 'utf8');
   }
   const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)', ...geminiVidiqAllow(vidiq)] } };
-  return run(cmd, [...pre, '-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify(settings), '--print-timeout', '1200s'], cwd);
+  const gemini = geminiStdin(prompt);
+  return geminiAnswer(await run(cmd, [...pre, ...gemini.args, ...modelArgs, '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify(settings), '--print-timeout', '1200s'], cwd, undefined, gemini.input));
 };
 
 // ---- The job ----------------------------------------------------------------------------------------------

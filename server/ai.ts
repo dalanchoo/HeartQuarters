@@ -411,6 +411,36 @@ export function killProcessTree(child: ChildProcess) {
   fallback();
 }
 
+// ---- Long prompts through stdin -----------------------------------------------
+// Windows refuses a command line over about 32,000 characters, so one-shot jobs send the prompt on stdin instead:
+// Claude reads it after a bare -p, Codex after "-" as the prompt, and Gemini (agy) only as stream JSON, below.
+
+/** Gemini's arguments and stdin for one prompt. Read its answer with geminiAnswer. */
+export function geminiStdin(prompt: string): { args: string[]; input: string } {
+  return {
+    args: ['--input-format', 'stream-json', '--output-format', 'stream-json', '--print='],
+    input: JSON.stringify({ event: 'user', message: { role: 'user', content: prompt } }) + '\n',
+  };
+}
+
+/** Gemini's reply in its stream JSON output: the response of its last "result" line, or that line's error. */
+export function geminiAnswer(stdout: string): string {
+  const results = stdout
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      try {
+        const e = JSON.parse(line) as { event?: string; result?: { status?: string; response?: string; error?: string } };
+        return e.event === 'result' && e.result ? [e.result] : [];
+      } catch {
+        return [];
+      }
+    });
+  const last = results.at(-1);
+  if (!last) throw new Error('Gemini finished without an answer.');
+  if (last.status !== 'SUCCESS') throw new Error(last.error || 'Gemini stopped with an error.');
+  return last.response ?? '';
+}
+
 export interface ProcessResult {
   code: number | null;
   stdout: string;
