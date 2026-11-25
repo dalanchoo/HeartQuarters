@@ -716,9 +716,9 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .photo-choice { padding: 0; min-height: 0; border: none; background: none; box-shadow: none; cursor: pointer; line-height: 0; display: block; }
 .photo-choice:hover { transform: none; background: none; }
 .photo-choice:hover img { outline: 2px solid var(--accent); }
-.photo-choice img { height: 150px; width: auto; max-width: 240px; object-fit: contain; border-radius: 4px; background: var(--bg); }
-.photo-path { font-size: 0.72rem; margin-top: 0.2rem; max-width: 240px; overflow-wrap: anywhere; }
-.photo-tile-foot { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; margin-top: 0.2rem; }
+.photo-choice img { height: 150px; width: auto; max-width: 150px; object-fit: cover; border-radius: 4px; background: var(--bg); }
+.photo-path { font-size: 0.72rem; margin-top: 0.1rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-tile-foot { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; margin-top: 0.1rem; max-width: 150px; }
 .picked-label { color: #1a7f37; font-weight: 700; }
 .photo-group .small { margin-left: 0.5rem; }
 .add-category { display: block; margin: 0.6rem 0; }
@@ -873,7 +873,7 @@ details.page-section:not(.action-menu):not(.new-version):not(.playlist-select de
 .new-photo-choice { display: flex; align-items: flex-start; gap: 0.4rem; margin: 0.35rem 0; }
 .new-photo-choice input { width: auto; margin-top: 0.15rem; }
 /* Pick the Photo: Claude's ranked photos with their reasons, and the categories folded below. */
-.photo-rank { font-weight: 700; color: var(--accent); margin-top: 0.25rem; }
+.photo-rank { font-weight: 700; color: var(--accent); margin-top: 0.2rem; max-width: 150px; font-size: 0.85rem; }
 .photo-why { margin: 0.15rem 0 0.25rem; }
 .photo-category > summary { cursor: pointer; display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; padding: 0.2rem 0; }
 .photo-category > summary::before { content: "▸"; color: var(--muted); transition: transform 0.1s; }

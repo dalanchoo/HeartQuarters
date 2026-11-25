@@ -306,12 +306,11 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     const photoPath = root === 'projects' ? p.path.slice(8) : p.path;
     return (
       <div key={p.path} className={`photo-tile${picked ? ' picked' : ''}`}>
-        <button className="photo-choice" disabled={saving !== null} title={`Use ${p.name}`} onClick={() => pick(p.path)}>
+        <button className="photo-choice" disabled={saving !== null} title={why ? `${why}\n\nClick to use ${p.name}.` : `Use ${p.name}`} onClick={() => pick(p.path)}>
           <img src={thumbUrl(root, photoPath, 320, p.revision)} alt={p.name} loading="lazy" />
         </button>
-        {place !== undefined && <div className="photo-rank">#{place}{label && ` · ${label}`}</div>}
-        <div className="photo-path">{p.path.replace(/\.[^.]+$/, '')}</div>
-        {why && <div className="photo-why small-text">{why}</div>}
+        {(place !== undefined || label) && <div className="photo-rank" title={why}>{place !== undefined && `#${place}`}{place !== undefined && label && ' · '}{label}</div>}
+        <div className="photo-path" title={p.path}>{(p.path.split('/').pop() ?? p.path).replace(/\.[^.]+$/, '')}</div>
         <div className="photo-tile-foot">
           {picked ? <span className="picked-label">✓ Picked</span> : saving === p.path ? <span className="muted">Saving…</span> : null}
           <a href={fileUrl(root, photoPath, p.revision)} target="_blank" rel="noreferrer">
@@ -343,6 +342,9 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
               Rank Again
             </button>
           )}
+          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List, with the pair's photo cues. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here as Made for This Video.">
+            {opening ? 'Opening…' : 'Generate a Look for This Pair'}
+          </button>
         </p>
         {!!choice.pick.photoAttributes?.length && <p className="muted small-text">Photo Cues: {choice.pick.photoAttributes.map(tag => tag.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}</p>}
         {rankingNow && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
@@ -356,25 +358,18 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
         )}
         {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. Choose a photo below, or generate one for this pair.</p>}
         {ranked && !ranked.cameraFirst && !rankingNow && <p className="muted small-text">Use Rank Again to check this older ranking with camera photos first.</p>}
-        {ranked && library && (
+        {library && ((ranked?.ranked.length ?? 0) > 0 || madeFor.length > 0) && (
           <div className="photo-grid">
-            {ranked.ranked.map((r, i) => {
+            {ranked?.ranked.map((r, i) => {
               const found = library.photos.find((p) => p.path === r.photo);
               if (!found) return null;
               const aiLabel = ranking?.madeFor?.includes(found.path) ? 'Made for This Video' : isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
               return tile(found, i + 1, r.why, aiLabel);
             })}
+            {/* A picture made for this video always shows, even when the ranking left it out (John, 2026-11-25). */}
+            {madeFor.filter(p => !ranked?.ranked.some(r => r.photo === p.path)).map(p => tile(p, undefined, ranked ? `${ranked.by ?? 'Claude'} didn't rank this one.` : undefined, 'Made for This Video'))}
           </div>
         )}
-      </div>
-      <div className="photo-group">
-        <p className="small-text">
-          <strong>Made for This Video</strong> <span className="muted">· {madeFor.length ? `${madeFor.length} confirmed` : 'none yet'}</span>{' '}
-          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here and is ranked first.">
-            {opening ? 'Opening…' : 'Generate a Look for This Pair'}
-          </button>
-        </p>
-        {madeFor.length > 0 && <div className="photo-grid">{madeFor.map(p => tile(p))}</div>}
       </div>
       {library && <details className="photo-group"><summary>Starred Photos ({library.photos.filter(p => stars.includes(p.path)).length})</summary>
         <div className="photo-grid">{library.photos.filter(p => stars.includes(p.path)).map((p) => tile(p))}</div>
