@@ -69,6 +69,7 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   that picks the top 3; Channel analysis chooses reviewers and the combiner; expression
   assessment chooses which AIs assess. ChatGPT and Gemini can use vidIQ's research tools
   when ticked (each AI signs in to vidIQ separately).
+- **Published packaging research requires the transcript.** The question for vidIQ and Ask Studio tells them to stop with an uppercase warning if they cannot read the spoken transcript and to ask John to paste it.
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
 - **Record packaging changes in the version's Notes.** Uploads and updates sent through HeartQuarters
   record the Pacific date and the title, description, tags, or thumbnail that YouTube confirmed.

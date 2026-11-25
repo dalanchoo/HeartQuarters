@@ -9,10 +9,24 @@ describe('the research question for vidIQ and Ask Studio', () => {
     expect(q).toContain('suggest 5 title and cover pairs');
     expect(q).toContain('true to what actually happens');
   });
+  it.each([
+    ['longform', false, 'https://youtube.com/watch?v=x'],
+    ['Short', true, 'https://youtube.com/shorts/x'],
+  ])('requires a readable transcript before making suggestions for a published %s', (_, short, url) => {
+    const q = researchQuestion({ title: 'T', about: 'Description context', short, url });
+    const warning = 'reply only with: TRANSCRIPT UNAVAILABLE. PASTE THE TRANSCRIPT TO CONTINUE.';
+    expect(q).toContain('First, read the spoken transcript for this exact video, or use a transcript I provide.');
+    expect(q).toContain(warning);
+    expect(q).toContain('Never guess from the title, thumbnail, description, or chapters.');
+    expect(q.indexOf(warning)).toBeLessThan(q.indexOf("What it's about:"));
+    expect(q.indexOf(warning)).toBeLessThan(q.indexOf('suggest 5 title'));
+  });
+
   it('works for a longform video not on YouTube yet, with no title', () => {
     const q = researchQuestion({ title: '', about: '', short: false });
     expect(q).toMatch(/^I'm choosing the title and thumbnail for my next YouTube video, which isn't on YouTube yet\./);
     expect(q).not.toContain("What it's about");
+    expect(q).not.toContain('TRANSCRIPT UNAVAILABLE');
     expect(q).toContain('under about 60 characters');
   });
   it('asks for plain text with no tables or links, before the transcript', () => {

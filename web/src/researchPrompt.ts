@@ -23,15 +23,19 @@ export interface ResearchFacts {
  */
 // Kept short on purpose: a longer question gets pasted into vidIQ as an attachment, and then it doesn't look up the video.
 const PLAIN_TEXT_RULES =
-  'Answer in plain text only (I copy it with a copy button): no tables, cards, icons, emoji or links; each item on its own line; write each video as its full title in quotes with its numbers, like "Title" (76,660 views); timestamps as plain digits; label each part (Pair 1, My Choice, Description, Tags, Hashtags, Chapters, Pinned Comment) and end each with a line reading === END OF SECTION ===; put any warnings in a final Notes part.';
+  'Answer in plain text only (I copy it with a copy button): no tables, cards, icons, emoji or links; each item on its own line; write each video as its full title in quotes with its numbers, like "Title" (76,660 views); timestamps as plain digits; label each part (Pair 1, My Choice, Description, Tags, Hashtags, Chapters, Pinned Comment) and end each with a line reading === END OF SECTION ===; put any other warnings in a final Notes part.';
 
-/** The question for vidIQ and Ask Studio: what the video is, then what to suggest and how, honest to the video. */
+/** The question for vidIQ and Ask Studio, with a transcript requirement for linked videos. */
 export function researchQuestion(f: ResearchFacts): string {
   const kind = f.short ? 'YouTube Short' : 'YouTube video';
   const name = f.title.trim() ? `my ${kind} "${f.title.trim()}"` : `my next ${kind}`;
   const where = f.url ? `, which is on my channel at ${f.url}` : ", which isn't on YouTube yet";
   return [
     `I'm choosing the title and ${f.short ? 'cover' : 'thumbnail'} for ${name}${where}.`,
+    ...(f.url ? [
+      'First, read the spoken transcript for this exact video, or use a transcript I provide. If you cannot read it, reply only with: TRANSCRIPT UNAVAILABLE. PASTE THE TRANSCRIPT TO CONTINUE.',
+      'Use the transcript as the source for what happens in the video. Never guess from the title, thumbnail, description, or chapters.',
+    ] : []),
     ...(f.about.trim() ? [`What it's about: ${f.about.trim()}`] : []),
     '',
     `Based on everything you know about this ${f.short ? 'Short' : 'video'}, my channel and its audience, and what works on YouTube right now, suggest 5 title and ${f.short ? 'cover' : 'thumbnail'} pairs. For each pair:`,
