@@ -90,11 +90,23 @@ folders to load, and the Skills page turns skills on and off in that file.
 Buttons run an AI program John already has, in the background, using his own
 subscription rather than an API key: Claude Code, OpenAI's Codex (ChatGPT) or
 Google's Antigravity CLI (Gemini; the older Gemini CLI no longer serves personal accounts).
-He picks one at the top of the app; the choice is kept in `data/ai-choice.json`.
+He picks the AI next to each button (`web/src/AiChoice.tsx`); each button remembers its
+last choice in the browser, and the request carries it. There is no app-wide AI setting.
+Jobs with several AIs let him choose each one: Write Brief (1st writes, 2nd and 3rd
+review, each with its own vidIQ box, then the AI that picks the top 3), Channel analysis
+(which AIs review, which one combines), and expression assessment (which AIs assess).
+The top of the app shows each AI's sign-in and the model it uses (kept in
+`data/ai-choice.json`).
+
+- **vidIQ** is only for jobs with a vidIQ box, and only its read-only research tools
+  (`VIDIQ_RESEARCH_TOOLS` in `server/ai.ts`). Claude uses John's claude.ai connector;
+  Codex has `vidiq` in `~/.codex/config.toml` but every call turns it off unless the job
+  asks; Gemini's Antigravity CLI has it in `~/.gemini/config/mcp_config.json` and only gets
+  permission for those tools when ticked. Each AI has its own vidIQ sign-in.
 
 - Each job has one conversation, kept only in the engine's memory, never in a file. Reloading the page clears
   them, and so does Clear conversation on a card. A conversation stays with its AI.
-  If John picks the other AI and sends a note, that AI takes over with the
+  If John picks another AI for a note, that AI takes over with the
   conversation's text and the files, but none of the first AI's memory. So
   anything that must last belongs in Drive, not only in a conversation.
 - Codex can only write in the video's folder, CapCut's drafts folder, and its
