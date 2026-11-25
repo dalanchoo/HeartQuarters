@@ -1016,9 +1016,14 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .outside-options { display: flex; flex-direction: column; gap: 0.3rem; }
 .outside-options fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; }
 .outside-options legend { font-weight: 600; padding: 0; margin-right: 0.4rem; float: left; }
-.outside-videos { width: 100%; border-collapse: collapse; margin: 0.3rem 0; }
+.outside-videos { width: 100%; border-collapse: collapse; }
 .outside-videos th, .outside-videos td { text-align: left; padding: 0.15rem 0.35rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .outside-videos td.number { text-align: right; white-space: nowrap; }
+.outside-videos-scroll { max-height: 32rem; overflow: auto; border: 1px solid var(--line); border-radius: 5px; }
+.outside-videos thead th { position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.outside-videos .sort-button { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap; }
+.outside-videos tr.removed td { opacity: 0.55; }
+.outside-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; margin: 0.3rem 0; }
 .research-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
 .channel-performance h2, .channel-video-view h2 { font-size: 1.05rem; margin: 0; }
 .channel-metrics { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.4rem 0; }

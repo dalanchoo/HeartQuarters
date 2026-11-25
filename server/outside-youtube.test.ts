@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import {
-  OUTSIDE_DIR, SETTINGS_FILE, VIDEOS_FILE, checkSettings, listScans, outsideOverview, readScanSettings,
+  OUTSIDE_DIR, SETTINGS_FILE, VIDEOS_FILE, checkSettings, filterScan, videoMentions, listScans, outsideOverview, readScanSettings,
   runYoutubeScan, saveScanSettings, scanEstimate, scanFolderName,
 } from './outside-youtube';
 import { makeTree, removeTree } from './testing';
@@ -46,9 +46,9 @@ function fakeYoutube(searchIds: Record<string, string[]>, videos: ReturnType<typ
 
 describe('outside demand: YouTube scan settings', () => {
   it('starts from the topic name and saves tidy settings to Drive', () => {
-    expect(readScanSettings('sdam')).toEqual({ version: 1, searchWords: ['SDAM'], format: 'both', reach: 'english', vidiq: false });
-    const settings = saveScanSettings('sdam', { searchWords: [' SDAM ', 'sdam', '', 'no  episodic memory'], format: 'longform', reach: 'worldwide', vidiq: true });
-    expect(settings).toEqual({ version: 1, searchWords: ['SDAM', 'no episodic memory'], format: 'longform', reach: 'worldwide', vidiq: true });
+    expect(readScanSettings('sdam')).toEqual({ version: 1, searchWords: ['SDAM'], format: 'both', reach: 'english', vidiq: false, mustMention: [] });
+    const settings = saveScanSettings('sdam', { searchWords: [' SDAM ', 'sdam', '', 'no  episodic memory'], format: 'longform', reach: 'worldwide', vidiq: true, mustMention: ['SDAM', ' sdam', ''] });
+    expect(settings).toEqual({ version: 1, searchWords: ['SDAM', 'no episodic memory'], format: 'longform', reach: 'worldwide', vidiq: true, mustMention: ['SDAM'] });
     expect(fs.existsSync(path.join(config.videoProjectsDir, OUTSIDE_DIR, 'sdam', SETTINGS_FILE))).toBe(true);
     expect(readScanSettings('sdam')).toEqual(settings);
   });
@@ -59,6 +59,13 @@ describe('outside demand: YouTube scan settings', () => {
     expect(() => checkSettings({ searchWords: ['a'], format: 'both', reach: 'mars' })).toThrow('English or Worldwide');
     expect(() => checkSettings({ searchWords: Array.from({ length: 9 }, (_, i) => `w${i}`), format: 'both', reach: 'english' })).toThrow('at most 8');
     expect(() => saveScanSettings('../x', { searchWords: ['a'], format: 'both', reach: 'english' })).toThrow('Choose a topic');
+  });
+
+  it('reads settings saved before Must Mention existed as "keep everything"', () => {
+    const dir = path.join(config.videoProjectsDir, OUTSIDE_DIR, 'sdam');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ version: 1, searchWords: ['SDAM'], format: 'both', reach: 'english', vidiq: false }));
+    expect(readScanSettings('sdam').mustMention).toEqual([]);
   });
 
   it('estimates two 100-unit searches per word', () => {
@@ -106,5 +113,36 @@ describe('outside demand: YouTube scan', () => {
     const fetcher = vi.fn(async () => new Response('{"error":{"errors":[{"reason":"quotaExceeded"}]}}', { status: 403 }));
     await expect(runYoutubeScan('sdam', { token: 't', fetcher, now, ownChannelId: null })).rejects.toThrow('Out of YouTube quota');
     expect(listScans('sdam')).toEqual([]);
+  });
+});
+
+describe('outside demand: Must Mention filter', () => {
+  const v = (title: string, description = '', tags?: string[]) => ({ title, description, tags });
+
+  it('matches whole words only, ignoring capitals', () => {
+    expect(videoMentions(v('Living with SDAM'), ['SDAM'])).toEqual(['SDAM']);
+    expect(videoMentions(v('My story #sdam'), ['SDAM'])).toEqual(['SDAM']);
+    expect(videoMentions(v('SDAM: what is it?'), ['SDAM'])).toEqual(['SDAM']);
+    expect(videoMentions(v('Adam Sandler'), ['SDAM'])).toEqual([]);
+    expect(videoMentions(v('Saddam Hussein documentary'), ['SDAM'])).toEqual([]);
+    expect(videoMentions(v('Hoover Dam', 'SDAMS of the world'), ['SDAM'])).toEqual([]);
+  });
+
+  it('looks in the description and tags, and matches phrases across any spacing', () => {
+    expect(videoMentions(v('My memory', 'I have Severely  Deficient\nAutobiographical Memory'), ['severely deficient autobiographical memory'])).toHaveLength(1);
+    expect(videoMentions(v('My memory', '', ['aphantasia', 'sdam']), ['SDAM', 'aphantasia'])).toEqual(['SDAM', 'aphantasia']);
+    expect(videoMentions(v('Special (characters)'), ['(characters)'])).toEqual(['(characters)']);
+  });
+
+  it('keeps everything when the list is empty, and counts kept and removed', () => {
+    const base = { version: 1 as const, topic: 'sdam' as const, scannedAt: '', settings: checkSettings({ searchWords: ['SDAM'], format: 'both', reach: 'english' }), searches: [], unitsUsed: 0 };
+    const videos = ['SDAM explained', 'ADAM explained'].map((title, i) => ({
+      id: `v${i}`, title, description: '', channelId: '', channelTitle: '', publishedAt: '', seconds: 60, kind: 'short' as const, views: 1, likes: 1, comments: 1, foundBy: [],
+    }));
+    const all = filterScan({ ...base, videos }, []);
+    expect([all.kept, all.removed]).toEqual([2, 0]);
+    const some = filterScan({ ...base, videos }, ['SDAM']);
+    expect([some.kept, some.removed]).toEqual([1, 1]);
+    expect(some.videos.map((x) => [x.title, x.kept, x.mentions])).toEqual([['SDAM explained', true, ['SDAM']], ['ADAM explained', false, []]]);
   });
 });

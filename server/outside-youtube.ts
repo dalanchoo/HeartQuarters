@@ -20,6 +20,9 @@ const RECENT_DAYS = 90;
 /** YouTube Shorts can be up to three minutes long; longer videos count as longform. */
 const SHORT_MAX_SECONDS = 180;
 const SEARCH_COST = 100;
+const MUST_MENTION_MAX = 20;
+const DESCRIPTION_MAX = 5_000;
+const TAGS_MAX = 40;
 
 export type ScanFormat = 'longform' | 'short' | 'both';
 export type ScanReach = 'english' | 'worldwide';
@@ -33,6 +36,12 @@ export interface ScanSettings {
   reach: ScanReach;
   /** Also ask vidIQ (uses vidIQ credits). Used by a later step. */
   vidiq: boolean;
+  /**
+   * A video is kept only if its title, description or tags mention at least one of these, as a whole word
+   * (so "SDAM" doesn't match "ADAM" or "Saddam"). Empty keeps everything. Applied when reading a scan,
+   * so changing the words re-filters saved scans without searching again.
+   */
+  mustMention: string[];
 }
 
 export type SearchOrder = 'viewCount' | 'date';
@@ -48,6 +57,8 @@ export interface OutsideVideo {
   /** Guessed from length: three minutes or less counts as a Short. */
   kind: 'longform' | 'short';
   language?: string;
+  /** The video's tags (older scans don't have them). */
+  tags?: string[];
   views: number | null;
   likes: number | null;
   comments: number | null;
@@ -65,11 +76,23 @@ export interface OutsideScan {
   unitsUsed: number;
 }
 
+/** A scanned video as the screen sees it: which Must Mention words it contains, and whether it is kept. */
+export interface FilteredVideo extends OutsideVideo {
+  mentions: string[];
+  kept: boolean;
+}
+
+export interface FilteredScan extends Omit<OutsideScan, 'videos'> {
+  videos: FilteredVideo[];
+  kept: number;
+  removed: number;
+}
+
 export interface OutsideOverview {
   settings: ScanSettings;
   estimate: number;
   quotaLeft: number;
-  latest: OutsideScan | null;
+  latest: FilteredScan | null;
   scans: string[];
 }
 
@@ -77,28 +100,60 @@ type FetchFn = typeof youtubeFetch;
 const activeScans = new Set<string>();
 
 export function defaultSettings(topic: ResearchTopic): ScanSettings {
-  return { version: 1, searchWords: [topicLabel(topic)], format: 'both', reach: 'english', vidiq: false };
+  return { version: 1, searchWords: [topicLabel(topic)], format: 'both', reach: 'english', vidiq: false, mustMention: [] };
 }
 
-/** Checks settings sent from the screen and tidies the search words (trimmed, no blanks or repeats). */
+/** Trims a list of words or phrases, dropping blanks and repeats (ignoring case). */
+function tidyWords(raw: unknown[], what: string): string[] {
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (const word of raw) {
+    if (typeof word !== 'string') throw new Error(`${what} must be text.`);
+    const clean = word.replace(/\s+/g, ' ').trim();
+    if (!clean || seen.has(clean.toLowerCase())) continue;
+    if (clean.length > SEARCH_WORD_LENGTH_MAX) throw new Error(`One of the ${what.toLowerCase()} is too long.`);
+    seen.add(clean.toLowerCase());
+    words.push(clean);
+  }
+  return words;
+}
+
+/** Checks settings sent from the screen and tidies the word lists (trimmed, no blanks or repeats). */
 export function checkSettings(raw: unknown): ScanSettings {
   const given = raw as Partial<ScanSettings> | null;
   if (!given || !Array.isArray(given.searchWords)) throw new Error('Add at least one search word.');
-  const seen = new Set<string>();
-  const searchWords: string[] = [];
-  for (const word of given.searchWords) {
-    if (typeof word !== 'string') throw new Error('Search words must be text.');
-    const clean = word.replace(/\s+/g, ' ').trim();
-    if (!clean || seen.has(clean.toLowerCase())) continue;
-    if (clean.length > SEARCH_WORD_LENGTH_MAX) throw new Error('A search word is too long.');
-    seen.add(clean.toLowerCase());
-    searchWords.push(clean);
-  }
+  const searchWords = tidyWords(given.searchWords, 'Search Words');
   if (!searchWords.length) throw new Error('Add at least one search word.');
   if (searchWords.length > SEARCH_WORDS_MAX) throw new Error(`Use at most ${SEARCH_WORDS_MAX} search words.`);
   if (!['longform', 'short', 'both'].includes(given.format as string)) throw new Error('Choose Longform, Shorts, or Both.');
   if (!['english', 'worldwide'].includes(given.reach as string)) throw new Error('Choose English or Worldwide.');
-  return { version: 1, searchWords, format: given.format as ScanFormat, reach: given.reach as ScanReach, vidiq: given.vidiq === true };
+  // Settings saved before Must Mention existed have no list; that means "keep everything".
+  if (given.mustMention !== undefined && !Array.isArray(given.mustMention)) throw new Error('Must Mention words must be a list.');
+  const mustMention = tidyWords(given.mustMention ?? [], 'Must Mention Words');
+  if (mustMention.length > MUST_MENTION_MAX) throw new Error(`Use at most ${MUST_MENTION_MAX} Must Mention words.`);
+  return { version: 1, searchWords, format: given.format as ScanFormat, reach: given.reach as ScanReach, vidiq: given.vidiq === true, mustMention };
+}
+
+/** Matches a word or phrase on its own: not inside a longer word, any capitals, any spacing between phrase words. */
+function wholeWord(word: string): RegExp {
+  const pattern = word.split(' ').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, 'iu');
+}
+
+/** Which Must Mention words a video's title, description or tags contain. */
+export function videoMentions(video: Pick<OutsideVideo, 'title' | 'description' | 'tags'>, words: string[]): string[] {
+  const text = [video.title, video.description, ...(video.tags ?? [])].join('\n');
+  return words.filter((word) => wholeWord(word).test(text));
+}
+
+/** Marks each video kept or removed by the Must Mention words. */
+export function filterScan(scan: OutsideScan, words: string[]): FilteredScan {
+  const videos = scan.videos.map((video) => {
+    const mentions = videoMentions(video, words);
+    return { ...video, mentions, kept: words.length === 0 || mentions.length > 0 };
+  });
+  const kept = videos.filter((v) => v.kept).length;
+  return { ...scan, videos, kept, removed: videos.length - kept };
 }
 
 /** YouTube units a scan will use: two searches per word, plus about one unit per 50 videos for their numbers. */
@@ -162,7 +217,8 @@ export function outsideOverview(rawTopic: unknown): OutsideOverview {
   const settings = readScanSettings(topic);
   const scans = listScans(topic);
   const quota = youtubeQuota();
-  return { settings, estimate: scanEstimate(settings), quotaLeft: quota.limit - quota.used, latest: scans[0] ? readScan(topic, scans[0]) : null, scans };
+  const latest = scans[0] ? filterScan(readScan(topic, scans[0]), settings.mustMention) : null;
+  return { settings, estimate: scanEstimate(settings), quotaLeft: quota.limit - quota.used, latest, scans };
 }
 
 /** "2026-11-25 1430" in local time, used as the scan's folder name. */
@@ -184,7 +240,7 @@ async function youtubeJson<T>(url: string, token: string, fetcher: FetchFn, what
 interface RawSearch { items?: { id?: { videoId?: string } }[] }
 interface RawVideo {
   id?: string;
-  snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; publishedAt?: string; defaultAudioLanguage?: string; defaultLanguage?: string };
+  snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; publishedAt?: string; defaultAudioLanguage?: string; defaultLanguage?: string; tags?: string[] };
   contentDetails?: { duration?: string };
   statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
 }
@@ -246,13 +302,14 @@ export async function runYoutubeScan(
         videos.push({
           id: item.id,
           title: item.snippet.title ?? '',
-          description: (item.snippet.description ?? '').slice(0, 1_000),
+          description: (item.snippet.description ?? '').slice(0, DESCRIPTION_MAX),
           channelId: item.snippet.channelId ?? '',
           channelTitle: item.snippet.channelTitle ?? '',
           publishedAt: item.snippet.publishedAt ?? '',
           seconds,
           kind,
           language: item.snippet.defaultAudioLanguage ?? item.snippet.defaultLanguage,
+          tags: (item.snippet.tags ?? []).slice(0, TAGS_MAX),
           views: count(item.statistics?.viewCount),
           likes: count(item.statistics?.likeCount),
           comments: count(item.statistics?.commentCount),
