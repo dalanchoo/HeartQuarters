@@ -82,7 +82,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   suggested again. Merges are automatic; John doesn't approve them. Each Shot List folder shows the
   library's Liked and Meh photos, real and AI apart; Disliked and unrated photos don't count. Folders with
   the fewest Liked come first, and from 5 Liked a folder is "Well covered" and greyed (a guide, not a limit).
-  **Next step:** let Generate & Review use a category's best Shot List description.
+  Generate AI photos from the Shot List; giving Generate & Review the Shot List's descriptions was
+  considered and skipped (2026-11-25).
 - **Prefer suitable camera photos for thumbnails.** New rankings check the photo's emotional fit,
   lighting, color, and readability at phone size. AI photos are labeled fallbacks when no camera photo
   fits. Ratings still apply. Rankings search the whole library for expression tags, giving John's
