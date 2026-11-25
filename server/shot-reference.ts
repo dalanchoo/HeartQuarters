@@ -57,21 +57,32 @@ const running = new Set<string>();
 const FRAMINGS = ['HeadShoulders', 'UpperBody', 'CloseUp'];
 const ANGLES = ['Frontal', 'ThreeQuarter', 'LeftFacing', 'RightFacing'];
 const GAZES = ['LookAtCamera', 'LookOffCamera', 'LookLeft', 'LookRight', 'LookUp', 'LookDown'];
+/** Pose tags about hands or arms. A look with none of them is made with the hands out of frame. */
+const HAND_TAGS = ['HandsOutOfFrame', 'OneHandVisible', 'BothHandsVisible', 'HandsVisible', 'ChinTouch', 'ChinRest', 'FaceTouch', 'TempleTouch', 'CheekCover', 'HandNeck', 'HandOnChest', 'HandsClasped', 'HandsOnHips', 'ArmsCrossed', 'OneArmRaised', 'BothArmsRaised', 'OpenPalm', 'PalmUp', 'PalmOut', 'IndexFingerRaised'];
 
-/** The generator's framing, face direction and gaze for a look, using only choices it understands. */
+/**
+ * The generator's framing, face direction and gaze for a look, using only choices it understands. A look without a
+ * face direction is asked for Frontal, so the picture's direction is known and tagged when it is made (John, 2026-11-25).
+ */
 export function shotOptions(shot: ExpressionShot): Options {
   return {
     framing: shot.framing.find(tag => FRAMINGS.includes(tag)) ?? 'HeadShoulders',
-    angle: shot.framing.find(tag => ANGLES.includes(tag)) ?? '',
+    angle: shot.framing.find(tag => ANGLES.includes(tag)) ?? 'Frontal',
     gaze: shot.pose.find(tag => GAZES.includes(tag)) ?? '',
   };
 }
 
-/** The look's words for the prompt: title, description, facial details and what to avoid. */
+/** HandsOutOfFrame when the look says nothing about hands: then it is asked for and tagged, not left to chance. */
+export function shotHands(shot: ExpressionShot): string[] {
+  return shot.pose.some(tag => HAND_TAGS.includes(tag)) || shot.ruledOut?.includes('HandsOutOfFrame') ? [] : ['HandsOutOfFrame'];
+}
+
+/** The look's words for the prompt: title, description, facial details, hands and what to avoid. */
 export function shotLook(shot: ExpressionShot): string {
   const details = shot.morphology.length ? ` Facial details: ${shot.morphology.join(', ')}.` : '';
+  const hands = shotHands(shot).length ? ' Keep both hands out of the frame.' : '';
   const avoid = shot.ruledOut?.length ? ` Avoid: ${shot.ruledOut.join(', ')}.` : '';
-  return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}${avoid}`.trim();
+  return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}${hands}${avoid}`.trim();
 }
 
 /**
@@ -90,10 +101,10 @@ export function shotPictureTags(shot: ExpressionShot, ai?: ImageAi): string {
     const given = unique(tags);
     return [...given.map(tag => `${tag}, N/A, UNCONFIRMED`), ...out.filter(tag => vocabulary.includes(tag) && !given.includes(tag)).map(tag => `${tag}, N/A, DISCONFIRMED`)];
   };
-  const groups = [lines([...shot.pose, options.gaze], POSE_TAGS), lines([...shot.framing, options.framing, options.angle], FRAMING_TAGS), lines(shot.morphology, MORPHOLOGY_TAGS), lines([expression], [])].filter(group => group.length);
+  const groups = [lines([...shot.pose, options.gaze, ...shotHands(shot)], POSE_TAGS), lines([...shot.framing, options.framing, options.angle], FRAMING_TAGS), lines(shot.morphology, MORPHOLOGY_TAGS), lines([expression], [])].filter(group => group.length);
   const tags = [...groups.map(group => group.join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
   if (!ai) return tags;
-  return tags + generationLines({ by: ai, look: shot.title || expression, description: shot.description, with: [...shot.pose, options.gaze, ...shot.framing, options.framing, options.angle, ...shot.morphology], without: out, shot: shot.id });
+  return tags + generationLines({ by: ai, look: shot.title || expression, description: shot.description, with: [...shot.pose, options.gaze, ...shotHands(shot), ...shot.framing, options.framing, options.angle, ...shot.morphology], without: out, shot: shot.id });
 }
 
 /** "reference-002.png" → "reference-002.txt", the picture's tag file. */
