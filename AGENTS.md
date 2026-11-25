@@ -33,3 +33,26 @@ Instructions for any AI (or person) changing this code.
   explanatory sentences can use normal sentence case.
 - Make screens compact: little wasted vertical space, small gaps between rows and sections.
 - Use the big triangle (▶ / ▼) to open and close collapsible areas.
+- Make a collapsible area a `<details className="yt-section">` with a `<summary>`:
+  the app draws the triangle. Never build one from a button with ▶/▼ inside it,
+  because it looks like a button and a section at once. Put counts and dates in
+  the summary as grey (`muted`) text after the title, for example
+  “Videos Used  59 videos · 70 comments”.
+- The Video Projects page is the model to follow. Put a page's content on a white
+  `card`, with its sections inside it, so the page isn't all grey.
+- Anything you click to *do* or *choose* something is an ordinary `<button>` (or
+  `<select>`), so it gets the app's raised button style. Don't invent other
+  button looks such as bordered links or pills. Show the chosen one of a group in
+  the accent colours (pink text and border on the soft pink background).
+- Table column headings are plain text, never buttons with a bubble. To sort,
+  reuse the Channel table's style (`channel-table`, a `sort` button inside the
+  `th`, ▼/▲ in a `sort-icon`).
+- Keep table and list text readable, about 0.9rem. Use `small-text` only for
+  hints and secondary details, not for main content.
+- Long tables scroll inside their own box with a fixed heading row, and long
+  text wraps so the table fits the page without scrolling sideways.
+- Line up fields that sit side by side: label on top, then the box, then any
+  help text underneath, so a long hint doesn't push one box lower than the
+  other.
+- Text boxes use the app's normal font, not the browser's code-style default.
+- Before saying a screen change is done, look at it in the browser.
