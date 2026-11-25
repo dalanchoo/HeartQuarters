@@ -18,7 +18,8 @@ import { assessmentJob, parseAssessmentAis, startAssessment } from './expression
 import { slowRequestLogger, watchEngineStalls } from './slow-watch.js';
 import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
-import { addExpressionShots, deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
+import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
+import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { copyShotReferenceToInbox, migrateShotReferences, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
@@ -35,10 +36,10 @@ import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
-import { aiOverview, chooseAiModel, parseAi } from './ai.js';
+import { aiOverview, chooseAiModel, isAiId, parseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
-import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
+import { askAi, briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, parseImageAi, startThumbnail, thumbJobs } from './thumbnails.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
@@ -377,7 +378,18 @@ app.post('/api/ideas/brainstorm/send', (req, res) => {
 });
 app.post('/api/ideas/brainstorm/clear', handle((req, res) => { res.json(clearBrainstorm(req.body?.id)); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
-app.post('/api/expressions/shot-list/add', handle((req, res) => { res.json(addExpressionShots(String(req.body?.piece ?? ''), req.body?.shots)); }));
+// { piece, shots, ai }: adds a video's suggestions; the AI merges looks the list already has (expression-shot-merge.ts).
+app.post('/api/expressions/shot-list/add', (req, res) => {
+  const ai = req.body?.ai;
+  const run = isAiId(ai) ? addShotsMerging(String(req.body?.piece ?? ''), req.body?.shots, (prompt) => askAi(ai, prompt, mergeWorkFolder())) : Promise.reject(new Error('Choose an AI.'));
+  run.then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
+// { ai }: Merge Duplicates over the whole list, after saving a copy of it.
+app.post('/api/expressions/shot-list/merge', (req, res) => {
+  const ai = req.body?.ai;
+  const run = isAiId(ai) ? mergeDuplicateShots((prompt) => askAi(ai, prompt, mergeWorkFolder())) : Promise.reject(new Error('Choose an AI.'));
+  run.then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));
 app.post('/api/expressions/shot-list/delete', handle((req, res) => { const shots = deleteShot(req.body?.id); removeShotReference(String(req.body?.id)); res.json(shots); }));
 app.get('/api/expressions/shot-list/references', handle((_req, res) => { res.json(shotReferences()); }));

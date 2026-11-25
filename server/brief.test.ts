@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, parseBriefPlan, DEFAULT_BRIEF_PLAN, type AskAi, type BriefStep } from './brief';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
+import { readShotList } from './expression-shot-list';
 import { makeTree, removeTree } from './testing';
 import { stageLongformThumbnails } from './brief-thumbnail-comparison';
 
 let tmp: string;
 let original: string;
+let originalLibrary: string;
 const LONGFORM = '022 - Worth Telling Them/Longform';
 const draftsDir = () => path.join(tmp, LONGFORM, 'Packaging', 'Drafts');
 const briefText = () => fs.readFileSync(path.join(draftsDir(), 'Brief.md'), 'utf8');
@@ -26,10 +28,15 @@ beforeEach(() => {
   });
   original = config.videoProjectsDir;
   config.videoProjectsDir = tmp;
+  // The picks add their expressions to the Shot List: a fake library, never the real one.
+  originalLibrary = config.expressionsDir;
+  config.expressionsDir = path.join(tmp, '_Expressions');
+  fs.mkdirSync(config.expressionsDir);
 });
 
 afterEach(() => {
   config.videoProjectsDir = original;
+  config.expressionsDir = originalLibrary;
   removeTree(tmp);
 });
 
@@ -111,9 +118,14 @@ describe('writing the brief', () => {
     await finished;
     expect(job.steps.map(step => step.state)).toEqual(['done', 'done', 'done', 'done']);
     expect(calls).toEqual(['claude', 'codex', 'gemini', 'claude']);
+    // The picks' expression went onto the Shot List by itself; one look, so no AI was asked to compare.
+    expect(job.shotList).toEqual({ added: 1, merged: 0 });
+    expect(readShotList().map(shot => shot.category)).toEqual(['Composure/Calm']);
     const retry = await startPicks(LONGFORM, '', check);
     await retry.finished;
     expect(retry.job.status).toBe('done');
+    expect(retry.job.shotList).toEqual({ added: 0, merged: 1 });
+    expect(readShotList()).toHaveLength(1);
   });
 
   it('follows the plan John chose: who writes, who reviews, who may use vidIQ, and who picks', async () => {

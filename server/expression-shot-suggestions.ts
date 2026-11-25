@@ -1,4 +1,4 @@
-import type { BriefPick } from './api';
+import type { BriefPick } from './projects.js';
 
 export interface ShotSuggestion { expression: string; context: string }
 const key = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();

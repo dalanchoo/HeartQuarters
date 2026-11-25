@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { expressionShotSuggestions } from './expressionShotSuggestions';
-import type { BriefPick } from './api';
+import { expressionShotSuggestions } from './expression-shot-suggestions';
+import type { BriefPick } from './projects';
 
 describe('expression suggestions for the shot list', () => {
   it('includes final picks and labelled ideas from the whole brief without duplicates', () => {

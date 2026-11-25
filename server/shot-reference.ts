@@ -160,6 +160,30 @@ export function copyShotReferenceToInbox(shotId: unknown, name: unknown): { path
   return copyAiImageToInbox(`${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`, file);
 }
 
+/**
+ * When one look is merged into another, copies its pictures to the look that stays, numbered after that look's own
+ * (oldest first, so the newest stays newest). The merged look's folder is left as it was. Returns how many were copied.
+ */
+export function copyShotPictures(fromId: string, toId: string): number {
+  if (!UUID.test(fromId) || fromId === toId || running.has(fromId) || running.has(toId)) return 0;
+  const pictures = listPictures(fromId).reverse();
+  if (!pictures.length) return 0;
+  const to = folder(toId);
+  fs.mkdirSync(to, { recursive: true });
+  let next = Math.max(0, ...listPictures(toId).map(name => Number(PICTURE.exec(name)![1] ?? 0))) + 1;
+  for (const name of pictures) {
+    if (next > 999) break;
+    const format = PICTURE.exec(name)![2];
+    fs.copyFileSync(path.join(folder(fromId), name), path.join(to, `reference-${String(next++).padStart(3, '0')}.${format}`), fs.constants.COPYFILE_EXCL);
+  }
+  // The pictures only show with a job file; a look that never had one gets the merged look's.
+  if (!readJob(toId)) {
+    const from = readJob(fromId);
+    saveJob({ shotId: toId, state: 'ready', prompt: from?.prompt ?? '', createdAt: from?.createdAt ?? new Date().toISOString(), pictures: [], ...(from?.ai ? { ai: from.ai } : {}) });
+  }
+  return pictures.length;
+}
+
 /** Remove a deleted shot's pictures. Leaves it alone while one is still being made. */
 export function removeShotReference(shotId: string): void {
   if (!UUID.test(shotId) || running.has(shotId)) return;

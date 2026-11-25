@@ -101,26 +101,46 @@ export function seedShotList(): ExpressionShot[] {
 /** Has this exact suggestion (ignoring case and spacing) already been added to a look? */
 export const shotHasSuggestion = (shot: ExpressionShot, text: string) => shot.sources.some(s => s.text !== undefined && shotKey(s.text) === shotKey(text));
 
-/** Add the checked expressions, retaining where each suggestion came from. */
-export function addExpressionShots(piece: string, input: unknown): ExpressionShot[] {
+/** A new look made from one suggestion's words. */
+export const shotFromSuggestion = (text: string, source: ShotSource): ExpressionShot => fromText(text, [source], new Date().toISOString(), false);
+
+/** Reads the list, lets `change` edit it, and saves it (refused if the file changed meanwhile). */
+export function changeShotList(change: (shots: ExpressionShot[]) => void): ExpressionShot[] {
+  const { shots, original } = load(); change(shots); save(shots, original); return shots;
+}
+
+/**
+ * Adds a suggestion to a look it matches word for word, keeping where it came from. A look already photographed stays
+ * done: being suggested again doesn't make it needed again. Returns false when no look has these words.
+ */
+export function addToMatchingShot(shots: ExpressionShot[], source: ShotSource & { text: string }): boolean {
+  const existing = shots.find(shot => shotHasSuggestion(shot, source.text));
+  if (!existing) return false;
+  if (!existing.sources.some(s => s.piece === source.piece && s.context === source.context)) existing.sources.push(source);
+  return true;
+}
+
+/** Checks a video's suggestions before anything is added. */
+export function checkShotSuggestions(piece: string, input: unknown): { expression: string; context: string }[] {
   const folder = safeResolve('projects', piece);
   const packaging = safeResolve('projects', path.join(piece, 'Packaging'));
   if (!piece || !fs.statSync(packaging, { throwIfNoEntry: false })?.isDirectory() || fs.lstatSync(packaging).isSymbolicLink() || fs.lstatSync(folder).isSymbolicLink()) throw new Error('Choose a video with packaging.');
   if (!Array.isArray(input) || !input.length || input.length > 100) throw new Error('Choose one or more expressions.');
-  const items = input.map((item: { expression?: unknown; context?: unknown }) => {
+  return input.map((item: { expression?: unknown; context?: unknown }) => {
     if (!item || typeof item.expression !== 'string' || !item.expression.trim() || item.expression.length > 2000 || typeof item.context !== 'string' || item.context.length > 500) throw new Error('An expression suggestion is invalid.');
     return { expression: item.expression.trim(), context: item.context.trim() };
   });
-  const { shots, original } = load();
-  for (const item of items) {
-    const source = { piece, context: item.context, text: item.expression };
-    const existing = shots.find(shot => shotHasSuggestion(shot, item.expression));
-    if (existing) {
-      if (!existing.sources.some(s => s.piece === piece && s.context === source.context)) existing.sources.push(source);
-      existing.done = false;
-    } else shots.push(fromText(item.expression, [source], new Date().toISOString(), false));
-  }
-  save(shots, original); return shots;
+}
+
+/** Add a video's suggestions word for word, retaining where each came from (no AI; see expression-shot-merge.ts). */
+export function addExpressionShots(piece: string, input: unknown): ExpressionShot[] {
+  const items = checkShotSuggestions(piece, input);
+  return changeShotList(shots => {
+    for (const item of items) {
+      const source = { piece, context: item.context, text: item.expression };
+      if (!addToMatchingShot(shots, source)) shots.push(shotFromSuggestion(item.expression, source));
+    }
+  });
 }
 
 export function setShotDone(id: unknown, done: unknown): ExpressionShot[] {

@@ -13,7 +13,7 @@ import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
 import { isAiExpression } from '../../server/expression-origin';
 import type { AiId } from '../../server/ai';
 import type { ExpressionShot } from '../../server/expression-shot-list';
-import { expressionShotSuggestions } from './expressionShotSuggestions';
+import { expressionShotSuggestions } from '../../server/expression-shot-suggestions';
 import { YouTubeOpenLink } from './YouTubeOpenLink';
 import { AI_OPTIONS, AiSelect, aiName, useAiFor, useRemembered } from './AiChoice';
 
@@ -77,39 +77,53 @@ export function DraftsSection({ piece, drafts, target, research, onChanged }: { 
 function ShotListSuggestions({ piece, brief, picks }: { piece: string; brief: { path: string; modified?: number } | null; picks: BriefPick[] }) {
   const [text, setText] = useState('');
   const [shots, setShots] = useState<ExpressionShot[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  // Which AI compares new looks with the ones already on the list. Remembered in this browser.
+  const [ai, setAi] = useAiFor('shot-list-add');
   useEffect(() => {
     let active = true;
-    setText(''); setSelected([]); setError('');
+    setText(''); setError(''); setMessage('');
     if (brief) void getText('projects', brief.path).then(value => { if (active) setText(value); }, (e: Error) => { if (active) setError(`Could Not Read the Brief: ${e.message}`); });
-    void getJson<ExpressionShot[]>('/api/expressions/shot-list').then(value => { if (active) setShots(value); }, (e: Error) => { if (active) setError(e.message); });
-    return () => { active = false; };
+    const load = () => { void getJson<ExpressionShot[]>('/api/expressions/shot-list').then(value => { if (active) setShots(value); }, (e: Error) => { if (active) setError(e.message); }); };
+    load(); window.addEventListener('hq-expression-shot-list-changed', load);
+    return () => { active = false; window.removeEventListener('hq-expression-shot-list-changed', load); };
   }, [piece, brief?.path, brief?.modified]);
   const suggestions = expressionShotSuggestions(text, picks);
-  const validSelected = selected.filter(value => suggestions.some(item => item.expression === value));
   const normalized = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  // A suggestion's words stay on the look it became or was merged into.
+  const onList = (expression: string) => shots.some(shot => shot.sources.some(source => source.text !== undefined && normalized(source.text) === normalized(expression)));
+  const missing = suggestions.filter(item => !onList(item.expression));
   const add = async () => {
     setBusy(true); setError(''); setMessage('');
     try {
-      const chosen = suggestions.filter(s => validSelected.includes(s.expression));
-      const result = await postJson<ExpressionShot[]>('/api/expressions/shot-list/add', { piece, shots: chosen });
-      setShots(result); setSelected([]); setMessage(`${chosen.length} ${chosen.length === 1 ? 'suggestion added' : 'suggestions added'} to the Expression Shot List.`);
+      const result = await postJson<{ shots: ExpressionShot[]; added: number; merged: number; error?: string }>('/api/expressions/shot-list/add', { piece, shots: missing, ai });
+      setShots(result.shots); setMessage(shotListMessage(result));
+      if (result.error) setError(result.error);
       window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  return <details className="yt-section shot-suggestions"><summary>Expression Suggestions for the Shot List ({suggestions.length})</summary>
-    <p className="muted small-text">Select the expressions you still need to photograph, then add them to the shot list in Expressions. The suggestions include the brief and the final picks.</p>
-    {suggestions.map(item => <label key={item.expression} className="shot-suggestion"><input type="checkbox" checked={selected.includes(item.expression)} disabled={busy} onChange={e => setSelected(values => e.target.checked ? [...values, item.expression] : values.filter(value => value !== item.expression))} /><span><strong>{item.context}</strong> · {item.expression}{shots.some(shot => shot.sources.some(source => source.text !== undefined && normalized(source.text) === normalized(item.expression))) && <span className="muted"> · Already on Shot List</span>}</span></label>)}
+  return <details className="yt-section shot-suggestions"><summary>Expression Suggestions for the Shot List <span className="muted">{suggestions.length} suggestions · {suggestions.length - missing.length} on the list</span></summary>
+    <p className="muted small-text">Every expression the brief and its picks suggest goes onto the Shot List in Expressions by itself when the top 3 are picked. A look the list already has, worded differently, is merged into it.</p>
+    <ul className="shot-suggestion-list">
+      {suggestions.map(item => <li key={item.expression} className="shot-suggestion"><strong>{item.context}</strong> · {item.expression}<span className="muted"> · {onList(item.expression) ? 'On Shot List' : 'Not on Shot List'}</span></li>)}
+    </ul>
     {!suggestions.length && !error && <p className="muted small-text">No labelled expression suggestions found.</p>}
-    <button disabled={busy || !validSelected.length} onClick={() => void add()}>Add Selected to Shot List</button>
+    {missing.length > 0 && <div className="expression-inbox-actions">
+      <button disabled={busy} onClick={() => void add()}>{busy ? 'Adding…' : `Add ${missing.length} to Shot List`}</button>
+      <AiSelect value={ai} onChange={setAi} title="Which AI checks the new looks against the ones already on the Shot List" />
+    </div>}
     {message && <p role="status">{message}</p>}{error && <p className="error" role="alert">{error}</p>}
   </details>;
 }
-
+/** "2 new looks added to the Shot List; 1 merged into a look it already had." */
+export function shotListMessage({ added, merged }: { added: number; merged: number }): string {
+  const looks = (n: number) => `${n} ${n === 1 ? 'look' : 'looks'}`;
+  const parts = [added ? `${added === 1 ? '1 new look' : `${added} new looks`} added to the Shot List` : '', merged ? `${looks(merged)} merged into ${merged === 1 ? 'a look' : 'looks'} it already had` : ''].filter(Boolean);
+  return parts.length ? `${parts.join('; ')}.` : 'Nothing new for the Shot List.';
+}
 interface ThumbJobs {
   jobs: ThumbJob[];
   /** Call after starting one: checks again, and keeps checking while any is working. */
@@ -642,6 +656,9 @@ function WriteBrief({ piece, hasBrief, hasPicks, research, onChanged }: { piece:
         </ul>
       )}
       {job?.kept && <p className="muted small-text">The earlier brief was kept as {job.kept}.</p>}
+      {job?.status === 'running' && job.steps.at(-1)?.state === 'done' && <p className="muted small-text">Adding the expressions to the Shot List…</p>}
+      {job?.shotList && <p className="muted small-text">{shotListMessage(job.shotList)}</p>}
+      {job?.shotList?.error && <p className="error small-text">{job.shotList.error}</p>}
       {job?.error && <p className="error">{job.error}</p>}
       {error && <p className="error">{error}</p>}
     </div>

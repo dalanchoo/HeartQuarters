@@ -17,6 +17,8 @@ import { appDir, config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, PICKS_FILE, parsePicks, readChoice, readPicks, type BriefChoice, type BriefPick } from './projects.js';
 import { decodeReference, isShort } from './thumbnails.js';
+import { addShotsMerging } from './expression-shot-merge.js';
+import { expressionShotSuggestions } from './expression-shot-suggestions.js';
 import { appendText, makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
 
 export interface BriefSource {
@@ -71,6 +73,8 @@ export interface BriefJob {
   /** The earlier Brief.md's new name, when there was one. */
   kept?: string;
   error?: string;
+  /** After the picks: how many of the brief's expressions became new Shot List looks and how many joined one. */
+  shotList?: { added: number; merged: number; error?: string };
 }
 
 /**
@@ -397,6 +401,22 @@ async function runPicks(step: BriefStep, ask: AskAi, work: string, hasNotes: boo
   }
 }
 
+/**
+ * Puts every expression the brief and its picks suggest on the Expression Shot List, merging looks it already has
+ * (expression-shot-merge.ts) with the AI that picked the top 3. A failure here never fails the brief.
+ */
+async function addToShotList(job: BriefJob, picker: BriefStep, ask: AskAi, work: string, drafts: string): Promise<void> {
+  if (picker.state !== 'done') return;
+  try {
+    const brief = path.join(drafts, BRIEF_FILE);
+    const items = expressionShotSuggestions(fs.existsSync(brief) ? readText(brief) : '', readPicks(path.join(drafts, PICKS_FILE)) ?? []);
+    if (!items.length) return;
+    const result = await addShotsMerging(job.piece, items, (prompt) => ask(picker.ai, prompt, work));
+    job.shotList = { added: result.added, merged: result.merged, ...(result.error ? { error: result.error } : {}) };
+  } catch (e) {
+    job.shotList = { added: 0, merged: 0, error: `The expressions weren't added to the Shot List: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
 // ---- Screenshots John pasted into the brief's boxes ------------------------------------------------------------
 
 /** Which box an image was pasted into, as it's named for the AIs and in its file name. */
@@ -551,6 +571,7 @@ export async function startBrief(piece: string, rawNotes: string, ask: AskAi = a
     }
     writeFile(brief, noteWhoTookPart(readText(brief), job.steps));
     await runPicks(picker, ask, work, !!notes.trim(), drafts, when, shots, comparison);
+    await addToShotList(job, picker, ask, work, drafts);
     job.status = 'done';
   })().catch((e) => {
     job.status = 'failed';
@@ -597,7 +618,8 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     jobs.delete(piece);
     throw e;
   }
-  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots, comparison).then(() => {
+  const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots, comparison).then(async () => {
+    await addToShotList(job, job.steps[0], ask, work, drafts);
     job.status = job.steps[0].state === 'done' ? 'done' : 'failed';
   });
   return { job, finished };

@@ -29,7 +29,8 @@ describe('expression shot list', () => {
     expect(result).toHaveLength(4); expect(result[3].sources.map(s => s.context)).toEqual(['Top 1', 'Idea 2']);
     expect(result[3]).toMatchObject({ category: 'Composure/Calm', description: 'Open eyes, gentle smile.' });
     expect(setShotDone(result[3].id, true)[3].done).toBe(true);
-    expect(addExpressionShots('Video/Longform', [{ expression, context: 'Top 1' }])[3].done).toBe(false);
+    // Suggested again by a video: a look already photographed stays done.
+    expect(addExpressionShots('Video/Longform', [{ expression, context: 'Top 1' }])[3].done).toBe(true);
     expect(setShotDone(result[3].id, false)[3].done).toBe(false);
     expect(readShotList()).toHaveLength(4);
   });
