@@ -274,7 +274,12 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     setError('');
     postJson<{ id: string }>('/api/brief/pair-shot', { piece }).then(({ id }) => { location.hash = `#Expressions/~shot/${id}`; }, (e: Error) => setError(e.message)).finally(() => setOpening(false));
   };
-  const madeFor = library ? (ranking?.madeFor ?? []).map(path => library.photos.find(p => p.path === path)).filter((p): p is NonNullable<typeof p> => !!p) : [];
+  // The library was loaded when this opened: a picture confirmed since then, or a ranking that names one, needs a fresh copy.
+  const missing = !!library && [...(ranking?.madeFor ?? []), ...(ranked?.ranked.map(r => r.photo) ?? [])].some(path => !library.photos.some(p => p.path === path));
+  useEffect(() => {
+    if (missing) getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
+  }, [missing, ranking?.madeFor?.join('|'), ranked?.at]);
+  const madeFor = library ?(ranking?.madeFor ?? []).map(path => library.photos.find(p => p.path === path)).filter((p): p is NonNullable<typeof p> => !!p) : [];
   const asked = useRef('');
   useEffect(() => {
     if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
