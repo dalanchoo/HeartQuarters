@@ -4,6 +4,7 @@ import type { ExpressionShot } from '../../server/expression-shot-list';
 import type { ShotReference } from '../../server/shot-reference';
 import { ExpressionVideos } from './ExpressionVideos';
 import { AiSelect, IMAGE_AIS, aiName, useAiFor } from './AiChoice';
+import { byNeed, coverageText, folderCoverage, isWellCovered, WELL_COVERED } from './shotCoverage';
 
 export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
@@ -15,6 +16,20 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const [busy, setBusy] = useState('');
   // Which AI makes reference pictures: any that can make images. Remembered in this browser.
   const [imageAi, setImageAi] = useAiFor('shot-picture', 'codex', IMAGE_AIS);
+  // Merge Duplicates: which AI compares the looks in each folder. Remembered in this browser.
+  const [mergeAi, setMergeAi] = useAiFor('shot-list-merge');
+  const [merging, setMerging] = useState(false);
+  const [mergeMessage, setMergeMessage] = useState('');
+  const mergeDuplicates = async () => {
+    setMerging(true); setError(''); setMergeMessage('');
+    try {
+      const result = await postJson<{ shots: ExpressionShot[]; merged: number; copy?: string }>('/api/expressions/shot-list/merge', { ai: mergeAi });
+      setShots(result.shots);
+      setMergeMessage(result.merged ? `Merged ${result.merged} duplicate ${result.merged === 1 ? 'look' : 'looks'}; their wording and pictures are kept on the look that stays. The list as it was is saved as ${result.copy}.` : 'No duplicates found.');
+      window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setMerging(false); }
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -29,10 +44,10 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     if (!active) return;
     let live = true;
     const load = () => { void getJson<Record<string, ShotReference>>('/api/expressions/shot-list/references').then(value => { if (live) setPictures(value); }, (e: Error) => { if (live) setError(e.message); }); };
-    load();
+    load(); window.addEventListener('hq-expression-shot-list-changed', load); // merged looks bring their pictures
     // While a picture is being made, check every few seconds so it appears when ready.
     const timer = making ? setInterval(load, 3000) : undefined;
-    return () => { live = false; if (timer) clearInterval(timer); };
+    return () => { live = false; if (timer) clearInterval(timer); window.removeEventListener('hq-expression-shot-list-changed', load); };
   }, [active, making]);
 
   const makePicture = async (shot: ExpressionShot) => {
@@ -113,11 +128,13 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const section = (title: string, items: ExpressionShot[], open: boolean, empty: string) => {
     const byFolder = new Map<string, ExpressionShot[]>();
     for (const shot of items) byFolder.set(shot.category, [...(byFolder.get(shot.category) ?? []), shot]);
-    const folders = [...byFolder.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+    // Neediest first: the folders with the fewest Liked photos in the library.
+    const coverage = (folder: string) => folderCoverage(index?.photos ?? [], folder);
+    const folders = byNeed([...byFolder.keys()], coverage);
     return <details className="yt-section expression-shot-group" open={open}><summary>{title} ({items.length})</summary>
       {!items.length && <p className="muted small-text">{empty}</p>}
       {folders.map(folder => <details className="yt-section expression-shot-group" key={folder || 'unsorted'}>
-        <summary>{folderLabel(folder)} ({byFolder.get(folder)!.length})</summary>
+        <summary className={folder && isWellCovered(coverage(folder)) ? 'muted' : undefined}>{folderLabel(folder)} ({byFolder.get(folder)!.length}){folder && index && <span className="muted small-text"> · In library: {coverageText(coverage(folder))}{isWellCovered(coverage(folder)) ? ' · Well covered' : ''}</span>}</summary>
         {byFolder.get(folder)!.map(card)}
       </details>)}
     </details>;
@@ -125,8 +142,13 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
 
   return <section className="expression-shot-list">
     <h2>Expression Shot List</h2>
-    <p>Expressions to photograph when you have time. Add suggestions from a video’s Generate Packaging section.</p>
-    <p className="muted small-text">Saved in Expression Shot List.json in your Expressions folder.</p>
+    <p>Expressions to photograph when you have time. Every expression a video’s packaging brief suggests is added here by itself, and a look already on the list is merged into it.</p>
+    <p className="muted small-text">Folders needing photos most come first. Counts are the library's Liked and Meh photos (Disliked and unrated ones don't count); from {WELL_COVERED} Liked a folder is well covered and greyed. Saved in Expression Shot List.json in your Expressions folder.</p>
+    <div className="expression-inbox-actions">
+      <button disabled={merging || !shots?.length} onClick={() => void mergeDuplicates()} title="An AI compares the looks in each expression folder and merges the ones that would be the same photo">{merging ? 'Merging Duplicates…' : 'Merge Duplicates'}</button>
+      <AiSelect value={mergeAi} onChange={setMergeAi} title="Which AI finds the duplicates" />
+    </div>
+    {mergeMessage && <p role="status">{mergeMessage}</p>}
     {error && <p className="error" role="alert">{error}</p>}
 
     {!shots && !error && <p className="muted">Loading Shot List…</p>}

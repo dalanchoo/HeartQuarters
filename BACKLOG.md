@@ -73,6 +73,16 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 - **Generated YouTube tags use Title Case and real search phrasing.** Use vidIQ evidence when available, drop phrases with zero scores, and leave dialogue and title hooks out of tags.
 - **Record packaging changes in the version's Notes.** Uploads and updates sent through HeartQuarters
   record the Pacific date and the title, description, tags, or thumbnail that YouTube confirmed.
+- **The Expression Shot List fills itself and stays free of duplicates (2026-11-25).** Goal: flesh out the
+  expressions library with AI photos until John reshoots the missing and bad ones; the Shot List's
+  descriptions make better AI photos than Generate & Review's generic folder definitions. Every expression a
+  brief and its picks suggest is added after Pick Top 3 (the picker AI compares new looks with the ones in
+  the same folder and merges duplicates, keeping their wording and pictures). Merge Duplicates on the Shot
+  List does the same for the whole list after saving a copy. A look already photographed stays done when
+  suggested again. Merges are automatic; John doesn't approve them. Each Shot List folder shows the
+  library's Liked and Meh photos, real and AI apart; Disliked and unrated photos don't count. Folders with
+  the fewest Liked come first, and from 5 Liked a folder is "Well covered" and greyed (a guide, not a limit).
+  **Next step:** let Generate & Review use a category's best Shot List description.
 - **Prefer suitable camera photos for thumbnails.** New rankings check the photo's emotional fit,
   lighting, color, and readability at phone size. AI photos are labeled fallbacks when no camera photo
   fits. Ratings still apply. Rankings search the whole library for expression tags, giving John's
