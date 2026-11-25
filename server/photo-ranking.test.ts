@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { MAX_CANDIDATES, RANKING_FILE, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
+import { MAX_CANDIDATES, RANKING_FILE, photosMadeFor, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
 import { setExpressionRating } from './expression-rating';
 import { clearExpressionIndex, type ExpressionPhoto } from './expressions';
 import type { AskAi } from './brief';
@@ -45,14 +45,35 @@ describe('which photos Claude looks at', () => {
   it("reads the pair's categories", () => {
     expect(pickCategories(PICK.expression)).toEqual(['Positive/Warmth', 'Empathy/Compassion']);
   });
-  it('puts starred photos in the categories first, then the categories, then other starred photos', () => {
+  it('uses the categories, with stars only breaking ties, and leaves out starred photos of other expressions', () => {
     const list = rankingCandidates(PHOTOS, ['Positive/Warmth', 'Empathy/Compassion'], ['Positive/Warmth/Warm_002.jpg', 'Composure/Calm/Calm_004.jpg']);
     expect(list.map((c) => [c.photo.path, c.starred])).toEqual([
       ['Positive/Warmth/Warm_002.jpg', true],
       ['Positive/Warmth/Warm_001.jpg', false],
       ['Empathy/Compassion/Compassion_002.jpg', false],
-      ['Composure/Calm/Calm_004.jpg', true],
     ]);
+  });
+  it('leaves out photos John marked as not having a requested cue, or with a confirmed opposite gaze, but keeps untagged ones', () => {
+    const [untagged, notCamera, lookingLeft, guessedLeft, closedMouth] = Array.from({ length: 5 }, (_, i) => photo(`Positive/Warmth/P_${i}.jpg`));
+    notCamera.tags = [{ tag: 'LookAtCamera', confirmed: false, disconfirmed: true, confidence: null }];
+    lookingLeft.tags = [{ tag: 'LookLeft', confirmed: true, confidence: null }];
+    guessedLeft.tags = [{ tag: 'LookLeft', confirmed: false, confidence: 90 }];
+    closedMouth.tags = [{ tag: 'MouthOpen', confirmed: false, disconfirmed: true, confidence: null }];
+    const photos = [untagged, notCamera, lookingLeft, guessedLeft, closedMouth];
+    expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookAtCamera']).map(c => c.photo)).toEqual([untagged, guessedLeft, closedMouth]);
+    expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo)).toEqual([untagged, notCamera, guessedLeft]);
+    expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
+  });
+  it('puts pictures generated for this video first, from any folder, and not as AI fallbacks', () => {
+    const made = { ...photo('Doubt/Unsure/Made_AI_001.jpg'), tags: [{ tag: 'AIGenerated', confirmed: true, confidence: null }] };
+    const list = rankingCandidates([...PHOTOS, made], ['Positive/Warmth'], [], [], new Set([made.path]));
+    expect(list[0]).toMatchObject({ photo: made, madeForThisVideo: true, aiGenerated: false });
+  });
+  it('finds library photos made from a look this video suggested', () => {
+    const shot = (id: string, piece: string) => ({ id, category: 'Positive/Warmth', title: '', description: '', framing: [], pose: [], morphology: [], alsoFits: [], sources: [{ piece, context: 'Top 1' }], addedAt: '', done: false });
+    const mine = { ...photo('Positive/Warmth/A.jpg'), generation: { shot: 'mine' } };
+    const other = { ...photo('Positive/Warmth/B.jpg'), generation: { shot: 'other' } };
+    expect([...photosMadeFor(PIECE, [mine, other, PHOTOS[0]], [shot('mine', PIECE), shot('other', 'Another video')])]).toEqual([mine.path]);
   });
   it('excludes a disliked star and gives likes priority before applying the cap', () => {
     const many = Array.from({ length: 60 }, (_, i) => photo(`Positive/Warmth/W_${i}.jpg`));
@@ -79,7 +100,7 @@ describe('which photos Claude looks at', () => {
     expect(list).toHaveLength(MAX_CANDIDATES);
     expect(list[0].photo).toBe(confirmed);
   });
-  it('prefers confirmed cues over guesses and keeps photos without matching cues eligible', () => {
+  it('prefers confirmed cues over guesses, keeps untagged photos and leaves out a cue John ruled out', () => {
     const [unknown, rejected, guessed, confirmed] = PHOTOS.slice(0, 4).map((_, i) => photo(`Positive/Warmth/Photo_${i}.jpg`));
     rejected.tags = [{ tag: 'LookRight', confirmed: false, disconfirmed: true, confidence: 99 }];
     guessed.tags = ['LookRight', 'MouthOpen'].map(tag => ({ tag, confirmed: false, confidence: 98 }));
@@ -87,7 +108,7 @@ describe('which photos Claude looks at', () => {
     const photos = [unknown, rejected, guessed, confirmed];
     expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
     expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo))
-      .toEqual([confirmed, guessed, unknown, rejected]);
+      .toEqual([confirmed, guessed, unknown]);
   });
 });
 
@@ -120,10 +141,10 @@ describe('ranking the photos for the chosen pair', () => {
     const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked }); };
     const { job, finished } = startRanking(PIECE, { ask, starred: () => [starred.path], small });
     await finished;
-    expect(job).toMatchObject({ state: 'done', looked: 3 });
+    expect(job).toMatchObject({ state: 'done', looked: 2 });
     expect(seen).toContain(`- 01.jpg: ${confirmed.path}`);
     expect(seen).toContain(`- 02.jpg: ${suggested.path}`);
-    expect(seen).toContain(`- 03.jpg: ${starred.path}`);
+    expect(seen).not.toContain(starred.path);
     expect(seen).not.toContain(disconfirmed.path);
     expect(seen).not.toContain(disliked.path);
     expect(readRanking(PIECE)?.ranked).toEqual(ranked);
