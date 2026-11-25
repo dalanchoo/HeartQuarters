@@ -278,6 +278,9 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
   let sawResult = false;
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk: string) => {
+    // Output still arriving from a turn that was stopped (or replaced) must not save that turn's conversation over the
+    // newer one with the same key.
+    if (running.get(key) !== child) return;
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) >= 0) {
