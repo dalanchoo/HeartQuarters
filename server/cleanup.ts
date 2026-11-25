@@ -198,7 +198,10 @@ function* scanLinks(video: string): Generator<void, CapCutLinks> {
       // count as used (keeping more is safe), but a stale link in them isn't a missing link in the project.
       // draft_agency_config.json only remembers which clips CapCut once made proxies for; it isn't checked when the
       // project opens, so old paths in it aren't broken links (005B, 2026-11-18).
-      const driveCopy = / \(\d+\)\.[a-z]+$/i.test(e.name) || e.name.toLowerCase() === 'draft_agency_config.json';
+      // attachment/patch/ holds CapCut's edit history (mini_draft.json, patch.json); it keeps paths from before media
+      // was moved, while the timeline itself points to the new place (014A, Stills moved to B-Roll, 2026-11-25).
+      const driveCopy = / \(\d+\)\.[a-z]+$/i.test(e.name) || e.name.toLowerCase() === 'draft_agency_config.json'
+        || /[\\/]attachment[\\/]patch$/i.test(e.parentPath);
       for (const original of paths) {
         const value = original.toLowerCase();
         if (value.startsWith(prefix)) used.add(value);

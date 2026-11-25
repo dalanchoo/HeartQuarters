@@ -188,6 +188,14 @@ describe('cleaning up a video', () => {
     expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
   });
 
+  it("ignores old paths in CapCut's edit history, attachment/patch/mini_draft.json", () => {
+    const gone = fwd(V('Longform', 'Stills', 'Rocks.png'));
+    const patch = path.join(tmp, 'Drafts', '022 - V', 'Timelines', 'ABC', 'attachment', 'patch');
+    fs.mkdirSync(patch, { recursive: true });
+    fs.writeFileSync(path.join(patch, 'mini_draft.json'), JSON.stringify({ path: gone }));
+    expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
+  });
+
   it('resolves internal subdraft links inside the current CapCut draft when the draft was renamed from an older working name', () => {
     const subDir = path.join(tmp, 'Drafts', '022 - V', 'subdraft', '121B5324');
     fs.mkdirSync(subDir, { recursive: true });
