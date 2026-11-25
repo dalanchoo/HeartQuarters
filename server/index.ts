@@ -35,7 +35,7 @@ import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
-import { aiOverview, chooseAi, chooseAiModel, parseAi } from './ai.js';
+import { aiOverview, chooseAiModel, parseAi } from './ai.js';
 import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
@@ -229,7 +229,7 @@ app.post('/api/script', (req, res) => {
   }).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/ai-writing-check', (req, res) => {
-  checkAiWriting(req.body?.text, req.body?.label).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+  checkAiWriting(req.body?.text, req.body?.label, req.body?.ai).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/packaging/trash-version', handle((req, res) => { res.json(trashPackagingVersion(String(req.body?.piece ?? ''), String(req.body?.source ?? ''))); }));
 app.post('/api/packaging/copy-thumbnail', handle((req, res) => { res.json(copyVersionThumbnail(String(req.body?.piece ?? ''), String(req.body?.source ?? ''), String(req.body?.target ?? ''), req.body?.expected, req.body?.sourceExpected)); }));
@@ -465,16 +465,15 @@ app.post('/api/capcut/open', handle((req, res) => {
   res.json({ name: openInCapCut(req.body?.draft) });
 }));
 
-// ---- Which AI (see ai.ts) ---------------------------------------------------
+// ---- The AIs: which model each uses, and their sign-ins (see ai.ts) --------
 
 app.get('/api/ai', handle((_req, res) => {
   res.json(aiOverview());
 }));
 
-// { id: "claude" | "codex" | "gemini", model?: string }
+// { id: "claude" | "codex" | "gemini", model: string }: the model that AI uses ("" for its own default).
 app.post('/api/ai', handle((req, res) => {
-  if (req.body?.model !== undefined) chooseAiModel(req.body?.id, req.body?.model);
-  else chooseAi(req.body?.id);
+  chooseAiModel(req.body?.id, req.body?.model);
   res.json(aiOverview());
 }));
 
@@ -521,12 +520,12 @@ app.post('/api/shorts/propose', handle((req, res) => {
   const video = String(req.body?.video ?? '');
   if (getRun(video, 'shorts')?.status === 'running') throw new Error('The AI is already proposing shorts for this video.');
   keepOldPlan(video);
-  res.json(startShortsProposal(video, hasRetention(video)));
+  res.json(startShortsProposal(video, hasRetention(video), parseAi(req.body?.ai)));
 }));
 
-// { video, job: "shorts" or "short-S07", text }
+// { video, job: "shorts" or "short-S07", text, ai }
 app.post('/api/shorts/note', handle((req, res) => {
-  res.json(sendNote(String(req.body?.video ?? ''), String(req.body?.text ?? ''), parseShortsJob(req.body?.job)));
+  res.json(sendNote(String(req.body?.video ?? ''), String(req.body?.text ?? ''), parseShortsJob(req.body?.job), parseAi(req.body?.ai)));
 }));
 
 app.post('/api/shorts/stop', handle((req, res) => {
@@ -550,8 +549,8 @@ app.post('/api/shorts/retention/remove', handle((req, res) => {
 // Copying the CapCut project can take minutes, so this one waits without holding up the rest of the app.
 app.post('/api/shorts/make', async (req, res) => {
   try {
-    const { video, id, draft } = req.body ?? {};
-    res.json(await makeShort(String(video ?? ''), String(id ?? ''), String(draft ?? '')));
+    const { video, id, draft, ai } = req.body ?? {};
+    res.json(await makeShort(String(video ?? ''), String(id ?? ''), String(draft ?? ''), parseAi(ai)));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
@@ -563,9 +562,9 @@ app.get('/api/piece-ai', handle((req, res) => {
   res.json(pieceRun(String(req.query.video ?? ''), String(req.query.piece ?? '')));
 }));
 
-// { video, piece, text }: a note, which starts a conversation if the piece has none.
+// { video, piece, text, ai }: a note, which starts a conversation if the piece has none.
 app.post('/api/piece-ai/note', handle((req, res) => {
-  res.json(notePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.text));
+  res.json(notePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.text, parseAi(req.body?.ai)));
 }));
 
 // ?video=&piece=: whether the card's button says Generate or Regenerate, and whether it can be used.
@@ -573,10 +572,10 @@ app.get('/api/piece-ai/state', handle((req, res) => {
   res.json(pieceState(String(req.query.video ?? ''), String(req.query.piece ?? '')));
 }));
 
-// { video, piece, regenerate }: copying a CapCut project can take minutes, so this waits without holding up the rest.
+// { video, piece, regenerate, ai }: copying a CapCut project can take minutes, so this waits without holding up the rest.
 app.post('/api/piece-ai/generate', async (req, res) => {
   try {
-    res.json(await generatePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.regenerate));
+    res.json(await generatePiece(String(req.body?.video ?? ''), String(req.body?.piece ?? ''), req.body?.regenerate, parseAi(req.body?.ai)));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
@@ -710,8 +709,8 @@ app.post('/api/brief/picks', async (req, res) => {
 // Moves the old short to the trash, then makes it again: the same wait as above.
 app.post('/api/shorts/regenerate', async (req, res) => {
   try {
-    const { video, id, draft } = req.body ?? {};
-    res.json(await regenerateShort(String(video ?? ''), String(id ?? ''), String(draft ?? '')));
+    const { video, id, draft, ai } = req.body ?? {};
+    res.json(await regenerateShort(String(video ?? ''), String(id ?? ''), String(draft ?? ''), parseAi(ai)));
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }

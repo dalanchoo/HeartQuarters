@@ -1,24 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ClaudeRun } from './api';
-import { chosenName, useAi } from './AiPicker';
+import type { AiId, ClaudeRun } from './api';
+import { aiName } from './AiChoice';
 
 // One conversation with an AI: what's been said, what it's doing, and a box to answer in.
 // Used by "Edit with Claude", the list of shorts, and each short.
 export function ClaudeChat({
   run,
+  ai,
   placeholder,
   onSend,
   onStop,
 }: {
   run: ClaudeRun;
+  /** The AI chosen next to the button: the next note goes to it. */
+  ai: AiId;
   placeholder: string;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
   const [note, setNote] = useState('');
-  const { overview } = useAi();
-  const who = overview?.options.find((o) => o.id === (run.ai ?? 'claude'))?.name ?? 'The AI';
-  const switching = !!overview && overview.chosen !== (run.ai ?? 'claude');
+  const who = aiName(run.ai ?? 'claude');
+  const switching = ai !== (run.ai ?? 'claude');
   const listRef = useRef<HTMLDivElement>(null);
 
   // Scrolls the conversation only, never the page around it.
@@ -40,7 +42,7 @@ export function ClaudeChat({
       {busy && <p className="muted small-text">{who} is working… {run.activity}</p>}
       {!busy && switching && (
         <p className="muted small-text">
-          Your next note goes to {chosenName(overview)}, which takes over from {who}. It will only know what's written in
+          Your next note goes to {aiName(ai)}, which takes over from {who}. It will only know what's written in
           this conversation and in the files.
         </p>
       )}

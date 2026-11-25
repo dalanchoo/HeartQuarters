@@ -3,8 +3,8 @@ import { getJson, postJson, type AiId, type AiOverview, type SignIn } from './ap
 
 const CHANGED = 'hq-ai-chosen';
 
-/** Which AI is picked, kept the same everywhere on the page. Null until it has loaded. */
-export function useAi(): { overview: AiOverview | null; choose: (id: AiId) => Promise<void>; chooseModel: (id: AiId, model: string) => Promise<void> } {
+/** The AIs: whether each is installed and which model it uses. Null until it has loaded. */
+export function useAi(): { overview: AiOverview | null; chooseModel: (id: AiId, model: string) => Promise<void> } {
   const [overview, setOverview] = useState<AiOverview | null>(null);
   useEffect(() => {
     const load = () => getJson<AiOverview>('/api/ai').then(setOverview, () => {});
@@ -12,74 +12,44 @@ export function useAi(): { overview: AiOverview | null; choose: (id: AiId) => Pr
     window.addEventListener(CHANGED, load);
     return () => window.removeEventListener(CHANGED, load);
   }, []);
-  const choose = (id: AiId) =>
-    postJson('/api/ai', { id }).then(() => {
-      window.dispatchEvent(new Event(CHANGED));
-    });
   const chooseModel = (id: AiId, model: string) =>
     postJson('/api/ai', { id, model }).then(() => {
       window.dispatchEvent(new Event(CHANGED));
     });
-  return { overview, choose, chooseModel };
+  return { overview, chooseModel };
 }
 
-/** The AI's name, for "Edit with ..." and the like. */
-export function chosenName(overview: AiOverview | null): string {
-  return overview?.options.find((o) => o.id === overview.chosen)?.name ?? 'AI';
-}
-
-/** At the top of the app: which AI the buttons use, and which model each AI uses. */
+/**
+ * At the top of the app: each AI's sign-in and the model it uses. Which AI does a job is chosen next to each button
+ * (AiChoice.tsx), not here.
+ */
 export function AiPicker() {
-  const { overview, choose, chooseModel } = useAi();
+  const { overview, chooseModel } = useAi();
   const [error, setError] = useState<string | null>(null);
   if (!overview) return null;
-  const activeOption = overview.options.find((o) => o.id === overview.chosen);
-  const aiTip =
-    error ??
-    (overview.chosen === 'gemini'
-      ? "Gemini (can't build CapCut projects) — which AI does the jobs that buttons in this app start"
-      : 'Which AI does the jobs that buttons in this app start');
+  const pickModel = (id: AiId, model: string) => {
+    setError(null);
+    chooseModel(id, model).catch((err: Error) => setError(err.message));
+  };
   return (
     <div className="ai-controls">
-      <label className="ai-picker small-text" title={aiTip}>
-        AI
-        <select
-          value={overview.chosen}
-          onChange={(e) => {
-            setError(null);
-            choose(e.target.value as AiId).catch((err: Error) => setError(err.message));
-          }}
-        >
-          {overview.options.map((o) => (
-            <option key={o.id} value={o.id} disabled={!o.available}>
-              {o.name}
-              {!o.available ? ' (not installed)' : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-      {activeOption && (
-        <label className="ai-picker small-text" title={`Which model ${activeOption.name} uses (remembered for ${activeOption.name})`}>
-          Model
-          <select
-            value={activeOption.model}
-            onChange={(e) => {
-              setError(null);
-              chooseModel(activeOption.id, e.target.value).catch((err: Error) => setError(err.message));
-            }}
-          >
-            <option value="">{activeOption.defaultLabel}</option>
-            {activeOption.models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          {error && <span className="error">{error}</span>}
-        </label>
-      )}
-      <SignIns overview={overview} />
+      <SignIns overview={overview} onModel={pickModel} />
+      {error && <span className="error">{error}</span>}
     </div>
+  );
+}
+
+/** One AI's model, as a small dropdown. */
+function ModelSelect({ option, onModel }: { option: AiOverview['options'][number]; onModel: (id: AiId, model: string) => void }) {
+  return (
+    <select className="ai-model" value={option.model} title={`Which model ${option.name} uses`} onChange={(e) => onModel(option.id, e.target.value)}>
+      <option value="">{option.defaultLabel}</option>
+      {option.models.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -87,7 +57,7 @@ export function AiPicker() {
  * Whether each AI is signed in, checked when the app opens, when ↻ is clicked, and when John comes back to the app
  * after opening a sign-in. Sign In opens that AI's program in its own window, where he finishes in the browser.
  */
-function SignIns({ overview }: { overview: AiOverview }) {
+function SignIns({ overview, onModel }: { overview: AiOverview; onModel: (id: AiId, model: string) => void }) {
   const [signIns, setSignIns] = useState<SignIn[] | null>(null);
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
@@ -137,11 +107,11 @@ function SignIns({ overview }: { overview: AiOverview }) {
       <span className="ai-signin-list">
         {signIns.map((s) => {
           const opt = overview.options.find((o) => o.id === s.id);
-          const modelLabel = opt?.model ? (opt.models.find((m) => m.id === opt.model)?.label ?? opt.model) : (opt?.defaultLabel ?? 'Default');
           return (
-            <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={`${s.detail} · Model: ${modelLabel}`}>
+            <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={s.detail}>
               <span className="ai-signin-dot" aria-hidden="true" />
               {s.name}
+              {opt && <ModelSelect option={opt} onModel={onModel} />}
               {s.state !== 'in' && (
                 <button type="button" className="small" onClick={() => signIn(s)} title={s.state === 'out' ? 'Not signed in' : `Couldn't tell: ${s.detail}`}>
                   Sign In

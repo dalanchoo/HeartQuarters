@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { AiSelect, useAiFor } from './AiChoice';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { postJson } from './api';
@@ -91,6 +92,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
   const [error, setError] = useState('');
   const [picked, setPicked] = useState<number | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
+  const [ai, setAi] = useAiFor('ai-writing');
 
   if (!isProseFieldLabel(label)) return null;
   const trimmed = text.trim();
@@ -101,7 +103,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
     setBusy(true);
     setError('');
     try {
-      const result = await postJson<AiWritingReview>('/api/ai-writing-check', { text: trimmed, label });
+      const result = await postJson<AiWritingReview>('/api/ai-writing-check', { text: trimmed, label, ai });
       setReview(result);
       if (suggestionKey) setFieldSuggestions(suggestionKey, result.suggestions);
       setPicked(null);
@@ -161,6 +163,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
         ) : (
           <span className="ai-writing-badge ai-writing-badge--ok">✓ No Common AI Tells</span>
         )}
+        <AiSelect value={ai} onChange={setAi} title="Which AI checks the writing" />
         <button type="button" className="small" disabled={busy || !trimmed} onClick={() => void checkWithAi()}>
           {busy ? 'Checking Writing…' : 'Check Writing'}
         </button>

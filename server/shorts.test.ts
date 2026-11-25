@@ -2,7 +2,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { chooseAi } from './ai';
 import { appDir, config } from './config';
 import { buildPrompt, forgetRun, getRun, parseShortsJob, sendNote, shortsPrompt, startShortsProposal, stopRun } from './claude';
 import { system } from './manage';
@@ -112,19 +111,19 @@ describe("a card's AI box, the same for the longform and each short", () => {
 
   it("starts a short's conversation from a note when it has none, saying which short and skill, then continues it", async () => {
     makeShortFolder();
-    notePiece(NUMBERED, NAME, 'Make the captions bigger');
+    notePiece(NUMBERED, NAME, 'Make the captions bigger', 'claude');
     let run = await settle('short-S01');
     expect(run.messages[0]).toMatchObject({ from: 'john', text: 'Make the captions bigger' });
     expect(run.prompt).toMatch(/the short "777_S01 - A Good Title".*shorts-from-longform.*CapCut closed.*Make the captions bigger/s);
-    notePiece(NUMBERED, NAME, 'And smaller font');
+    notePiece(NUMBERED, NAME, 'And smaller font', 'claude');
     run = await settle('short-S01');
     expect(run.messages.filter((m) => m.from === 'john').map((m) => m.text)).toEqual(['Make the captions bigger', 'And smaller font']);
-    expect(() => notePiece(NUMBERED, NAME, '   ')).toThrow(/empty/);
+    expect(() => notePiece(NUMBERED, NAME, '   ', 'claude')).toThrow(/empty/);
   });
 
   it("Generate makes the longform's first cut when it has none", async () => {
     expect(pieceState(NUMBERED, 'Longform')).toEqual({ generated: false, canGenerate: true });
-    await generatePiece(NUMBERED, 'Longform', false);
+    await generatePiece(NUMBERED, 'Longform', false, 'claude');
     const run = await settle('edit');
     expect(run.messages[0].text).toBe('Edit this video with the longform-edit skill.');
   });
@@ -144,12 +143,12 @@ describe("a card's AI box, the same for the longform and each short", () => {
 
     it('needs confirming once the longform has a first cut', async () => {
       expect(pieceState(NUMBERED, 'Longform').generated).toBe(true);
-      await expect(generatePiece(NUMBERED, 'Longform', false)).rejects.toThrow(/Confirm/);
+      await expect(generatePiece(NUMBERED, 'Longform', false, 'claude')).rejects.toThrow(/Confirm/);
       expect(fs.existsSync(path.join(draftDir(), 'draft_content.json'))).toBe(true);
     });
 
     it('moves the CapCut project to the trash and starts again from a fresh copy of the template', async () => {
-      await generatePiece(NUMBERED, 'Longform', true);
+      await generatePiece(NUMBERED, 'Longform', true, 'claude');
       await settle('edit');
       const [slot] = fs.readdirSync(path.join(tmp, 'Trash'));
       expect(slot).toMatch(/\(regenerated\)$/);
@@ -161,16 +160,9 @@ describe("a card's AI box, the same for the longform and each short", () => {
 
     it('changes nothing while CapCut is open, or with Gemini', async () => {
       system.isCapCutRunning = () => true;
-      await expect(generatePiece(NUMBERED, 'Longform', true)).rejects.toThrow(/Close CapCut/);
+      await expect(generatePiece(NUMBERED, 'Longform', true, 'claude')).rejects.toThrow(/Close CapCut/);
       system.isCapCutRunning = () => false;
-      const file = process.env.HQ_AI_FILE;
-      process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
-      chooseAi('gemini');
-      try {
-        await expect(generatePiece(NUMBERED, 'Longform', true)).rejects.toThrow(/limited/);
-      } finally {
-        process.env.HQ_AI_FILE = file;
-      }
+      await expect(generatePiece(NUMBERED, 'Longform', true, 'gemini')).rejects.toThrow(/limited/);
       expect(fs.readFileSync(path.join(draftDir(), 'draft_content.json'), 'utf8')).toContain('my work');
       expect(fs.existsSync(path.join(tmp, 'Trash'))).toBe(false);
     });
@@ -179,7 +171,7 @@ describe("a card's AI box, the same for the longform and each short", () => {
   it("can't regenerate a short made by hand, which has no clip times in the plan", async () => {
     makeShortFolder();
     expect(pieceState(NUMBERED, NAME)).toMatchObject({ generated: true, canGenerate: false });
-    await expect(generatePiece(NUMBERED, NAME, true)).rejects.toThrow(/isn't in the shorts plan/);
+    await expect(generatePiece(NUMBERED, NAME, true, 'claude')).rejects.toThrow(/isn't in the shorts plan/);
   });
 
   it("takes the longform's URL from its linked YouTube video first, then the older saved file", () => {
@@ -210,7 +202,7 @@ describe('checking a short after each turn', () => {
 
   it("shows the problems it finds, whatever the AI said, and isn't finished until it has", async () => {
     setUp("console.log('Note: ignore me'); console.log('PROBLEM: The voice is silent.'); console.log('PROBLEM: No captions.'); process.exit(1);");
-    notePiece(NUMBERED, NAME, 'Check this');
+    notePiece(NUMBERED, NAME, 'Check this', 'claude');
     const run = await settle();
     expect(run.status).toBe('idle');
     const said = run.messages.at(-1)!;
@@ -222,7 +214,7 @@ describe('checking a short after each turn', () => {
 
   it('says the settings are fine when they are, without claiming more', async () => {
     setUp("console.log('No problems found.');");
-    notePiece(NUMBERED, NAME, 'Check this');
+    notePiece(NUMBERED, NAME, 'Check this', 'claude');
     const said = (await settle()).messages.at(-1)!;
     expect(said.from).toBe('app');
     expect(said.text).toMatch(/no problems in its settings.*how it looks or sounds/);
@@ -230,14 +222,14 @@ describe('checking a short after each turn', () => {
 
   it('says so if the checker itself fails', async () => {
     setUp("process.exit(3);");
-    notePiece(NUMBERED, NAME, 'Check this');
+    notePiece(NUMBERED, NAME, 'Check this', 'claude');
     expect((await settle()).messages.at(-1)!.text).toMatch(/couldn't check/);
   });
 
   it("counts a missing .srt for YouTube as a problem", async () => {
     setUp("console.log('No problems found.');");
     fs.rmSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME, 'Subtitles'), { recursive: true });
-    notePiece(NUMBERED, NAME, 'Check this');
+    notePiece(NUMBERED, NAME, 'Check this', 'claude');
     const said = (await settle()).messages.at(-1)!;
     expect(said.text).toMatch(/found 1 problem\(s\)/);
     expect(said.text).toMatch(/no \.srt in the short's Subtitles folder.*--subtitles/);
@@ -245,7 +237,7 @@ describe('checking a short after each turn', () => {
 
   it('adds nothing when there is no checker', async () => {
     fs.mkdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME), { recursive: true });
-    notePiece(NUMBERED, NAME, 'Check this');
+    notePiece(NUMBERED, NAME, 'Check this', 'claude');
     expect((await settle()).messages.some((m) => m.from === 'app')).toBe(false);
   });
 });
@@ -267,7 +259,7 @@ describe("a short's first message", () => {
     const shorts = path.join(tmp, 'Videos', NUMBERED, 'Shorts');
     fs.mkdirSync(shorts, { recursive: true });
     fs.writeFileSync(path.join(shorts, 'Shorts Plan.json'), JSON.stringify({ shorts: [{ ...ROW, visuals: 'Drop the reveal list.', why: 'Strong hook' }] }));
-    await makeShort(NUMBERED, 'S01', NUMBERED);
+    await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
     for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')?.status === 'running'; i++) {
       await new Promise((res) => setTimeout(res, 50));
     }
@@ -289,19 +281,12 @@ describe("the longform's YouTube URL", () => {
 });
 
 describe('Gemini, which is limited', () => {
-  const file = process.env.HQ_AI_FILE;
-  afterEach(() => {
-    process.env.HQ_AI_FILE = file;
-  });
-
   it("refuses to make or regenerate a short, before touching anything", async () => {
-    process.env.HQ_AI_FILE = path.join(tmp, 'ai-choice.json');
-    chooseAi('gemini');
     const shorts = path.join(tmp, 'Videos', NUMBERED, 'Shorts');
     fs.mkdirSync(path.join(shorts, NAME), { recursive: true });
     fs.writeFileSync(path.join(shorts, 'Shorts Plan.json'), JSON.stringify({ shorts: [{ ...ROW, made: NAME }, { ...ROW, id: 'S02', title: 'Other' }] }));
-    await expect(makeShort(NUMBERED, 'S02', NUMBERED)).rejects.toThrow(/limited/);
-    await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/limited/);
+    await expect(makeShort(NUMBERED, 'S02', NUMBERED, 'gemini')).rejects.toThrow(/limited/);
+    await expect(regenerateShort(NUMBERED, 'S01', NUMBERED, 'gemini')).rejects.toThrow(/limited/);
     expect(fs.existsSync(path.join(shorts, NAME))).toBe(true);
     expect(fs.readdirSync(shorts).sort()).toEqual([NAME, 'Shorts Plan.json'].sort());
   });
@@ -591,8 +576,8 @@ describe('Propose shorts', () => {
   });
 
   it('runs in the video folder, and its conversation is separate from the edit', async () => {
-    startShortsProposal(VIDEO);
-    expect(() => startShortsProposal(VIDEO)).toThrow(/already proposing/);
+    startShortsProposal(VIDEO, false, 'claude');
+    expect(() => startShortsProposal(VIDEO, false, 'claude')).toThrow(/already proposing/);
     for (let i = 0; i < 100 && getRun(VIDEO, 'shorts')!.status === 'running'; i++) {
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -625,7 +610,7 @@ describe('Make this short', () => {
   });
 
   it('makes the folder and a copy of the CapCut project, marks the row, and starts Claude', async () => {
-    await makeShort(NUMBERED, 'S01', NUMBERED);
+    await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
     const folder = path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME);
     expect(fs.existsSync(path.join(folder, 'Exports'))).toBe(true);
     expect(fs.existsSync(path.join(folder, `${NAME} - Script.docx`))).toBe(true);
@@ -642,9 +627,9 @@ describe('Make this short', () => {
   });
 
   it("sends John's notes to that short's own conversation", async () => {
-    await makeShort(NUMBERED, 'S01', NUMBERED);
+    await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
     const first = await settled();
-    sendNote(NUMBERED, 'Move me to the left', 'short-S01');
+    sendNote(NUMBERED, 'Move me to the left', 'short-S01', 'claude');
     const run = await settled();
     expect(run.sessionId).toBe(first.sessionId);
     expect(run.messages.at(-1)!.text).toBe('Got: Move me to the left');
@@ -653,35 +638,35 @@ describe('Make this short', () => {
 
   it('can make a near miss too', async () => {
     savePlan(NUMBERED, [], [ROW]);
-    await makeShort(NUMBERED, 'S01', NUMBERED);
+    await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
     await settled();
     expect(readPlan(NUMBERED)!.rejected[0].made).toBe(NAME);
   });
 
   it('makes each row only once', async () => {
-    await makeShort(NUMBERED, 'S01', NUMBERED);
+    await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
     await settled();
-    await expect(makeShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/already been made/);
+    await expect(makeShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/already been made/);
   });
 
   it('touches nothing while CapCut is open', async () => {
     system.isCapCutRunning = () => true;
-    await expect(makeShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/Close CapCut/);
+    await expect(makeShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/Close CapCut/);
     expect(fs.existsSync(path.join(tmp, 'Drafts', NAME))).toBe(false);
     expect(fs.readdirSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts'))).toEqual(['Shorts Plan.json']);
     expect(readPlan(NUMBERED)!.shorts[0].made).toBeUndefined();
   });
 
   it('refuses a row or a CapCut project that is not there', async () => {
-    await expect(makeShort(NUMBERED, 'S09', NUMBERED)).rejects.toThrow(/no S09/);
-    await expect(makeShort(NUMBERED, 'S01', 'Nope')).rejects.toThrow(/no CapCut draft/);
-    await expect(makeShort(NUMBERED, 'S01', '../..')).rejects.toThrow();
+    await expect(makeShort(NUMBERED, 'S09', NUMBERED, 'claude')).rejects.toThrow(/no S09/);
+    await expect(makeShort(NUMBERED, 'S01', 'Nope', 'claude')).rejects.toThrow(/no CapCut draft/);
+    await expect(makeShort(NUMBERED, 'S01', '../..', 'claude')).rejects.toThrow();
   });
 
   it('leaves no half-made folder if the CapCut project already exists, and keeps what was there', async () => {
     fs.mkdirSync(path.join(tmp, 'Drafts', NAME));
     fs.writeFileSync(path.join(tmp, 'Drafts', NAME, 'mine.txt'), 'keep');
-    await expect(makeShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/already exists/);
+    await expect(makeShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/already exists/);
     expect(fs.existsSync(path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME))).toBe(false);
     expect(fs.readFileSync(path.join(tmp, 'Drafts', NAME, 'mine.txt'), 'utf8')).toBe('keep');
     expect(readPlan(NUMBERED)!.shorts[0].made).toBeUndefined();
@@ -691,7 +676,7 @@ describe('Make this short', () => {
     const folder = path.join(tmp, 'Videos', NUMBERED, 'Shorts', NAME);
     fs.mkdirSync(folder);
     fs.writeFileSync(path.join(folder, 'mine.txt'), 'keep');
-    await expect(makeShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/already exists/);
+    await expect(makeShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/already exists/);
     expect(fs.readFileSync(path.join(folder, 'mine.txt'), 'utf8')).toBe('keep');
   });
 
@@ -709,12 +694,12 @@ describe('Make this short', () => {
     });
 
     it('moves the old short to the trash and starts again from a fresh copy, with a new conversation', async () => {
-      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
       const first = await settled();
       fs.writeFileSync(path.join(folder(), 'old work.txt'), 'old');
       fs.writeFileSync(path.join(draft(), 'old work.txt'), 'old');
 
-      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      await regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude');
       const second = await settled();
 
       expect(fs.existsSync(path.join(folder(), 'old work.txt'))).toBe(false);
@@ -729,39 +714,39 @@ describe('Make this short', () => {
 
     it('leaves the other rows made', async () => {
       savePlan(NUMBERED, [ROW, { ...ROW, id: 'S02', title: 'Other' }]);
-      await makeShort(NUMBERED, 'S02', NUMBERED);
+      await makeShort(NUMBERED, 'S02', NUMBERED, 'claude');
       for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S02')!.status === 'running'; i++) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
-      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      await regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
       expect(readPlan(NUMBERED)!.shorts[1].made).toBe('777_S02 - Other');
       forgetRun(NUMBERED, 'short-S02');
     });
 
     it('recovers when the Drive folder is already gone and only the CapCut draft remains', async () => {
-      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
       fs.rmSync(folder(), { recursive: true, force: true });
       fs.writeFileSync(path.join(draft(), 'leftover.txt'), 'old');
-      await regenerateShort(NUMBERED, 'S01', NUMBERED);
+      await regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
       expect(fs.existsSync(path.join(draft(), 'leftover.txt'))).toBe(false);
       expect(fs.existsSync(path.join(folder(), 'Exports'))).toBe(true);
     });
 
     it('refuses, changing nothing, in every case it cannot finish', async () => {
-      await expect(regenerateShort(NUMBERED, 'S09', NUMBERED)).rejects.toThrow(/no S09/);
-      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/hasn't been made/);
-      await makeShort(NUMBERED, 'S01', NUMBERED);
+      await expect(regenerateShort(NUMBERED, 'S09', NUMBERED, 'claude')).rejects.toThrow(/no S09/);
+      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/hasn't been made/);
+      await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
-      await expect(regenerateShort(NUMBERED, 'S01', NAME)).rejects.toThrow(/its own CapCut project/);
-      await expect(regenerateShort(NUMBERED, 'S01', 'Nope')).rejects.toThrow(/no CapCut draft/);
-      await expect(regenerateShort(NUMBERED, 'S01', '../..')).rejects.toThrow();
+      await expect(regenerateShort(NUMBERED, 'S01', NAME, 'claude')).rejects.toThrow(/its own CapCut project/);
+      await expect(regenerateShort(NUMBERED, 'S01', 'Nope', 'claude')).rejects.toThrow(/no CapCut draft/);
+      await expect(regenerateShort(NUMBERED, 'S01', '../..', 'claude')).rejects.toThrow();
       system.isCapCutRunning = () => true;
-      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED)).rejects.toThrow(/Close CapCut/);
+      await expect(regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude')).rejects.toThrow(/Close CapCut/);
       system.isCapCutRunning = () => false;
       expect(fs.existsSync(folder())).toBe(true);
       expect(fs.existsSync(draft())).toBe(true);

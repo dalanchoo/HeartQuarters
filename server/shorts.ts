@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { makeFolder, moveFile, readable, readText, writable, writeFile } from './safe-files.js';
-import { chosenAi, requireCapCutAi } from './ai.js';
+import { requireCapCutAi, type AiId } from './ai.js';
 import { askInConversation, forgetRun, getRun, pieceNotePrompt, startEdit, startShortBuild, stopRun, type ClaudeJob, type ClaudeRun } from './claude.js';
 import { uploadsFor } from './youtube.js';
 import { checkDraftName, createCapCutDraft, createVideoFolder, draftsForVideo, findDraft, numberOf } from './create.js';
@@ -329,9 +329,9 @@ const making = new Set<string>();
 
 /**
  * "Make this short": the short's folder from the template, the longform's CapCut project copied under the short's name,
- * then Claude cuts that copy down and turns it portrait. Each row is made once; after that John talks to Claude.
+ * then the chosen AI cuts that copy down and turns it portrait. Each row is made once; after that John talks to the AI.
  */
-async function makeShortLocked(video: string, id: string, source: string, plan: ShortsPlan, row: PlannedShort): Promise<ClaudeRun> {
+async function makeShortLocked(video: string, id: string, source: string, plan: ShortsPlan, row: PlannedShort, ai: AiId): Promise<ClaudeRun> {
   const name = `${numberOf(video)}_${id} - ${row.title}`;
   const made = await createVideoFolder('short', video, name, source);
   if (!made.capcut.created) {
@@ -344,11 +344,11 @@ async function makeShortLocked(video: string, id: string, source: string, plan: 
   const mark = (s: PlannedShort) => (s.id === id ? { ...s, made: name } : s);
   writePlan(video, { shorts: now.shorts.map(mark), rejected: now.rejected.map(mark) });
   const notes = [row.visuals, row.why].filter(Boolean).join(' ');
-  return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source, notes });
+  return startShortBuild(video, { id, title: row.title, start: row.start, end: row.end, name, source, notes }, ai);
 }
 
-export async function makeShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
-  requireCapCutAi(chosenAi());
+export async function makeShort(video: string, id: string, sourceDraft: string, ai: AiId): Promise<ClaudeRun> {
+  requireCapCutAi(ai);
   const plan = readPlan(video);
   const row = plan && [...plan.shorts, ...plan.rejected].find((s) => s.id === id);
   if (!plan || !row) throw new Error(`There's no ${id} in this video's list.`);
@@ -359,7 +359,7 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
   if (making.has(key)) throw new Error(`${id} is already being made.`);
   making.add(key);
   try {
-    return await makeShortLocked(video, id, source, plan, row);
+    return await makeShortLocked(video, id, source, plan, row, ai);
   } finally {
     making.delete(key);
   }
@@ -369,8 +369,8 @@ export async function makeShort(video: string, id: string, sourceDraft: string):
  * "Regenerate": moves the short's folder and CapCut project to the trash (nothing is really deleted), then makes the
  * short again from a fresh copy of the longform, with a new conversation. For trying changed instructions from scratch.
  */
-export async function regenerateShort(video: string, id: string, sourceDraft: string): Promise<ClaudeRun> {
-  requireCapCutAi(chosenAi());
+export async function regenerateShort(video: string, id: string, sourceDraft: string, ai: AiId): Promise<ClaudeRun> {
+  requireCapCutAi(ai);
   const plan = readPlan(video);
   const row = plan && [...plan.shorts, ...plan.rejected].find((s) => s.id === id);
   if (!plan || !row) throw new Error(`There's no ${id} in this video's list.`);
@@ -401,7 +401,7 @@ export async function regenerateShort(video: string, id: string, sourceDraft: st
     const nextPlan: ShortsPlan = { shorts: plan.shorts.map(unmark), rejected: plan.rejected.map(unmark) };
     writePlan(video, nextPlan);
     const nextRow = [...nextPlan.shorts, ...nextPlan.rejected].find((s) => s.id === id)!;
-    return await makeShortLocked(video, id, source, nextPlan, nextRow);
+    return await makeShortLocked(video, id, source, nextPlan, nextRow, ai);
   } finally {
     making.delete(key);
   }
@@ -444,13 +444,13 @@ export function pieceRun(video: string, piece: string): ClaudeRun | null {
 }
 
 /** John's note to a piece's AI. Without a conversation yet, it starts one that knows which piece and skill it's about. */
-export function notePiece(video: string, piece: string, text: unknown): ClaudeRun {
+export function notePiece(video: string, piece: string, text: unknown, ai: AiId): ClaudeRun {
   const note = String(text ?? '').trim();
   if (!note) throw new Error('The note is empty.');
   const { job, draft } = pieceJob(video, piece);
-  if (getRun(video, job)) return askInConversation(video, job, draft, note);
+  if (getRun(video, job)) return askInConversation(video, job, draft, note, note, ai);
   const videoDir = safeResolve('projects', video);
-  return askInConversation(video, job, draft, pieceNotePrompt(videoDir, job, draft, note), note);
+  return askInConversation(video, job, draft, pieceNotePrompt(videoDir, job, draft, note), note, ai);
 }
 
 // ---- Generate and Regenerate, the same button on every card -----------------------
@@ -500,7 +500,7 @@ export function pieceState(video: string, piece: string): PieceState {
  * the longform from a fresh copy of the template, a short from a fresh copy of the longform's project. Changes go in
  * as notes instead.
  */
-export async function generatePiece(video: string, piece: string, regenerate: unknown): Promise<ClaudeRun> {
+export async function generatePiece(video: string, piece: string, regenerate: unknown, ai: AiId): Promise<ClaudeRun> {
   const { job, draft } = pieceJob(video, piece);
   const confirmed = regenerate === true;
   if (job !== 'edit') {
@@ -508,9 +508,9 @@ export async function generatePiece(video: string, piece: string, regenerate: un
     if (!row) throw new Error(pieceState(video, piece).reason);
     if (!confirmed) throw new Error('This short has already been made. Confirm to regenerate it.');
     const source = findDraft(path.basename(video)) ?? draftsForVideo(video).find((d) => d !== draft) ?? '';
-    return regenerateShort(video, row.id, source);
+    return regenerateShort(video, row.id, source, ai);
   }
-  requireCapCutAi(chosenAi());
+  requireCapCutAi(ai);
   if (getRun(video, 'edit')?.status === 'running') throw new Error('The AI is still working on this longform. Stop it first.');
   const editKey = `${video}#edit`;
   if (making.has(editKey)) throw new Error('This longform is already being set up.');
@@ -526,7 +526,7 @@ export async function generatePiece(video: string, piece: string, regenerate: un
     } else {
       forgetRun(video, 'edit');
     }
-    return startEdit(video);
+    return startEdit(video, ai);
   } finally {
     making.delete(editKey);
   }

@@ -7,7 +7,7 @@ interface PieceState {
   canGenerate: boolean;
   reason?: string;
 }
-import { chosenName, useAi } from './AiPicker';
+import { AiSelect, aiName, useAiFor } from './AiChoice';
 import { ClaudeChat } from './ClaudeChat';
 
 // The AI box at the top of every card on a video's page, the same for the longform and each short: the piece's
@@ -36,7 +36,9 @@ export function PieceAI({
   const [loaded, setLoaded] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const name = chosenName(useAi().overview);
+  // One choice for every card's AI box: Generate, Regenerate and notes all go to it.
+  const [ai, setAi] = useAiFor('piece');
+  const name = aiName(ai);
   const query = video ? `video=${encodeURIComponent(video)}&piece=${encodeURIComponent(piece)}` : '';
   const wasBusy = useRef(false);
   const box = useRef<HTMLDivElement>(null);
@@ -74,7 +76,7 @@ export function PieceAI({
 
   const act = (url: string, data: object = {}) => {
     setError(null);
-    postJson<ClaudeRun>(url, { video, piece, ...data }).then(setRun, fail);
+    postJson<ClaudeRun>(url, { video, piece, ai, ...data }).then(setRun, fail);
   };
 
   const generate = () => {
@@ -90,15 +92,18 @@ export function PieceAI({
       return;
     setError(null);
     setStarting(true);
-    postJson<ClaudeRun>('/api/piece-ai/generate', { video, piece, regenerate })
+    postJson<ClaudeRun>('/api/piece-ai/generate', { video, piece, regenerate, ai })
       .then(setRun, fail)
       .finally(() => {
         setStarting(false);
         refresh();
       });
   };
+  const noCapCut = ai === 'gemini' ? "Gemini can't build CapCut projects. Choose Claude or ChatGPT." : '';
   const generateTitle = !state?.canGenerate
     ? state?.reason
+    : noCapCut
+      ? noCapCut
     : state.generated
       ? `Throws this CapCut project away (to the trash) and makes it again from scratch. Asks first.`
       : 'Makes the CapCut project and the first cut from the takes';
@@ -107,7 +112,8 @@ export function PieceAI({
     <div className="card piece-ai" ref={box}>
       <h4>AI · CapCut project "{draft}"</h4>
       <div className="piece-ai-buttons">
-        <button disabled={busy || !state?.canGenerate} title={generateTitle} onClick={generate}>
+        <AiSelect value={ai} onChange={setAi} title="Which AI Generate, Regenerate and your notes go to" label="AI" />
+        <button disabled={busy || !state?.canGenerate || !!noCapCut} title={generateTitle} onClick={generate}>
           {starting ? 'Starting…' : state?.generated ? 'Regenerate' : 'Generate'}
         </button>
       </div>
@@ -125,6 +131,7 @@ export function PieceAI({
       {run ? (
         <ClaudeChat
           run={run}
+          ai={ai}
           placeholder="What to change, or what you changed yourself in CapCut"
           onSend={(text) => act('/api/piece-ai/note', { text })}
           onStop={() => act('/api/piece-ai/stop')}

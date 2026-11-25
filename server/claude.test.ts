@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appDir, config } from './config';
 import { buildPrompt, claudeArgs, firstPrompt, forgetIdleRuns, forgetRun, getRun, handoverPrompt, missingShortSubtitles, readEvent, sendNote, startEdit, stopRun, type ClaudeRun } from './claude';
-import { aiOverview, chooseAi, chosenAi, codexArgs, geminiArgs, geminiReader, readCodexEvent } from './ai';
+import { aiOverview, codexArgs, geminiArgs, geminiReader, readCodexEvent } from './ai';
 import { makeTree, removeTree } from './testing';
 
 // Prints Codex's --json lines: its arguments and message, and the conversation id it was given or makes up.
@@ -92,21 +92,6 @@ describe('choosing an AI', () => {
   const file = process.env.HQ_AI_FILE;
   afterEach(() => {
     process.env.HQ_AI_FILE = file;
-  });
-
-  it('is Claude until John picks, remembers his pick, and refuses anything else', () => {
-    process.env.HQ_AI_FILE = path.join(tmp, 'data', 'ai-choice.json');
-    expect(chosenAi()).toBe('claude');
-    chooseAi('codex');
-    expect(chosenAi()).toBe('codex');
-    expect(() => chooseAi('skynet')).toThrow(/Unknown/);
-    expect(chosenAi()).toBe('codex');
-  });
-
-  it('falls back to Claude if the file is damaged', () => {
-    process.env.HQ_AI_FILE = path.join(tmp, 'damaged.json');
-    fs.writeFileSync(process.env.HQ_AI_FILE, 'not json');
-    expect(chosenAi()).toBe('claude');
   });
 
   it("says which AI isn't installed", () => {
@@ -318,7 +303,7 @@ describe('the command line', () => {
 
 describe('a conversation', () => {
   it('runs the first turn and keeps what Claude said', async () => {
-    startEdit(VIDEO);
+    startEdit(VIDEO, 'claude');
     const run = await settle();
     expect(run.status).toBe('idle');
     expect(run.draft).toBe(VIDEO);
@@ -327,20 +312,20 @@ describe('a conversation', () => {
   });
 
   it("sends John's notes to the same conversation", async () => {
-    startEdit(VIDEO);
+    startEdit(VIDEO, 'claude');
     const first = await settle();
-    sendNote(VIDEO, 'The B-roll at 3:20 is in the wrong place');
+    sendNote(VIDEO, 'The B-roll at 3:20 is in the wrong place', 'edit', 'claude');
     const run = await settle();
     expect(run.sessionId).toBe(first.sessionId);
     expect(run.messages.map((m) => m.text)).toContain('Got: The B-roll at 3:20 is in the wrong place');
   });
 
   it('one turn at a time, and Stop cuts it off but keeps the conversation', async () => {
-    startEdit(VIDEO);
+    startEdit(VIDEO, 'claude');
     await settle();
-    sendNote(VIDEO, 'HANG please');
-    expect(() => sendNote(VIDEO, 'another')).toThrow(/still working/);
-    expect(() => startEdit(VIDEO)).toThrow(/already working/);
+    sendNote(VIDEO, 'HANG please', 'edit', 'claude');
+    expect(() => sendNote(VIDEO, 'another', 'edit', 'claude')).toThrow(/still working/);
+    expect(() => startEdit(VIDEO, 'claude')).toThrow(/already working/);
     const stopped = stopRun(VIDEO)!;
     expect(stopped.status).toBe('failed');
     expect(stopped.error).toMatch(/Stopped/);
@@ -348,10 +333,10 @@ describe('a conversation', () => {
   });
 
   it('refuses a video without a Longform folder or a CapCut project, or outside the video folder', () => {
-    expect(() => startEdit('../Drafts')).toThrow();
+    expect(() => startEdit('../Drafts', 'claude')).toThrow();
     fs.rmSync(path.join(tmp, 'Drafts', VIDEO), { recursive: true });
-    expect(() => startEdit(VIDEO)).toThrow(/no CapCut project/);
-    expect(() => sendNote('Nope', 'x')).toThrow(/no Longform folder/);
+    expect(() => startEdit(VIDEO, 'claude')).toThrow(/no CapCut project/);
+    expect(() => sendNote('Nope', 'x', 'edit', 'claude')).toThrow(/no Longform folder/);
   });
 });
 

@@ -17,6 +17,8 @@ import {
   type TimedWord,
 } from './api';
 import { ClaudeChat } from './ClaudeChat';
+import { AiSelect, useAiFor } from './AiChoice';
+import type { AiId } from './api';
 import { CleanUp } from './CleanUp';
 import { groupPlannedShorts } from './shortsGrouping';
 import { dragEdge, moveRow, nextShortId, parseTime, rangeOfWords, showTime, trimWindow, wordAt, wordInClip, type TrimWindow } from './shortsTime';
@@ -36,6 +38,9 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
   const [error, setError] = useState<string | null>(null);
   // A failed Make or Regenerate shows its message under that short's buttons, not at the top.
   const [makeError, setMakeError] = useState<{ id: string; message: string } | null>(null);
+  // The AI for everything on this card: proposing, notes, and making each short.
+  const [ai, setAi] = useAiFor('shorts');
+  const noCapCut = ai === 'gemini';
 
   const fail = (e: Error) => setError(e.message);
   const saveSeq = useRef(0);
@@ -103,12 +108,12 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
   const propose = () => {
     if (plan && !confirm('Propose a new list? Your current list is kept as a separate file in the Shorts folder.')) return;
     setError(null);
-    postJson('/api/shorts/propose', { video }).then(refresh, fail);
+    postJson('/api/shorts/propose', { video, ai }).then(refresh, fail);
   };
   const stop = (job: string) => postJson('/api/shorts/stop', { video, job }).then(refresh, fail);
   const send = (job: string, text: string) => {
     setError(null);
-    postJson('/api/shorts/note', { video, job, text }).then(refresh, fail);
+    postJson('/api/shorts/note', { video, job, text, ai }).then(refresh, fail);
   };
   const save = (shorts: PlannedShort[], rejected: PlannedShort[]) => {
     setError(null);
@@ -131,7 +136,7 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
     setError(null);
     setMakeError(null);
     setMaking(s.id);
-    postJson(`/api/shorts/${how}`, { video, id: s.id, draft: source })
+    postJson(`/api/shorts/${how}`, { video, id: s.id, draft: source, ai })
       .then(
         () => {
           onChanged?.();
@@ -156,7 +161,8 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
         build={builds[s.id] ?? null}
         making={making === s.id}
         makeError={makeError?.id === s.id ? makeError.message : null}
-        canMake={!!source && !making}
+        canMake={!!source && !making && !noCapCut}
+        ai={ai}
         onChange={(next) => put(list.map((x) => (x.id === s.id ? next : x)))}
         onDelete={() => put(list.filter((x) => x.id !== s.id))}
         onMove={() => {
@@ -179,11 +185,14 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
   return (
     <div className="card shorts-plan" ref={root}>
       <div className="tool-head">
-        {proposing ? (
-          <button onClick={() => stop('shorts')}>Stop</button>
-        ) : (
-          <button onClick={propose}>{plan ? 'Propose Again' : 'Propose Shorts'}</button>
-        )}
+        <span className="ai-with-button">
+          <AiSelect value={ai} onChange={setAi} label="AI" title="Which AI proposes shorts, answers notes and makes each short" />
+          {proposing ? (
+            <button onClick={() => stop('shorts')}>Stop</button>
+          ) : (
+            <button onClick={propose}>{plan ? 'Propose Again' : 'Propose Shorts'}</button>
+          )}
+        </span>
       </div>
 
       <div className="retention small-text" tabIndex={0} onPaste={pasteRetention} title="Click here, then paste a screenshot of the retention graph (Ctrl+V)">
@@ -217,6 +226,7 @@ export function ShortsPlanCard({ video, onChanged }: { video: string; onChanged?
           <summary className="small-text">Talk to the AI About This List</summary>
           <ClaudeChat
             run={run}
+            ai={ai}
             placeholder="An answer, or what to change in the list"
             onSend={(text) => send('shorts', text)}
             onStop={() => stop('shorts')}
@@ -287,6 +297,7 @@ function ShortCard({
   making,
   makeError,
   canMake,
+  ai,
   onChange,
   onDelete,
   onMove,
@@ -303,6 +314,7 @@ function ShortCard({
   making: boolean;
   makeError: string | null;
   canMake: boolean;
+  ai: AiId;
   onChange: (next: PlannedShort) => void;
   onDelete: () => void;
   onMove: () => void;
@@ -428,7 +440,7 @@ function ShortCard({
           <div className="short-buttons">
             {!made && (
               <>
-                <button disabled={!canMake} onClick={onMake}>
+                <button disabled={!canMake} onClick={onMake} title={ai === 'gemini' ? "Gemini can't build CapCut projects. Choose Claude or ChatGPT at the top of this card." : undefined}>
                   {making ? 'Copying the CapCut Project…' : 'Make This Short'}
                 </button>
                 <button className="small" onClick={onMove}>
@@ -457,6 +469,7 @@ function ShortCard({
           {build && (
             <ClaudeChat
               run={build}
+              ai={ai}
               placeholder="What to change, or what you changed yourself in CapCut"
               onSend={onSend}
               onStop={onStop}

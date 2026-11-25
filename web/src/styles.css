@@ -142,8 +142,9 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .ai-controls { display: flex; align-items: center; gap: 0.55rem; margin-left: auto; }
 .ai-picker { display: flex; align-items: center; gap: 0.3rem; color: var(--muted); white-space: nowrap; }
 .ai-signins { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; position: relative; }
-.ai-signin-list { display: flex; flex-direction: column; gap: 0.05rem; line-height: 1.15; }
+.ai-signin-list { display: flex; flex-wrap: wrap; gap: 0.15rem 0.7rem; line-height: 1.15; }
 .ai-signin { display: inline-flex; align-items: center; gap: 0.25rem; }
+.ai-model { font: inherit; font-size: 0.72rem; padding: 0 0.1rem; max-width: 11rem; }
 .ai-signin-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #9aa0a6; flex-shrink: 0; }
 .ai-signin--in .ai-signin-dot { background: #2e9d4f; }
 .ai-signin--out .ai-signin-dot { background: #d93025; }
@@ -725,6 +726,7 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .brief-plan-step { display: flex; flex-direction: column; gap: 0.15rem; }
 .brief-plan-step label { display: flex; align-items: center; gap: 0.25rem; }
 .ai-select { font: inherit; font-size: 0.85rem; }
+.ai-with-button { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: auto; }
 .ai-select-label { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 .brief-working { font-weight: 600; }
 .brief-done { color: var(--ok); }

@@ -1,5 +1,6 @@
-// Which AI does the jobs the buttons start: Claude (Claude Code), ChatGPT (OpenAI's Codex) or Gemini (Google's
-// Antigravity CLI, "agy"). John picks at the top of the app. A conversation stays with the AI it's with until John sends a note after picking the other one; see claude.ts.
+// The AIs the buttons can start: Claude (Claude Code), ChatGPT (OpenAI's Codex) or Gemini (Google's Antigravity CLI,
+// "agy"). Each button has its own AI choice, sent with the request; the model each AI uses is kept here, in the app's data.
+// A conversation stays with the AI it's with until John sends a note with another one chosen; see claude.ts.
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,7 +17,6 @@ export interface AiModelOption {
 }
 
 export interface AiOverview {
-  chosen: AiId;
   options: {
     id: AiId;
     name: string;
@@ -42,21 +42,20 @@ export function parseAi(value: unknown): AiId {
 }
 
 interface StoredAiChoice {
-  ai: AiId;
   models: Partial<Record<AiId, string>>;
 }
 
 function readChoiceData(): StoredAiChoice {
   try {
-    const raw = JSON.parse(fs.readFileSync(choiceFile(), 'utf8')) as { ai?: unknown; models?: Record<string, unknown> };
+    const raw = JSON.parse(fs.readFileSync(choiceFile(), 'utf8')) as { models?: Record<string, unknown> };
     const models: Partial<Record<AiId, string>> = {};
     for (const id of ['claude', 'codex', 'gemini'] as const) {
       const m = raw.models?.[id];
       if (typeof m === 'string' && MODEL_ID_RE.test(m)) models[id] = m;
     }
-    return { ai: isAiId(raw.ai) ? raw.ai : 'claude', models };
+    return { models };
   } catch {
-    return { ai: 'claude', models: {} };
+    return { models: {} };
   }
 }
 
@@ -64,18 +63,6 @@ function writeChoiceData(data: StoredAiChoice) {
   const file = choiceFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data));
-}
-
-/** The AI John picked. Claude if he never has, or if the file is unreadable. */
-export function chosenAi(): AiId {
-  return readChoiceData().ai;
-}
-
-export function chooseAi(value: unknown): AiId {
-  if (!isAiId(value)) throw new Error('Unknown AI.');
-  const current = readChoiceData();
-  writeChoiceData({ ...current, ai: value });
-  return value;
 }
 
 /** The model John picked for `ai`, or '' for that CLI's own default. */
@@ -245,7 +232,6 @@ function isAvailable(ai: AiId): boolean {
 export function aiOverview(): AiOverview {
   const data = readChoiceData();
   return {
-    chosen: data.ai,
     options: (['claude', 'codex', 'gemini'] as const).map((id) => {
       const model = data.models[id] ?? '';
       const { defaultLabel, models } = availableModels(id);
@@ -261,7 +247,7 @@ export function aiOverview(): AiOverview {
  */
 export function requireCapCutAi(ai: AiId) {
   if (ai === 'gemini') {
-    throw new Error("Gemini is set up in a limited way and can't build CapCut projects. Pick Claude or ChatGPT at the top of the app. Nothing was changed.");
+    throw new Error("Gemini is set up in a limited way and can't build CapCut projects. Pick Claude or ChatGPT next to the button. Nothing was changed.");
   }
 }
 

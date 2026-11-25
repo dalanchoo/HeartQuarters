@@ -1,4 +1,4 @@
-// Runs the chosen AI (Claude Code, Codex or Antigravity, see ai.ts) in the background on one video, and keeps the conversation.
+// Runs the AI John chose for the button (Claude Code, Codex or Antigravity, see ai.ts) in the background on one video, and keeps the conversation.
 //   "Edit with Claude": follows the longform-edit skill; John sends notes after looking at the result in CapCut.
 //   "Propose shorts": follows the shorts skill's choosing steps and writes Shorts\\Shorts Plan.json (see shorts.ts).
 //   "Make this short": cuts a copy of the longform's CapCut project down to one short, turns it portrait, adds captions.
@@ -6,7 +6,7 @@
 // Each video has one conversation per job (a Claude Code session id). They live only in the engine's memory, never in a
 // file (John, 2026-11-12): reloading the page clears them, and so does Clear on a card.
 // A run is one turn of that conversation: the first one starts the job, later ones send John's notes.
-// If John picks the other AI and sends a note, that AI takes over with the conversation's text (see handoverPrompt).
+// If John picks another AI for a note, that AI takes over with the conversation's text (see handoverPrompt).
 import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -15,7 +15,6 @@ import {
   AI_NAMES,
   aiCommand,
   aiModelArgs,
-  chosenAi,
   codexArgs,
   codexWritableFolders,
   geminiArgs,
@@ -382,7 +381,7 @@ function checkShortProject(video: string, draft: string, done: (said: string | n
 }
 
 /** Starts a new conversation for this video: the AI edits it following the longform-edit skill. */
-export function startEdit(video: string, ai: AiId = chosenAi()): ClaudeRun {
+export function startEdit(video: string, ai: AiId): ClaudeRun {
   requireCapCutAi(ai);
   const { longform, draft } = videoPlaces(video);
   if (running.has(video)) throw new Error('The AI is already working on this video.');
@@ -396,7 +395,7 @@ export function startEdit(video: string, ai: AiId = chosenAi()): ClaudeRun {
 }
 
 /** Starts a shorts conversation: the AI proposes shorts into the plan file. Any earlier plan is kept by the caller. */
-export function startShortsProposal(video: string, retentionGraph = false, ai: AiId = chosenAi()): ClaudeRun {
+export function startShortsProposal(video: string, retentionGraph: boolean, ai: AiId): ClaudeRun {
   const { longform, draft } = videoPlaces(video);
   if (running.has(keyOf(video, 'shorts'))) throw new Error('The AI is already proposing shorts for this video.');
   const videoDir = path.dirname(longform);
@@ -407,7 +406,7 @@ export function startShortsProposal(video: string, retentionGraph = false, ai: A
 }
 
 /** Starts one short's conversation: the AI cuts its CapCut project down. The project was copied before this (shorts.ts). */
-export function startShortBuild(video: string, short: ShortToBuild, ai: AiId = chosenAi()): ClaudeRun {
+export function startShortBuild(video: string, short: ShortToBuild, ai: AiId): ClaudeRun {
   requireCapCutAi(ai);
   const { longform } = videoPlaces(video);
   const job: ClaudeJob = `short-${short.id}`;
@@ -423,7 +422,7 @@ export function startShortBuild(video: string, short: ShortToBuild, ai: AiId = c
  * Sends John's note to one of the video's conversations, and the AI carries on from where it was. If he has picked the
  * other AI since, that one takes over. So does a new conversation of the same AI if the first never got started.
  */
-export function sendNote(video: string, text: string, job: ClaudeJob = 'edit', ai: AiId = chosenAi()): ClaudeRun {
+export function sendNote(video: string, text: string, job: ClaudeJob, ai: AiId): ClaudeRun {
   const { longform } = videoPlaces(video);
   const note = text.trim();
   if (!note) throw new Error('The note is empty.');
@@ -465,7 +464,7 @@ export function pieceNotePrompt(videoDir: string, job: ClaudeJob, draft: string,
  * Sends a message in a piece's conversation, the longform's ("edit") or a short's, or starts one if it has none: a
  * short John made by hand has no conversation yet. `said` is what the page shows for John's side.
  */
-export function askInConversation(video: string, job: ClaudeJob, draft: string, message: string, said = message, ai: AiId = chosenAi()): ClaudeRun {
+export function askInConversation(video: string, job: ClaudeJob, draft: string, message: string, said: string, ai: AiId): ClaudeRun {
   if (getRun(video, job)) return sendNote(video, message, job, ai);
   const { longform } = videoPlaces(video);
   if (running.has(keyOf(video, job))) throw new Error('The AI is still working. Wait for it to finish, or stop it.');

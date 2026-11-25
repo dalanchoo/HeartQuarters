@@ -7,6 +7,7 @@ describe('checkAiWriting', () => {
     const res = await checkAiWriting(
       "It's not about memory — it's about connection.",
       'YouTube Description',
+      'claude',
       async (_ai, prompt) => {
         seenPrompt = prompt;
         return '- **"It\'s not about memory — it\'s about connection."** Sounds like a formulaic AI contrast.';
@@ -26,13 +27,13 @@ describe('checkAiWriting', () => {
       { find: 'not about memory', replace: 'x', why: 'Overlaps the one above.' },
       { find: 'Words that are not there.', replace: 'y', why: 'Made up.' },
     ] });
-    const res = await checkAiWriting(text, 'YouTube Description', async () => answer);
+    const res = await checkAiWriting(text, 'YouTube Description', 'claude', async () => answer);
     expect(res.review).toBe('Two spots.');
     expect(res.suggestions.map((s) => s.replace)).toEqual(['It is about connection.', 'I am fine.']);
   });
 
   it('shows an answer that is not the JSON asked for as it is', async () => {
-    const res = await checkAiWriting('Some text.', 'Title', async () => 'It reads naturally.');
+    const res = await checkAiWriting('Some text.', 'Title', 'claude', async () => 'It reads naturally.');
     expect(res).toMatchObject({ review: 'It reads naturally.', suggestions: [] });
   });
 

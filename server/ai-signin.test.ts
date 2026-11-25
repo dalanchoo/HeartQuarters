@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { aiModelArgs, aiOverview, availableModels, chooseAi, chooseAiModel, chosenModel, parseGeminiModels, rememberGeminiModels, runAiProcess } from './ai';
+import { aiModelArgs, aiOverview, availableModels, chooseAiModel, chosenModel, parseGeminiModels, rememberGeminiModels, runAiProcess } from './ai';
 import { aiSignIns, openSignIn, readSignIn, type Runner } from './ai-signin';
 import { makeTree, removeTree } from './testing';
 
@@ -71,7 +71,6 @@ describe('per-AI model selection and catalog discovery', () => {
       expect(aiModelArgs('claude')).toEqual([]);
       chooseAiModel('claude', 'claude-opus-5-5');
       chooseAiModel('codex', 'gpt-6.2-sol');
-      chooseAi('gemini');
       chooseAiModel('gemini', 'gemini-4-argon-medium');
       expect(chosenModel('claude')).toBe('claude-opus-5-5');
       expect(chosenModel('codex')).toBe('gpt-6.2-sol');

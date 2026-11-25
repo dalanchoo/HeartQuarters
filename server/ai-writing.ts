@@ -1,9 +1,9 @@
-// Asks the selected AI to review a piece of John's writing (script, description, pinned comment, title, etc.)
+// Asks the AI John chose to review a piece of John's writing (script, description, pinned comment, title, etc.)
 // for anything that sounds AI-written, and suggest plain-spoken rewrites in his voice.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AI_NAMES, chosenAi, type AiId } from './ai.js';
+import { AI_NAMES, parseAi, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { askReadOnlyImage } from './expression-assessment.js';
 
@@ -78,6 +78,7 @@ export function parseAiWritingAnswer(answer: string, text: string): { review: st
 export async function checkAiWriting(
   rawText: unknown,
   rawLabel: unknown = 'Text',
+  rawAi: unknown = 'claude',
   ask: AskAi = askReadOnlyImage,
 ): Promise<AiWritingReview> {
   const text = String(rawText ?? '').trim();
@@ -85,7 +86,7 @@ export async function checkAiWriting(
   if (!text) throw new Error('There is no text to check yet.');
   if (text.length > 40_000) throw new Error('That text is too long to check all at once (maximum 40,000 characters).');
 
-  const ai = chosenAi();
+  const ai = parseAi(rawAi);
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-ai-writing-'));
   try {
     const answer = (await ask(ai, buildAiWritingPrompt(text, label), work)).trim();
