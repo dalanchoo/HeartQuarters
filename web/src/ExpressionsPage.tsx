@@ -67,7 +67,7 @@ export function ExpressionsPage() {
   const [motionFilter, setMotionFilter] = useState<'all' | 'motion' | 'still'>('all');
   const [assessmentFilter, setAssessmentFilter] = useState<'all' | 'three-ais' | 'not-three-ais'>('all');
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
-  const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string } | null>(null);
+  const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string; note?: string } | null>(null);
   const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
   const refreshInbox = useCallback(() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); void getJson<ExpressionPhoto[]>('/api/expressions/inbox').then(photos => { setInbox(photos); setPreview(current => { if (!current || current.imageUrl || current.photo.category !== '_Inbox') return current; const photo = photos.find(item => item.path === current.photo.path); return photo ? { ...current, photo } : null; }); }, e => setError(e.message)); }, []);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
@@ -275,7 +275,7 @@ export function ExpressionsPage() {
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
         <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} onRate={rate} /></div>
-        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onViewImage={(imageUrl, name, category, tags) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl })} /></div>
+        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onViewImage={(imageUrl, name, category, tags) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl, note: 'These tags are suggested from the look. Confirm them after moving the picture to the Expression Inbox.' })} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="generation-top">
         <div className="expression-planning">
@@ -366,6 +366,7 @@ export function ExpressionsPage() {
           key={preview.imageUrl ?? preview.photo.path}
           photo={preview.photo}
           imageUrl={preview.imageUrl}
+          note={preview.note}
           starred={!preview.imageUrl && preview.photo.category !== '_Inbox' ? references.includes(preview.photo.path) : undefined}
           starDisabled={!referenceReady || referenceBusy}
           onToggleStar={!preview.imageUrl && preview.photo.category !== '_Inbox' ? () => void setReference(preview.photo.path, !references.includes(preview.photo.path)) : undefined}
@@ -503,8 +504,8 @@ function PhotoActions({ photo, rootDir, categories, onChanged }: {
   </div>;
 }
 
-function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, reference, referenceDisabled, onToggleReference, onClose, onPrev, onNext, onTagAction, onRate, onAssessmentStarted, onAssessmentDone }: {
-  photo: ExpressionPhoto; imageUrl?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onRate?: (rating: Rating | null) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
+function Lightbox({ photo, imageUrl, note, starred, starDisabled, onToggleStar, reference, referenceDisabled, onToggleReference, onClose, onPrev, onNext, onTagAction, onRate, onAssessmentStarted, onAssessmentDone }: {
+  photo: ExpressionPhoto; imageUrl?: string; /** A line above the tags, e.g. why they can't be confirmed here. */ note?: string; starred?: boolean; starDisabled?: boolean; onToggleStar?: () => void; reference?: boolean; referenceDisabled?: boolean; onToggleReference?: () => void; onClose: () => void; onPrev?: () => void; onNext?: () => void; onTagAction?: (photo: ExpressionPhoto, action: TagAction) => Promise<void>; onRate?: (rating: Rating | null) => Promise<void>; onAssessmentStarted?: (id: string) => void; onAssessmentDone?: () => void;
 }) {
   const [pendingTag, setPendingTag] = useState<Extract<TagAction, { tag: ExpressionPhoto['tags'][number] }> | null>(null);
   const [savingTag, setSavingTag] = useState(false);
@@ -647,6 +648,7 @@ function Lightbox({ photo, imageUrl, starred, starDisabled, onToggleStar, refere
           <div id="expression-photo-details" hidden={!detailsExpanded}>
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
           {groups.details.length > 0 && showTags(groups.details)}
+          {note && <p className="muted small-text">{note}</p>}
           <div className="attribute-groups">
             <div className="attribute-row"><section><AttributeDefinitions title="Framing" file="Framing.txt" />{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Framing" value={newFraming} disabled={savingTag} onChange={setNewFraming} placeholder="Choose…" searchPlaceholder="Search framing…" emptyMessage="No matching attributes." options={FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add framing" disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add</button></div>}</div>
