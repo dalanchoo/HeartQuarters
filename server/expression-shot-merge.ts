@@ -9,6 +9,7 @@ import path from 'node:path';
 import { appDir, safeResolve } from './config.js';
 import { addToMatchingShot, changeShotList, checkShotSuggestions, readShotList, shotFromSuggestion, SHOT_LIST_FILE, shotKey, type ExpressionShot } from './expression-shot-list.js';
 import { copyShotPictures } from './shot-reference.js';
+import { tagShots } from './expression-shot-tags.js';
 import { writable } from './safe-files.js';
 
 /** Asks an AI one question and gives back its answer. */
@@ -80,6 +81,7 @@ export function applyDuplicates(shots: ExpressionShot[], groups: string[][], kee
       }
       if (!kept.title) kept.title = other.title;
       for (const key of ['framing', 'pose', 'morphology'] as const) if (!kept[key].length) kept[key] = [...other[key]];
+      if (!kept.ruledOut?.length && other.ruledOut?.length) kept.ruledOut = [...other.ruledOut];
       kept.alsoFits = [...new Set([...kept.alsoFits, ...other.alsoFits])].filter(f => f !== kept.category);
       kept.done = kept.done || other.done;
       shots.splice(at, 1);
@@ -102,7 +104,7 @@ export interface ShotAddResult { shots: ExpressionShot[]; added: number; merged:
 /**
  * Adds a video's suggestions: word-for-word repeats join their look; the rest are compared by the AI with the looks
  * in the same folder, and a duplicate joins the look already there. If the AI fails, the new looks are added unmerged
- * (Merge Duplicates can tidy them later) and `error` says why.
+ * (Merge Duplicates can tidy them later) and `error` says why. Then the AI fills in the new looks' tags.
  */
 export async function addShotsMerging(piece: string, input: unknown, ask: AskText): Promise<ShotAddResult> {
   const items = checkShotSuggestions(piece, input);
@@ -128,8 +130,14 @@ export async function addShotsMerging(piece: string, input: unknown, ask: AskTex
     merged = applyDuplicates(list, groups, existing);
   });
   for (const [from, to] of merged) copyShotPictures(from, to);
-  const added = fresh.filter(s => shots.some(kept => kept.id === s.id)).length;
-  return { shots, added, merged: items.length - added, ...(error ? { error } : {}) };
+  const kept = new Set(fresh.filter(s => shots.some(look => look.id === s.id)).map(s => s.id));
+  // The new looks' tags are filled in from their descriptions (expression-shot-tags.ts).
+  let final = shots;
+  if (kept.size) {
+    try { final = (await tagShots(ask, kept)).shots; }
+    catch (e) { error = [error, `The new looks' tags were not filled in: ${e instanceof Error ? e.message : String(e)}`].filter(Boolean).join(' '); }
+  }
+  return { shots: final, added: kept.size, merged: items.length - kept.size, ...(error ? { error } : {}) };
 }
 
 let merging = false;

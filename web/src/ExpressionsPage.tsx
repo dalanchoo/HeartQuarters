@@ -649,6 +649,11 @@ function Lightbox({ photo, imageUrl, note, starred, starDisabled, onToggleStar, 
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
           {groups.details.length > 0 && showTags(groups.details)}
           {note && <p className="muted small-text">{note}</p>}
+          {photo.generation && <div className="muted small-text expression-generation" aria-label="What the picture was asked to show">
+            <p><strong>Asked for{photo.generation.by ? ` (made by ${photo.generation.by})` : ''}:</strong> {[photo.generation.look, photo.generation.description].filter(Boolean).join('. ') || 'No description was kept.'}</p>
+            {(photo.generation.with?.length || photo.generation.without?.length) ? <p>{photo.generation.with?.length ? <>With: {photo.generation.with.join(', ')}</> : null}{photo.generation.with?.length && photo.generation.without?.length ? ' · ' : ''}{photo.generation.without?.length ? <>Without: {photo.generation.without.join(', ')}</> : null}</p> : null}
+            <p>This is what the AI was asked to make. The tags and AI scores are what the picture actually shows.</p>
+          </div>}
           <div className="attribute-groups">
             <div className="attribute-row"><section><AttributeDefinitions title="Framing" file="Framing.txt" />{groups.framing.length ? showTags(groups.framing) : <p className="muted small-text">None recorded.</p>}</section>
               {onTagAction && <div className="lb-attribute-control"><CategoryPicker label="Add Framing" value={newFraming} disabled={savingTag} onChange={setNewFraming} placeholder="Choose…" searchPlaceholder="Search framing…" emptyMessage="No matching attributes." options={FRAMING_TAGS.filter(name => !photo.tags.some(t => t.tag.toLowerCase() === name.toLowerCase())).map(name => ({ value: name, label: name.replace(/([a-z])([A-Z])/g, '$1 $2') }))} /><button aria-label="Add framing" disabled={savingTag || !newFraming} onClick={() => void saveTag({ kind: 'add', name: newFraming, group: 'framing' })}>Add</button></div>}</div>

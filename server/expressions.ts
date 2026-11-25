@@ -14,6 +14,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { requireFolder } from './projects.js';
 import { writeFile } from './safe-files.js';
+import { parseGeneration, type GenerationRecord } from './expression-generation-record.js';
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const CACHE_MS = 30_000;
@@ -53,6 +54,8 @@ export interface ExpressionPhoto {
   motionPhoto?: boolean;
   /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked", "# Rating: Meh" or "# Rating: Disliked". */
   rating?: ExpressionRating;
+  /** For an AI picture HeartQuarters made: what it was asked to show (separate from what the AIs think it shows). */
+  generation?: GenerationRecord;
   tags: Tag[];
 }
 
@@ -138,7 +141,7 @@ export function parseRating(text: string): ExpressionRating | undefined {
   return rating;
 }
 
-type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating; motion?: boolean };
+type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating; motion?: boolean; generation?: GenerationRecord };
 const NO_SIDECAR: SidecarInfo = { tags: [], assessedByThreeAIs: false };
 
 function readSidecar(file: string): SidecarInfo {
@@ -150,7 +153,8 @@ function readSidecar(file: string): SidecarInfo {
       tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
     const rating = parseRating(text);
     const motion = parseMotion(text);
-    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}) };
+    const generation = parseGeneration(text);
+    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}), ...(generation ? { generation } : {}) };
   } catch {
     return NO_SIDECAR;
   }
@@ -195,7 +199,7 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
     const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : NO_SIDECAR;
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), tags: sidecarInfo.tags };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -276,6 +280,7 @@ export function buildExpressionIndex(withPhotos = true): ExpressionIndex {
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
           ...(motionOf(full, files.has(`${base}.txt`) ? path.join(dir, `${base}.txt`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}),
           ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}),
+          ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}),
           tags: sidecarInfo.tags,
         });
         category.ownCount++;

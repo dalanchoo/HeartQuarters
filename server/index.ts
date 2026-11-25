@@ -20,6 +20,7 @@ import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './
 import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox, importInboxPhoto, trashInboxPhoto } from './expression-inbox.js';
 import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
+import { fillInShotTags } from './expression-shot-tags.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
@@ -388,6 +389,11 @@ app.post('/api/expressions/shot-list/add', (req, res) => {
 app.post('/api/expressions/shot-list/merge', (req, res) => {
   const ai = req.body?.ai;
   const run = isAiId(ai) ? mergeDuplicateShots((prompt) => askAi(ai, prompt, mergeWorkFolder())) : Promise.reject(new Error('Choose an AI.'));
+  run.then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+});
+app.post('/api/expressions/shot-list/fill-tags', (req, res) => {
+  const ai = req.body?.ai;
+  const run = isAiId(ai) ? fillInShotTags((prompt) => askAi(ai, prompt, mergeWorkFolder())) : Promise.reject(new Error('Choose an AI.'));
   run.then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/expressions/shot-list/status', handle((req, res) => { res.json(setShotDone(req.body?.id, req.body?.done)); }));

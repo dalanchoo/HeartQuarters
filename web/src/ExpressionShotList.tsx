@@ -32,6 +32,19 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setMerging(false); }
   };
+  // Fill In Tags: an AI reads each look's description and adds the tags it states, and the ones it rules out.
+  const [tagAi, setTagAi] = useAiFor('shot-list-tags');
+  const [filling, setFilling] = useState(false);
+  const fillInTags = async () => {
+    setFilling(true); setError(''); setMergeMessage('');
+    try {
+      const result = await postJson<{ shots: ExpressionShot[]; tagged: number }>('/api/expressions/shot-list/fill-tags', { ai: tagAi });
+      setShots(result.shots);
+      setMergeMessage(result.tagged ? `Added tags to ${result.tagged} ${result.tagged === 1 ? 'look' : 'looks'}. New pictures use them; pictures already made keep the tags they were made with.` : 'No new tags found.');
+      window.dispatchEvent(new Event('hq-expression-shot-list-changed'));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setFilling(false); }
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -101,7 +114,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
   const known = new Set(index?.categories.map(c => c.path) ?? []);
   const folderLabel = (path: string) => path ? path.split('/').join(' > ') : 'Not Yet Sorted';
   const card = (shot: ExpressionShot) => {
-    const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology]] as const).filter(([, list]) => list.length);
+    const tags = ([['Framing', shot.framing], ['Pose', shot.pose], ['Morphology', shot.morphology], ['Ruled Out', shot.ruledOut ?? []]] as const).filter(([, list]) => list.length);
     const picture = pictures[shot.id];
     const list = picture?.pictures ?? [];
     const pick = chosen[shot.id]?.count === list.length && list.includes(chosen[shot.id].name) ? chosen[shot.id].name : list[0];
@@ -157,6 +170,8 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
     <div className="expression-inbox-actions">
       <button disabled={merging || !shots?.length} onClick={() => void mergeDuplicates()} title="An AI compares the looks in each expression folder and merges the ones that would be the same photo">{merging ? 'Merging Duplicates…' : 'Merge Duplicates'}</button>
       <AiSelect value={mergeAi} onChange={setMergeAi} title="Which AI finds the duplicates" />
+      <button disabled={filling || !shots?.length} onClick={() => void fillInTags()} title="An AI reads each look's description and adds the Framing, Pose & Gaze and Morphology tags it states, and the tags it rules out. Tags a look already has are kept.">{filling ? 'Filling In Tags…' : 'Fill In Tags'}</button>
+      <AiSelect value={tagAi} onChange={setTagAi} title="Which AI reads the descriptions" />
     </div>
     {mergeMessage && <p role="status">{mergeMessage}</p>}
     {error && <p className="error" role="alert">{error}</p>}

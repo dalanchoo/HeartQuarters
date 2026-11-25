@@ -27,9 +27,15 @@ const CALM_CLOSED = 'Composure > Calm (eyes closed, a small relaxed smile)';
 const CURIOUS = 'Cognitive > Curiosity (head tilted, one eyebrow raised)';
 /** A fake AI that groups the looks whose descriptions contain the given words. */
 const grouping = (...groups: string[][]) => async (prompt: string) => {
+  if (prompt.includes('"ruledOut"')) return tagging(prompt);
   const looks = JSON.parse(prompt.split('\n\n').pop()!) as { looks: { id: string; look: string }[] }[];
   const all = looks.flatMap(f => f.looks);
   return `Sure:\n${JSON.stringify({ duplicates: groups.map(words => words.map(w => all.find(l => l.look.toLowerCase().includes(w))?.id ?? 'unknown')) })}`;
+};
+/** A fake AI for the tags question: a look mentioning "eyebrow raised" gets RaisedBrow, and Squint is ruled out. */
+const tagging = (prompt: string) => {
+  const looks = JSON.parse(prompt.split('\n\n').pop()!) as { id: string; look: string }[];
+  return JSON.stringify({ looks: looks.map(l => ({ id: l.id, framing: [], pose: [], morphology: l.look.includes('eyebrow raised') ? ['RaisedBrow'] : [], ruledOut: ['Squint'] })) });
 };
 const picture = (id: string, name: string) => {
   const dir = path.join(root, 'Refs', id); fs.mkdirSync(dir, { recursive: true });
@@ -68,11 +74,15 @@ describe('merging duplicate looks', () => {
     expect(result.shots[0]).toMatchObject({ id: kept.id, done: true });
     expect(result.shots[0].sources.map(s => `${s.piece}: ${s.text}`)).toEqual([`Video/Longform: ${CALM_A}`, `Other/Longform: ${CALM_B}`]);
     expect(readShotList()).toHaveLength(3);
+    // The new looks' tags were filled in from their descriptions; the look that was already there was not asked about.
+    expect(result.shots[2]).toMatchObject({ morphology: ['RaisedBrow'], ruledOut: ['Squint'] });
+    expect(result.shots[0].ruledOut).toBeUndefined();
+    expect(result.error).toBeUndefined();
   });
 
   it("doesn't ask the AI when no folder has a new look next to another, and adds exact repeats to their look", async () => {
     addExpressionShots('Video/Longform', [{ expression: CALM_A, context: 'Top 1' }]);
-    const never = async () => { throw new Error('should not be asked'); };
+    const never = async (prompt: string) => { if (prompt.includes('"ruledOut"')) return tagging(prompt); throw new Error('should not be asked'); };
     const result = await addShotsMerging('Other/Longform', [{ expression: ` ${CALM_A.toUpperCase()} `, context: 'Top 1' }, { expression: CURIOUS, context: 'Idea 1' }], never);
     expect(result).toMatchObject({ added: 1, merged: 1 });
     expect(result.shots[0].sources).toHaveLength(2);

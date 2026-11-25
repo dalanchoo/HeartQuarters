@@ -13,6 +13,8 @@ export interface ShotSource { piece: string; context: string; text?: string }
 export interface ExpressionShot {
   id: string; category: string; title: string; description: string;
   framing: string[]; pose: string[]; morphology: string[]; alsoFits: string[];
+  /** Tags the description rules out ("no squint" → Squint), from the same vocabulary. Older looks have none. */
+  ruledOut?: string[];
   sources: ShotSource[]; addedAt: string; done: boolean;
 }
 export const SHOT_LIST_FILE = 'Expression Shot List.json';
@@ -75,7 +77,7 @@ function load(): { shots: ExpressionShot[]; original: string | null } {
       return fromText(text, withText, s.addedAt as string, s.done as boolean, s.id as string);
     }), original };
   }
-  if (data.version !== 2 || (data.shots as ExpressionShot[]).some(s => !s || typeof s.id !== 'string' || typeof s.category !== 'string' || typeof s.title !== 'string' || typeof s.description !== 'string' || !strings(s.framing) || !strings(s.pose) || !strings(s.morphology) || !strings(s.alsoFits) || typeof s.addedAt !== 'string' || typeof s.done !== 'boolean' || !validSources(s.sources))) throw unexpected;
+  if (data.version !== 2 || (data.shots as ExpressionShot[]).some(s => !s || typeof s.id !== 'string' || typeof s.category !== 'string' || typeof s.title !== 'string' || typeof s.description !== 'string' || !strings(s.framing) || !strings(s.pose) || !strings(s.morphology) || !strings(s.alsoFits) || (s.ruledOut !== undefined && !strings(s.ruledOut)) || typeof s.addedAt !== 'string' || typeof s.done !== 'boolean' || !validSources(s.sources))) throw unexpected;
   return { shots: data.shots as ExpressionShot[], original };
 }
 

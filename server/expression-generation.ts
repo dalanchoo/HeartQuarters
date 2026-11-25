@@ -6,6 +6,7 @@ import { buildExpressionIndex, clearExpressionIndex } from './expressions.js';
 import { geminiImageArgs, makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 import { addGeneratedImageToInbox } from './expression-inbox.js';
+import { generationLines } from './expression-generation-record.js';
 
 export type Options = { framing: string; angle: string; gaze: string };
 type Job = { id: string; category: string; ai: ImageAi | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; options: Options; format?: 'png' | 'jpg' | 'webp'; prompt: string; references: string[]; createdAt: string; recovered?: boolean };
@@ -95,7 +96,7 @@ export function candidateFile(id: string): string { const job = expressionJob(id
 export function rejectExpression(id: string): void { const job = expressionJob(id); if (job.state === 'working') throw new Error('Wait for generation to finish.'); fs.rmSync(valid(id), { recursive: true, force: true }); jobs.delete(id); }
 /**
  * Approve a candidate: it moves into the Expression Inbox, marked as AI, with the category, framing and gaze as
- * unconfirmed tag guesses. It is filed into a category from the Inbox like any other photo.
+ * unconfirmed tag guesses, and a record of what it was asked for (expression-generation-record.ts). It is filed into a category from the Inbox like any other photo.
  */
 export function approveExpression(id: string): { path: string } {
   const job = expressionJob(id); const image = candidateFile(id);
@@ -103,6 +104,7 @@ export function approveExpression(id: string): { path: string } {
   if (job.category && !category) throw new Error('The category no longer exists.');
   const groups = [[job.options.gaze], [job.options.framing, job.options.angle], [category?.name ?? '']].map((group) => group.filter(Boolean)).filter((group) => group.length);
   const sidecar = [...groups.map((group) => group.map((tag) => `${tag}, N/A, UNCONFIRMED`).join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
-  const result = addGeneratedImageToInbox(`${category?.name ?? 'Expression'} AI Candidate`, fs.readFileSync(image), `.${job.format}`, sidecar);
+  const record = generationLines({ by: job.ai === 'unknown' ? '' : job.ai, look: category?.name, with: [job.options.gaze, job.options.framing, job.options.angle] });
+  const result = addGeneratedImageToInbox(`${category?.name ?? 'Expression'} AI Candidate`, fs.readFileSync(image), `.${job.format}`, sidecar + record);
   rejectExpression(id); clearExpressionIndex(); return result;
 }

@@ -11,6 +11,8 @@ import { writeFileSafely } from './files.js';
 import { writable } from './safe-files.js';
 import { addGeneratedImageToInbox, copyAiImageToInbox } from './expression-inbox.js';
 import { trashSlot } from './manage.js';
+import { generationLines } from './expression-generation-record.js';
+import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
 /**
  * AI pictures of what a Shot List look should be, so John can see the target before photographing it.
@@ -65,23 +67,33 @@ export function shotOptions(shot: ExpressionShot): Options {
   };
 }
 
-/** The look's words for the prompt: title, description and facial details. */
+/** The look's words for the prompt: title, description, facial details and what to avoid. */
 export function shotLook(shot: ExpressionShot): string {
   const details = shot.morphology.length ? ` Facial details: ${shot.morphology.join(', ')}.` : '';
-  return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}`.trim();
+  const avoid = shot.ruledOut?.length ? ` Avoid: ${shot.ruledOut.join(', ')}.` : '';
+  return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}${avoid}`.trim();
 }
 
 /**
  * A picture's tag file, written when the picture is made (John, 2026-11-25): the look's Pose & Gaze, Framing and
  * Morphology, and its expression folder, all as unconfirmed suggestions (the AI may not have made that face), then
- * the AI mark. The same layout as Generate & Review's pictures and the library's own tag files.
+ * the AI mark. Tags the look rules out ("no squint") are written as disconfirmed. The same layout as Generate &
+ * Review's pictures and the library's own tag files. With `ai` (a new picture), it ends with the record of what the
+ * picture was asked for (expression-generation-record.ts), which the AI assessment leaves alone.
  */
-export function shotPictureTags(shot: ExpressionShot): string {
+export function shotPictureTags(shot: ExpressionShot, ai?: ImageAi): string {
   const options = shotOptions(shot);
   const unique = (tags: string[]) => [...new Set(tags.filter(Boolean))];
   const expression = shot.category.split('/').pop() ?? '';
-  const groups = [unique([...shot.pose, options.gaze]), unique([...shot.framing, options.framing, options.angle]), unique(shot.morphology), unique([expression])].filter(group => group.length);
-  return [...groups.map(group => group.map(tag => `${tag}, N/A, UNCONFIRMED`).join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
+  const out = shot.ruledOut ?? [];
+  const lines = (tags: string[], vocabulary: string[]) => {
+    const given = unique(tags);
+    return [...given.map(tag => `${tag}, N/A, UNCONFIRMED`), ...out.filter(tag => vocabulary.includes(tag) && !given.includes(tag)).map(tag => `${tag}, N/A, DISCONFIRMED`)];
+  };
+  const groups = [lines([...shot.pose, options.gaze], POSE_TAGS), lines([...shot.framing, options.framing, options.angle], FRAMING_TAGS), lines(shot.morphology, MORPHOLOGY_TAGS), lines([expression], [])].filter(group => group.length);
+  const tags = [...groups.map(group => group.join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
+  if (!ai) return tags;
+  return tags + generationLines({ by: ai, look: shot.title || expression, description: shot.description, with: [...shot.pose, options.gaze, ...shot.framing, options.framing, options.angle, ...shot.morphology], without: out });
 }
 
 /** "reference-002.png" → "reference-002.txt", the picture's tag file. */
@@ -151,7 +163,7 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage,
   if (!category) throw new Error('Sort this shot into an expression folder first.');
   const files = likenessPhotos().map(p => safeResolve('expressions', p));
   const prompt = expressionPrompt(category.name, category.definition, shotOptions(shot), shotLook(shot));
-  const tags = shotPictureTags(shot); // the look as it was asked for
+  const tags = shotPictureTags(shot, ai); // the look as it was asked for
   fs.mkdirSync(dir, { recursive: true });
   const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), pictures: listPictures(shotId), ai };
   saveJob(job); running.add(shotId);
