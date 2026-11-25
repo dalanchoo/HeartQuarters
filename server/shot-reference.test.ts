@@ -83,6 +83,32 @@ describe('shot reference pictures', () => {
     expect(readShotList()[0].done).toBe(false);
     expect(() => moveShotReferenceToInbox(shot.id, 'reference-001.png')).toThrow(/no longer there/);
   });
+  it("writes each picture's tag file when it is made, and it goes with the picture to the Inbox", async () => {
+    const [shot] = seedShotList();
+    const file = path.join(tmp, 'Expressions', 'Expression Shot List.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    Object.assign(data.shots[0], { framing: ['CloseUp', 'Frontal'], pose: ['LookAtCamera'], morphology: ['Smile', 'SoftEyes'] });
+    fs.writeFileSync(file, JSON.stringify(data));
+    await startShotReference(shot.id, making(png)).finished;
+    const tags = 'LookAtCamera, N/A, UNCONFIRMED\n==========\nCloseUp, N/A, UNCONFIRMED\nFrontal, N/A, UNCONFIRMED\n==========\nSmile, N/A, UNCONFIRMED\nSoftEyes, N/A, UNCONFIRMED\n==========\nRelief, N/A, UNCONFIRMED\n==========\nAIGenerated, N/A, CONFIRMED\n';
+    expect(fs.readFileSync(path.join(tmp, 'shot-references', shot.id, 'reference-001.txt'), 'utf8')).toBe(tags);
+    // The viewer gets them as unconfirmed suggestions, with the AI mark confirmed.
+    expect(shotReferences()[shot.id].tags?.['reference-001.png']).toContainEqual({ tag: 'Relief', confidence: null, confirmed: false });
+    expect(shotReferences()[shot.id].tags?.['reference-001.png']).toContainEqual({ tag: 'AIGenerated', confidence: null, confirmed: true });
+    const result = moveShotReferenceToInbox(shot.id, 'reference-001.png');
+    expect(fs.readFileSync(path.join(tmp, 'Expressions', result.path.replace(/\.png$/, '.txt')), 'utf8')).toBe(tags);
+    expect(fs.existsSync(path.join(tmp, 'shot-references', shot.id, 'reference-001.txt'))).toBe(false);
+  });
+  it("gives a picture made before tag files the look's tags, and keeps a picture's own tag file with it in Trash", async () => {
+    const [shot] = seedShotList();
+    await startShotReference(shot.id, making(png)).finished;
+    await startShotReference(shot.id, making(jpg)).finished;
+    fs.rmSync(path.join(tmp, 'shot-references', shot.id, 'reference-002.txt'));
+    expect(shotReferences()[shot.id].tags?.['reference-002.jpg'].map(t => t.tag)).toEqual(['HeadShoulders', 'Relief', 'AIGenerated']);
+    deleteShotPicture(shot.id, 'reference-001.png');
+    const [slot] = fs.readdirSync(config.trashDir);
+    expect(fs.readdirSync(path.join(config.trashDir, slot)).sort()).toEqual(['reference-001.png', 'reference-001.txt']);
+  });
   it('refuses a second start while one runs, an unsorted shot and a bad id', async () => {
     const [shot] = seedShotList();
     const { finished } = startShotReference(shot.id, making(png));
@@ -109,7 +135,7 @@ describe('shot reference pictures', () => {
     expect(deleteShotPicture(shot.id, 'reference-001.png')?.pictures).toEqual(['reference-002.jpg']);
     const [slot] = fs.readdirSync(config.trashDir);
     expect(slot).toMatch(/\(picture\)$/);
-    expect(fs.readdirSync(path.join(config.trashDir, slot))).toEqual(['reference-001.png']);
+    expect(fs.readdirSync(path.join(config.trashDir, slot)).sort()).toEqual(['reference-001.png', 'reference-001.txt']);
     expect(() => deleteShotPicture(shot.id, 'reference-001.png')).toThrow(/no longer there/);
     expect(() => deleteShotPicture(shot.id, '../Expression Shot List.json')).toThrow(/no longer there/);
     expect(() => deleteShotPicture('../../elsewhere', 'reference-002.jpg')).toThrow(/valid shot/);

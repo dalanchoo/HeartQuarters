@@ -2,14 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appDir, config, isInside, rootDir, safeResolve } from './config.js';
-import { buildExpressionIndex } from './expressions.js';
+import { buildExpressionIndex, parseTags, type Tag } from './expressions.js';
 import { expressionPrompt, imageFormat, type Options } from './expression-generation.js';
 import { readLikenessReferences } from './expression-references.js';
 import { readShotList, type ExpressionShot } from './expression-shot-list.js';
 import { makeImage, type ImageAi, type MakeImage } from './thumbnails.js';
 import { writeFileSafely } from './files.js';
 import { writable } from './safe-files.js';
-import { copyAiImageToInbox } from './expression-inbox.js';
+import { addGeneratedImageToInbox, copyAiImageToInbox } from './expression-inbox.js';
 import { trashSlot } from './manage.js';
 
 /**
@@ -19,7 +19,8 @@ import { trashSlot } from './manage.js';
  * newest first. They used to be in data/shot-references; the first read copies those across.
  */
 /** `ai` is the AI that made (or is making) the latest picture; older job files have none and were ChatGPT's. */
-export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[]; ai?: ImageAi };
+/** `tags`: each picture's tags from its tag file (or the look's, for pictures older than tag files). */
+export type ShotReference = { shotId: string; state: 'working' | 'ready' | 'failed'; error?: string; prompt: string; createdAt: string; pictures: string[]; tags?: Record<string, Tag[]>; ai?: ImageAi };
 const PICTURE = /^reference(?:-(\d{3}))?\.(png|jpg|webp)$/;
 
 export const SHOT_REFERENCES_FOLDER = '_ShotReferences';
@@ -70,6 +71,29 @@ export function shotLook(shot: ExpressionShot): string {
   return `${shot.title ? `${shot.title}. ` : ''}${shot.description}${details}`.trim();
 }
 
+/**
+ * A picture's tag file, written when the picture is made (John, 2026-11-25): the look's Pose & Gaze, Framing and
+ * Morphology, and its expression folder, all as unconfirmed suggestions (the AI may not have made that face), then
+ * the AI mark. The same layout as Generate & Review's pictures and the library's own tag files.
+ */
+export function shotPictureTags(shot: ExpressionShot): string {
+  const options = shotOptions(shot);
+  const unique = (tags: string[]) => [...new Set(tags.filter(Boolean))];
+  const expression = shot.category.split('/').pop() ?? '';
+  const groups = [unique([...shot.pose, options.gaze]), unique([...shot.framing, options.framing, options.angle]), unique(shot.morphology), unique([expression])].filter(group => group.length);
+  return [...groups.map(group => group.map(tag => `${tag}, N/A, UNCONFIRMED`).join('\n')), 'AIGenerated, N/A, CONFIRMED'].join('\n==========\n') + '\n';
+}
+
+/** "reference-002.png" → "reference-002.txt", the picture's tag file. */
+const tagFileOf = (name: string) => name.replace(/\.[^.]+$/, '.txt');
+
+/** A picture's tag file text; pictures made before tag files existed get the look's tags as they are now. */
+function pictureTagText(shotId: string, name: string, shot?: ExpressionShot): string | null {
+  const file = path.join(folder(shotId), tagFileOf(name));
+  if (fs.existsSync(file) && fs.lstatSync(file).isFile()) return fs.readFileSync(file, 'utf8');
+  return shot ? shotPictureTags(shot) : null;
+}
+
 /** The pictures in a shot's folder, newest first. An older single "reference.png" counts as the first. */
 function listPictures(shotId: string): string[] {
   const dir = folder(shotId);
@@ -78,28 +102,31 @@ function listPictures(shotId: string): string[] {
     .map(e => ({ name: e.name, n: Number(PICTURE.exec(e.name)![1] ?? 0) })).sort((a, b) => b.n - a.n).map(e => e.name);
 }
 
-function readJob(shotId: string): ShotReference | null {
+function readJob(shotId: string, shot: ExpressionShot | undefined = readShotList().find(s => s.id === shotId)): ShotReference | null {
   const file = path.join(folder(shotId), 'job.json');
   if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) return null;
   try {
     const job = JSON.parse(fs.readFileSync(file, 'utf8')) as ShotReference;
     if (job.shotId !== shotId || !['working', 'ready', 'failed'].includes(job.state)) return null;
-    const result = { shotId, state: job.state, prompt: job.prompt, createdAt: job.createdAt, pictures: listPictures(shotId), ...(job.error ? { error: job.error } : {}), ...(job.ai === 'codex' || job.ai === 'gemini' ? { ai: job.ai } : {}) };
+    const pictures = listPictures(shotId);
+    const tags = Object.fromEntries(pictures.map(name => [name, parseTags(pictureTagText(shotId, name, shot) ?? '')]));
+    const result = { shotId, state: job.state, prompt: job.prompt, createdAt: job.createdAt, pictures, tags, ...(job.error ? { error: job.error } : {}), ...(job.ai === 'codex' || job.ai === 'gemini' ? { ai: job.ai } : {}) };
     // A job still marked working that no longer runs was cut off when HeartQuarters stopped.
     if (job.state === 'working' && !running.has(shotId)) return { ...result, state: 'failed', error: 'Generation was interrupted when HeartQuarters stopped. Try again.' };
     return result;
   } catch { return null; }
 }
-const saveJob = ({ pictures: _computed, ...job }: ShotReference) => writeFileSafely(path.join(folder(job.shotId), 'job.json'), JSON.stringify(job, null, 2));
+const saveJob = ({ pictures: _computed, tags: _read, ...job }: ShotReference) => writeFileSafely(path.join(folder(job.shotId), 'job.json'), JSON.stringify(job, null, 2));
 
 /** Every shot's reference picture status, keyed by shot id. */
 export function shotReferences(): Record<string, ShotReference> {
   const result: Record<string, ShotReference> = {};
   migrateShotReferences();
   if (!fs.existsSync(root())) return result;
+  const shots = new Map(readShotList().map(s => [s.id, s]));
   for (const entry of fs.readdirSync(root(), { withFileTypes: true })) {
     if (!entry.isDirectory() || !UUID.test(entry.name)) continue;
-    const job = readJob(entry.name); if (job) result[entry.name] = job;
+    const job = readJob(entry.name, shots.get(entry.name)); if (job) result[entry.name] = job;
   }
   return result;
 }
@@ -124,6 +151,7 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage,
   if (!category) throw new Error('Sort this shot into an expression folder first.');
   const files = likenessPhotos().map(p => safeResolve('expressions', p));
   const prompt = expressionPrompt(category.name, category.definition, shotOptions(shot), shotLook(shot));
+  const tags = shotPictureTags(shot); // the look as it was asked for
   fs.mkdirSync(dir, { recursive: true });
   const job: ShotReference = { shotId, state: 'working', prompt, createdAt: new Date().toISOString(), pictures: listPictures(shotId), ai };
   saveJob(job); running.add(shotId);
@@ -137,7 +165,9 @@ export function startShotReference(shotId: unknown, make: MakeImage = makeImage,
     const taken = listPictures(shotId).map(name => Number(PICTURE.exec(name)![1] ?? 0));
     const next = Math.max(0, ...taken) + 1;
     if (next > 999) throw new Error('This shot already has 999 pictures.');
-    fs.writeFileSync(path.join(dir, `reference-${String(next).padStart(3, '0')}.${format}`), data, { flag: 'wx' });
+    const name = `reference-${String(next).padStart(3, '0')}.${format}`;
+    fs.writeFileSync(path.join(dir, name), data, { flag: 'wx' });
+    fs.writeFileSync(path.join(dir, tagFileOf(name)), tags, { flag: 'wx' });
     job.state = 'ready'; saveJob(job);
   })().catch((e: unknown) => { job.state = 'failed'; job.error = e instanceof Error ? e.message : String(e); try { saveJob(job); } catch { /* the error still shows until restart */ } })
     .finally(() => { running.delete(shotId); fs.rmSync(work, { recursive: true, force: true }); });
@@ -163,8 +193,13 @@ export function moveShotReferenceToInbox(shotId: unknown, name: unknown): { path
   if (running.has(shotId)) throw new Error('Wait until the picture being made is ready, then move this one.');
   const shot = readShotList().find(s => s.id === shotId);
   const number = listPictures(shotId).length - listPictures(shotId).indexOf(name);
-  const { path: inboxPath } = copyAiImageToInbox(`${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`, file);
+  const label = `${shot?.title || 'Shot List'} - AI Reference ${String(number).padStart(2, '0')}`;
+  const data = fs.readFileSync(file); const format = imageFormat(data);
+  const tags = pictureTagText(shotId, name, shot);
+  // The Inbox gets the picture with its tag file, so its expression, framing, pose and morphology are suggested there.
+  const { path: inboxPath } = format && tags ? addGeneratedImageToInbox(label, data, `.${format}`, tags) : copyAiImageToInbox(label, file);
   fs.rmSync(checked(file));
+  fs.rmSync(checked(path.join(folder(shotId), tagFileOf(name))), { force: true });
   return { path: inboxPath, pictures: readJob(shotId) };
 }
 
@@ -182,7 +217,10 @@ export function copyShotPictures(fromId: string, toId: string): number {
   for (const name of pictures) {
     if (next > 999) break;
     const format = PICTURE.exec(name)![2];
-    fs.copyFileSync(path.join(folder(fromId), name), path.join(to, `reference-${String(next++).padStart(3, '0')}.${format}`), fs.constants.COPYFILE_EXCL);
+    const copy = `reference-${String(next++).padStart(3, '0')}.${format}`;
+    fs.copyFileSync(path.join(folder(fromId), name), path.join(to, copy), fs.constants.COPYFILE_EXCL);
+    const tags = path.join(folder(fromId), tagFileOf(name));
+    if (fs.existsSync(tags)) fs.copyFileSync(tags, path.join(to, tagFileOf(copy)), fs.constants.COPYFILE_EXCL);
   }
   // The pictures only show with a job file; a look that never had one gets the merged look's.
   if (!readJob(toId)) {
@@ -221,6 +259,8 @@ export function deleteShotPicture(shotId: unknown, name: unknown): ShotReference
   const shot = readShotList().find(s => s.id === shotId);
   const slot = trashSlot(trashName(shot?.title || shot?.description || '', 'picture'));
   moveToTrash(checked(path.join(dir, name)), path.join(slot, name));
+  const tags = path.join(dir, tagFileOf(name));
+  if (fs.existsSync(tags)) moveToTrash(checked(tags), path.join(slot, tagFileOf(name)));
   return readJob(shotId);
 }
 

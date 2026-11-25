@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { getJson, postJson, type ExpressionIndex } from './api';
 import type { ExpressionShot } from '../../server/expression-shot-list';
 import type { ShotReference } from '../../server/shot-reference';
+import type { Tag } from '../../server/expressions';
 import { ExpressionVideos } from './ExpressionVideos';
 import { AiSelect, IMAGE_AIS, aiName, useAiFor } from './AiChoice';
 import { byNeed, coverageText, folderCoverage, isWellCovered, WELL_COVERED } from './shotCoverage';
 
-export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string) => void }) {
+export function ExpressionShotList({ active, index, onViewImage }: { active: boolean; index: ExpressionIndex | null; onViewImage: (imageUrl: string, name: string, category: string, tags: Tag[]) => void }) {
   const [shots, setShots] = useState<ExpressionShot[] | null>(null);
   const [pictures, setPictures] = useState<Record<string, ShotReference>>({});
   // The picture John picked for each shot; a newly made picture takes over again.
@@ -125,7 +126,7 @@ export function ExpressionShotList({ active, index, onViewImage }: { active: boo
           {moved[shot.id] && <p className="muted small-text" role="status">{moved[shot.id]}</p>}
         </div>
         {pictureUrl && <div className="expression-shot-pictures">
-          <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category)} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
+          <button type="button" className="expression-view-image expression-shot-picture" onClick={() => onViewImage(pictureUrl, `${name} · ${pictureLabel(pick)}`, shot.category, picture?.tags?.[pick] ?? [])} aria-label={`View the AI reference for ${name}`}><img src={pictureUrl} alt={`AI reference for ${name}`} loading="lazy" /></button>
           {list.length > 1 && <select aria-label="Choose a picture" value={pick} onChange={e => setChosen(current => ({ ...current, [shot.id]: { name: e.target.value, count: list.length } }))}>{list.map(item => <option key={item} value={item}>{pictureLabel(item)}</option>)}</select>}
           <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void moveToInbox(shot, pick)} title="Moves this picture to the Expression Inbox; the look keeps its other pictures">Move to Expression Inbox</button>
           <button className="small" disabled={!!busy || picture?.state === 'working'} onClick={() => void deletePicture(shot, pick)} title="Moves only this picture to HeartQuarters Trash">Delete Picture</button>
