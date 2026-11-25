@@ -267,7 +267,7 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job, madeFor: r?.madeFor })), (e: Error) => setError(e.message));
   };
   // Generate a Look for This Pair: opens the pair's look on the Shot List, where pictures are made, moved to the
-  // Inbox and confirmed. Confirmed ones come back here under Made for This Video.
+  // Inbox and confirmed. Confirmed ones come back here under Made for This Pairing.
   const [opening, setOpening] = useState(false);
   const generateLook = () => {
     setOpening(true);
@@ -338,11 +338,11 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           {ranked && <span className="muted">· {ranked.by ?? 'Claude'} looked at {ranked.looked} photos</span>}
           {ranked && !rankingNow && <AiSelect value={rankAi} onChange={setRankAi} title="Which AI ranks the photos" />}
           {ranked && !rankingNow && (
-            <button className="small" onClick={rank} title="Searches the library again using current expression tags, folders, cues, ratings and pictures made for this video">
+            <button className="small" onClick={rank} title="Searches the library again using current expression tags, folders, cues, ratings and pictures made for this pairing">
               Rank Again
             </button>
           )}
-          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List, with the pair's photo cues. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here as Made for This Video.">
+          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List, with the pair's photo cues. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here as Made for This Pairing.">
             {opening ? 'Opening…' : 'Generate a Look for This Pair'}
           </button>
         </p>
@@ -363,11 +363,11 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             {ranked?.ranked.map((r, i) => {
               const found = library.photos.find((p) => p.path === r.photo);
               if (!found) return null;
-              const aiLabel = ranking?.madeFor?.includes(found.path) ? 'Made for This Video' : isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
+              const aiLabel = ranking?.madeFor?.includes(found.path) ? 'Made for This Pairing' : isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
               return tile(found, i + 1, r.why, aiLabel);
             })}
-            {/* A picture made for this video always shows, even when the ranking left it out (John, 2026-11-25). */}
-            {madeFor.filter(p => !ranked?.ranked.some(r => r.photo === p.path)).map(p => tile(p, undefined, ranked ? `${ranked.by ?? 'Claude'} didn't rank this one.` : undefined, 'Made for This Video'))}
+            {/* A picture made for this pairing always shows, even when the ranking left it out (John, 2026-11-25). */}
+            {madeFor.filter(p => !ranked?.ranked.some(r => r.photo === p.path)).map(p => tile(p, undefined, ranked ? `${ranked.by ?? 'Claude'} didn't put this picture in its ranking. If you confirmed it after the ranking, use Rank Again.` : 'Not ranked yet.', ranked ? 'Not Ranked · Made for This Pairing' : 'Made for This Pairing'))}
           </div>
         )}
       </div>

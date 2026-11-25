@@ -106,8 +106,10 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   marked a requested cue as not there (DISCONFIRMED) or confirmed an opposite gaze. Untagged photos
   stay in. When nothing fits, **Generate a Look for This Pair** opens the pair's Shot List look.
   Pictures made there carry `# Generated shot: <id>` in their tag file. Once moved to the Inbox and
-  confirmed, they show under **Made for This Video** and are ranked first as normal candidates,
-  not AI fallbacks.
+  confirmed, they show as **Made for This Pairing**: only for pairs asking for that exact expression,
+  with their rank or "Not Ranked". They are offered to the ranking first as normal candidates, not
+  AI fallbacks. A pick's photo cues travel into its look (Pose/Morphology tags) and the image
+  prompt; looks with a different gaze are never merged.
 
 ---
 

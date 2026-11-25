@@ -65,16 +65,17 @@ describe('which photos Claude looks at', () => {
     expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo)).toEqual([untagged, notCamera, guessedLeft]);
     expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
   });
-  it('puts pictures generated for this video first, from any folder, and not as AI fallbacks', () => {
+  it('puts pictures generated for this pair first, from any folder, and not as AI fallbacks', () => {
     const made = { ...photo('Doubt/Unsure/Made_AI_001.jpg'), tags: [{ tag: 'AIGenerated', confirmed: true, confidence: null }] };
     const list = rankingCandidates([...PHOTOS, made], ['Positive/Warmth'], [], [], new Set([made.path]));
-    expect(list[0]).toMatchObject({ photo: made, madeForThisVideo: true, aiGenerated: false });
+    expect(list[0]).toMatchObject({ photo: made, madeForThisPair: true, aiGenerated: false });
   });
-  it('finds library photos made from a look this video suggested', () => {
-    const shot = (id: string, piece: string) => ({ id, category: 'Positive/Warmth', title: '', description: '', framing: [], pose: [], morphology: [], alsoFits: [], sources: [{ piece, context: 'Top 1' }], addedAt: '', done: false });
-    const mine = { ...photo('Positive/Warmth/A.jpg'), generation: { shot: 'mine' } };
-    const other = { ...photo('Positive/Warmth/B.jpg'), generation: { shot: 'other' } };
-    expect([...photosMadeFor(PIECE, [mine, other, PHOTOS[0]], [shot('mine', PIECE), shot('other', 'Another video')])]).toEqual([mine.path]);
+  it("finds library photos made from a look with this pair's expression", () => {
+    const shot = (id: string, piece: string, text: string) => ({ id, category: 'Positive/Warmth', title: '', description: '', framing: [], pose: [], morphology: [], alsoFits: [], sources: [{ piece, context: 'Top 1', text }], addedAt: '', done: false });
+    const [mine, otherPair, otherVideo] = ['mine', 'otherPair', 'otherVideo'].map(id => ({ ...photo(`Positive/Warmth/${id}.jpg`), generation: { shot: id } }));
+    const looks = [shot('mine', PIECE, PICK.expression), shot('otherPair', PIECE, 'Composure > Calm (steady)'), shot('otherVideo', 'Another video', PICK.expression)];
+    // Only this pair's expression from this video, ignoring case and spacing.
+    expect([...photosMadeFor(PIECE, `  ${PICK.expression.toUpperCase()} `, [mine, otherPair, otherVideo, PHOTOS[0]], looks)]).toEqual([mine.path]);
   });
   it('excludes a disliked star and gives likes priority before applying the cap', () => {
     const many = Array.from({ length: 60 }, (_, i) => photo(`Positive/Warmth/W_${i}.jpg`));
@@ -287,7 +288,7 @@ describe('generating a photo for the chosen pair', () => {
     const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked: [{ photo: made, why: 'made for it' }, { photo: PHOTOS[0].path, why: 'warm' }] }); };
     const { finished } = startRanking(PIECE, { ask, starred: () => [], small });
     await finished;
-    expect(seen).toContain(`- 01.jpg: ${made} (Doubt > Unsure, made for this video`);
+    expect(seen).toContain(`- 01.jpg: ${made} (Doubt > Unsure, made for this pair`);
     expect(readRanking(PIECE)?.ranked.map(r => r.photo)).toEqual([made, PHOTOS[0].path]);
   });
 });

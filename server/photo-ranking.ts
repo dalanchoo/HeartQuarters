@@ -1,5 +1,5 @@
 // Best Photos for This Pair: the AI John chose (Claude unless he picks another) looks at the photos of John that could go with the chosen title and thumbnail pair
-// (from expression tags and category folders, plus pictures generated for this video from the Shot List) and ranks up to five, with a reason for each. The
+// (from expression tags and category folders, plus pictures generated for the pair from the Shot List) and ranks up to five, with a reason for each. The
 // ranking is saved in Packaging\Drafts\Photo Ranking.json so it's there next time; picking a photo stays John's.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,7 +12,7 @@ import { isAiExpression } from './expression-origin.js';
 import { readExpressionReferences } from './expression-references.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { expressionIndex, type ExpressionPhoto } from './expressions.js';
-import { changeShotList, readShotList, shotFromSuggestion, shotHasSuggestion, type ExpressionShot } from './expression-shot-list.js';
+import { changeShotList, readShotList, shotFromSuggestion, shotHasSuggestion, shotKey, type ExpressionShot } from './expression-shot-list.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefPick } from './projects.js';
 import { readable, readText, writeFile } from './safe-files.js';
 import { thumbnail } from './thumbs.js';
@@ -70,7 +70,7 @@ export function contradictsCues(photo: ExpressionPhoto, attributes: string[]): b
 
 /**
  * Find eligible photos by expression (confirmed tag, folder, suggested tag), plus photos generated for this video.
- * Thumbs-down photos and photos that contradict a requested cue are left out. Photos made for this video come first,
+ * Thumbs-down photos and photos that contradict a requested cue are left out. Photos made for this pair come first,
  * then confirmed expression matches, then requested gaze and mouth tags, likes and stars, before the cap.
  * Stars only break ties: starred photos from unrelated expressions are no longer added (John, 2026-11-25).
  */
@@ -96,11 +96,11 @@ export function rankingCandidates(photos: ExpressionPhoto[], categories: string[
   for (const c of categories) photos.filter((p) => inCategory(p, c)).forEach(add);
   suggested.forEach(add);
   const candidates = order.map(photo => ({
-    photo, starred: stars.has(photo.path), madeForThisVideo: madeFor.has(photo.path),
+    photo, starred: stars.has(photo.path), madeForThisPair: madeFor.has(photo.path),
     // A picture generated for this video is what John asked for, so it competes with camera photos.
     aiGenerated: isAiExpression(photo) && !madeFor.has(photo.path), attributeScore: attributeScore(photo, attributes),
   }));
-  candidates.sort((a, b) => Number(b.madeForThisVideo) - Number(a.madeForThisVideo)
+  candidates.sort((a, b) => Number(b.madeForThisPair) - Number(a.madeForThisPair)
     || Number(confirmed.has(b.photo)) - Number(confirmed.has(a.photo))
     || b.attributeScore - a.attributeScore
     || Number(b.photo.rating === 'liked') - Number(a.photo.rating === 'liked')
@@ -122,16 +122,23 @@ function attributeScore(photo: ExpressionPhoto, attributes: string[]): number {
   return score;
 }
 
-/** Library photos generated from a Shot List look that this video suggested (its tag file names the look). */
-export function photosMadeFor(piece: string, photos: ExpressionPhoto[], shots: ExpressionShot[]): Set<string> {
-  const looks = new Set(shots.filter(shot => shot.sources.some(source => source.piece === piece)).map(shot => shot.id));
+/**
+ * Library photos generated for this pair: from a Shot List look this video suggested with the pair's exact expression
+ * words (its tag file names the look). Pairs asking for the same expression share them; other pairs don't (John,
+ * 2026-11-25). The look's cues don't matter here, so a picture made before the pair's cues were passed still counts.
+ */
+export function photosMadeFor(piece: string, expression: string, photos: ExpressionPhoto[], shots: ExpressionShot[]): Set<string> {
+  const looks = new Set(shots.filter(shot => shot.sources.some(source => source.piece === piece && source.text !== undefined && shotKey(source.text) === shotKey(expression))).map(shot => shot.id));
   return new Set(photos.filter(photo => photo.generation?.shot && looks.has(photo.generation.shot)).map(photo => photo.path));
 }
 
-/** The library photos generated for this video, for the photo picker. An unreadable Shot List means none. */
+/** The library photos generated for the chosen pair, for the photo picker. No pair or an unreadable Shot List means none. */
 export function readMadeFor(piece: string): string[] {
-  draftsOf(piece);
-  try { return [...photosMadeFor(piece, expressionIndex().photos, readShotList())]; } catch { return []; }
+  const drafts = draftsOf(piece);
+  try {
+    const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
+    return choice ? [...photosMadeFor(piece, choice.pick.expression, expressionIndex().photos, readShotList())] : [];
+  } catch { return []; }
 }
 
 /**
@@ -157,7 +164,7 @@ export function pairShot(piece: string): { id: string } {
   return { id };
 }
 
-type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; aiGenerated: boolean; madeForThisVideo?: boolean; rating?: ExpressionPhoto['rating'] };
+type RankingPhoto = { file: string; photo: string; category: string; starred: boolean; aiGenerated: boolean; madeForThisPair?: boolean; rating?: ExpressionPhoto['rating'] };
 
 export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhoto[], skill: string): string {
   return [
@@ -172,10 +179,10 @@ export function rankingPrompt(pick: BriefPick, short: boolean, list: RankingPhot
     ].join('\n'),
     `Open and look at every one of these ${list.length} photos (small copies in the current folder). Starred means John marked it as one of his best.`,
     'Some matching photos are filed in other expression folders. Judge the expression you see in the photo.',
-    'A photo "made for this video" is an AI picture John generated and approved for this video. Judge it like a camera photo, and prefer it when it fits the pair as well as the others.',
+    'A photo "made for this pair" is an AI picture John generated and approved for this expression. Judge it like a camera photo, and prefer it when it fits the pair as well as the others.',
     'Liked and Meh are John’s own ratings. Give a liked photo a boost when it fits the pair. Meh and unrated photos are also usable.',
     THUMBNAIL_EXPRESSION_GUIDANCE,
-    list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.madeForThisVideo ? 'made for this video' : c.aiGenerated ? 'AI-generated' : 'camera photo', c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
+    list.map((c) => `- ${c.file}: ${c.photo} (${[c.category, c.madeForThisPair ? 'made for this pair' : c.aiGenerated ? 'AI-generated' : 'camera photo', c.starred && 'starred', c.rating].filter(Boolean).join(', ')})`).join('\n'),
     `Judge the actual photos for emotional fit, natural lighting and skin color, a clear expression at phone size, and how the gaze and mouth suit the layout and any photo cues above. Prefer variety when photos are close. Rank up to ${TOP} suitable camera photos, best first. If even one camera photo suits the pair, return only suitable camera photos. If none suits it, rank up to ${TOP} suitable AI-generated photos as fallbacks. Return an empty ranked array if none of the photos is suitable.`,
     "Don't create or change any file. Reply with only this JSON, nothing before or after it, using the library paths exactly as listed:",
     '{"ranked":[{"photo":"Category/Sub/Name.jpg","why":"one sentence"}]}',
@@ -244,10 +251,10 @@ export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = '
   if (!choice) throw new Error('Choose one of the top 3 pairs first.');
   const photos = (deps.photos ?? (() => expressionIndex().photos))();
   const starred = (deps.starred ?? (() => readExpressionReferences().paths))();
-  // An unreadable Shot List only loses the "made for this video" boost; the ranking still runs.
+  // An unreadable Shot List only loses the "made for this pair" boost; the ranking still runs.
   let shots: ExpressionShot[] = [];
   try { shots = (deps.shots ?? readShotList)(); } catch { /* ranked without it */ }
-  const madeFor = photosMadeFor(piece, photos, shots);
+  const madeFor = photosMadeFor(piece, choice.pick.expression, photos, shots);
   const candidates = rankingCandidates(photos, pickCategories(choice.pick.expression), starred, choice.pick.photoAttributes, madeFor);
   if (!candidates.length) throw new Error("No eligible photos matched this pair's expression tags or folders. Thumbs-down photos, and photos marked as not having the gaze or mouth the pair asks for, are left out. Generate one for this pair from the Shot List.");
   const job: RankingJob = { piece, state: 'working', looked: candidates.length, ai };
@@ -261,7 +268,7 @@ export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = '
     for (const [i, c] of candidates.entries()) {
       const file = `${String(i + 1).padStart(2, '0')}.jpg`;
       fs.copyFileSync(await small(resolveExpressionPhoto(c.photo.path)), path.join(work, file));
-      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred, aiGenerated: c.aiGenerated, ...(c.madeForThisVideo ? { madeForThisVideo: true } : {}), rating: c.photo.rating });
+      list.push({ file, photo: c.photo.path, category: c.photo.category.split('/').join(' > '), starred: c.starred, aiGenerated: c.aiGenerated, ...(c.madeForThisPair ? { madeForThisPair: true } : {}), rating: c.photo.rating });
     }
     const skill = path.join(config.skillsDir, 'HMF_Skills', 'thumbnails-and-titles', 'SKILL.md');
     const short = /(^|\/)Shorts\//i.test(piece) || /^999 - Shorts\//i.test(piece);
