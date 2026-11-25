@@ -1,6 +1,6 @@
 // vidIQ settings for each AI's command line, and checking which AI a request names. No AI runs.
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, VIDIQ_RESEARCH_TOOLS, codexVidiq, geminiVidiqAllow, parseAi } from './ai';
+import { CLAUDE_VIDIQ_TOOLS, CODEX_STANDARD_TIER, VIDIQ_RESEARCH_TOOLS, codexVidiq, geminiVidiqAllow, parseAi, runAiProcess } from './ai';
 
 describe('vidIQ', () => {
   it('offers only research tools, never ones that change the channel', () => {
@@ -19,6 +19,15 @@ describe('vidIQ', () => {
   it("gives Gemini permission for the research tools only when asked", () => {
     expect(geminiVidiqAllow(false)).toEqual([]);
     expect(geminiVidiqAllow(true)).toContain('mcp(vidiq/vidiq_youtube_search)');
+  });
+});
+
+describe('running an AI program', () => {
+  it('hands it a prompt too long for a Windows command line through stdin', async () => {
+    const prompt = 'x'.repeat(40_000);
+    const res = await runAiProcess(process.execPath, ['-e', "let n=0;process.stdin.on('data',c=>n+=c.length).on('end',()=>console.log(n))"], { cwd: process.cwd(), timeoutMs: 20_000, input: prompt });
+    expect(res.code).toBe(0);
+    expect(res.stdout.trim()).toBe('40000');
   });
 });
 

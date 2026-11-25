@@ -262,8 +262,8 @@ export function errorInAnswer(out: string): string {
   return reason;
 }
 
-async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
-  const res = await runAiProcess(cmd, args, { cwd, env, timeoutMs: ONE_RUN_MS });
+async function run(cmd: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv, input?: string): Promise<string> {
+  const res = await runAiProcess(cmd, args, { cwd, env, timeoutMs: ONE_RUN_MS, input });
   if (res.startError) throw new Error(`Couldn't start it: ${res.startError}`);
   if (res.code === 0) return res.stdout;
   if (res.timedOut) throw new Error('It timed out before finishing.');
@@ -288,7 +288,7 @@ export const askAi: AskAi = async (ai, prompt, cwd, images = [], vidiq = false) 
   if (ai === 'codex') {
     const answer = path.join(cwd, 'chatgpt-answer.md');
     fs.rmSync(answer, { force: true }); // two ChatGPT steps share the folder: never return the earlier one's answer
-    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...(vidiq ? codexVidiq(true) : []), '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, prompt, ...images.flatMap((i) => ['-i', i])], cwd);
+    await run(cmd, [...pre, 'exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...(vidiq ? codexVidiq(true) : []), '-c', 'model_reasoning_effort="low"', ...modelArgs, '-s', 'read-only', '-o', answer, '-', ...images.flatMap((i) => ['-i', i])], cwd, undefined, prompt); // the prompt via stdin: no command-line length limit
     return fs.readFileSync(answer, 'utf8');
   }
   const settings = { toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)', ...geminiVidiqAllow(vidiq)] } };

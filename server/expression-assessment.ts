@@ -144,10 +144,11 @@ export const askReadOnlyImage: AskAi = async (ai, prompt, cwd, images = []) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
   const modelArgs = aiModelArgs(ai);
-  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-s', 'read-only', '-o', output, prompt, ...images.flatMap(image => ['-i', image])]
+  // ChatGPT reads the prompt from stdin ("-"): the assessment prompt is too long for a Windows command line.
+  const args = ai === 'codex' ? ['exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-s', 'read-only', '-o', output, '-', ...images.flatMap(image => ['-i', image])]
     : ai === 'claude' ? ['-p', prompt, ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
     : ['-p', prompt, ...modelArgs, '--output-format', 'text', '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
-  const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000 });
+  const res = await runAiProcess(cmd, [...prefix, ...args], { cwd, timeoutMs: 20 * 60 * 1000, ...(ai === 'codex' ? { input: prompt } : {}) });
   if (res.startError) throw new Error(`Could not start the AI: ${res.startError}`);
   if (res.code !== 0) throw new Error(res.timedOut ? 'The assessment timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);
   const out = res.stdout;

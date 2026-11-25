@@ -423,10 +423,18 @@ export interface ProcessResult {
 export function runAiProcess(
   cmd: string,
   args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; windowsHide?: boolean; mergeOutput?: boolean },
+  /**
+   * `input` is written to the program's stdin. Long prompts go this way: Windows refuses a command line over about
+   * 32,000 characters (ENAMETOOLONG), and the expression assessment's prompt alone is over 30,000.
+   */
+  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; windowsHide?: boolean; mergeOutput?: boolean; input?: string },
 ): Promise<ProcessResult> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: opts.windowsHide ?? true });
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], windowsHide: opts.windowsHide ?? true });
+    if (opts.input !== undefined && child.stdin) {
+      child.stdin.on('error', () => { /* the program exited before reading it all; its exit code says what happened */ });
+      child.stdin.end(opts.input, 'utf8');
+    }
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -439,8 +447,8 @@ export function runAiProcess(
       if (exitTimer) clearTimeout(exitTimer);
       resolve(result);
     };
-    child.stdout.setEncoding('utf8').on('data', (c: string) => { stdout += c; });
-    child.stderr.setEncoding('utf8').on('data', (c: string) => {
+    child.stdout!.setEncoding('utf8').on('data', (c: string) => { stdout += c; });
+    child.stderr!.setEncoding('utf8').on('data', (c: string) => {
       if (opts.mergeOutput) stdout += c;
       else stderr = (stderr + c).slice(-2000);
     });
