@@ -5,6 +5,7 @@ import mammoth from 'mammoth';
 import { appDir, config } from './config';
 import {
   attachLinkToChat,
+  attachVideoPartToChat,
   buildChatPrompt,
   CHAT_DIR,
   CHAT_FILES_DIR,
@@ -15,6 +16,7 @@ import {
   deleteChat,
   deleteFolder,
   listChats,
+  listVideoParts,
   moveChat,
   readChat,
   renameChat,
@@ -383,5 +385,32 @@ describe('full-screen multi-AI chat', () => {
     clearChat(t1.id);
     await sendChatMessage(t1.id, 'codex', 'Fresh start', [], fakeAsk);
     expect(calls[5].isResume).toBe(false);
+  });
+
+  it('lists video parts (captions, script, packaging, thumbnail, exports) and attaches any chosen part', () => {
+    const lf = path.join(config.videoProjectsDir, '003 - SDAM', 'Longform');
+    fs.mkdirSync(path.join(lf, 'Subtitles'), { recursive: true });
+    fs.mkdirSync(path.join(lf, 'Packaging', 'V01', 'Thumbnail'), { recursive: true });
+    fs.mkdirSync(path.join(lf, 'Exports'), { recursive: true });
+    fs.writeFileSync(path.join(lf, 'Subtitles', '003-captions.txt'), 'Plain text captions');
+    fs.writeFileSync(path.join(lf, 'Subtitles', '003-captions.srt'), '1\n00:00:00,000 --> 00:00:01,000\nHi\n');
+    fs.writeFileSync(path.join(lf, '003 - SDAM - Script.docx'), 'docx-bytes');
+    fs.writeFileSync(path.join(lf, 'Packaging', 'V01', 'YouTube.md'), '# Title');
+    fs.writeFileSync(path.join(lf, 'Packaging', 'V01', 'Thumbnail', 'Thumbnail.png'), 'png-bytes');
+    fs.writeFileSync(path.join(lf, 'Exports', '003 - SDAM.mp4'), 'mp4-bytes');
+
+    const parts = listVideoParts('#Videos/003%20-%20SDAM');
+    expect(parts.map((p) => p.label)).toEqual([
+      '003-captions.srt',
+      '003-captions.txt',
+      '003 - SDAM - Script.docx',
+      'V01 · YouTube.md',
+      'V01 · Thumbnail.png',
+      'Export · 003 - SDAM.mp4',
+    ]);
+
+    const attached = attachVideoPartToChat(parts[1].relPath);
+    expect(attached.name).toBe('003-captions.txt');
+    expect(fs.readFileSync(chatFilePath('003-captions.txt'), 'utf8')).toBe('Plain text captions');
   });
 });

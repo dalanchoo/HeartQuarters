@@ -17,7 +17,7 @@ import {
   type AiId,
 } from './ai.js';
 import { config, isInside, safeResolve } from './config.js';
-import { linkedSubstackText, linkedTranscript } from './idea-brainstorm.js';
+import { linkedPieces, linkedSubstackText, linkedTranscript } from './idea-brainstorm.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 import { sessionFrom } from './thumbnails.js';
 
@@ -76,6 +76,13 @@ export interface ChatThread {
 
 export interface UploadedChatFile {
   name: string;
+  size: number;
+}
+
+export interface VideoPart {
+  id: string;
+  label: string;
+  relPath: string;
   size: number;
 }
 
@@ -540,6 +547,100 @@ export async function attachLinkToChat(
   }
 
   return { kind: 'text', text: note ? `[${note}](${url})` : url };
+}
+
+function safeListFiles(dirRel: string, filter: (name: string) => boolean): { name: string; relPath: string; size: number }[] {
+  try {
+    const dir = readable(safeResolve('projects', dirRel));
+    if (!fs.statSync(dir).isDirectory()) return [];
+    const out: { name: string; relPath: string; size: number }[] = [];
+    for (const name of fs.readdirSync(dir).sort()) {
+      if (!filter(name)) continue;
+      const relPath = path.posix.join(dirRel.replace(/\\/g, '/'), name);
+      try {
+        const full = readable(safeResolve('projects', relPath));
+        const st = fs.lstatSync(full);
+        if (st.isFile() && !st.isSymbolicLink()) out.push({ name, relPath, size: st.size });
+      } catch {
+        // Skip unreadable or symlinked entries.
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Lists insertable parts (script, captions, thumbnail, packaging, exports) for a #Videos/... link. */
+export function listVideoParts(rawUrl: unknown): VideoPart[] {
+  if (typeof rawUrl !== 'string' || !rawUrl.startsWith('#Videos/')) {
+    throw new Error('Choose a valid HeartQuarters video link.');
+  }
+  const pieces = linkedPieces(rawUrl);
+  let pieceRel = '';
+  for (const candidate of pieces) {
+    try {
+      const full = readable(safeResolve('projects', candidate));
+      if (fs.statSync(full).isDirectory()) {
+        pieceRel = candidate.replace(/\\/g, '/');
+        break;
+      }
+    } catch {
+      // Try next candidate.
+    }
+  }
+  if (!pieceRel) return [];
+
+  const parts: VideoPart[] = [];
+  const add = (label: string, relPath: string, size: number) => {
+    parts.push({ id: relPath, label, relPath, size });
+  };
+
+  // Subtitles: captions.txt, captions.srt, etc.
+  for (const f of safeListFiles(path.posix.join(pieceRel, 'Subtitles'), (n) => /\.(txt|srt|vtt)$/i.test(n))) {
+    add(f.name, f.relPath, f.size);
+  }
+
+  // Script (.docx, .md, .txt in the piece folder)
+  for (const f of safeListFiles(pieceRel, (n) => /script/i.test(n) && /\.(docx|md|txt)$/i.test(n) && !n.startsWith('~$'))) {
+    add(f.name, f.relPath, f.size);
+  }
+
+  // Newest packaging version: YouTube.md (or platform .md) and Thumbnail
+  try {
+    const pkgDir = readable(safeResolve('projects', path.posix.join(pieceRel, 'Packaging')));
+    const versions = fs.readdirSync(pkgDir).filter((n) => /^V\d+/i.test(n) || n === 'Legacy').sort();
+    const newest = versions.at(-1);
+    if (newest) {
+      const verRel = path.posix.join(pieceRel, 'Packaging', newest);
+      for (const f of safeListFiles(verRel, (n) => /\.md$/i.test(n) && !/^Notes\.md$/i.test(n))) {
+        add(`${newest} · ${f.name}`, f.relPath, f.size);
+      }
+      for (const f of safeListFiles(path.posix.join(verRel, 'Thumbnail'), (n) => IMAGE_EXTS.has(path.extname(n).toLowerCase()))) {
+        add(`${newest} · ${f.name}`, f.relPath, f.size);
+      }
+    }
+  } catch {
+    // No packaging folder yet.
+  }
+
+  // Exports: exported video files
+  for (const f of safeListFiles(path.posix.join(pieceRel, 'Exports'), (n) => MEDIA_EXTS.has(path.extname(n).toLowerCase()))) {
+    add(`Export · ${f.name}`, f.relPath, f.size);
+  }
+
+  return parts;
+}
+
+/** Copies a chosen file from Video Projects into Chat's Files folder so any AI in the thread can use it. */
+export function attachVideoPartToChat(rawRelPath: unknown): UploadedChatFile {
+  if (typeof rawRelPath !== 'string' || !rawRelPath.trim()) throw new Error('Choose a file to attach.');
+  const full = readable(safeResolve('projects', rawRelPath));
+  const st = fs.lstatSync(full, { throwIfNoEntry: false });
+  if (!st || !st.isFile() || st.isSymbolicLink()) throw new Error('That file could not be found.');
+  if (st.size === 0) throw new Error('That file is empty.');
+  if (st.size > MAX_FILE_BYTES) throw new Error('Attached files must be 100 MB or smaller.');
+  return uploadChatFile(path.basename(full), fs.readFileSync(full));
 }
 
 /** Checked path to an attached chat file for serving sandboxed in the browser. */

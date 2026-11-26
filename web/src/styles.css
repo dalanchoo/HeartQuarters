@@ -1350,10 +1350,13 @@ button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 .chat-empty-folder { margin: 0.2rem 0.25rem; }
 .chat-idea-links { margin-top: 0.35rem; border-top: 1px solid var(--line); padding-top: 0.45rem; }
 .chat-idea-links > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; }
-.chat-idea-link-list { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.35rem; }
-.chat-idea-link-row { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; min-width: 0; }
+.chat-idea-link-list { display: flex; flex-direction: column; gap: 0.15rem; margin-top: 0.25rem; }
+.chat-idea-link-row { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; min-width: 0; line-height: 1.25; }
 .chat-idea-link-row > span { flex: 1; min-width: 0; }
 .chat-idea-link-row > button { flex: none; }
+button.small.chat-insert-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 0; padding: 2px 5px; line-height: 1; }
+.chat-video-link > summary { cursor: pointer; display: flex; align-items: center; gap: 0.35rem; min-width: 0; line-height: 1.25; }
+.chat-video-parts { display: flex; flex-direction: column; gap: 0.12rem; padding: 0.1rem 0 0.15rem 2.1rem; }
 .chat-page { flex: 1; min-width: 0; height: 100%; padding: 0.75rem 1rem; display: flex; }
 .chat-card { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 0.5rem; margin: 0; padding: 0.75rem 0.9rem; position: relative; }
 .chat-card.dragging { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }

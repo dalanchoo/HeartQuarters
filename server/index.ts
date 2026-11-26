@@ -25,6 +25,7 @@ import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment,
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import {
   attachLinkToChat,
+  attachVideoPartToChat,
   chatFilePath,
   clearChat,
   createChat,
@@ -32,6 +33,7 @@ import {
   deleteChat,
   deleteFolder as deleteChatFolder,
   listChats,
+  listVideoParts,
   moveChat,
   readChat,
   renameChat,
@@ -431,6 +433,8 @@ app.post('/api/chat/attach-link', (req, res) => {
     (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
   );
 });
+app.get('/api/chat/video-parts', handle((req, res) => { res.json(listVideoParts(req.query.url)); }));
+app.post('/api/chat/attach-part', handle((req, res) => { res.json(attachVideoPartToChat(req.body?.relPath)); }));
 app.post('/api/chat/send', (req, res) => {
   sendChatMessage(req.body?.id, req.body?.ai, req.body?.message, req.body?.files).then(
     (result) => res.json(result),

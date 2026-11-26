@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { copyText, formatSize, getJson, postJson, type AiId } from './api';
 import { useAi } from './AiPicker';
 import { SidebarResizer } from './SidebarResizer';
-import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile } from '../../server/chat';
+import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile, VideoPart } from '../../server/chat';
 import type { VideoIdea } from '../../server/video-ideas';
 
 const CHAT_AIS: { id: AiId; label: string }[] = [
@@ -82,6 +82,14 @@ function SidebarToggleIcon({ open }: { open: boolean }) {
   );
 }
 
+function InsertArrowIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="chat-sidebar-icon">
+      <path d="M3 8h9M9 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function ChatPage() {
   const [index, setIndex] = useState<ChatIndex>({ version: 1, folders: [], chats: [] });
   const [thread, setThread] = useState<ChatThread | null>(null);
@@ -93,6 +101,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [linkedIdea, setLinkedIdea] = useState<VideoIdea | null>(null);
+  const [videoParts, setVideoParts] = useState<Record<string, VideoPart[] | 'loading'>>({});
   const { overview } = useAi();
   const listRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
@@ -332,6 +341,42 @@ export function ChatPage() {
     }
   };
 
+  const loadVideoParts = (url: string) => {
+    if (videoParts[url]) return;
+    setVideoParts((prev) => ({ ...prev, [url]: 'loading' }));
+    getJson<VideoPart[]>(`/api/chat/video-parts?url=${encodeURIComponent(url)}`).then(
+      (parts) => setVideoParts((prev) => ({ ...prev, [url]: parts })),
+      (e: Error) => {
+        setError(e.message);
+        setVideoParts((prev) => {
+          const next = { ...prev };
+          delete next[url];
+          return next;
+        });
+      },
+    );
+  };
+
+  const insertVideoPart = async (relPath: string) => {
+    if (asking) return;
+    setError(null);
+    try {
+      const file = await postJson<UploadedChatFile>('/api/chat/attach-part', { relPath });
+      setPending((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          kind: 'uploaded',
+          name: file.name,
+          size: file.size,
+          previewUrl: null,
+        },
+      ]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const removePending = (id: string) => {
     setPending((prev) => {
       const target = prev.find((p) => p.id === id);
@@ -510,21 +555,62 @@ export function ChatPage() {
                   <p className="muted small-text chat-empty-folder">No links on this idea.</p>
                 ) : (
                   <div className="chat-idea-link-list">
-                    {linkedIdea.references.map((ref) => (
-                      <div key={ref.id} className="chat-idea-link-row">
-                        <span className="ellipsis small-text" title={ref.note ? `${ref.note} (${ref.url})` : ref.url}>
-                          {ref.note || ref.url}
-                        </span>
-                        <button
-                          type="button"
-                          className="small"
-                          disabled={!!asking}
-                          onClick={() => void insertIdeaLink(ref.url, ref.note)}
-                        >
-                          Insert
-                        </button>
-                      </div>
-                    ))}
+                    {linkedIdea.references.map((ref) => {
+                      if (ref.url.startsWith('#Videos/')) {
+                        const parts = videoParts[ref.url];
+                        return (
+                          <details
+                            key={ref.id}
+                            className="chat-video-link"
+                            onToggle={(e) => { if (e.currentTarget.open) loadVideoParts(ref.url); }}
+                          >
+                            <summary title={ref.url}>
+                              <span className="ellipsis small-text">{ref.note || ref.url}</span>
+                            </summary>
+                            <div className="chat-video-parts">
+                              {parts === 'loading' && <span className="muted small-text">Loading files…</span>}
+                              {Array.isArray(parts) && parts.length === 0 && (
+                                <span className="muted small-text">No files found for this video.</span>
+                              )}
+                              {Array.isArray(parts) && parts.map((part) => (
+                                <div key={part.id} className="chat-idea-link-row">
+                                  <span className="ellipsis small-text" title={`${part.label} (${formatSize(part.size)})`}>
+                                    {part.label}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="small chat-insert-btn"
+                                    disabled={!!asking}
+                                    aria-label={`Insert ${part.label}`}
+                                    title={`Insert ${part.label}`}
+                                    onClick={() => void insertVideoPart(part.relPath)}
+                                  >
+                                    <InsertArrowIcon />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        );
+                      }
+                      return (
+                        <div key={ref.id} className="chat-idea-link-row">
+                          <span className="ellipsis small-text" title={ref.note ? `${ref.note} (${ref.url})` : ref.url}>
+                            {ref.note || ref.url}
+                          </span>
+                          <button
+                            type="button"
+                            className="small chat-insert-btn"
+                            disabled={!!asking}
+                            aria-label={`Insert ${ref.note || ref.url}`}
+                            title={`Insert ${ref.note || ref.url}`}
+                            onClick={() => void insertIdeaLink(ref.url, ref.note)}
+                          >
+                            <InsertArrowIcon />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </details>
