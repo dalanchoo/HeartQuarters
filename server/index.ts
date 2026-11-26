@@ -34,6 +34,7 @@ import { readExpressionReferences, readLikenessReferences, saveExpressionReferen
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
 import { pairShot, rankingJob, readMadeFor, readRanking, startRanking } from './photo-ranking.js';
+import { clearDiscussion, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
@@ -669,6 +670,22 @@ app.get('/api/thumbs', handle((req, res) => {
 }));
 
 // Feedback reviews an existing image and its generated packaging without changing either.
+// ?piece=&image=: the Discuss conversation about a thumbnail draft, and whether an AI is replying.
+app.get('/api/thumbs/discussion', handle((req, res) => {
+  res.json(readDiscussion(String(req.query.piece ?? ''), String(req.query.image ?? '')));
+}));
+
+// { piece, image, ai, message }: John's message in Discuss; the AI's reply arrives in the background.
+app.post('/api/thumbs/discussion', handle((req, res) => {
+  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message).job);
+}));
+
+// { piece, image }: Start Over, forgetting that draft's discussion.
+app.post('/api/thumbs/discussion/clear', handle((req, res) => {
+  clearDiscussion(String(req.body?.piece ?? ''), String(req.body?.image ?? ''));
+  res.json({ ok: true });
+}));
+
 app.get('/api/thumbs/reviews', handle((req, res) => {
   res.json(thumbnailReviews(String(req.query.piece ?? ''), String(req.query.image ?? '')));
 }));
