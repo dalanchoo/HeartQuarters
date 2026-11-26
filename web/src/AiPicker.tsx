@@ -20,36 +20,16 @@ export function useAi(): { overview: AiOverview | null; chooseModel: (id: AiId, 
 }
 
 /**
- * At the top of the app: each AI's sign-in and the model it uses. Which AI does a job is chosen next to each button
- * (AiChoice.tsx), not here.
+ * At the top of the app: each AI's sign-in status. Which model each AI uses is set on the Tools page, and which AI
+ * does a job is chosen next to each button (AiChoice.tsx).
  */
 export function AiPicker() {
-  const { overview, chooseModel } = useAi();
-  const [error, setError] = useState<string | null>(null);
+  const { overview } = useAi();
   if (!overview) return null;
-  const pickModel = (id: AiId, model: string) => {
-    setError(null);
-    chooseModel(id, model).catch((err: Error) => setError(err.message));
-  };
   return (
     <div className="ai-controls">
-      <SignIns overview={overview} onModel={pickModel} />
-      {error && <span className="error">{error}</span>}
+      <SignIns overview={overview} />
     </div>
-  );
-}
-
-/** One AI's model, as a small dropdown. */
-function ModelSelect({ option, onModel }: { option: AiOverview['options'][number]; onModel: (id: AiId, model: string) => void }) {
-  return (
-    <select className="ai-model" value={option.model} title={`Which model ${option.name} uses`} onChange={(e) => onModel(option.id, e.target.value)}>
-      <option value="">{option.defaultLabel}</option>
-      {option.models.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.label}
-        </option>
-      ))}
-    </select>
   );
 }
 
@@ -57,7 +37,7 @@ function ModelSelect({ option, onModel }: { option: AiOverview['options'][number
  * Whether each AI is signed in, checked when the app opens, when ↻ is clicked, and when John comes back to the app
  * after opening a sign-in. Sign In opens that AI's program in its own window, where he finishes in the browser.
  */
-function SignIns({ overview, onModel }: { overview: AiOverview; onModel: (id: AiId, model: string) => void }) {
+function SignIns({ overview }: { overview: AiOverview }) {
   const [signIns, setSignIns] = useState<SignIn[] | null>(null);
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
@@ -107,11 +87,12 @@ function SignIns({ overview, onModel }: { overview: AiOverview; onModel: (id: Ai
       <span className="ai-signin-list">
         {signIns.map((s) => {
           const opt = overview.options.find((o) => o.id === s.id);
+          const modelLabel = opt?.models.find((m) => m.id === opt.model)?.label ?? opt?.defaultLabel;
+          const tip = [modelLabel && `Model: ${modelLabel}`, s.detail].filter(Boolean).join(' · ');
           return (
-            <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={s.detail}>
+            <span key={s.id} className={`ai-signin ai-signin--${s.state}`} title={tip}>
               <span className="ai-signin-dot" aria-hidden="true" />
               {s.name}
-              {opt && <ModelSelect option={opt} onModel={onModel} />}
               {s.state !== 'in' && (
                 <button type="button" className="small" onClick={() => signIn(s)} title={s.state === 'out' ? 'Not signed in' : `Couldn't tell: ${s.detail}`}>
                   Sign In

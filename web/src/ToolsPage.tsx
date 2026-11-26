@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getJson, postJson, type Job } from './api';
+import { useAi } from './AiPicker';
+import { getJson, postJson, type AiId, type Job } from './api';
 
 interface Tool {
   id: string;
@@ -26,9 +27,51 @@ export function ToolsPage() {
         These run the scripts in your HMF_SYS\Tools folder, exactly as if you ran them yourself.
       </p>
       {error && <p className="error">{error}</p>}
+      <AiModelsCard />
       {tools.map((t) => (
         <ToolCard key={t.id} tool={t} />
       ))}
+    </div>
+  );
+}
+
+/** Lets John pick which model each AI uses without crowding the top toolbar. */
+function AiModelsCard() {
+  const { overview, chooseModel } = useAi();
+  const [error, setError] = useState<string | null>(null);
+  if (!overview) return null;
+
+  const pickModel = (id: AiId, model: string) => {
+    setError(null);
+    chooseModel(id, model).catch((err: Error) => setError(err.message));
+  };
+
+  return (
+    <div className="card">
+      <h2 className="ai-models-heading">AI Models</h2>
+      <p className="muted small-text ai-models-help">
+        Choose which model each AI uses when HeartQuarters runs it.
+      </p>
+      <div className="ai-models-grid">
+        {overview.options.map((opt) => (
+          <div key={opt.id} className="ai-model-field">
+            <label htmlFor={`ai-model-${opt.id}`}>{opt.name}</label>
+            <select
+              id={`ai-model-${opt.id}`}
+              value={opt.model}
+              onChange={(e) => pickModel(opt.id, e.target.value)}
+            >
+              <option value="">{opt.defaultLabel}</option>
+              {opt.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

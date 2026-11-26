@@ -143,9 +143,8 @@ select::picker-icon { display: none; }
 .ai-controls { display: flex; align-items: center; gap: 0.55rem; margin-left: auto; }
 .ai-picker { display: flex; align-items: center; gap: 0.3rem; color: var(--muted); white-space: nowrap; }
 .ai-signins { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; position: relative; }
-.ai-signin-list { display: flex; flex-wrap: wrap; gap: 0.15rem 0.7rem; line-height: 1.15; }
+.ai-signin-list { display: flex; flex-direction: column; gap: 0.1rem; line-height: 1.15; }
 .ai-signin { display: inline-flex; align-items: center; gap: 0.25rem; }
-.ai-model { font-size: 0.8rem; padding: 0.1rem 1.7rem 0.1rem 0.55rem; background-position: right 0.5rem center; max-width: 12rem; }
 .ai-signin-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #9aa0a6; flex-shrink: 0; }
 .ai-signin--in .ai-signin-dot { background: #2e9d4f; }
 .ai-signin--out .ai-signin-dot { background: #d93025; }
@@ -641,6 +640,11 @@ body.expression-viewer-open .split > .content, body.expression-viewer-open .spli
 .markdown pre code { display: block; padding: 0.75rem; overflow-x: auto; }
 
 /* Tools */
+.ai-models-heading { margin: 0 0 0.2rem; }
+.ai-models-help { margin: 0 0 0.65rem; }
+.ai-models-grid { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: flex-start; }
+.ai-model-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.ai-model-field label { font-size: 0.9rem; font-weight: 600; }
 .tool-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .tool-status { display: flex; gap: 0.75rem; align-items: center; }
 .status { font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 99px; background: var(--bg); }
