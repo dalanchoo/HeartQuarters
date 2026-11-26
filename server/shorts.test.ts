@@ -589,13 +589,19 @@ describe('Propose shorts', () => {
   });
 });
 
-describe('Make this short', () => {
-  const settled = async () => {
-    for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S01')!.status === 'running'; i++) {
+// Each run starts a real node process as the fake AI, which can be slow while the whole suite runs. The waits allow
+// 20 seconds and then fail saying so, rather than giving up quietly and failing later in a way that hides why.
+describe('Make this short', { timeout: 30_000 }, () => {
+  const settle = async (job: 'short-S01' | 'short-S02') => {
+    for (let i = 0; i < 400 && getRun(NUMBERED, job)?.status === 'running'; i++) {
       await new Promise((r) => setTimeout(r, 50));
     }
-    return getRun(NUMBERED, 'short-S01')!;
+    const run = getRun(NUMBERED, job);
+    if (!run) throw new Error(`There is no ${job} run.`);
+    if (run.status === 'running') throw new Error(`${job} was still running after 20 seconds.`);
+    return run;
   };
+  const settled = () => settle('short-S01');
 
   beforeEach(() => {
     savePlan(NUMBERED, [ROW]);
@@ -691,6 +697,9 @@ describe('Make this short', () => {
     });
     afterEach(() => {
       config.trashDir = savedTrash;
+      // Only "leaves the other rows made" starts S02; stop and forget it here too, so a failure can't leave it running.
+      stopRun(NUMBERED, 'short-S02');
+      forgetRun(NUMBERED, 'short-S02');
     });
 
     it('moves the old short to the trash and starts again from a fresh copy, with a new conversation', async () => {
@@ -715,15 +724,12 @@ describe('Make this short', () => {
     it('leaves the other rows made', async () => {
       savePlan(NUMBERED, [ROW, { ...ROW, id: 'S02', title: 'Other' }]);
       await makeShort(NUMBERED, 'S02', NUMBERED, 'claude');
-      for (let i = 0; i < 100 && getRun(NUMBERED, 'short-S02')!.status === 'running'; i++) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
+      await settle('short-S02');
       await makeShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
       await regenerateShort(NUMBERED, 'S01', NUMBERED, 'claude');
       await settled();
-      expect(readPlan(NUMBERED)!.shorts[1].made).toBe('777_S02 - Other');
-      forgetRun(NUMBERED, 'short-S02');
+      expect(readPlan(NUMBERED)!.shorts.map((s) => [s.id, s.made])).toEqual([['S01', NAME], ['S02', '777_S02 - Other']]);
     });
 
     it('recovers when the Drive folder is already gone and only the CapCut draft remains', async () => {
