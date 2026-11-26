@@ -23,6 +23,7 @@ import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './express
 import { fillInShotTags } from './expression-shot-tags.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
+import { chatFilePath, clearChat, readChat, sendChatMessage, uploadChatFile } from './chat.js';
 import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
@@ -97,6 +98,8 @@ app.use('/api/expressions/inbox/import', express.json({ limit: '24mb' }));
 app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
 app.use('/api/thumbs/discussion', express.json({ limit: '80mb' })); // up to 4 pasted images in a Discuss message
 app.use(['/api/brief/start', '/api/brief/picks'], express.json({ limit: '120mb' })); // screenshots pasted into the brief's boxes
+app.use('/api/script', express.json({ limit: '10mb' })); // long scripts or pasted rich text
+app.use('/api/chat/send', express.json({ limit: '50mb' })); // unlimited pasted text in full-screen Chat
 app.use(express.json());
 
 // YouTube sign-in and uploads. The callback is a Google browser redirect; its
@@ -394,6 +397,18 @@ app.post('/api/ideas/brainstorm/send', (req, res) => {
   );
 });
 app.post('/api/ideas/brainstorm/clear', handle((req, res) => { res.json(clearBrainstorm(req.body?.id)); }));
+app.get('/api/chat', handle((_req, res) => { res.json(readChat()); }));
+app.get('/api/chat/file', handle((req, res) => { sandboxHeaders(res); res.sendFile(chatFilePath(req.query.name)); }));
+app.post('/api/chat/upload', express.raw({ type: 'application/octet-stream', limit: '100mb' }), handle((req, res) => {
+  res.json(uploadChatFile(req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+}));
+app.post('/api/chat/send', (req, res) => {
+  sendChatMessage(req.body?.ai, req.body?.message, req.body?.files).then(
+    (result) => res.json(result),
+    (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
+app.post('/api/chat/clear', handle((_req, res) => { res.json(clearChat()); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 // { piece, shots, ai }: adds a video's suggestions; the AI merges looks the list already has (expression-shot-merge.ts).
 app.post('/api/expressions/shot-list/add', (req, res) => {

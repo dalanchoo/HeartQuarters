@@ -7,6 +7,7 @@ import { postJson } from './api';
 void postJson('/api/conversations/forget').catch(() => {});
 import { ChannelPage } from './ChannelPage';
 import { IdeasPage } from './IdeasPage';
+import { ChatPage } from './ChatPage';
 import { ProjectsPage } from './ProjectsPage';
 import { SubstackPage } from './SubstackPage';
 import { ExpressionsPage } from './ExpressionsPage';
@@ -28,6 +29,7 @@ function cleanPaste(event: ClipboardEvent<HTMLDivElement>) {
 
 // Each tab has an id (used in the address, e.g. #Videos) and a label.
 const TABS = [
+  { id: 'Chat', label: 'Chat' },
   { id: 'Ideas', label: 'Ideas' },
   { id: 'Channel', label: 'Channel' },
   { id: 'Videos', label: 'Video Projects' },
@@ -132,6 +134,7 @@ export function App() {
       </header>
       <main>
         <ErrorBoundary>
+          {page('Chat', <ChatPage />)}
           {page('Ideas', <IdeasPage />)}
           {page('Channel', <ChannelPage />)}
           {page('Videos',<ProjectsPage />)}
