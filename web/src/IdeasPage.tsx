@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatSize, getJson, postJson, type AiId } from './api';
+import { useAutosavedText } from './unsavedEdits';
 import { useAi } from './AiPicker';
 import { channelRows, rowName, videoProjectsHash } from './channelRows';
 import { ALL_VIDEO_FILTERS, VideoFilterBar, type VideoSearchFilters } from './VideoFinder';
@@ -211,11 +212,9 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
   uploadAttachment: (ideaId: string, file: File, note: string) => Promise<boolean>;
   onBrainstorm: () => void;
 }) {
-  const [title, setTitle] = useState(idea.title);
-  const [notes, setNotes] = useState(idea.notes);
-  // After a save the server's copy is the new starting point.
-  useEffect(() => { setTitle(idea.title); setNotes(idea.notes); }, [idea.title, idea.notes]);
-  const changed = title !== idea.title || notes !== idea.notes;
+  // Title and notes save themselves a moment after typing stops, like the dropdowns.
+  const title = useAutosavedText(idea.title, (value) => send('/api/ideas/update', { id: idea.id, title: value }), (value) => !!value.trim());
+  const notes = useAutosavedText(idea.notes, (value) => send('/api/ideas/update', { id: idea.id, notes: value }));
 
   const remove = () => {
     if (!window.confirm(`Delete the idea “${idea.title}”? This cannot be undone.`)) return;
@@ -229,7 +228,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         <span className="muted small-text">{CATEGORY_LABELS[idea.category]} · {FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}{idea.attachments.length ? ` · ${idea.attachments.length} File${idea.attachments.length === 1 ? '' : 's'}` : ''}</span>
       </summary>
       <div className="idea-body">
-        <input className="idea-title-input" type="text" value={title} maxLength={300} aria-label="Title" onChange={(e) => setTitle(e.target.value)} />
+        <input className={`idea-title-input${title.dirty ? ' unsaved' : ''}`} type="text" value={title.value} maxLength={300} aria-label="Title" onChange={(e) => title.setValue(e.target.value)} onBlur={title.flush} />
         <div className="idea-fields">
           <select aria-label="Status" value={idea.status} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, status: e.target.value })}>
             {Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
@@ -241,7 +240,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
             {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
         </div>
-        <textarea rows={3} aria-label="Notes" value={notes} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => setNotes(e.target.value)} />
+        <textarea className={notes.dirty ? 'unsaved' : undefined} rows={3} aria-label="Notes" value={notes.value} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => notes.setValue(e.target.value)} onBlur={notes.flush} />
         <div className="idea-refs">
           <div className="idea-refs-head">References</div>
           {idea.references.map((ref, at) => (
@@ -252,18 +251,16 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         </div>
         <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
-          <button type="button" className="small" disabled={busy || !changed || !title.trim()} onClick={() => void send('/api/ideas/update', { id: idea.id, title, notes })}>Save</button>
-          {changed && <button type="button" className="small" onClick={() => { setTitle(idea.title); setNotes(idea.notes); }}>Undo</button>}
-          <button type="button" className="small" disabled={busy || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
+          <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
             {idea.processed ? 'Back to Raw' : 'Mark Processed'}
           </button>
           <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
             {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}
           </button>
-          <span className="muted small-text">Changed {new Date(idea.updatedAt).toLocaleDateString()}</span>
+          <span className="muted small-text">{title.dirty || notes.dirty ? 'Saving…' : `Saved · Changed ${new Date(idea.updatedAt).toLocaleDateString()}`}</span>
           <span className="spacer" />
-          <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>
-          <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Down</button>
+          <button type="button" className="small" disabled={busy || first} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>
+          <button type="button" className="small" disabled={busy || last} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Down</button>
           <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
         </div>
       </div>
@@ -271,16 +268,20 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
   );
 }
 
-/** One link: its web address and a note, with Save, Up, Down and Delete. */
+/** Whether a typed address is complete enough to save (the server checks it properly). */
+export function looksLikeLink(value: string): boolean {
+  return /^(https?:\/\/\S|#Videos\/\S)/i.test(value.trim());
+}
+
+/** One link: its web address and a note, each saving itself, with Up, Down and Delete. */
 function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
   ideaId: string; reference: IdeaReference; busy: boolean; first: boolean; last: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
 }) {
-  const [url, setUrl] = useState(reference.url);
-  const [note, setNote] = useState(reference.note);
-  useEffect(() => { setUrl(reference.url); setNote(reference.note); }, [reference.url, reference.note]);
-  const changed = url !== reference.url || note !== reference.note;
   const base = { id: ideaId, referenceId: reference.id };
+  // Both boxes save themselves; a half-typed address waits until it looks like a link.
+  const url = useAutosavedText(reference.url, (value) => send('/api/ideas/reference/update', { ...base, url: value.trim() }), looksLikeLink);
+  const note = useAutosavedText(reference.note, (value) => send('/api/ideas/reference/update', { ...base, note: value }));
 
   const remove = () => {
     if (!window.confirm(`Delete the link ${reference.url}?`)) return;
@@ -291,8 +292,8 @@ function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
 
   return (
     <div className="idea-ref">
-      <input type="text" aria-label="Link address" placeholder="https://… or #Videos/…" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
-      <input type="text" aria-label="Link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+      <input className={url.dirty ? 'unsaved' : undefined} type="text" aria-label="Link address" placeholder="https://… or #Videos/…" maxLength={2000} value={url.value} onChange={(e) => url.setValue(e.target.value)} onBlur={url.flush} />
+      <input className={note.dirty ? 'unsaved' : undefined} type="text" aria-label="Link note" placeholder="Note" maxLength={20000} value={note.value} onChange={(e) => note.setValue(e.target.value)} onBlur={note.flush} />
       <div className="idea-ref-actions">
         <a
           className="button-link small"
@@ -302,9 +303,8 @@ function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
         >
           Open
         </a>
-        <button type="button" className="small" disabled={busy || !changed || !url.trim()} onClick={() => void send('/api/ideas/reference/update', { ...base, url, note })}>Save</button>
-        <button type="button" className="small" disabled={busy || first || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: -1 })}>Up</button>
-        <button type="button" className="small" disabled={busy || last || changed} title={changed ? 'Save first' : undefined} onClick={() => void send('/api/ideas/reference/move', { ...base, step: 1 })}>Down</button>
+        <button type="button" className="small" disabled={busy || first} onClick={() => void send('/api/ideas/reference/move', { ...base, step: -1 })}>Up</button>
+        <button type="button" className="small" disabled={busy || last} onClick={() => void send('/api/ideas/reference/move', { ...base, step: 1 })}>Down</button>
         <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
       </div>
     </div>
@@ -467,9 +467,7 @@ function AttachmentRow({ ideaId, attachment, busy, send }: {
   ideaId: string; attachment: IdeaAttachment; busy: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
 }) {
-  const [note, setNote] = useState(attachment.note);
-  useEffect(() => { setNote(attachment.note); }, [attachment.note]);
-  const changed = note !== attachment.note;
+  const note = useAutosavedText(attachment.note, (value) => send('/api/ideas/attachment/update', { id: ideaId, attachmentId: attachment.id, note: value }));
   const href = `/api/ideas/attachment?id=${encodeURIComponent(ideaId)}&attachmentId=${encodeURIComponent(attachment.id)}`;
 
   const remove = () => {
@@ -482,10 +480,9 @@ function AttachmentRow({ ideaId, attachment, busy, send }: {
       <span className="idea-attach-name" title={attachment.name}>
         {attachment.name} <span className="muted small-text">({formatSize(attachment.size)})</span>
       </span>
-      <input type="text" aria-label="Attachment note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
+      <input className={note.dirty ? 'unsaved' : undefined} type="text" aria-label="Attachment note" placeholder="Note" maxLength={20000} value={note.value} onChange={(e) => note.setValue(e.target.value)} onBlur={note.flush} />
       <div className="idea-ref-actions">
         <a className="button-link small" href={href} target="_blank" rel="noreferrer">Open</a>
-        <button type="button" className="small" disabled={busy || !changed} onClick={() => void send('/api/ideas/attachment/update', { id: ideaId, attachmentId: attachment.id, note })}>Save</button>
         <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
       </div>
     </div>

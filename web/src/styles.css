@@ -1292,3 +1292,8 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 @media (max-width: 720px) { .comment-card { grid-template-columns: 1fr; } }
 
 .apply-result { margin: 6px 0 0; padding: 6px 10px; border: 2px solid #b42318; border-radius: 6px; background: #fef3f2; font-weight: 600; }
+
+/* Unsaved text: an accent outline on the field (or section) until it's saved. */
+input.unsaved, textarea.unsaved { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.yt-section.unsaved { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent-soft) 35%, transparent); }
+.unsaved-label { color: var(--accent); font-weight: 600; font-size: 0.8rem; }

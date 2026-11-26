@@ -31,7 +31,7 @@ import { VideoPreview } from './VideoPreview';
 import { PackagingChoice, PackagingCompare } from './PackagingCompare';
 import { LockSwitch } from './LockSwitch';
 import { YOUTUBE_SELECTION } from './comparisonSelection';
-import { hasPendingPackaging } from './pendingPackaging';
+import { hasPendingEdits } from './unsavedEdits';
 import { ThumbnailImport } from './ThumbnailImport';
 import type { VideoOverview } from '../../server/video-overview';
 import type { CleanupStatus } from '../../server/cleanup-status';
@@ -185,7 +185,7 @@ export function ProjectsPage() {
     const onHash = () => {
       if (!/^#(Videos|Projects)(\/|$)/.test(location.hash)) return;
       const next = projectFromHash();
-      if (next !== selectedRef.current && hasPendingPackaging() && !window.confirm('You have unapplied packaging changes. Discard them and open another project?')) {
+      if (next !== selectedRef.current && hasPendingEdits() && !window.confirm('You have unsaved changes on this project. Discard them and open another project?')) {
         history.replaceState(null, '', lastVideoHash.current);
         return;
       }

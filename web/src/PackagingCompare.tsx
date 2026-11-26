@@ -4,7 +4,7 @@ import { lockDocs, usePackagingDocs, type LoadedDoc } from './PackagingDoc';
 import { LocalVsYouTube, type YoutubeLink } from './YouTubeCard';
 import { VersionCompare } from './VersionCompare';
 import { choiceOrder, comparisonSelection, orderedChoices, rightChoices, YOUTUBE_SELECTION as YOUTUBE, type ComparisonChoices } from './comparisonSelection';
-import { setPendingPackaging } from './pendingPackaging';
+import { setPendingEdit } from './unsavedEdits';
 import { LockSwitch } from './LockSwitch';
 import { PackagingChoice } from './PackagingChoice';
 
@@ -23,7 +23,7 @@ export function PackagingCompare({ piece, version, doc, locked, unlocked, onTogg
   const [compareReady, setCompareReady] = useState(true);
   const bodyRef = useRef<HTMLDivElement>(null);
   const pendingId = useRef(Symbol('packaging'));
-  useEffect(() => { const id = pendingId.current; setPendingPackaging(id, dirty); return () => setPendingPackaging(id, false); }, [dirty]);
+  useEffect(() => { const id = pendingId.current; setPendingEdit(id, dirty); return () => setPendingEdit(id, false); }, [dirty]);
   useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
   useEffect(() => { if (!dirty) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const changeSelection = (side: 'left' | 'right', value: string) => {

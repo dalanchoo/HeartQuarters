@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useUnsavedWarning } from './unsavedEdits';
 import DOMPurify from 'dompurify';
 import { getJson, postJson } from './api';
 import { AiWritingChecker } from './AiWritingChecker';
@@ -80,6 +81,8 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   };
 
   const dirty = file !== null && html !== file.html;
+  // Refreshing or opening another project asks first while the script has unsaved changes.
+  useUnsavedWarning(dirty);
 
   const save = async () => {
     if (!file || busy) return;
@@ -118,8 +121,8 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
   return (
-    <details className="yt-section" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>Script</summary>
+    <details className={`yt-section${dirty ? ' unsaved' : ''}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>Script{dirty && <span className="unsaved-label">Unsaved Changes</span>}</summary>
       {error && <p className="error" role="alert">{error}</p>}
       {!file && !error && <p className="muted small-text">Loading script…</p>}
       {file && (
