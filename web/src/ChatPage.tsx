@@ -72,6 +72,17 @@ async function uploadFile(file: File): Promise<UploadedChatFile> {
   return body;
 }
 
+function SidebarToggleIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" className="chat-sidebar-icon">
+      <rect x="2" y="3" width="14" height="12" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      {open
+        ? <rect x="2" y="3" width="5" height="12" rx="2" fill="currentColor" />
+        : <line x1="6" y1="6" x2="6" y2="12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
 export function ChatPage() {
   const [index, setIndex] = useState<ChatIndex>({ version: 1, folders: [], chats: [] });
   const [thread, setThread] = useState<ChatThread | null>(null);
@@ -366,10 +377,19 @@ export function ChatPage() {
 
   return (
     <div className="split chat-split">
-      {sidebarOpen && (
+      {sidebarOpen ? (
         <>
           <aside className="sidebar chat-sidebar">
             <div className="chat-sidebar-actions">
+              <button
+                type="button"
+                className="small chat-sidebar-toggle"
+                onClick={toggleSidebar}
+                aria-label="Hide Sidebar"
+                title="Hide Sidebar"
+              >
+                <SidebarToggleIcon open />
+              </button>
               <button type="button" className="small" disabled={!!asking} onClick={() => void startNewChat(null)}>
                 New Chat
               </button>
@@ -415,6 +435,18 @@ export function ChatPage() {
           </aside>
           <SidebarResizer />
         </>
+      ) : (
+        <aside className="chat-sidebar-collapsed">
+          <button
+            type="button"
+            className="small chat-sidebar-toggle"
+            onClick={toggleSidebar}
+            aria-label="Show Sidebar"
+            title="Show Sidebar"
+          >
+            <SidebarToggleIcon open={false} />
+          </button>
+        </aside>
       )}
 
       <div
@@ -427,9 +459,6 @@ export function ChatPage() {
         <div className={`card chat-card${dragging ? ' dragging' : ''}`}>
           <div className="chat-head">
             <div className="chat-head-left">
-              <button type="button" className="small" onClick={toggleSidebar}>
-                {sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
-              </button>
               <div className="chat-title-wrap">
                 <div className="chat-title-row">
                   <h1 className="ellipsis">{thread?.title || 'Chat'}</h1>

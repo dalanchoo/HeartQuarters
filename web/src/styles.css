@@ -1336,8 +1336,11 @@ button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 /* Full-screen Chat tab */
 .chat-split { height: 100%; overflow: hidden; }
 .chat-sidebar { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.6rem; }
-.chat-sidebar-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-.chat-sidebar-actions button { flex: 1; }
+.chat-sidebar-collapsed { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; padding: 0.6rem 0.45rem; background: var(--panel); border-right: 1px solid var(--line); }
+.chat-sidebar-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.chat-sidebar-actions button:not(.chat-sidebar-toggle) { flex: 1; }
+.chat-sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; padding: 0.15rem 0.4rem; flex: 0 0 auto; }
+.chat-sidebar-icon { display: block; }
 .chat-folder { margin: 0; }
 .chat-folder > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; }
 .chat-folder-tools { display: flex; gap: 0.25rem; margin: 0.3rem 0; flex-wrap: wrap; }
