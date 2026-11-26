@@ -9,6 +9,7 @@ import { isCurrentChoice } from './draftPackaging';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
+import type { DiscussionJob, DiscussionMessage } from '../../server/thumbnail-discussion';
 import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
 import { isAiExpression } from '../../server/expression-origin';
 import type { AiId } from '../../server/ai';
@@ -791,6 +792,7 @@ function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job
           <div className="muted small-text">Thumbnail text: {conversation.pick.thumbnailText.toUpperCase()}</div>
         </div>
       )}
+      {current && <ThumbnailDiscussion key={conversation.path} piece={piece} image={current.path} canChange={rounds.length > 0 && !working} onUseChange={(text) => setChange(text)} />}
       {current && <ThumbnailFeedback key={current.path} piece={piece} image={current.path} hasMetadata={!!conversation.pick} />}
       {current && !working && target && (
         <div className="draft-use">
@@ -886,6 +888,73 @@ function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job
       {conversation.requests && <TextToggle label="Requests" path={conversation.requests.path} />}
     </div>
   );
+}
+
+/**
+ * Discuss: a conversation with any AI about this draft before making a new image (John, 2026-11-25). Each message goes
+ * with the image shown. A reply that settles a change has a Change Request, which Use as Change Request puts in the
+ * Ask for Changes box below, to read and send.
+ */
+function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: string; image: string; canChange: boolean; onUseChange: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<DiscussionMessage[]>([]);
+  const [job, setJob] = useState<DiscussionJob | null>(null);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  const [ai, setAi] = useAiFor('thumb-discuss');
+  const [usedId, setUsedId] = useState('');
+  const replying = job?.state === 'working';
+  const url = `/api/thumbs/discussion?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`;
+  const load = (isActive: () => boolean = () => true) => getJson<{ messages: DiscussionMessage[]; job: DiscussionJob | null }>(url).then(
+    (data) => { if (isActive()) { setMessages(data.messages); setJob(data.job); } },
+    (e: Error) => { if (isActive()) setError(e.message); },
+  );
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
+  }, [piece, image]);
+  useEffect(() => {
+    if (!replying) return;
+    let active = true;
+    const timer = setInterval(() => void load(() => active), 3000);
+    return () => { active = false; clearInterval(timer); };
+  }, [replying, piece, image]);
+  const send = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setError('');
+    postJson<DiscussionJob>('/api/thumbs/discussion', { piece, image, ai, message: text }).then(
+      (started) => { setDraft(''); setJob(started); void load(); },
+      (e: Error) => setError(e.message),
+    );
+  };
+  const startOver = () => {
+    if (!window.confirm('Start over? This forgets the discussion about this draft.')) return;
+    postJson('/api/thumbs/discussion/clear', { piece, image }).then(() => { setMessages([]); setJob(null); }, (e: Error) => setError(e.message));
+  };
+  const speaker = (from: DiscussionMessage['from']) => (from === 'john' ? 'You' : aiName(from));
+  return <details className="yt-section thumbnail-discussion" open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary>Discuss{messages.length > 0 && <span className="muted small-text"> · {messages.length} {messages.length === 1 ? 'message' : 'messages'}</span>}</summary>
+    <p className="muted small-text">Talk it over with an AI before making a new image. It sees the image shown above, the title and thumbnail words, the brief and the transcript, and never makes images itself. Saved on this computer.</p>
+    {messages.map(m => <div key={m.id} className={`discussion-message ${m.from === 'john' ? 'from-john' : 'from-ai'}`}>
+      <div className="small-text"><strong>{speaker(m.from)}</strong> <span className="muted">· {new Date(m.at).toLocaleString()}</span></div>
+      {m.from === 'john' ? <p className="discussion-text">{m.text}</p> : <div className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown></div>}
+      {m.changeRequest && <div className="claude-buttons">
+        <button className="small" disabled={!canChange} title={canChange ? 'Puts this change request in the Ask for Changes box below, to read and send' : 'Wait until the image being made is ready'} onClick={() => { onUseChange(m.changeRequest!); setUsedId(m.id); }}>Use as Change Request</button>
+        {usedId === m.id && <span className="muted small-text">In the Ask for Changes box below.</span>}
+      </div>}
+    </div>)}
+    {replying && <p className="brief-working small-text">{aiName(job?.ai ?? ai)} is replying…</p>}
+    {job?.state === 'failed' && <p className="error small-text">{aiName(job.ai)}: {job.error}</p>}
+    <textarea rows={2} value={draft} maxLength={4000} disabled={replying} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); }} placeholder="For example: He never said he had one memory left. What would be true here?" />
+    <div className="claude-buttons">
+      <button className="small" disabled={replying || !draft.trim()} onClick={send}>{replying ? 'Waiting for the Reply…' : 'Send'}</button>
+      <AiSelect value={ai} onChange={setAi} title="Which AI you talk with" />
+      {messages.length > 0 && <button className="small" disabled={replying} onClick={startOver} title="Forgets this draft's discussion">Start Over</button>}
+    </div>
+    {error && <p className="error small-text" role="alert">{error}</p>}
+  </details>;
 }
 
 /** Review the image currently shown, independently of making another image. */

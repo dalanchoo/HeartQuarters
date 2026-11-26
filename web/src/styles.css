@@ -476,6 +476,11 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .expression-shot { padding: .3rem .65rem; margin: .3rem 0; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
 .expression-shot p { margin: .3rem 0; }
 .expression-shot[open] { padding-bottom: .5rem; }
+.thumbnail-discussion textarea { width: 100%; margin-top: .3rem; }
+.discussion-message { margin: .35rem 0; padding: .35rem .55rem; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); }
+.discussion-message.from-john { background: var(--accent-soft); }
+.discussion-message .markdown p, .discussion-text { margin: .2rem 0; white-space: pre-wrap; }
+.discussion-message .markdown p { white-space: normal; }
 .expression-shot-stepper { display: flex; align-items: center; gap: .3rem; }
 .expression-shot-stepper > button.small { font-size: 1.1rem; padding: .1rem .45rem; }
 .expression-shot.focused { border-color: var(--accent); background: var(--accent-soft); }
