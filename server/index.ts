@@ -24,6 +24,7 @@ import { fillInShotTags } from './expression-shot-tags.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import {
+  attachLinkToChat,
   chatFilePath,
   clearChat,
   createChat,
@@ -424,6 +425,12 @@ app.get('/api/chat/file', handle((req, res) => { sandboxHeaders(res); res.sendFi
 app.post('/api/chat/upload', express.raw({ type: 'application/octet-stream', limit: '100mb' }), handle((req, res) => {
   res.json(uploadChatFile(req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
 }));
+app.post('/api/chat/attach-link', (req, res) => {
+  attachLinkToChat(req.body?.url, req.body?.note).then(
+    (result) => res.json(result),
+    (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
+  );
+});
 app.post('/api/chat/send', (req, res) => {
   sendChatMessage(req.body?.id, req.body?.ai, req.body?.message, req.body?.files).then(
     (result) => res.json(result),

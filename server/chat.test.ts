@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mammoth from 'mammoth';
 import { appDir, config } from './config';
 import {
+  attachLinkToChat,
   buildChatPrompt,
   CHAT_DIR,
   CHAT_FILES_DIR,
@@ -314,5 +315,21 @@ describe('full-screen multi-AI chat', () => {
     } finally {
       removeTree(externalDir);
     }
+  });
+
+  it('resolves #Videos/ and web links for attachLinkToChat', async () => {
+    const sub = path.join(config.videoProjectsDir, '003 - SDAM', 'Longform', 'Subtitles');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, '003.srt'), '1\n00:00:00,000 --> 00:00:02,000\nHello SDAM.\n');
+
+    const attached = await attachLinkToChat('#Videos/003%20-%20SDAM', '003 - SDAM');
+    expect(attached.kind).toBe('file');
+    if (attached.kind === 'file') {
+      expect(attached.file.name).toBe('003 - SDAM (Transcript).txt');
+      expect(fs.readFileSync(chatFilePath(attached.file.name), 'utf8')).toContain('Hello SDAM.');
+    }
+
+    const web = await attachLinkToChat('https://example.com/article', 'SDAM Article');
+    expect(web).toEqual({ kind: 'text', text: '[SDAM Article](https://example.com/article)' });
   });
 });

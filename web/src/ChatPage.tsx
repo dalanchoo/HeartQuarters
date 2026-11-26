@@ -5,6 +5,7 @@ import { copyText, formatSize, getJson, postJson, type AiId } from './api';
 import { useAi } from './AiPicker';
 import { SidebarResizer } from './SidebarResizer';
 import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile } from '../../server/chat';
+import type { VideoIdea } from '../../server/video-ideas';
 
 const CHAT_AIS: { id: AiId; label: string }[] = [
   { id: 'claude', label: 'Send to Claude' },
@@ -24,11 +25,9 @@ const VIDEO_RE = /\.(mp4|mov|webm|m4v|mkv)$/i;
 const AUDIO_RE = /\.(mp3|wav|m4a|ogg|aac)$/i;
 const SIDEBAR_KEY = 'hq-chat-sidebar-open';
 
-interface PendingFile {
-  id: string;
-  file: File;
-  previewUrl: string | null;
-}
+type PendingItem =
+  | { id: string; kind: 'local'; name: string; size: number; file: File; previewUrl: string | null }
+  | { id: string; kind: 'uploaded'; name: string; size: number; previewUrl: null };
 
 function filesFromClipboard(data: DataTransfer | null): File[] {
   if (!data) return [];
@@ -88,15 +87,17 @@ export function ChatPage() {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
   const [draft, setDraft] = useState('');
-  const [pending, setPending] = useState<PendingFile[]>([]);
+  const [pending, setPending] = useState<PendingItem[]>([]);
   const [asking, setAsking] = useState<AiId | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [linkedIdea, setLinkedIdea] = useState<VideoIdea | null>(null);
   const { overview } = useAi();
   const listRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
-  const pendingRef = useRef<PendingFile[]>([]);
+  const pendingRef = useRef<PendingItem[]>([]);
   pendingRef.current = pending;
 
   const loadAll = async (requestedId = chatIdFromHash()) => {
@@ -140,6 +141,38 @@ export function ChatPage() {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [thread?.id, thread?.messages.length]);
+
+  useEffect(() => {
+    const ideaId = thread?.ideaId;
+    if (!ideaId) {
+      setLinkedIdea(null);
+      return;
+    }
+    let active = true;
+    getJson<VideoIdea[]>('/api/ideas').then(
+      (all) => { if (active) setLinkedIdea(all.find((i) => i.id === ideaId) ?? null); },
+      () => { if (active) setLinkedIdea(null); },
+    );
+    return () => { active = false; };
+  }, [thread?.ideaId]);
+
+  const insertAtCursor = (snippet: string) => {
+    const el = draftRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    const before = draft.slice(0, start);
+    const after = draft.slice(end);
+    const padLeft = before && !/[\s\n]$/.test(before) ? ' ' : '';
+    const padRight = after && !/^[\s\n]/.test(after) ? ' ' : '';
+    const next = `${before}${padLeft}${snippet}${padRight}${after}`;
+    const caret = before.length + padLeft.length + snippet.length;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      if (!draftRef.current) return;
+      draftRef.current.focus();
+      draftRef.current.setSelectionRange(caret, caret);
+    });
+  };
 
   const toggleSidebar = () => {
     setSidebarOpen((prev) => {
@@ -257,16 +290,46 @@ export function ChatPage() {
   const stageFiles = (files: File[]) => {
     if (!files.length) return;
     setError(null);
-    const added: PendingFile[] = files.map((file, idx) => {
+    const added: PendingItem[] = files.map((file, idx) => {
       const isImage = file.type.startsWith('image/') || IMAGE_RE.test(file.name);
       const namedFile = file.name ? file : new File([file], `Pasted Image ${Date.now()}-${idx + 1}.png`, { type: file.type || 'image/png' });
       return {
         id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2)}`,
+        kind: 'local',
+        name: namedFile.name,
+        size: namedFile.size,
         file: namedFile,
         previewUrl: isImage ? URL.createObjectURL(namedFile) : null,
       };
     });
     setPending((prev) => [...prev, ...added]);
+  };
+
+  const insertIdeaLink = async (url: string, note: string) => {
+    if (asking) return;
+    setError(null);
+    try {
+      const res = await postJson<{ kind: 'file'; file: UploadedChatFile } | { kind: 'text'; text: string }>(
+        '/api/chat/attach-link',
+        { url, note },
+      );
+      if (res.kind === 'file') {
+        setPending((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            kind: 'uploaded',
+            name: res.file.name,
+            size: res.file.size,
+            previewUrl: null,
+          },
+        ]);
+      } else {
+        insertAtCursor(res.text);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const removePending = (id: string) => {
@@ -311,8 +374,12 @@ export function ChatPage() {
     try {
       const uploadedNames: string[] = [];
       for (const item of pending) {
-        const res = await uploadFile(item.file);
-        uploadedNames.push(res.name);
+        if (item.kind === 'uploaded') {
+          uploadedNames.push(item.name);
+        } else {
+          const res = await uploadFile(item.file);
+          uploadedNames.push(res.name);
+        }
       }
       const updated = await postJson<ChatThread>('/api/chat/send', {
         id: thread?.id || null,
@@ -432,6 +499,36 @@ export function ChatPage() {
                 <p className="muted small-text chat-empty-folder">No conversations yet.</p>
               )}
             </div>
+
+            {linkedIdea && (
+              <details className="yt-section chat-idea-links" open>
+                <summary>
+                  <span>Idea Links</span>
+                  <span className="muted small-text">{linkedIdea.references.length}</span>
+                </summary>
+                {linkedIdea.references.length === 0 ? (
+                  <p className="muted small-text chat-empty-folder">No links on this idea.</p>
+                ) : (
+                  <div className="chat-idea-link-list">
+                    {linkedIdea.references.map((ref) => (
+                      <div key={ref.id} className="chat-idea-link-row">
+                        <span className="ellipsis small-text" title={ref.note ? `${ref.note} (${ref.url})` : ref.url}>
+                          {ref.note || ref.url}
+                        </span>
+                        <button
+                          type="button"
+                          className="small"
+                          disabled={!!asking}
+                          onClick={() => void insertIdeaLink(ref.url, ref.note)}
+                        >
+                          Insert
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </details>
+            )}
           </aside>
           <SidebarResizer />
         </>
@@ -601,14 +698,14 @@ export function ChatPage() {
               <div className="chat-pending-files">
                 {pending.map((item) => (
                   <div key={item.id} className="chat-pending-chip">
-                    {item.previewUrl && <img src={item.previewUrl} alt={item.file.name} className="chat-file-thumb" />}
-                    <span>{item.file.name}</span>
-                    <span className="muted small-text">({formatSize(item.file.size)})</span>
+                    {item.previewUrl && <img src={item.previewUrl} alt={item.name} className="chat-file-thumb" />}
+                    <span>{item.name}</span>
+                    <span className="muted small-text">({formatSize(item.size)})</span>
                     <button
                       type="button"
                       className="small"
                       disabled={!!asking}
-                      aria-label={`Remove ${item.file.name}`}
+                      aria-label={`Remove ${item.name}`}
                       onClick={() => removePending(item.id)}
                     >
                       ×
@@ -618,6 +715,7 @@ export function ChatPage() {
               </div>
             )}
             <textarea
+              ref={draftRef}
               rows={4}
               value={draft}
               disabled={!!asking}

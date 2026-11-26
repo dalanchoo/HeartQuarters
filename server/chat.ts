@@ -17,6 +17,7 @@ import {
   type AiId,
 } from './ai.js';
 import { config, isInside, safeResolve } from './config.js';
+import { linkedSubstackText, linkedTranscript } from './idea-brainstorm.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 import { sessionFrom } from './thumbnails.js';
 
@@ -476,6 +477,39 @@ export function uploadChatFile(rawName: unknown, bytes: Buffer): UploadedChatFil
   const target = writable(safeResolve('projects', path.posix.join(CHAT_FILES_DIR, candidate)));
   writeFile(target, bytes, { flag: 'wx' });
   return { name: candidate, size: bytes.length };
+}
+
+/**
+ * Resolves an Idea reference link (#Videos/... or #Substack/...) into an attached .txt file in Chat
+ * containing its transcript, script, or Substack draft, or returns a clean Markdown link for web URLs.
+ */
+export async function attachLinkToChat(
+  rawUrl: unknown,
+  rawNote: unknown = '',
+): Promise<{ kind: 'file'; file: UploadedChatFile } | { kind: 'text'; text: string }> {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) throw new Error('Choose a valid link.');
+  const url = rawUrl.trim();
+  const note = typeof rawNote === 'string' ? rawNote.trim() : '';
+
+  if (url.startsWith('#Substack/')) {
+    const text = await linkedSubstackText(url);
+    if (!text) throw new Error('Could not find a .docx draft for that Substack piece.');
+    const label = note || decodeURIComponent(url.slice('#Substack/'.length)).split('/').pop() || 'Substack';
+    const file = uploadChatFile(`${label}.txt`, Buffer.from(`${label}\n\n${text}`, 'utf8'));
+    return { kind: 'file', file };
+  }
+
+  if (url.startsWith('#Videos/')) {
+    const found = await linkedTranscript(url);
+    if (!found) throw new Error('No transcript or script was found for that video.');
+    const label = note || decodeURIComponent(url.slice('#Videos/'.length)).split('/').pop() || 'Video';
+    const kindLabel = found.source === 'script' ? 'Script' : 'Transcript';
+    const warning = found.source === 'script' ? '(This is the script, which may differ from what was said.)\n\n' : '';
+    const file = uploadChatFile(`${label} (${kindLabel}).txt`, Buffer.from(`${label}\n\n${warning}${found.text}`, 'utf8'));
+    return { kind: 'file', file };
+  }
+
+  return { kind: 'text', text: note ? `[${note}](${url})` : url };
 }
 
 /** Checked path to an attached chat file for serving sandboxed in the browser. */
