@@ -40,7 +40,7 @@ button:has(> .youtube-icon) { display: inline-flex; align-items: center; gap: 0.
 
 /* Native dropdowns keep their keyboard and screen-reader behavior while matching the searchable pickers. */
 select {
-  appearance: none; font: inherit; font-size: 0.9rem; font-weight: 600; min-height: 24px;
+  -webkit-appearance: none; appearance: none; font: inherit; font-size: 0.9rem; font-weight: 600; min-height: 24px;
   padding: 0.1rem 2rem 0.1rem 0.75rem; border: 1px solid #b5bdc9; border-radius: 7px;
   background: #edf1f7 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23273b58' d='M3 4.5h6L6 8z'/%3E%3C/svg%3E") no-repeat right 0.65rem center;
   color: #273b58; cursor: pointer; box-shadow: 0 2px 0 #a8b1bf, 0 3px 6px #182b4618;
@@ -50,6 +50,7 @@ select:hover:not(:disabled) { border-color: #7595c3; background-color: #dce8f8; 
 select:active:not(:disabled) { background-color: #cbdcf3; box-shadow: 0 0 0 #a8b1bf; }
 select:focus-visible { outline: 3px solid #508ee2; outline-offset: 2px; }
 select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+select::picker-icon { display: none; }
 
 .muted { color: var(--muted); }
 .error { color: var(--bad); }
@@ -144,7 +145,7 @@ select:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .ai-signins { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; position: relative; }
 .ai-signin-list { display: flex; flex-wrap: wrap; gap: 0.15rem 0.7rem; line-height: 1.15; }
 .ai-signin { display: inline-flex; align-items: center; gap: 0.25rem; }
-.ai-model { font: inherit; font-size: 0.72rem; padding: 0 0.1rem; max-width: 11rem; }
+.ai-model { font-size: 0.8rem; padding: 0.1rem 1.7rem 0.1rem 0.55rem; background-position: right 0.5rem center; max-width: 12rem; }
 .ai-signin-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #9aa0a6; flex-shrink: 0; }
 .ai-signin--in .ai-signin-dot { background: #2e9d4f; }
 .ai-signin--out .ai-signin-dot { background: #d93025; }
