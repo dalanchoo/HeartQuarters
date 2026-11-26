@@ -6,6 +6,7 @@ import {
   BRAINSTORMS_DIR,
   buildBrainstormPrompt,
   clearBrainstorm,
+  linkedPieces,
   readBrainstorm,
   sendBrainstormMessage,
 } from './idea-brainstorm';
@@ -105,6 +106,39 @@ describe('idea brainstorm', () => {
     await expect(sendBrainstormMessage(idea.id, 'other', 'Hi')).rejects.toThrow('Claude, ChatGPT, or Gemini');
     await expect(sendBrainstormMessage(idea.id, 'claude', '   ')).rejects.toThrow('Type a message');
     await expect(sendBrainstormMessage('missing-id', 'claude', 'Hi')).rejects.toThrow('no longer on the list');
+  });
+
+  it('turns #Videos/ links back into the pieces they point to', () => {
+    expect(linkedPieces('#Videos/001%20-%20Video')).toEqual(['001 - Video/Longform', '001 - Video']);
+    expect(linkedPieces('#Videos/005%20-%20Series%2F005B%20-%20Part')).toEqual(['005 - Series/005B - Part/Longform', '005 - Series/005B - Part']);
+    expect(linkedPieces('#Videos/002%20-%20Video/002%20-%20Video%2FShorts%2FS01')).toEqual(['002 - Video/Shorts/S01']);
+    expect(linkedPieces('https://youtube.com/watch?v=x')).toEqual([]);
+    expect(linkedPieces('#Videos/%E0%A4%A')).toEqual([]);
+  });
+
+  it('gives the AI the transcript of every linked HeartQuarters video by default', async () => {
+    const subtitles = path.join(config.videoProjectsDir, '001 - Video', 'Longform', 'Subtitles');
+    fs.mkdirSync(subtitles, { recursive: true });
+    fs.writeFileSync(path.join(subtitles, '001-captions.txt'), 'What I actually said on camera.');
+
+    const [idea] = addIdea('Follow-up idea');
+    addReference(idea.id, { url: '#Videos/001%20-%20Video', note: '001 - Video' });
+    addReference(idea.id, { url: '#Videos/999%20-%20Gone', note: 'Moved away' });
+    addReference(idea.id, { url: 'https://example.com', note: 'Web page' });
+
+    let prompt = '';
+    let folder: Record<string, string> = {};
+    const fakeAsk = async (_ai: 'claude' | 'codex' | 'gemini', p: string, work: string) => {
+      prompt = p;
+      folder = Object.fromEntries(fs.readdirSync(work).map((f) => [f, fs.readFileSync(path.join(work, f), 'utf8')]));
+      return 'ok';
+    };
+    await sendBrainstormMessage(idea.id, 'claude', 'What should the follow-up cover?', fakeAsk);
+
+    expect(Object.keys(folder)).toEqual(['Linked Video 1 Transcript.txt']);
+    expect(folder['Linked Video 1 Transcript.txt']).toContain('What I actually said on camera.');
+    expect(prompt).toContain('#Videos/001%20-%20Video — 001 - Video (its transcript is in your working folder: Linked Video 1 Transcript.txt)');
+    expect(prompt).toContain('#Videos/999%20-%20Gone — Moved away\n');
   });
 
   it('refuses to read or write through a shortcut or junction', async () => {

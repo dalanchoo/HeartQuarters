@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AI_NAMES, isAiId, type AiId } from './ai.js';
+import { readAnalysisTranscript } from './analytics-context.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
 import { askReadOnlyImage } from './expression-assessment.js';
@@ -95,15 +96,51 @@ function speakerLabel(from: BrainstormMessage['from']): string {
   return from === 'john' ? 'John' : AI_NAMES[from];
 }
 
+/**
+ * The video pieces a HeartQuarters `#Videos/` link may point to, most likely first. It is the reverse of
+ * `videoProjectsHash` in web/src/channelRows.ts: `#Videos/<project>` is a project (its Longform, or the
+ * project itself for a standalone Short), and `#Videos/<project>/<piece>` is a Short inside a project.
+ */
+export function linkedPieces(url: string): string[] {
+  if (!url.startsWith('#Videos/')) return [];
+  let parts: string[];
+  try {
+    parts = url.slice('#Videos/'.length).split('/').map(decodeURIComponent).filter(Boolean);
+  } catch {
+    return [];
+  }
+  if (parts.length === 0) return [];
+  if (parts.length > 1) return [parts[parts.length - 1]];
+  return [`${parts[0]}/Longform`, parts[0]];
+}
+
+/** A linked video's transcript (or its script when there is no transcript), or null when none is found. */
+export async function linkedTranscript(url: string): Promise<{ text: string; source: 'transcript' | 'script' } | null> {
+  for (const piece of linkedPieces(url)) {
+    try {
+      const found = await readAnalysisTranscript(piece);
+      if (found) return found;
+    } catch {
+      // A link to a video that was renamed or moved: try the next guess, then give up quietly.
+    }
+  }
+  return null;
+}
+
 /** Builds the full-context prompt passed to whichever AI John sends the next turn to. */
 export function buildBrainstormPrompt(
   idea: VideoIdea,
   history: BrainstormMessage[],
   nextMessage: string,
   ai: AiId,
+  /** File names in the working folder holding each linked video's transcript, by reference id. */
+  transcripts: Record<string, string> = {},
 ): string {
   const refs = idea.references.length
-    ? idea.references.map((r, i) => `${i + 1}. ${r.url}${r.note ? ` — ${r.note}` : ''}`).join('\n')
+    ? idea.references.map((r, i) => {
+      const transcript = transcripts[r.id] ? ` (its transcript is in your working folder: ${transcripts[r.id]})` : '';
+      return `${i + 1}. ${r.url}${r.note ? ` — ${r.note}` : ''}${transcript}`;
+    }).join('\n')
     : '(none)';
   const files = idea.attachments.length
     ? idea.attachments.map((a, i) => `${i + 1}. ${a.name}${a.note ? ` — ${a.note}` : ''}`).join('\n')
@@ -166,7 +203,18 @@ export async function sendBrainstormMessage(
       }
     }
 
-    const prompt = buildBrainstormPrompt(idea, historyBefore, message, rawAi);
+    // Linked HeartQuarters videos come with their transcripts, so the AI can read what was actually said.
+    const transcripts: Record<string, string> = {};
+    for (const [i, ref] of idea.references.entries()) {
+      const found = await linkedTranscript(ref.url);
+      if (!found) continue;
+      const name = `Linked Video ${i + 1} ${found.source === 'script' ? 'Script' : 'Transcript'}.txt`;
+      const warning = found.source === 'script' ? '(This is the script, which may differ from what was said.)\n\n' : '';
+      fs.writeFileSync(path.join(work, name), `${ref.note || ref.url}\n\n${warning}${found.text}`, { flag: 'wx' });
+      transcripts[ref.id] = name;
+    }
+
+    const prompt = buildBrainstormPrompt(idea, historyBefore, message, rawAi, transcripts);
     const answer = (await ask(rawAi, prompt, work)).trim();
     if (!answer) throw new Error(`${AI_NAMES[rawAi]} returned an empty reply.`);
 

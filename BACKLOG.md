@@ -278,6 +278,9 @@ and timely outside demand. Use the existing Topic and Angle review.
 5. Ideas, research, brainstorm, packaging: the research step (what worked for John and for others: vidIQ, Reddit, other channels),
    a brainstorm chat for a chosen idea, and a small packaging skill for the title and thumbnail before filming. The Ideas tab still
    has its own old category list; decide whether to move it to Topic and Angle.
+   Done (2026-11-25): a brainstorm always gives the AI the transcript (or script) of every `#Videos/` video linked to the idea.
+   Web links are still only passed as addresses. Next (John's call): bring his Substack writing into the brainstorm, then
+   decide whether the AI should read ordinary web links.
 
 **Loose ends needing John's decision**
 - A note for `999-2026-01` about its sped-up pauses.
