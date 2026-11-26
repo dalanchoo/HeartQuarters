@@ -266,7 +266,10 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
           </select>
         </div>
         <textarea className={notes.dirty ? 'unsaved' : undefined} rows={3} aria-label="Notes" value={notes.value} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => notes.setValue(e.target.value)} onBlur={notes.flush} />
+        {/* The finder sits on the left at its own width; links, files and the idea's buttons fill the rest. */}
+        <div className="idea-lower">
         <VideoFinder ideaId={idea.id} videos={videos} busy={busy} send={send} />
+        <div className="idea-lower-main">
         <div className="idea-refs">
           <div className="idea-refs-head">Links and Files</div>
           <IdeaLinkList idea={idea} busy={busy} send={send} />
@@ -288,6 +291,8 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
           <button type="button" className="small" disabled={busy || first} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>
           <button type="button" className="small" disabled={busy || last} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Down</button>
           <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
+        </div>
+        </div>
         </div>
       </div>
     </details>
@@ -363,47 +368,53 @@ function AddLink({ ideaId, busy, send }: {
   );
 }
 
-/** A collapsible Video Finder matching Channel → Video Detail; clicking a video adds it as a link named after it. */
+/** A collapsible Video Finder matching Channel → Video Detail: click a video to choose it, then Add Video. */
 function VideoFinder({ ideaId, videos, busy, send }: {
   ideaId: string; videos: ChannelVideo[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
   const [filters, setFilters] = useState<VideoSearchFilters>(ALL_VIDEO_FILTERS);
+  const [chosen, setChosen] = useState<string | null>(null);
   const matching = channelRows(videos, filters, 'publishedAt', true);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
+  const picked = videos.find((v) => v.id === chosen) ?? null;
 
+  const add = async () => {
+    if (!picked) return;
+    const done = await send('/api/ideas/reference/add', { id: ideaId, url: videoProjectsHash(picked.piece ?? ''), note: rowName(picked) });
+    if (done) setChosen(null);
+  };
+
+  if (!videos.length) return null;
   return (
-    <>
-      {videos.length > 0 && (
-        <details className="idea-video-finder">
-          <summary>Find a Video in HeartQuarters</summary>
-          <div className="idea-video-finder-body">
-            <VideoFilterBar filters={filters} onChange={setFilters} />
-            <p className="muted small-text idea-video-count">
-              {matching.length} {filtering ? 'Matching ' : ''}{matching.length === 1 ? 'Video' : 'Videos'} · click one to add
-            </p>
-            <div className="idea-video-list">
-              {matching.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  className="idea-video-option"
-                  disabled={busy}
-                  title={v.title}
-                  onClick={() => void send('/api/ideas/reference/add', {
-                    id: ideaId,
-                    url: videoProjectsHash(v.piece ?? ''),
-                    note: rowName(v),
-                  })}
-                >
-                  {rowName(v)}
-                </button>
-              ))}
-              {matching.length === 0 && <p className="muted small-text">No videos match these filters.</p>}
-            </div>
-          </div>
-        </details>
-      )}
-    </>
+    <details className="idea-video-finder">
+      <summary>Find a Video in HeartQuarters</summary>
+      <div className="idea-video-finder-body">
+        <VideoFilterBar filters={filters} onChange={setFilters} />
+        <p className="muted small-text idea-video-count">
+          {matching.length} {filtering ? 'Matching ' : ''}{matching.length === 1 ? 'Video' : 'Videos'} · click one to choose it
+        </p>
+        <div className="idea-video-list">
+          {matching.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              className={`idea-video-option${v.id === chosen ? ' chosen' : ''}`}
+              aria-pressed={v.id === chosen}
+              title={v.title}
+              onClick={() => setChosen((cur) => (cur === v.id ? null : v.id))}
+              onDoubleClick={() => void add()}
+            >
+              {rowName(v)}
+            </button>
+          ))}
+          {matching.length === 0 && <p className="muted small-text">No videos match these filters.</p>}
+        </div>
+        <div className="idea-video-add">
+          <button type="button" className="small" disabled={busy || !picked} onClick={() => void add()}>Add Video</button>
+          <span className="muted small-text">{picked ? rowName(picked) : 'No video chosen'}</span>
+        </div>
+      </div>
+    </details>
   );
 }
 

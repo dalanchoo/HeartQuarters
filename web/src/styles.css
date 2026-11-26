@@ -1307,3 +1307,13 @@ input.unsaved, textarea.unsaved { border-color: var(--accent); box-shadow: 0 0 0
 .idea-add-link input { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
 button.remove-x { background: none; border: none; box-shadow: none; padding: 0 0.35rem; min-height: 0; font-size: 1.05rem; line-height: 1; color: var(--muted); cursor: pointer; }
 button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
+
+/* An open idea's lower half: the video finder on the left at its own width, everything else on the right. */
+.idea-lower { display: flex; gap: 0.8rem; align-items: flex-start; }
+.idea-lower-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.idea-lower .idea-video-finder { flex: none; margin-top: 0; }
+.idea-lower .idea-video-finder[open] { width: 20rem; }
+.idea-video-option.chosen { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.idea-video-add { display: flex; gap: 0.4rem; align-items: center; min-width: 0; }
+.idea-video-add .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) { .idea-lower { flex-direction: column; } .idea-lower .idea-video-finder[open] { width: 100%; } }
