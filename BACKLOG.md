@@ -100,6 +100,26 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   use the current episode's thumbnail as revision context. Each idea includes a supporting visual
   that helps tell the story. The top three use distinct compositions, and image generation follows
   the chosen concept's layout.
+- **Best Photos filter by expression, not stars (2026-11-25).** The candidates are the pair's
+  expression (confirmed tag, folder, suggested tag). Stars only break ties; starred photos of other
+  expressions are no longer added. Thumbs-down photos are left out, and so are photos where John
+  marked a requested cue as not there (DISCONFIRMED) or confirmed an opposite gaze. Untagged photos
+  stay in. When nothing fits, **Generate a Look for This Pair** opens the pair's Shot List look.
+  Pictures made there carry `# Generated shot: <id>` in their tag file. Once moved to the Inbox and
+  confirmed, they show as **Made for This Pairing**: only for pairs asking for that exact expression,
+  with their rank or "Not Ranked". They are offered to the ranking first as normal candidates, not
+  AI fallbacks. A pick's photo cues travel into its look (Pose/Morphology tags) and the image
+  prompt; looks with a different gaze are never merged.
+  Rankings are saved per pair: switching pairs never asks an AI again, only Rank Again does. A
+  ranking remembers the photos it was shown, and the picker notes when they have changed since.
+- **Packaging must be literally true (2026-11-25).** Every claim in a title and the thumbnail words,
+  alone and as a pair, must be literally true to the transcript: no inflated amounts or finality,
+  no joining separate moments, and the supporting visual shows what the words refer to. The
+  writer, reviewers (Accuracy section first), picker, Ask for Feedback and the first image request
+  carry this rule, and so does the thumbnails-and-titles skill's hard rule 2 (on Drive).
+- **Discuss a draft before changing it (2026-11-25).** Each thumbnail draft has a Discuss box: a
+  conversation with any AI that sees the image, packaging, brief and transcript and never makes
+  images. A reply's Change Request goes into Ask for Changes with one click.
 
 ---
 

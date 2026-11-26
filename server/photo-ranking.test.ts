@@ -4,9 +4,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { MAX_CANDIDATES, RANKING_FILE, pickCategories, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
+import { MAX_CANDIDATES, RANKING_FILE, pairShot, photosMadeFor, pickCategories, readMadeFor, rankingCandidates, rankingFromAnswer, readRanking, startRanking } from './photo-ranking';
 import { setExpressionRating } from './expression-rating';
 import { clearExpressionIndex, type ExpressionPhoto } from './expressions';
+import { readShotList } from './expression-shot-list';
 import type { AskAi } from './brief';
 import type { BriefPick } from './projects';
 
@@ -45,14 +46,36 @@ describe('which photos Claude looks at', () => {
   it("reads the pair's categories", () => {
     expect(pickCategories(PICK.expression)).toEqual(['Positive/Warmth', 'Empathy/Compassion']);
   });
-  it('puts starred photos in the categories first, then the categories, then other starred photos', () => {
+  it('uses the categories, with stars only breaking ties, and leaves out starred photos of other expressions', () => {
     const list = rankingCandidates(PHOTOS, ['Positive/Warmth', 'Empathy/Compassion'], ['Positive/Warmth/Warm_002.jpg', 'Composure/Calm/Calm_004.jpg']);
     expect(list.map((c) => [c.photo.path, c.starred])).toEqual([
       ['Positive/Warmth/Warm_002.jpg', true],
       ['Positive/Warmth/Warm_001.jpg', false],
       ['Empathy/Compassion/Compassion_002.jpg', false],
-      ['Composure/Calm/Calm_004.jpg', true],
     ]);
+  });
+  it('leaves out photos John marked as not having a requested cue, or with a confirmed opposite gaze, but keeps untagged ones', () => {
+    const [untagged, notCamera, lookingLeft, guessedLeft, closedMouth] = Array.from({ length: 5 }, (_, i) => photo(`Positive/Warmth/P_${i}.jpg`));
+    notCamera.tags = [{ tag: 'LookAtCamera', confirmed: false, disconfirmed: true, confidence: null }];
+    lookingLeft.tags = [{ tag: 'LookLeft', confirmed: true, confidence: null }];
+    guessedLeft.tags = [{ tag: 'LookLeft', confirmed: false, confidence: 90 }];
+    closedMouth.tags = [{ tag: 'MouthOpen', confirmed: false, disconfirmed: true, confidence: null }];
+    const photos = [untagged, notCamera, lookingLeft, guessedLeft, closedMouth];
+    expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookAtCamera']).map(c => c.photo)).toEqual([untagged, guessedLeft, closedMouth]);
+    expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo)).toEqual([untagged, notCamera, guessedLeft]);
+    expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
+  });
+  it('puts pictures generated for this pair first, from any folder, and not as AI fallbacks', () => {
+    const made = { ...photo('Doubt/Unsure/Made_AI_001.jpg'), tags: [{ tag: 'AIGenerated', confirmed: true, confidence: null }] };
+    const list = rankingCandidates([...PHOTOS, made], ['Positive/Warmth'], [], [], new Set([made.path]));
+    expect(list[0]).toMatchObject({ photo: made, madeForThisPair: true, aiGenerated: false });
+  });
+  it("finds library photos made from a look with this pair's expression", () => {
+    const shot = (id: string, piece: string, text: string) => ({ id, category: 'Positive/Warmth', title: '', description: '', framing: [], pose: [], morphology: [], alsoFits: [], sources: [{ piece, context: 'Top 1', text }], addedAt: '', done: false });
+    const [mine, otherPair, otherVideo] = ['mine', 'otherPair', 'otherVideo'].map(id => ({ ...photo(`Positive/Warmth/${id}.jpg`), generation: { shot: id } }));
+    const looks = [shot('mine', PIECE, PICK.expression), shot('otherPair', PIECE, 'Composure > Calm (steady)'), shot('otherVideo', 'Another video', PICK.expression)];
+    // Only this pair's expression from this video, ignoring case and spacing.
+    expect([...photosMadeFor(PIECE, `  ${PICK.expression.toUpperCase()} `, [mine, otherPair, otherVideo, PHOTOS[0]], looks)]).toEqual([mine.path]);
   });
   it('excludes a disliked star and gives likes priority before applying the cap', () => {
     const many = Array.from({ length: 60 }, (_, i) => photo(`Positive/Warmth/W_${i}.jpg`));
@@ -79,7 +102,7 @@ describe('which photos Claude looks at', () => {
     expect(list).toHaveLength(MAX_CANDIDATES);
     expect(list[0].photo).toBe(confirmed);
   });
-  it('prefers confirmed cues over guesses and keeps photos without matching cues eligible', () => {
+  it('prefers confirmed cues over guesses, keeps untagged photos and leaves out a cue John ruled out', () => {
     const [unknown, rejected, guessed, confirmed] = PHOTOS.slice(0, 4).map((_, i) => photo(`Positive/Warmth/Photo_${i}.jpg`));
     rejected.tags = [{ tag: 'LookRight', confirmed: false, disconfirmed: true, confidence: 99 }];
     guessed.tags = ['LookRight', 'MouthOpen'].map(tag => ({ tag, confirmed: false, confidence: 98 }));
@@ -87,7 +110,7 @@ describe('which photos Claude looks at', () => {
     const photos = [unknown, rejected, guessed, confirmed];
     expect(rankingCandidates(photos, ['Positive/Warmth'], []).map(c => c.photo)).toEqual(photos);
     expect(rankingCandidates(photos, ['Positive/Warmth'], [], ['LookRight', 'MouthOpen']).map(c => c.photo))
-      .toEqual([confirmed, guessed, unknown, rejected]);
+      .toEqual([confirmed, guessed, unknown]);
   });
 });
 
@@ -120,10 +143,10 @@ describe('ranking the photos for the chosen pair', () => {
     const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked }); };
     const { job, finished } = startRanking(PIECE, { ask, starred: () => [starred.path], small });
     await finished;
-    expect(job).toMatchObject({ state: 'done', looked: 3 });
+    expect(job).toMatchObject({ state: 'done', looked: 2 });
     expect(seen).toContain(`- 01.jpg: ${confirmed.path}`);
     expect(seen).toContain(`- 02.jpg: ${suggested.path}`);
-    expect(seen).toContain(`- 03.jpg: ${starred.path}`);
+    expect(seen).not.toContain(starred.path);
     expect(seen).not.toContain(disconfirmed.path);
     expect(seen).not.toContain(disliked.path);
     expect(readRanking(PIECE)?.ranked).toEqual(ranked);
@@ -208,7 +231,29 @@ describe('ranking the photos for the chosen pair', () => {
     expect(calls).toBe(1);
     expect(readRanking(PIECE)).toMatchObject({ cameraFirst: true, ranked });
   });
+  it('keeps one ranking per pair, so going back to a pair asks no AI, and says when its photos changed', async () => {
+    let calls = 0;
+    const ask: AskAi = async () => { calls++; return JSON.stringify({ ranked: [{ photo: PHOTOS[0].path, why: 'warm' }] }); };
+    const OTHER = { ...PICK, title: 'Another Pair', expression: 'Positive > Warmth (a broad grin)' };
+    choose();
+    await startRanking(PIECE, { ask, starred: () => [], small }).finished;
+    choose(OTHER);
+    expect(readRanking(PIECE)).toBeNull();
+    await startRanking(PIECE, { ask, starred: () => [], small }).finished;
+    choose();
+    // The first pair's ranking is still there, unchanged, without asking again.
+    expect(readRanking(PIECE)).toMatchObject({ title: PICK.title, ranked: [{ photo: PHOTOS[0].path }], offered: expect.any(Array) });
+    expect(readRanking(PIECE)?.changed).toBeUndefined();
+    expect(calls).toBe(2);
+    // A new photo in the pair's folder changes what it would be shown.
+    fs.writeFileSync(path.join(tmp, 'Expressions', 'Positive', 'Warmth', 'Warm_New.jpg'), 'fake photo');
+    clearExpressionIndex();
+    expect(readRanking(PIECE)?.changed).toBe(true);
+    choose(OTHER);
+    expect(readRanking(PIECE)).toMatchObject({ title: 'Another Pair' });
+  });
   it('updates saved recommendations when ratings change without rewriting the saved ranking', () => {
+    choose();
     const file = path.join(tmp, 'Videos', PIECE, 'Packaging', 'Drafts', RANKING_FILE);
     const ranked = PHOTOS.slice(0, 2).map(photo => ({ photo: photo.path, why: 'warm' }));
     const saved = JSON.stringify({ title: PICK.title, thumbnailText: PICK.thumbnailText, looked: 2, ranked });
@@ -230,5 +275,42 @@ describe('ranking the photos for the chosen pair', () => {
     expect(job).toMatchObject({ state: 'failed', error: expect.stringMatching(/expected form/) });
     expect(readRanking(PIECE)).toBeNull();
     expect(() => startRanking('../outside', { photos: () => PHOTOS, starred: () => [], small })).toThrow();
+  });
+});
+
+describe('generating a photo for the chosen pair', () => {
+  it("finds the pair's look on the Shot List, or adds it once for an older brief", () => {
+    expect(() => pairShot(PIECE)).toThrow(/Choose one of the top 3/);
+    choose();
+    const { id } = pairShot(PIECE);
+    expect(pairShot(PIECE).id).toBe(id);
+    const shots = readShotList();
+    expect(shots).toHaveLength(1);
+    expect(shots[0]).toMatchObject({ id, category: 'Positive/Warmth', sources: [{ piece: PIECE, text: PICK.expression }] });
+  });
+  it("gives the pair's look its photo cues, and adds a specific look beside one without them", () => {
+    choose();
+    const plain = pairShot(PIECE);
+    choose({ ...PICK, photoAttributes: ['LookRight'] });
+    const cued = pairShot(PIECE);
+    expect(cued.id).not.toBe(plain.id);
+    expect(readShotList().find(s => s.id === cued.id)).toMatchObject({ pose: ['LookRight'], sources: [{ cues: ['LookRight'] }] });
+    expect(pairShot(PIECE).id).toBe(cued.id);
+  });
+  it('ranks a confirmed picture generated from that look first, as a normal candidate', async () => {
+    choose();
+    const { id } = pairShot(PIECE);
+    // A picture confirmed into another folder, with the record line its tag file got when it was made.
+    const made = 'Doubt/Unsure/Made_AI_001.jpg';
+    fs.writeFileSync(path.join(tmp, 'Expressions', made), 'fake photo');
+    fs.writeFileSync(path.join(tmp, 'Expressions', made.replace(/\.jpg$/, '.txt')), `AIGenerated, N/A, CONFIRMED\n# Generated shot: ${id}\n`);
+    clearExpressionIndex();
+    expect(readMadeFor(PIECE)).toEqual([made]);
+    let seen = '';
+    const ask: AskAi = async (_ai, prompt) => { seen = prompt; return JSON.stringify({ ranked: [{ photo: made, why: 'made for it' }, { photo: PHOTOS[0].path, why: 'warm' }] }); };
+    const { finished } = startRanking(PIECE, { ask, starred: () => [], small });
+    await finished;
+    expect(seen).toContain(`- 01.jpg: ${made} (Doubt > Unsure, made for this pair`);
+    expect(readRanking(PIECE)?.ranked.map(r => r.photo)).toEqual([made, PHOTOS[0].path]);
   });
 });

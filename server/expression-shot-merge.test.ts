@@ -80,6 +80,20 @@ describe('merging duplicate looks', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it("keeps a pick's gaze and mouth cues as its own look, never merged into a look with another gaze", async () => {
+    const [plain] = addExpressionShots('Video/Longform', [{ expression: CALM_A, context: 'Idea 1' }]);
+    // The same words with cues are a new look, even though the AI calls them the same photo.
+    const result = await addShotsMerging('Other/Longform', [{ expression: CALM_A, context: 'Top 1', cues: ['LookRight', 'MouthOpen', 'NotATag'] }], grouping(['steady eyes']));
+    expect(result).toMatchObject({ added: 1, merged: 0 });
+    const cued = result.shots.find(s => s.id !== plain.id)!;
+    expect(cued).toMatchObject({ pose: ['LookRight'], morphology: ['MouthOpen'], sources: [{ piece: 'Other/Longform', cues: ['LookRight', 'MouthOpen'] }] });
+    expect(duplicatesPrompt(result.shots)).toContain('"LookRight"');
+    // Suggested again with the same cues, in any order, it joins that look.
+    await addShotsMerging('Video/Longform', [{ expression: CALM_A, context: 'Top 2', cues: ['MouthOpen', 'LookRight'] }], grouping());
+    expect(readShotList()).toHaveLength(2);
+    expect(readShotList().find(s => s.id === cued.id)!.sources).toHaveLength(2);
+  });
+
   it("doesn't ask the AI when no folder has a new look next to another, and adds exact repeats to their look", async () => {
     addExpressionShots('Video/Longform', [{ expression: CALM_A, context: 'Top 1' }]);
     const never = async (prompt: string) => { if (prompt.includes('"ruledOut"')) return tagging(prompt); throw new Error('should not be asked'); };

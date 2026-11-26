@@ -115,6 +115,7 @@ export function firstRequest(choice: BriefChoice, short: boolean, out: string): 
       `- Thumbnail text, exactly: ${p.thumbnailText.toUpperCase()}${p.accent ? ` (accent colour on ${p.accent.toUpperCase()}; the other words white)` : ''}.`,
       `- Expression: ${p.expression}`,
       `- Composition, background, and supporting visual: ${p.background}`,
+      '- The supporting visual must show what the title and thumbnail words refer to, as the brief describes it. Do not swap in another scene or add anything that makes a claim the brief does not.',
       '- Follow the concept for the placement and scale of John, the words, and the supporting visual. Make the visual recognizable at phone size. If the brief leaves it unspecified, choose one prop, setting, or symbol that helps tell this specific story.',
       `- Why it should work: ${p.why}`,
       short

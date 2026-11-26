@@ -16,4 +16,8 @@ describe('expression suggestions for the shot list', () => {
     const expression = 'Positive > Relief, Composure > Resolute, Positive > Warmth (open eyes, a quiet, relieved half-smile, the look of someone who has just come back)';
     expect(expressionShotSuggestions(`### Idea 1\nExpression: ${expression}`, [])).toEqual([{ expression, context: 'Idea 1' }]);
   });
+  it("carries a pick's photo cues with its expression", () => {
+    const pick = { title: 'T', thumbnailText: 'X', accent: '', expression: 'Cognitive > Recalling (quietly moved)', photoAttributes: ['LookRight'], background: '', why: '', backedBy: [] } as BriefPick;
+    expect(expressionShotSuggestions('', [pick])).toEqual([{ expression: pick.expression, context: 'Top 1: T', cues: ['LookRight'] }]);
+  });
 });

@@ -18,7 +18,7 @@ import { filterSelectablePhotos, openPhotoSelection, generationCategories, gener
 import { CategoryPicker } from './CategoryPicker';
 import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator, LikenessPicker } from './ExpressionGenerator';
-import { ExpressionShotList } from './ExpressionShotList';
+import { ExpressionShotList, type ViewerSteps } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
 import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMotionFilter } from '../../server/expression-origin';
@@ -33,7 +33,13 @@ const isAiList = (v: unknown): v is AiId[] => Array.isArray(v) && v.length > 0 &
 type TagAction = { kind: 'confirm' | 'disconfirm' | 'remove'; tag: ExpressionPhoto['tags'][number]; expression?: boolean } | { kind: 'add'; name: string; group: 'expression' | 'framing' | 'pose' | 'morphology' };
 
 // The selected category is kept in the address: #Expressions/Cognitive/Thinking
+// #Expressions/~shot/<id> opens the Shot List at one look instead (from Pick the Photo), leaving the category as it was.
+const SHOT_LINK = /^#Expressions\/~shot\/([^/]+)$/;
+function shotFromHash(): string {
+  return SHOT_LINK.exec(location.hash)?.[1] ?? '';
+}
 function categoryFromHash(): string {
+  if (shotFromHash()) return '';
   return decodeURIComponent(location.hash.slice(1).split('/').slice(1).join('/'));
 }
 
@@ -54,7 +60,8 @@ export function ExpressionsPage() {
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(categoryFromHash);
-  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'generation' | 'shots' | 'inbox'>(() => shotFromHash() ? 'shots' : 'library');
+  const [focusShot, setFocusShot] = useState(shotFromHash);
   const [generationCategory, setGenerationCategory] = useState('');
   const [readyCount, setReadyCount] = useState<number | null>(null);
   const [includeSub, setIncludeSub] = useState(true);
@@ -67,7 +74,7 @@ export function ExpressionsPage() {
   const [motionFilter, setMotionFilter] = useState<'all' | 'motion' | 'still'>('all');
   const [assessmentFilter, setAssessmentFilter] = useState<'all' | 'three-ais' | 'not-three-ais'>('all');
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
-  const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string; note?: string } | null>(null);
+  const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string; note?: string; steps?: ViewerSteps } | null>(null);
   const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
   const refreshInbox = useCallback(() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); void getJson<ExpressionPhoto[]>('/api/expressions/inbox').then(photos => { setInbox(photos); setPreview(current => { if (!current || current.imageUrl || current.photo.category !== '_Inbox') return current; const photo = photos.find(item => item.path === current.photo.path); return photo ? { ...current, photo } : null; }); }, e => setError(e.message)); }, []);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
@@ -126,7 +133,22 @@ export function ExpressionsPage() {
       const result = await postJson<{ path: string }>('/api/expressions/confirm-expression', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence });
       newPath = result.path;
     } else await postJson(action.kind === 'confirm' ? '/api/expressions/confirm-tag' : action.kind === 'disconfirm' ? '/api/expressions/disconfirm-tag' : '/api/expressions/remove-tag', { photo: photo.path, tag: action.tag.tag, confidence: action.tag.confidence, confirmed: action.tag.confirmed, disconfirmed: !!action.tag.disconfirmed });
-    if (photo.category === '_Inbox') { refreshInbox(); if (newPath !== photo.path) { setPreview(null); setChangeMessage(`Photo filed as ${newPath}.`); void getJson<ExpressionIndex>('/api/expressions').then(setIndex); } return; }
+    if (photo.category === '_Inbox') {
+      refreshInbox();
+      if (newPath !== photo.path) {
+        setChangeMessage(`Photo filed as ${newPath}.`);
+        // Confirming the expression files the photo; the viewer stays on it in its new folder, so its framing, pose and
+        // morphology can still be confirmed (John, 2026-11-25). Previous and next still step through the Inbox.
+        const rest = inbox.filter(p => p.path !== photo.path);
+        const at = Math.max(0, inbox.findIndex(p => p.path === photo.path));
+        const steps = rest.length ? { onPrev: () => setPreview({ photo: rest[(at - 1 + rest.length) % rest.length] }), onNext: () => setPreview({ photo: rest[at % rest.length] }) } : undefined;
+        const updated = await getJson<ExpressionIndex>('/api/expressions');
+        setIndex(updated);
+        const filed = updated.photos.find(p => p.path === newPath);
+        setPreview(filed ? { photo: filed, steps } : null);
+      }
+      return;
+    }
     const [updated, refs] = await Promise.all([getJson<ExpressionIndex>('/api/expressions'), newPath !== photo.path ? getJson<{ paths: string[] }>('/api/expression-references').catch(() => null) : Promise.resolve(null)]);
     setIndex(updated);
     if (newPath !== photo.path) {
@@ -194,6 +216,8 @@ export function ExpressionsPage() {
     // Another tab's address isn't for this page: it stays as it was while hidden.
     const onHash = () => {
       if (!/^#Expressions(\/|$)/.test(location.hash)) return;
+      const shot = shotFromHash();
+      if (shot) { setFocusShot(shot); setActiveTab('shots'); setPreview(null); return; }
       setSelected(categoryFromHash());
       setOpen(null);
     };
@@ -275,7 +299,7 @@ export function ExpressionsPage() {
           <button role="tab" aria-selected={activeTab === 'shots'} aria-controls="expression-shots" id="expression-shots-tab" onClick={() => switchTab('shots')}>Shot List</button>
         </div>
         <div id="expression-inbox" role="tabpanel" aria-labelledby="expression-inbox-tab" hidden={activeTab !== 'inbox'}><ExpressionInbox photos={inbox} onView={photo => setPreview({ photo })} onRefresh={refreshInbox} onRate={rate} /></div>
-        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} onViewImage={(imageUrl, name, category, tags) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl, note: 'These tags are suggested from the look. Confirm them after moving the picture to the Expression Inbox.' })} /></div>
+        <div id="expression-shots" role="tabpanel" aria-labelledby="expression-shots-tab" hidden={activeTab !== 'shots'}><ExpressionShotList active={activeTab === 'shots'} index={index} focus={focusShot} onViewImage={(imageUrl, name, category, tags, steps) => setPreview({ photo: { path: imageUrl, name, category, tags }, imageUrl, steps, note: 'These tags are suggested from the look. Confirm them after moving the picture to the Expression Inbox.' })} /></div>
         <div id="expression-generation" role="tabpanel" aria-labelledby="expression-generation-tab" hidden={activeTab !== 'generation'}>
         <div className="generation-top">
         <div className="expression-planning">
@@ -375,8 +399,8 @@ export function ExpressionsPage() {
           onToggleReference={!preview.imageUrl && preview.photo.category !== '_Inbox' ? () => void setLikenessPhoto(preview.photo.path, !likeness.includes(preview.photo.path)) : undefined}
           onTagAction={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? changeTag : undefined}
           onRate={!preview.imageUrl && (preview.photo.category === '_Inbox' || index.photos.some(p => p.path === preview.photo.path)) ? rating => rate(preview.photo, rating) : undefined}
-          onPrev={inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition - 1 + inbox.length) % inbox.length] })}
-          onNext={inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition + 1) % inbox.length] })}
+          onPrev={preview.steps?.onPrev ?? (inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition - 1 + inbox.length) % inbox.length] }))}
+          onNext={preview.steps?.onNext ?? (inboxPosition < 0 ? undefined : () => setPreview({ photo: inbox[(inboxPosition + 1) % inbox.length] }))}
           onAssessmentStarted={id => setAssessmentJobs(ids => [...ids, id])}
           onAssessmentDone={() => { if (preview.photo.category === '_Inbox') refreshInbox(); else void getJson<ExpressionIndex>('/api/expressions').then(updated => { setIndex(updated); setPreview(current => { if (!current || current.imageUrl) return current; const photo = updated.photos.find(p => p.path === current.photo.path); return photo ? { ...current, photo } : current; }); }, e => setError(e.message)); }}
           onClose={() => setPreview(null)}

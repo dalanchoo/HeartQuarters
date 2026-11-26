@@ -33,7 +33,8 @@ import { applyExpressionChange, previewExpressionChange } from './expression-man
 import { readExpressionReferences, readLikenessReferences, saveExpressionReferences, saveLikenessReferences } from './expression-references.js';
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
-import { rankingJob, readRanking, startRanking } from './photo-ranking.js';
+import { pairShot, rankingJob, readMadeFor, readRanking, startRanking } from './photo-ranking.js';
+import { clearDiscussion, discussionImage, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
@@ -93,6 +94,7 @@ app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted s
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
 app.use('/api/expressions/inbox/import', express.json({ limit: '24mb' }));
 app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
+app.use('/api/thumbs/discussion', express.json({ limit: '80mb' })); // up to 4 pasted images in a Discuss message
 app.use(['/api/brief/start', '/api/brief/picks'], express.json({ limit: '120mb' })); // screenshots pasted into the brief's boxes
 app.use(express.json());
 
@@ -669,6 +671,28 @@ app.get('/api/thumbs', handle((req, res) => {
 }));
 
 // Feedback reviews an existing image and its generated packaging without changing either.
+// ?piece=&image=: the Discuss conversation about a thumbnail draft, and whether an AI is replying.
+app.get('/api/thumbs/discussion', handle((req, res) => {
+  res.json(readDiscussion(String(req.query.piece ?? ''), String(req.query.image ?? '')));
+}));
+
+// { piece, image, ai, message }: John's message in Discuss; the AI's reply arrives in the background.
+app.post('/api/thumbs/discussion', handle((req, res) => {
+  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message, undefined, req.body?.pasted).job);
+}));
+
+// ?piece=&image=&name=: an image John pasted into a Discuss message.
+app.get('/api/thumbs/discussion/image', handle((req, res) => {
+  sandboxHeaders(res);
+  res.sendFile(discussionImage(String(req.query.piece ?? ''), String(req.query.image ?? ''), req.query.name));
+}));
+
+// { piece, image }: Start Over, forgetting that draft's discussion.
+app.post('/api/thumbs/discussion/clear', handle((req, res) => {
+  clearDiscussion(String(req.body?.piece ?? ''), String(req.body?.image ?? ''));
+  res.json({ ok: true });
+}));
+
 app.get('/api/thumbs/reviews', handle((req, res) => {
   res.json(thumbnailReviews(String(req.query.piece ?? ''), String(req.query.image ?? '')));
 }));
@@ -717,10 +741,15 @@ app.get('/api/cleanup/status', handle((_req, res) => {
 // ?piece=: the saved photo ranking for the chosen pair, and whether Claude is ranking now. See photo-ranking.ts.
 app.get('/api/brief/ranking', handle((req, res) => {
   const piece = String(req.query.piece ?? '');
-  res.json({ ranking: readRanking(piece), job: rankingJob(piece) });
+  res.json({ ranking: readRanking(piece), job: rankingJob(piece), madeFor: readMadeFor(piece) });
 }));
 
-// { piece }: Claude looks at the pair's category photos and the starred ones, and ranks the best five.
+// { piece }: the Shot List look for the chosen pair's expression (added if the brief didn't), to generate a picture of it.
+app.post('/api/brief/pair-shot', handle((req, res) => {
+  res.json(pairShot(String(req.body?.piece ?? '')));
+}));
+
+// { piece }: the chosen AI looks at the pair's category photos and those generated for this video, and ranks the best five.
 app.post('/api/brief/rank-photos', handle((req, res) => {
   res.json(startRanking(String(req.body?.piece ?? ''), undefined, parseAi(req.body?.ai ?? 'claude')).job);
 }));

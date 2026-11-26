@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, parseBriefPlan, DEFAULT_BRIEF_PLAN, type AskAi, type BriefStep } from './brief';
+import { ACCURACY_RULE, briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, errorInAnswer, expressionCategories, notesWithImages, saveResearchImages, findSource, fromHeading, noteWhoTookPart, picksFromAnswer, picksPrompt, readSource, reviewerPrompt, shortNote, srtToText, startBrief, writerPrompt, startPicks, parseBriefPlan, DEFAULT_BRIEF_PLAN, type AskAi, type BriefStep } from './brief';
+import { feedbackPrompt } from './thumbnail-feedback';
 import { readChoice, readPicks } from './projects';
 import { config } from './config';
 import { readShotList } from './expression-shot-list';
@@ -217,6 +218,16 @@ describe('writing the brief', () => {
     const source = { kind: 'transcript' as const, path: 'captions.txt' };
     expect(writerPrompt('Video/Longform', source, false, '2026-11-17')).toContain('beginning "Expression:"');
     expect(reviewerPrompt('ChatGPT', source)).toContain('beginning "Expression:"');
+  });
+  it('holds every title, thumbnail text and supporting visual to the accuracy rule', () => {
+    const source = { kind: 'transcript' as const, path: 'captions.txt' };
+    for (const prompt of [writerPrompt('Video/Longform', source, false, '2026-11-25'), reviewerPrompt('ChatGPT', source), picksPrompt(false)]) {
+      expect(prompt).toContain(ACCURACY_RULE);
+    }
+    expect(reviewerPrompt('ChatGPT', source)).toContain('"### Accuracy" section first');
+    expect(picksPrompt(false)).toContain("Leave out any pair that breaks the accuracy rule");
+    expect(feedbackPrompt('t.png', null, '', true, false, [])).toContain(ACCURACY_RULE);
+    expect(ACCURACY_RULE).toContain('read together as a pair');
   });
   it('uses the story to decide when a strongly negative expression fits', () => {
     const source = { kind: 'transcript' as const, path: 'captions.txt' };

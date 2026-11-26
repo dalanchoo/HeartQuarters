@@ -9,6 +9,15 @@ import { addGeneratedImageToInbox } from './expression-inbox.js';
 import { generationLines } from './expression-generation-record.js';
 
 export type Options = { framing: string; angle: string; gaze: string };
+/** The gaze in words. Left and right are the viewer's sides of the image, as everywhere in the library. */
+export const GAZE_WORDS: Record<string, string> = {
+  LookAtCamera: 'looking straight into the camera',
+  LookOffCamera: 'looking away from the camera',
+  LookLeft: "eyes turned toward the left side of the image as the viewer sees it (his own right)",
+  LookRight: "eyes turned toward the right side of the image as the viewer sees it (his own left)",
+  LookUp: 'eyes looking upward',
+  LookDown: 'eyes looking downward',
+};
 type Job = { id: string; category: string; ai: ImageAi | 'unknown'; state: 'working' | 'ready' | 'failed'; error?: string; options: Options; format?: 'png' | 'jpg' | 'webp'; prompt: string; references: string[]; createdAt: string; recovered?: boolean };
 const jobs = new Map<string, Job>();
 const root = () => process.env.HQ_EXPRESSION_DRAFTS ?? path.join(appDir, 'data', 'expression-drafts');
@@ -50,7 +59,7 @@ export function imageFormat(data: Buffer): 'png' | 'jpg' | 'webp' | null {
 }
 
 export function expressionPrompt(name: string, definition: string | null, options: Options, look = ''): string {
-  return [`Create a high-resolution, photorealistic portrait of John based on the attached reference photos. Preserve his identity, age, hair, facial hair and natural features; do not make him younger or change his face. Keep his complexion even without plastic skin or exaggerated redness.`, `Expression: ${name}. ${definition ?? ''} Make it clear, authentic and restrained, not an exaggerated YouTube face.${look ? ` The exact look: ${look}` : ''}`, `Framing: ${options.framing || 'head and shoulders with room around the head'}. Face orientation: ${options.angle || 'natural'}. Gaze: ${options.gaze || 'natural'}.`, 'Use soft, flattering, even studio lighting and a plain neutral contrasting background that is easy to remove. No text, graphics, watermark, or extra people.', 'Use your image generation tool, not code. Save the image in the current folder as candidate.png and reply with its full path.'].join('\n\n');
+  return [`Create a high-resolution, photorealistic portrait of John based on the attached reference photos. Preserve his identity, age, hair, facial hair and natural features; do not make him younger or change his face. Keep his complexion even without plastic skin or exaggerated redness.`, `Expression: ${name}. ${definition ?? ''} Make it clear, authentic and restrained, not an exaggerated YouTube face.${look ? ` The exact look: ${look}` : ''}`, `Framing: ${options.framing || 'head and shoulders with room around the head'}. Face orientation: ${options.angle || 'natural'}. Gaze: ${GAZE_WORDS[options.gaze] ?? 'natural'}.`, 'Use soft, flattering, even studio lighting and a plain neutral contrasting background that is easy to remove. No text, graphics, watermark, or extra people.', 'Use your image generation tool, not code. Save the image in the current folder as candidate.png and reply with its full path.'].join('\n\n');
 }
 
 export function previewExpressionPrompt(category: string, options: Options): string {

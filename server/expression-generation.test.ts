@@ -27,6 +27,7 @@ describe('expression generation', () => {
     const options = { framing: 'HeadShoulders', angle: '', gaze: 'LookAtCamera' };
     expect(expressionPrompt('Calm', null, options, 'A slight, settled smile.')).toContain('The exact look: A slight, settled smile.');
     expect(expressionPrompt('Calm', null, options)).not.toContain('The exact look');
+    expect(expressionPrompt('Calm', null, { ...options, gaze: 'LookRight' })).toContain('Gaze: eyes turned toward the right side of the image as the viewer sees it');
   });
   it('rejects unsafe references and discards a rejected candidate', async () => {
     expect(() => startExpressionGeneration('Positive/Warmth', ['../bad.jpg'], options, 'codex', fake)).toThrow();

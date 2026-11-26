@@ -9,6 +9,7 @@ import { isCurrentChoice } from './draftPackaging';
 import { readReferences } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
 import type { ThumbnailReview, ThumbnailReviewJob } from '../../server/thumbnail-feedback';
+import type { DiscussionJob, DiscussionMessage } from '../../server/thumbnail-discussion';
 import type { PhotoRanking, RankingJob } from '../../server/photo-ranking';
 import { isAiExpression } from '../../server/expression-origin';
 import type { AiId } from '../../server/ai';
@@ -246,11 +247,12 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
   useEffect(() => {
     getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
   }, []);
-  // Best Photos for This Pair: the chosen AI ranks the photos once per pair (saved in Drafts), started here when there's none.
-  const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null } | null>(null);
+  // Best Photos for This Pair: the chosen AI ranks the photos once per pair (each pair's ranking is saved in Drafts), started
+  // here only when this pair has none. Going back to a pair shows its saved ranking; only Rank Again asks again.
+  const [ranking, setRanking] = useState<{ ranking: PhotoRanking | null; job: RankingJob | null; madeFor?: string[] } | null>(null);
   const [rankAi, setRankAi] = useAiFor('rank-photos');
   const loadRanking = (isActive?: () => boolean) =>
-    getJson<{ ranking: PhotoRanking | null; job: RankingJob | null }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
+    getJson<{ ranking: PhotoRanking | null; job: RankingJob | null; madeFor?: string[] }>(`/api/brief/ranking?piece=${encodeURIComponent(piece)}`).then(
       (r) => { if (!isActive || isActive()) setRanking(r); },
       (e: Error) => { if (!isActive || isActive()) setError(e.message); },
     );
@@ -261,23 +263,40 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     return () => { active = false; };
   }, [piece, choice.pick.title]);
   const ranked = ranking?.ranking && ranking.ranking.title === choice.pick.title ? ranking.ranking : null;
-  const rankingNow = ranking?.job?.state === 'working';
+  // A job belongs to the pair it was started for; one for another pair only means this pair has to wait.
+  const forThisPair = !ranking?.job?.title || ranking.job.title === choice.pick.title;
+  const anyRanking = ranking?.job?.state === 'working';
+  const rankingNow = anyRanking && forThisPair;
   const rank = () => {
     setError('');
-    postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job })), (e: Error) => setError(e.message));
+    postJson<RankingJob>('/api/brief/rank-photos', { piece, ai: rankAi }).then((job) => setRanking((r) => ({ ranking: r?.ranking ?? null, job, madeFor: r?.madeFor })), (e: Error) => setError(e.message));
   };
+  // Generate a Look for This Pair: opens the pair's look on the Shot List, where pictures are made, moved to the
+  // Inbox and confirmed. Confirmed ones come back here under Made for This Pairing.
+  const [opening, setOpening] = useState(false);
+  const generateLook = () => {
+    setOpening(true);
+    setError('');
+    postJson<{ id: string }>('/api/brief/pair-shot', { piece }).then(({ id }) => { location.hash = `#Expressions/~shot/${id}`; }, (e: Error) => setError(e.message)).finally(() => setOpening(false));
+  };
+  // The library was loaded when this opened: a picture confirmed since then, or a ranking that names one, needs a fresh copy.
+  const missing = !!library && [...(ranking?.madeFor ?? []), ...(ranked?.ranked.map(r => r.photo) ?? [])].some(path => !library.photos.some(p => p.path === path));
+  useEffect(() => {
+    if (missing) getJson<ExpressionIndex>('/api/expressions').then(setLibrary, (e: Error) => setError(e.message));
+  }, [missing, ranking?.madeFor?.join('|'), ranked?.at]);
+  const madeFor = library ?(ranking?.madeFor ?? []).map(path => library.photos.find(p => p.path === path)).filter((p): p is NonNullable<typeof p> => !!p) : [];
   const asked = useRef('');
   useEffect(() => {
-    if (!ranking || ranked || rankingNow || ranking.job?.state === 'failed' || asked.current === choice.pick.title) return;
+    if (!ranking || ranked || anyRanking || (ranking.job?.state === 'failed' && forThisPair) || asked.current === choice.pick.title) return;
     asked.current = choice.pick.title;
     rank();
-  }, [ranking, ranked, rankingNow, choice.pick.title]);
+  }, [ranking, ranked, anyRanking, choice.pick.title]);
   useEffect(() => {
-    if (!rankingNow) return;
+    if (!anyRanking) return;
     let active = true;
     const timer = setInterval(() => void loadRanking(() => active), 3000);
     return () => { active = false; clearInterval(timer); };
-  }, [rankingNow, piece]);
+  }, [anyRanking, piece]);
   // The pair's own categories first, then any John adds from the whole library.
   const [added, setAdded] = useState<string[]>([]);
   const categories = [...categoriesIn(choice.pick.expression), ...added.filter((c) => !categoriesIn(choice.pick.expression).includes(c))];
@@ -292,12 +311,11 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
     const photoPath = root === 'projects' ? p.path.slice(8) : p.path;
     return (
       <div key={p.path} className={`photo-tile${picked ? ' picked' : ''}`}>
-        <button className="photo-choice" disabled={saving !== null} title={`Use ${p.name}`} onClick={() => pick(p.path)}>
+        <button className="photo-choice" disabled={saving !== null} title={why ? `${why}\n\nClick to use ${p.name}.` : `Use ${p.name}`} onClick={() => pick(p.path)}>
           <img src={thumbUrl(root, photoPath, 320, p.revision)} alt={p.name} loading="lazy" />
         </button>
-        {place !== undefined && <div className="photo-rank">#{place}{label && ` · ${label}`}</div>}
-        <div className="photo-path">{p.path.replace(/\.[^.]+$/, '')}</div>
-        {why && <div className="photo-why small-text">{why}</div>}
+        {(place !== undefined || label) && <div className="photo-rank" title={why}>{place !== undefined && `#${place}`}{place !== undefined && label && ' · '}{label}</div>}
+        <div className="photo-path" title={p.path}>{(p.path.split('/').pop() ?? p.path).replace(/\.[^.]+$/, '')}</div>
         <div className="photo-tile-foot">
           {picked ? <span className="picked-label">✓ Picked</span> : saving === p.path ? <span className="muted">Saving…</span> : null}
           <a href={fileUrl(root, photoPath, p.revision)} target="_blank" rel="noreferrer">
@@ -325,14 +343,19 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
           {ranked && <span className="muted">· {ranked.by ?? 'Claude'} looked at {ranked.looked} photos</span>}
           {ranked && !rankingNow && <AiSelect value={rankAi} onChange={setRankAi} title="Which AI ranks the photos" />}
           {ranked && !rankingNow && (
-            <button className="small" onClick={rank} title="Searches the library using current expression tags, folders, ratings and stars">
+            <button className="small" onClick={rank} title="Searches the library again using current expression tags, folders, cues, ratings and pictures made for this pairing">
               Rank Again
             </button>
           )}
+          <button className="small" disabled={opening} onClick={generateLook} title="Opens this pair's look on the Shot List, with the pair's photo cues. Generate pictures there, move the one you like to the Expression Inbox and confirm it; it then shows here as Made for This Pairing.">
+            {opening ? 'Opening…' : 'Generate a Look for This Pair'}
+          </button>
         </p>
         {!!choice.pick.photoAttributes?.length && <p className="muted small-text">Photo Cues: {choice.pick.photoAttributes.map(tag => tag.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}</p>}
         {rankingNow && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is checking {ranking?.job?.looked} photos for a suitable camera photo…</p>}
-        {ranking?.job?.state === 'failed' && !rankingNow && (
+        {anyRanking && !forThisPair && <p className="brief-working small-text">{aiName(ranking?.job?.ai ?? 'claude')} is still ranking photos for another pair. This pair's ranking starts when it's done.</p>}
+        {ranked?.changed && !rankingNow && <p className="muted small-text">The photos for this pair have changed since this ranking (added, removed, re-rated or re-tagged). Use Rank Again to include the changes.</p>}
+        {ranking?.job?.state === 'failed' && forThisPair && !rankingNow && (
           <p className="error small-text">
             {ranking.job.error}{' '}
             <button className="small" onClick={rank}>
@@ -340,16 +363,18 @@ function PhotoPicker({ piece, choice, onChanged }: { piece: string; choice: Brie
             </button>
           </p>
         )}
-        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. You can choose a photo below or add the expression to the Shot List.</p>}
+        {ranked && !ranked.ranked.length && !rankingNow && <p className="muted small-text">There are no suitable photos in this ranking. Choose a photo below, or generate one for this pair.</p>}
         {ranked && !ranked.cameraFirst && !rankingNow && <p className="muted small-text">Use Rank Again to check this older ranking with camera photos first.</p>}
-        {ranked && library && (
+        {library && ((ranked?.ranked.length ?? 0) > 0 || madeFor.length > 0) && (
           <div className="photo-grid">
-            {ranked.ranked.map((r, i) => {
+            {ranked?.ranked.map((r, i) => {
               const found = library.photos.find((p) => p.path === r.photo);
               if (!found) return null;
-              const aiLabel = isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
+              const aiLabel = ranking?.madeFor?.includes(found.path) ? 'Made for This Pairing' : isAiExpression(found) ? ranked.cameraFirst ? 'AI Fallback' : 'AI-Generated' : undefined;
               return tile(found, i + 1, r.why, aiLabel);
             })}
+            {/* A picture made for this pairing always shows, even when the ranking left it out (John, 2026-11-25). */}
+            {madeFor.filter(p => !ranked?.ranked.some(r => r.photo === p.path)).map(p => tile(p, undefined, ranked ? `${ranked.by ?? 'Claude'} didn't put this picture in its ranking. If you confirmed it after the ranking, use Rank Again.` : 'Not ranked yet.', ranked ? 'Not Ranked · Made for This Pairing' : 'Made for This Pairing'))}
           </div>
         )}
       </div>
@@ -767,6 +792,7 @@ function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job
           <div className="muted small-text">Thumbnail text: {conversation.pick.thumbnailText.toUpperCase()}</div>
         </div>
       )}
+      {current && <ThumbnailDiscussion key={conversation.path} piece={piece} image={current.path} canChange={rounds.length > 0 && !working} onUseChange={(text) => setChange(text)} />}
       {current && <ThumbnailFeedback key={current.path} piece={piece} image={current.path} hasMetadata={!!conversation.pick} />}
       {current && !working && target && (
         <div className="draft-use">
@@ -862,6 +888,97 @@ function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job
       {conversation.requests && <TextToggle label="Requests" path={conversation.requests.path} />}
     </div>
   );
+}
+
+/**
+ * Discuss: a conversation with any AI about this draft before making a new image (John, 2026-11-25). Each message goes
+ * with the image shown, and any images John pastes or drops in (up to four). A reply that settles a change has a Change
+ * Request, which Use as Change Request puts in the Ask for Changes box below, to read and send.
+ */
+function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: string; image: string; canChange: boolean; onUseChange: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<DiscussionMessage[]>([]);
+  const [job, setJob] = useState<DiscussionJob | null>(null);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  const [ai, setAi] = useAiFor('thumb-discuss');
+  const [usedId, setUsedId] = useState('');
+  const [pics, setPics] = useState<Reference[]>([]);
+  const replying = job?.state === 'working';
+  const addPics = (files: File[]) => {
+    if (!files.length) return;
+    readImages(files).then((more) => {
+      if (!more.length) setError('Only PNG, JPEG or WebP images can be added.');
+      setPics((p) => [...p, ...more].slice(0, 4));
+    }, (e: Error) => setError(e.message));
+  };
+  const picUrl = (name: string) => `/api/thumbs/discussion/image?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}&name=${encodeURIComponent(name)}`;
+  const url = `/api/thumbs/discussion?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`;
+  const load = (isActive: () => boolean = () => true) => getJson<{ messages: DiscussionMessage[]; job: DiscussionJob | null }>(url).then(
+    (data) => { if (isActive()) { setMessages(data.messages); setJob(data.job); } },
+    (e: Error) => { if (isActive()) setError(e.message); },
+  );
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
+  }, [piece, image]);
+  useEffect(() => {
+    if (!replying) return;
+    let active = true;
+    const timer = setInterval(() => void load(() => active), 3000);
+    return () => { active = false; clearInterval(timer); };
+  }, [replying, piece, image]);
+  const send = () => {
+    const text = draft.trim();
+    const pasted = pics.flatMap((p) => (p.kind === 'pasted' ? [p.data] : []));
+    if (!text && !pasted.length) return;
+    setError('');
+    postJson<DiscussionJob>('/api/thumbs/discussion', { piece, image, ai, message: text, pasted }).then(
+      (started) => { setDraft(''); setPics([]); setJob(started); void load(); },
+      (e: Error) => setError(e.message),
+    );
+  };
+  const startOver = () => {
+    if (!window.confirm('Start over? This forgets the discussion about this draft.')) return;
+    postJson('/api/thumbs/discussion/clear', { piece, image }).then(() => { setMessages([]); setJob(null); }, (e: Error) => setError(e.message));
+  };
+  const speaker = (from: DiscussionMessage['from']) => (from === 'john' ? 'You' : aiName(from));
+  return <details className="yt-section thumbnail-discussion" open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary>Discuss{messages.length > 0 && <span className="muted small-text"> · {messages.length} {messages.length === 1 ? 'message' : 'messages'}</span>}</summary>
+    <p className="muted small-text">Talk it over with an AI before making a new image. It sees the image shown above, the title and thumbnail words, the brief and the transcript, and never makes images itself. Saved on this computer.</p>
+    {messages.map(m => <div key={m.id} className={`discussion-message ${m.from === 'john' ? 'from-john' : 'from-ai'}`}>
+      <div className="small-text"><strong>{speaker(m.from)}</strong> <span className="muted">· {new Date(m.at).toLocaleString()}</span></div>
+      {m.from === 'john' ? <p className="discussion-text">{m.text}</p> : <div className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown></div>}
+      {!!m.images?.length && <div className="ref-list">{m.images.map(name => <a key={name} className="ref-item" href={picUrl(name)} target="_blank" rel="noreferrer" title="Open full size"><img src={picUrl(name)} alt="Pasted image" /></a>)}</div>}
+      {m.changeRequest && <div className="claude-buttons">
+        <button className="small" disabled={!canChange} title={canChange ? 'Puts this change request in the Ask for Changes box below, to read and send' : 'Wait until the image being made is ready'} onClick={() => { onUseChange(m.changeRequest!); setUsedId(m.id); }}>Use as Change Request</button>
+        {usedId === m.id && <span className="muted small-text">In the Ask for Changes box below.</span>}
+      </div>}
+    </div>)}
+    {replying && <p className="brief-working small-text">{aiName(job?.ai ?? ai)} is replying…</p>}
+    {job?.state === 'failed' && <p className="error small-text">{aiName(job.ai)}: {job.error}</p>}
+    <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); addPics([...e.dataTransfer.files]); }}>
+      <textarea rows={2} value={draft} maxLength={4000} disabled={replying} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); }}
+        onPaste={e => {
+          const files = [...e.clipboardData.items].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter((f): f is File => !!f);
+          if (!files.length) return; // ordinary text
+          e.preventDefault();
+          addPics(files);
+        }}
+        placeholder="For example: He never said he had one memory left. What would be true here? Paste or drop an image to show what you mean." />
+      {pics.length > 0 && <div className="ref-list">{pics.map((p, i) => <div key={i} className="ref-item">
+        <img src={p.kind === 'pasted' ? p.preview : thumbUrl('projects', p.path, 240)} alt="Image to send" />
+        <button className="small" title="Remove this image" onClick={() => setPics(pics.filter((_, j) => j !== i))}>✕</button>
+      </div>)}</div>}
+    </div>
+    <div className="claude-buttons">
+      <button className="small" disabled={replying || (!draft.trim() && !pics.length)} onClick={send}>{replying ? 'Waiting for the Reply…' : 'Send'}</button>
+      <AiSelect value={ai} onChange={setAi} title="Which AI you talk with" />
+      {messages.length > 0 && <button className="small" disabled={replying} onClick={startOver} title="Forgets this draft's discussion">Start Over</button>}
+    </div>
+    {error && <p className="error small-text" role="alert">{error}</p>}
+  </details>;
 }
 
 /** Review the image currently shown, independently of making another image. */

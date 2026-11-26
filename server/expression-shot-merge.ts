@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appDir, safeResolve } from './config.js';
-import { addToMatchingShot, changeShotList, checkShotSuggestions, readShotList, shotFromSuggestion, SHOT_LIST_FILE, shotKey, type ExpressionShot } from './expression-shot-list.js';
+import { addToMatchingShot, changeShotList, checkShotSuggestions, cueKey, readShotList, shotFromSuggestion, shotHasSuggestion, SHOT_LIST_FILE, shotKey, type ExpressionShot } from './expression-shot-list.js';
 import { copyShotPictures } from './shot-reference.js';
 import { tagShots } from './expression-shot-tags.js';
 import { writable } from './safe-files.js';
@@ -24,10 +24,11 @@ export function mergeWorkFolder(): string {
 
 /** The question: which looks in the same folder would be the same photo. Each folder lists its looks by id. */
 export function duplicatesPrompt(shots: ExpressionShot[]): string {
-  const folders = new Map<string, { id: string; look: string; wordings: string[] }[]>();
+  const folders = new Map<string, { id: string; look: string; wordings: string[]; gaze?: string[] }[]>();
   for (const shot of shots) {
     const wordings = [...new Set(shot.sources.map(s => s.text?.trim()).filter((t): t is string => !!t))].slice(0, 3);
-    folders.set(shot.category, [...(folders.get(shot.category) ?? []), { id: shot.id, look: [shot.title, shot.description].filter(Boolean).join('. '), wordings }]);
+    const gaze = shot.pose.filter(tag => tag.startsWith('Look'));
+    folders.set(shot.category, [...(folders.get(shot.category) ?? []), { id: shot.id, look: [shot.title, shot.description].filter(Boolean).join('. '), wordings, ...(gaze.length ? { gaze } : {}) }]);
   }
   const data = [...folders].map(([folder, looks]) => ({ folder: folder.replace('/', ' > '), looks }));
   return [
@@ -54,7 +55,9 @@ export function parseDuplicates(answer: string, shots: ExpressionShot[]): string
     if (!Array.isArray(group)) continue;
     const ids = [...new Set(group.filter((id): id is string => typeof id === 'string' && byId.has(id) && !used.has(id)))];
     const folder = ids.length ? byId.get(ids[0])!.category : '';
-    const same = ids.filter(id => byId.get(id)!.category === folder);
+    // Looks with a different gaze are different photos, whatever the AI says (John, 2026-11-25).
+    const gazeOf = (id: string) => cueKey(byId.get(id)!.pose.filter(tag => tag.startsWith('Look')));
+    const same = ids.filter(id => byId.get(id)!.category === folder && gazeOf(id) === gazeOf(ids[0]));
     if (same.length < 2) continue;
     same.forEach(id => used.add(id));
     result.push(same);
@@ -111,8 +114,8 @@ export async function addShotsMerging(piece: string, input: unknown, ask: AskTex
   const before = readShotList();
   const fresh: ExpressionShot[] = [];
   for (const item of items) {
-    const source = { piece, context: item.context, text: item.expression };
-    if (!before.some(s => s.sources.some(src => shotKey(src.text ?? '') === shotKey(item.expression))) && !fresh.some(s => shotKey(s.sources[0].text ?? '') === shotKey(item.expression))) fresh.push(shotFromSuggestion(item.expression, source));
+    const source = { piece, context: item.context, text: item.expression, ...(item.cues ? { cues: item.cues } : {}) };
+    if (!before.some(s => shotHasSuggestion(s, item.expression, item.cues)) && !fresh.some(s => shotHasSuggestion(s, item.expression, item.cues))) fresh.push(shotFromSuggestion(item.expression, source));
   }
   const freshIds = new Set(fresh.map(s => s.id));
   let groups: string[][] = []; let error: string | undefined;
@@ -126,7 +129,7 @@ export async function addShotsMerging(piece: string, input: unknown, ask: AskTex
     const existing = new Set(list.map(s => s.id));
     list.push(...fresh);
     // Each suggestion joins the look with its exact words (a new look already has its first one's).
-    for (const item of items) addToMatchingShot(list, { piece, context: item.context, text: item.expression });
+    for (const item of items) addToMatchingShot(list, { piece, context: item.context, text: item.expression, ...(item.cues ? { cues: item.cues } : {}) });
     merged = applyDuplicates(list, groups, existing);
   });
   for (const [from, to] of merged) copyShotPictures(from, to);
