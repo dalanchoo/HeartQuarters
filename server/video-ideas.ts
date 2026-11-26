@@ -17,12 +17,13 @@ export type IdeaFormat = (typeof IDEA_FORMATS)[number];
 /** The topic an idea belongs to. New and older ideas start Unassigned. */
 export const IDEA_CATEGORIES = ['unassigned', 'sdam', 'aphantasia', 'psychedelics', 'emotions', 'relationships', 'kink', 'healing', 'meaning', 'wisdom', 'story'] as const;
 export type IdeaCategory = (typeof IDEA_CATEGORIES)[number];
+/** `upNext` puts an idea on the short list at the top of the Ideas tab. */
 /** `processed` is false for a raw brain dump; true once John has turned it into a clear idea. Older ideas are unprocessed. */
 /** A link to a place or thing that informs the idea, with a note saying why it matters. */
 export interface IdeaReference { id: string; url: string; note: string }
 /** A file attached to an idea (such as a PDF or notes doc), stored in Video Projects\_IdeaResources\<ideaId>\. */
 export interface IdeaAttachment { id: string; name: string; note: string; size: number; addedAt: string }
-export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; category: IdeaCategory; processed: boolean; references: IdeaReference[]; attachments: IdeaAttachment[]; createdAt: string; updatedAt: string }
+export interface VideoIdea { id: string; title: string; notes: string; status: IdeaStatus; format: IdeaFormat; category: IdeaCategory; processed: boolean; upNext: boolean; references: IdeaReference[]; attachments: IdeaAttachment[]; createdAt: string; updatedAt: string }
 
 const TITLE_MAX = 300;
 const NOTES_MAX = 20_000;
@@ -51,7 +52,7 @@ function validAttachment(a: unknown): boolean {
 function valid(idea: unknown): idea is VideoIdea {
   const i = idea as VideoIdea;
   return !!i && typeof i.id === 'string' && typeof i.title === 'string' && typeof i.notes === 'string'
-    && IDEA_STATUSES.includes(i.status) && (i.format === undefined || IDEA_FORMATS.includes(i.format)) && (i.category === undefined || IDEA_CATEGORIES.includes(i.category)) && (i.processed === undefined || typeof i.processed === 'boolean')
+    && IDEA_STATUSES.includes(i.status) && (i.format === undefined || IDEA_FORMATS.includes(i.format)) && (i.category === undefined || IDEA_CATEGORIES.includes(i.category)) && (i.processed === undefined || typeof i.processed === 'boolean') && (i.upNext === undefined || typeof i.upNext === 'boolean')
     && (i.references === undefined || (Array.isArray(i.references) && i.references.every(r => !!r && typeof r.id === 'string' && typeof r.url === 'string' && typeof r.note === 'string')))
     && (i.attachments === undefined || (Array.isArray(i.attachments) && i.attachments.every(validAttachment)))
     && typeof i.createdAt === 'string' && typeof i.updatedAt === 'string';
@@ -71,6 +72,7 @@ function load(): { ideas: VideoIdea[]; original: string | null } {
     format: i.format ?? 'undecided',
     category: i.category ?? 'unassigned',
     processed: i.processed ?? false,
+    upNext: i.upNext ?? false,
     references: (i.references ?? []).map(r => ({ id: r.id, url: r.url, note: r.note })),
     attachments: (i.attachments ?? []).map(a => ({ id: a.id, name: a.name, note: a.note, size: a.size, addedAt: a.addedAt })),
   }));
@@ -104,12 +106,12 @@ export function addIdea(title: unknown, notes: unknown = ''): VideoIdea[] {
   const clean = text(title, TITLE_MAX, 'title').trim();
   if (!clean) throw new Error('Give the idea a title.');
   const { ideas, original } = load(); const now = new Date().toISOString();
-  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'undecided', category: 'unassigned', processed: false, references: [], attachments: [], createdAt: now, updatedAt: now });
+  ideas.unshift({ id: randomUUID(), title: clean, notes: text(notes, NOTES_MAX, 'notes'), status: 'thinking', format: 'undecided', category: 'unassigned', processed: false, upNext: false, references: [], attachments: [], createdAt: now, updatedAt: now });
   save(ideas, original); return ideas;
 }
 
 /** Change an idea's title, notes or status; leave out what isn't changing. */
-export function updateIdea(id: unknown, changes: { title?: unknown; notes?: unknown; status?: unknown; format?: unknown; category?: unknown; processed?: unknown }): VideoIdea[] {
+export function updateIdea(id: unknown, changes: { title?: unknown; notes?: unknown; status?: unknown; format?: unknown; category?: unknown; processed?: unknown; upNext?: unknown }): VideoIdea[] {
   const { ideas, original } = load(); const idea = ideas[find(ideas, id)];
   if (changes.title !== undefined) {
     const clean = text(changes.title, TITLE_MAX, 'title').trim();
@@ -132,6 +134,10 @@ export function updateIdea(id: unknown, changes: { title?: unknown; notes?: unkn
   if (changes.processed !== undefined) {
     if (typeof changes.processed !== 'boolean') throw new Error('Choose processed or unprocessed.');
     idea.processed = changes.processed;
+  }
+  if (changes.upNext !== undefined) {
+    if (typeof changes.upNext !== 'boolean') throw new Error('Choose whether the idea is up next.');
+    idea.upNext = changes.upNext;
   }
   idea.updatedAt = new Date().toISOString();
   save(ideas, original); return ideas;

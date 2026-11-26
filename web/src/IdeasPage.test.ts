@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { looksLikeLink } from './IdeasPage';
+import { ideaLabels, looksLikeLink } from './IdeasPage';
 import { hasPendingEdits, setPendingEdit } from './unsavedEdits';
 
-describe('unsaved edits', () => {
+describe('unsaved edits (unsavedEdits.ts)', () => {
   it('counts an edit as pending until it is saved or dropped', () => {
     const a = Symbol('a');
     const b = Symbol('b');
@@ -24,5 +24,15 @@ describe('idea link autosave', () => {
     expect(looksLikeLink('#Videos/')).toBe(false);
     expect(looksLikeLink('example.com')).toBe(false);
     expect(looksLikeLink('')).toBe(false);
+  });
+});
+
+describe('idea row labels', () => {
+  const base = { notes: '', references: [], attachments: [] };
+  it('leaves out values nobody has chosen yet', () => {
+    expect(ideaLabels({ ...base, category: 'unassigned', format: 'undecided', status: 'thinking' })).toBe('');
+    expect(ideaLabels({ ...base, category: 'sdam', format: 'undecided', status: 'thinking', notes: 'x' })).toBe('SDAM · Has Notes');
+    expect(ideaLabels({ ...base, category: 'unassigned', format: 'longform', status: 'brainstorming', references: [{ id: 'a', url: 'u', note: '' }] }))
+      .toBe('Longform · Brainstorming · 1 Link');
   });
 });

@@ -27,6 +27,22 @@ const FINISHED: IdeaStatus[] = ['made', 'dropped'];
 export const CATEGORY_LABELS: Record<IdeaCategory, string> = { unassigned: 'Unassigned', sdam: 'SDAM', aphantasia: 'Aphantasia', psychedelics: 'Psychedelics', emotions: 'Emotions', relationships: 'Relationships', kink: 'Kink', healing: 'Healing', meaning: 'Meaning', wisdom: 'Wisdom', story: 'My Story' };
 export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided', longform: 'Longform', short: 'Short' };
 
+/**
+ * The grey details after an idea's title. Values nobody has chosen yet (Unassigned, Undecided,
+ * Thinking About It) are left out: on almost every row they only add noise.
+ */
+export function ideaLabels(idea: Pick<VideoIdea, 'category' | 'format' | 'status' | 'notes' | 'references' | 'attachments'>): string {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  return [
+    idea.category !== 'unassigned' && CATEGORY_LABELS[idea.category],
+    idea.format !== 'undecided' && FORMAT_LABELS[idea.format],
+    idea.status !== 'thinking' && STATUS_LABELS[idea.status],
+    idea.notes.trim() && 'Has Notes',
+    idea.references.length > 0 && plural(idea.references.length, 'Link'),
+    idea.attachments.length > 0 && plural(idea.attachments.length, 'File'),
+  ].filter(Boolean).join(' · ');
+}
+
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);
   const [videos, setVideos] = useState<ChannelVideo[]>([]);
@@ -97,8 +113,10 @@ export function IdeasPage() {
     && (!text.trim() || `${idea.title} ${idea.notes}`.toLocaleLowerCase().includes(text.trim().toLocaleLowerCase()));
   const filtering = category !== 'all' || format !== 'all' || status !== 'all' || text.trim() !== '';
   const visible = (idea: VideoIdea) => matches(idea) && (showFinished || filtering || !FINISHED.includes(idea.status));
-  const raw = all.filter((idea) => !idea.processed && visible(idea));
-  const done = all.filter((idea) => idea.processed && visible(idea));
+  // Up Next ideas show only in their own short list at the top, not again in Raw or Processed.
+  const upNext = all.filter((idea) => idea.upNext && visible(idea));
+  const raw = all.filter((idea) => !idea.upNext && !idea.processed && visible(idea));
+  const done = all.filter((idea) => !idea.upNext && idea.processed && visible(idea));
   const hidden = all.filter((idea) => matches(idea) && !visible(idea)).length;
   const first = all[0]?.id;
   const last = all[all.length - 1]?.id;
@@ -162,6 +180,13 @@ export function IdeasPage() {
 
       {ideas && (
         <details className="page-section idea-section" open>
+          <summary>Up Next <span className="muted">({upNext.length}) · the few you're working on now</span></summary>
+          {upNext.length ? list(upNext) : <p className="muted">Open an idea and click Add to Up Next to keep it here.</p>}
+        </details>
+      )}
+
+      {ideas && (
+        <details className="page-section idea-section">
           <summary>Raw <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
           {raw.length ? list(raw) : <p className="muted">Nothing left to process.</p>}
         </details>
@@ -225,7 +250,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
     <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
-        <span className="muted small-text">{CATEGORY_LABELS[idea.category]} · {FORMAT_LABELS[idea.format]} · {STATUS_LABELS[idea.status]}{idea.notes.trim() ? ' · Has Notes' : ''}{idea.references.length ? ` · ${idea.references.length} Link${idea.references.length === 1 ? '' : 's'}` : ''}{idea.attachments.length ? ` · ${idea.attachments.length} File${idea.attachments.length === 1 ? '' : 's'}` : ''}</span>
+        <span className="muted small-text">{ideaLabels(idea)}</span>
       </summary>
       <div className="idea-body">
         <input className={`idea-title-input${title.dirty ? ' unsaved' : ''}`} type="text" value={title.value} maxLength={300} aria-label="Title" onChange={(e) => title.setValue(e.target.value)} onBlur={title.flush} />
@@ -253,6 +278,9 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         <div className="idea-actions">
           <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
             {idea.processed ? 'Back to Raw' : 'Mark Processed'}
+          </button>
+          <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, upNext: !idea.upNext })}>
+            {idea.upNext ? 'Remove From Up Next' : 'Add to Up Next'}
           </button>
           <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
             {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}

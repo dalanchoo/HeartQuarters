@@ -66,6 +66,16 @@ describe('video ideas', () => {
     expect(readIdeas()[0].processed).toBe(false);
   });
 
+  it('puts ideas on and off the Up Next list; older ideas are not up next', () => {
+    const [idea] = addIdea('Next one');
+    expect(idea.upNext).toBe(false);
+    expect(updateIdea(idea.id, { upNext: true })[0].upNext).toBe(true);
+    expect(updateIdea(idea.id, { upNext: false })[0].upNext).toBe(false);
+    expect(() => updateIdea(idea.id, { upNext: 'yes' })).toThrow('up next');
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, upNext: undefined }] }));
+    expect(readIdeas()[0].upNext).toBe(false);
+  });
+
   it('adds, edits, reorders and deletes references on one idea', () => {
     const [idea] = addIdea('With links');
     addReference(idea.id, { url: 'https://example.com/a', note: 'Study' });
