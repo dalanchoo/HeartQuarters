@@ -23,7 +23,21 @@ import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './express
 import { fillInShotTags } from './expression-shot-tags.js';
 import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
-import { chatFilePath, clearChat, readChat, sendChatMessage, uploadChatFile } from './chat.js';
+import {
+  chatFilePath,
+  clearChat,
+  createChat,
+  createFolder,
+  deleteChat,
+  deleteFolder as deleteChatFolder,
+  listChats,
+  moveChat,
+  readChat,
+  renameChat,
+  renameFolder as renameChatFolder,
+  sendChatMessage,
+  uploadChatFile,
+} from './chat.js';
 import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
 import { confirmExpressionFolder } from './confirm-expression-folder.js';
@@ -397,18 +411,26 @@ app.post('/api/ideas/brainstorm/send', (req, res) => {
   );
 });
 app.post('/api/ideas/brainstorm/clear', handle((req, res) => { res.json(clearBrainstorm(req.body?.id)); }));
-app.get('/api/chat', handle((_req, res) => { res.json(readChat()); }));
+app.get('/api/chat/list', handle((_req, res) => { res.json(listChats()); }));
+app.get('/api/chat', handle((req, res) => { res.json(readChat(req.query.id)); }));
+app.post('/api/chat/new', handle((req, res) => { res.json(createChat(req.body?.folderId, req.body?.title)); }));
+app.post('/api/chat/rename', handle((req, res) => { res.json(renameChat(req.body?.id, req.body?.title)); }));
+app.post('/api/chat/move', handle((req, res) => { res.json(moveChat(req.body?.id, req.body?.folderId)); }));
+app.post('/api/chat/delete', handle((req, res) => { res.json(deleteChat(req.body?.id)); }));
+app.post('/api/chat/folder/add', handle((req, res) => { res.json(createFolder(req.body?.name)); }));
+app.post('/api/chat/folder/rename', handle((req, res) => { res.json(renameChatFolder(req.body?.id, req.body?.name)); }));
+app.post('/api/chat/folder/delete', handle((req, res) => { res.json(deleteChatFolder(req.body?.id)); }));
 app.get('/api/chat/file', handle((req, res) => { sandboxHeaders(res); res.sendFile(chatFilePath(req.query.name)); }));
 app.post('/api/chat/upload', express.raw({ type: 'application/octet-stream', limit: '100mb' }), handle((req, res) => {
   res.json(uploadChatFile(req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
 }));
 app.post('/api/chat/send', (req, res) => {
-  sendChatMessage(req.body?.ai, req.body?.message, req.body?.files).then(
+  sendChatMessage(req.body?.id, req.body?.ai, req.body?.message, req.body?.files).then(
     (result) => res.json(result),
     (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }),
   );
 });
-app.post('/api/chat/clear', handle((_req, res) => { res.json(clearChat()); }));
+app.post('/api/chat/clear', handle((req, res) => { res.json(clearChat(req.body?.id)); }));
 app.get('/api/expressions/shot-list', handle((_req, res) => { res.json(readShotList()); }));
 // { piece, shots, ai }: adds a video's suggestions; the AI merges looks the list already has (expression-shot-merge.ts).
 app.post('/api/expressions/shot-list/add', (req, res) => {

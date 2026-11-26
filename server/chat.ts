@@ -1,5 +1,5 @@
 // Full-screen multi-AI chat, stored in Drive under Video Projects\_HeartQuarters\Chat\.
-// Any of the three AIs (Claude, ChatGPT, Gemini) can be called on any turn and receives the full thread and all attached files.
+// Supports multiple conversations, folders, and any attached file format; any AI (Claude, ChatGPT, Gemini) can reply on any turn.
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,10 +21,16 @@ import { makeFolder, readable, readText, writable, writeFile } from './safe-file
 import { sessionFrom } from './thumbnails.js';
 
 export const CHAT_DIR = '_HeartQuarters/Chat';
+export const CHAT_THREADS_DIR = '_HeartQuarters/Chat/Threads';
 export const CHAT_FILES_DIR = '_HeartQuarters/Chat/Files';
+const CHAT_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+const TITLE_MAX = 120;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const IMAGES_SENT = 6;
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm', '.m4v', '.mkv']);
+const AUDIO_EXTS = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.aac']);
+const MEDIA_EXTS = new Set([...IMAGE_EXTS, ...VIDEO_EXTS, ...AUDIO_EXTS]);
 const BLOCKED_EXTS = new Set(['.lnk', '.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi']);
 const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
@@ -36,8 +42,32 @@ export interface ChatMessage {
   files?: string[];
 }
 
+export interface ChatFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface ChatSummary {
+  id: string;
+  title: string;
+  folderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface ChatIndex {
+  version: 1;
+  folders: ChatFolder[];
+  chats: ChatSummary[];
+}
+
 export interface ChatThread {
   version: 1;
+  id: string;
+  title: string;
+  folderId: string | null;
   messages: ChatMessage[];
 }
 
@@ -49,10 +79,39 @@ export interface UploadedChatFile {
 export type ChatAskResult = string | { text: string; generatedImages?: string[] };
 export type AskChatAi = (ai: AiId, prompt: string, cwd: string, images?: string[]) => Promise<ChatAskResult>;
 
-let activeChat = false;
+const activeChats = new Set<string>();
+
+function checkId(raw: unknown, label: string): string {
+  if (typeof raw !== 'string' || !CHAT_ID_RE.test(raw)) {
+    throw new Error(`Choose a valid ${label}.`);
+  }
+  return raw;
+}
+
+function cleanTitle(raw: unknown, fallback = 'New Chat'): string {
+  if (typeof raw !== 'string') return fallback;
+  const cleaned = raw.replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX);
+  return cleaned || fallback;
+}
+
+function titleFromMessage(message: string): string {
+  const firstLine = message.split(/\r?\n/).find((l) => l.trim()) ?? '';
+  const cleaned = firstLine.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return 'New Chat';
+  return cleaned.length > 60 ? `${cleaned.slice(0, 57)}…` : cleaned;
+}
 
 function chatFolder(forWrite: boolean): string {
   const dir = safeResolve('projects', CHAT_DIR);
+  if (forWrite) {
+    makeFolder(dir);
+    return writable(dir);
+  }
+  return dir;
+}
+
+function threadsFolder(forWrite: boolean): string {
+  const dir = safeResolve('projects', CHAT_THREADS_DIR);
   if (forWrite) {
     makeFolder(dir);
     return writable(dir);
@@ -69,14 +128,20 @@ function chatFilesFolder(forWrite: boolean): string {
   return dir;
 }
 
-function chatFile(forWrite: boolean): string {
+function indexFile(forWrite: boolean): string {
   const dir = chatFolder(forWrite);
-  const file = path.join(dir, 'chat.json');
+  const file = path.join(dir, 'chats.json');
   return forWrite ? writable(file) : readable(file);
 }
 
-function emptyChat(): ChatThread {
-  return { version: 1, messages: [] };
+function threadFile(chatId: string, forWrite: boolean): string {
+  const dir = threadsFolder(forWrite);
+  const file = path.join(dir, `${chatId}.json`);
+  return forWrite ? writable(file) : readable(file);
+}
+
+function emptyIndex(): ChatIndex {
+  return { version: 1, folders: [], chats: [] };
 }
 
 function validMessage(m: unknown): m is ChatMessage {
@@ -89,14 +154,13 @@ function validMessage(m: unknown): m is ChatMessage {
     && (item.files === undefined || (Array.isArray(item.files) && item.files.every((f) => typeof f === 'string')));
 }
 
-/** Reads the saved full-screen chat thread from Drive, or returns an empty thread if none exists yet. */
-export function readChat(): ChatThread {
-  const dir = chatFolder(false);
-  if (!fs.existsSync(dir)) return emptyChat();
+function readThreadMessages(chatId: string): ChatMessage[] {
+  const dir = threadsFolder(false);
+  if (!fs.existsSync(dir)) return [];
   readable(dir);
-  const candidate = path.join(dir, 'chat.json');
-  if (!fs.existsSync(candidate)) return emptyChat();
-  const raw = readText(chatFile(false));
+  const candidate = path.join(dir, `${chatId}.json`);
+  if (!fs.existsSync(candidate)) return [];
+  const raw = readText(threadFile(chatId, false));
   let parsed: { version?: unknown; messages?: unknown };
   try {
     parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
@@ -106,12 +170,255 @@ export function readChat(): ChatThread {
   if (parsed?.version !== 1 || !Array.isArray(parsed.messages) || !parsed.messages.every(validMessage)) {
     throw new Error('The chat file has an unexpected format. Nothing was changed.');
   }
-  return { version: 1, messages: parsed.messages };
+  return parsed.messages;
 }
 
-function saveChat(data: ChatThread) {
-  const file = chatFile(true);
-  writeFile(file, JSON.stringify(data, null, 2) + '\n');
+function saveThreadMessages(chatId: string, messages: ChatMessage[]) {
+  writeFile(threadFile(chatId, true), JSON.stringify({ version: 1, messages }, null, 2) + '\n');
+}
+
+function saveIndex(index: ChatIndex) {
+  writeFile(indexFile(true), JSON.stringify(index, null, 2) + '\n');
+}
+
+/** Migrates an older single-conversation chat.json into chats.json + Threads/<id>.json if needed. */
+function maybeMigrateLegacyChat(): void {
+  const dir = chatFolder(false);
+  if (!fs.existsSync(dir)) return;
+  readable(dir);
+  const idxPath = path.join(dir, 'chats.json');
+  const legacyPath = path.join(dir, 'chat.json');
+  if (fs.existsSync(idxPath) || !fs.existsSync(legacyPath)) return;
+
+  const raw = readText(readable(legacyPath));
+  let parsed: { version?: unknown; messages?: unknown };
+  try {
+    parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
+  } catch {
+    return;
+  }
+  if (parsed?.version !== 1 || !Array.isArray(parsed.messages) || !parsed.messages.every(validMessage)) return;
+  if (parsed.messages.length === 0) return;
+
+  const id = randomUUID();
+  const firstJohn = parsed.messages.find((m) => m.from === 'john');
+  const firstAt = parsed.messages[0].at;
+  const lastAt = parsed.messages[parsed.messages.length - 1].at;
+  const title = firstJohn ? titleFromMessage(firstJohn.text) : 'Previous Chat';
+
+  saveThreadMessages(id, parsed.messages);
+  saveIndex({
+    version: 1,
+    folders: [],
+    chats: [{ id, title, folderId: null, createdAt: firstAt, updatedAt: lastAt, messageCount: parsed.messages.length }],
+  });
+  writable(legacyPath);
+  fs.rmSync(legacyPath, { force: true });
+}
+
+function readIndex(): ChatIndex {
+  maybeMigrateLegacyChat();
+  const dir = chatFolder(false);
+  if (!fs.existsSync(dir)) return emptyIndex();
+  readable(dir);
+  const candidate = path.join(dir, 'chats.json');
+  if (!fs.existsSync(candidate)) return emptyIndex();
+  const raw = readText(indexFile(false));
+  let parsed: Partial<ChatIndex>;
+  try {
+    parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Partial<ChatIndex>;
+  } catch {
+    throw new Error('The chat index could not be read. Nothing was changed.');
+  }
+  if (parsed?.version !== 1 || !Array.isArray(parsed.folders) || !Array.isArray(parsed.chats)) {
+    throw new Error('The chat index has an unexpected format. Nothing was changed.');
+  }
+  return { version: 1, folders: parsed.folders, chats: parsed.chats };
+}
+
+/** Lists all folders and conversations (newest updated first). */
+export function listChats(): ChatIndex {
+  const index = readIndex();
+  return {
+    version: 1,
+    folders: [...index.folders],
+    chats: [...index.chats].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+  };
+}
+
+/** Reads one conversation by ID, or returns an empty placeholder when no ID is given. */
+export function readChat(rawChatId?: unknown): ChatThread {
+  const index = readIndex();
+  if (rawChatId === undefined || rawChatId === null || rawChatId === '') {
+    const latest = [...index.chats].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    if (!latest) return { version: 1, id: '', title: 'New Chat', folderId: null, messages: [] };
+    return {
+      version: 1,
+      id: latest.id,
+      title: latest.title,
+      folderId: latest.folderId,
+      messages: readThreadMessages(latest.id),
+    };
+  }
+  const chatId = checkId(rawChatId, 'conversation');
+  const summary = index.chats.find((c) => c.id === chatId);
+  if (!summary) throw new Error('That conversation no longer exists.');
+  return {
+    version: 1,
+    id: summary.id,
+    title: summary.title,
+    folderId: summary.folderId,
+    messages: readThreadMessages(chatId),
+  };
+}
+
+/** Creates a new empty conversation, optionally inside a folder. */
+export function createChat(rawFolderId?: unknown, rawTitle?: unknown): { index: ChatIndex; chat: ChatThread } {
+  const index = readIndex();
+  let folderId: string | null = null;
+  if (rawFolderId !== undefined && rawFolderId !== null && rawFolderId !== '') {
+    folderId = checkId(rawFolderId, 'folder');
+    if (!index.folders.some((f) => f.id === folderId)) throw new Error('That folder no longer exists.');
+  }
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const title = cleanTitle(rawTitle, 'New Chat');
+  const summary: ChatSummary = { id, title, folderId, createdAt: now, updatedAt: now, messageCount: 0 };
+  index.chats.unshift(summary);
+  saveThreadMessages(id, []);
+  saveIndex(index);
+  return {
+    index: listChats(),
+    chat: { version: 1, id, title, folderId, messages: [] },
+  };
+}
+
+/** Renames an existing conversation. */
+export function renameChat(rawChatId: unknown, rawTitle: unknown): ChatIndex {
+  const chatId = checkId(rawChatId, 'conversation');
+  const title = cleanTitle(rawTitle, '');
+  if (!title) throw new Error('Enter a conversation name.');
+  const index = readIndex();
+  const chat = index.chats.find((c) => c.id === chatId);
+  if (!chat) throw new Error('That conversation no longer exists.');
+  chat.title = title;
+  saveIndex(index);
+  return listChats();
+}
+
+/** Moves a conversation into a folder (or null for no folder). */
+export function moveChat(rawChatId: unknown, rawFolderId: unknown): ChatIndex {
+  const chatId = checkId(rawChatId, 'conversation');
+  const index = readIndex();
+  const chat = index.chats.find((c) => c.id === chatId);
+  if (!chat) throw new Error('That conversation no longer exists.');
+
+  let folderId: string | null = null;
+  if (rawFolderId !== undefined && rawFolderId !== null && rawFolderId !== '') {
+    folderId = checkId(rawFolderId, 'folder');
+    if (!index.folders.some((f) => f.id === folderId)) throw new Error('That folder no longer exists.');
+  }
+  chat.folderId = folderId;
+  saveIndex(index);
+  return listChats();
+}
+
+function trashFiles(names: string[]): void {
+  if (!names.length) return;
+  const filesDir = chatFilesFolder(false);
+  if (!fs.existsSync(filesDir)) return;
+  writable(filesDir);
+  const existing = names.filter((n) => fs.existsSync(path.join(filesDir, n)));
+  if (!existing.length) return;
+
+  const projects = path.resolve(config.videoProjectsDir);
+  const trash = path.resolve(config.trashDir);
+  if (!config.trashDir || isInside(projects, trash) || isInside(trash, projects)) {
+    throw new Error('The trash folder must be outside Video Projects.');
+  }
+  fs.mkdirSync(trash, { recursive: true });
+  const holder = fs.mkdtempSync(path.join(trash, 'Chat Files '));
+  for (const name of existing) {
+    const full = path.join(filesDir, name);
+    writable(full);
+    fs.renameSync(full, path.join(holder, name));
+  }
+}
+
+function filesUsedByOtherChats(index: ChatIndex, excludedChatId: string): Set<string> {
+  const used = new Set<string>();
+  for (const c of index.chats) {
+    if (c.id === excludedChatId) continue;
+    try {
+      for (const m of readThreadMessages(c.id)) {
+        for (const f of m.files ?? []) used.add(f);
+      }
+    } catch {
+      // Ignore unreadable sibling threads when collecting referenced files.
+    }
+  }
+  return used;
+}
+
+/** Deletes a conversation and moves its unshared files and thread JSON to Trash. */
+export function deleteChat(rawChatId: unknown): ChatIndex {
+  const chatId = checkId(rawChatId, 'conversation');
+  if (activeChats.has(chatId)) throw new Error('Wait for the AI reply before deleting this conversation.');
+  const index = readIndex();
+  const pos = index.chats.findIndex((c) => c.id === chatId);
+  if (pos < 0) throw new Error('That conversation no longer exists.');
+
+  const messages = readThreadMessages(chatId);
+  const keep = filesUsedByOtherChats(index, chatId);
+  const orphanFiles = [...new Set(messages.flatMap((m) => m.files ?? []))].filter((f) => !keep.has(f));
+
+  index.chats.splice(pos, 1);
+  saveIndex(index);
+
+  const file = path.join(threadsFolder(false), `${chatId}.json`);
+  if (fs.existsSync(file)) {
+    writable(file);
+    fs.rmSync(file, { force: true });
+  }
+  trashFiles(orphanFiles);
+  return listChats();
+}
+
+/** Creates a new folder in the Chat sidebar. */
+export function createFolder(rawName: unknown): ChatIndex {
+  const name = cleanTitle(rawName, '');
+  if (!name) throw new Error('Enter a folder name.');
+  const index = readIndex();
+  index.folders.push({ id: randomUUID(), name, createdAt: new Date().toISOString() });
+  saveIndex(index);
+  return listChats();
+}
+
+/** Renames a folder in the Chat sidebar. */
+export function renameFolder(rawFolderId: unknown, rawName: unknown): ChatIndex {
+  const folderId = checkId(rawFolderId, 'folder');
+  const name = cleanTitle(rawName, '');
+  if (!name) throw new Error('Enter a folder name.');
+  const index = readIndex();
+  const folder = index.folders.find((f) => f.id === folderId);
+  if (!folder) throw new Error('That folder no longer exists.');
+  folder.name = name;
+  saveIndex(index);
+  return listChats();
+}
+
+/** Deletes a folder, moving any conversations inside it back to the top level. */
+export function deleteFolder(rawFolderId: unknown): ChatIndex {
+  const folderId = checkId(rawFolderId, 'folder');
+  const index = readIndex();
+  const pos = index.folders.findIndex((f) => f.id === folderId);
+  if (pos < 0) throw new Error('That folder no longer exists.');
+  index.folders.splice(pos, 1);
+  for (const chat of index.chats) {
+    if (chat.folderId === folderId) chat.folderId = null;
+  }
+  saveIndex(index);
+  return listChats();
 }
 
 function cleanFileName(raw: unknown): { stem: string; ext: string } {
@@ -197,11 +504,11 @@ export function buildChatPrompt(
   ].join('\n\n');
 }
 
-function newImagesInDir(dir: string, since: number, exclude: Set<string> = new Set()): string[] {
+function newMediaInDir(dir: string, since: number, exclude: Set<string> = new Set()): string[] {
   try {
     return fs
       .readdirSync(dir)
-      .filter((f) => IMAGE_EXTS.has(path.extname(f).toLowerCase()) && !exclude.has(f))
+      .filter((f) => MEDIA_EXTS.has(path.extname(f).toLowerCase()) && !exclude.has(f))
       .map((f) => path.join(dir, f))
       .filter((full) => {
         try {
@@ -217,9 +524,9 @@ function newImagesInDir(dir: string, since: number, exclude: Set<string> = new S
   }
 }
 
-function newestBrainImage(rootDir: string, convId: string, since: number): string[] {
+function newestBrainMedia(rootDir: string, convId: string, since: number): string[] {
   if (convId) {
-    const exact = newImagesInDir(path.join(rootDir, convId), since);
+    const exact = newMediaInDir(path.join(rootDir, convId), since);
     if (exact.length) return [exact[exact.length - 1]];
   }
   try {
@@ -234,7 +541,7 @@ function newestBrainImage(rootDir: string, convId: string, since: number): strin
           return false;
         }
       });
-    const all = recentDirs.flatMap((d) => newImagesInDir(d, since));
+    const all = recentDirs.flatMap((d) => newMediaInDir(d, since));
     if (all.length) {
       all.sort((a, b) => fs.statSync(a).mtimeMs - fs.statSync(b).mtimeMs);
       return [all[all.length - 1]];
@@ -245,8 +552,8 @@ function newestBrainImage(rootDir: string, convId: string, since: number): strin
   return [];
 }
 
-/** Finds local image file paths (file:///... or Windows/POSIX paths) mentioned in an AI's Markdown reply. */
-export function extractMentionedImages(text: string): string[] {
+/** Finds local file paths (file:///... or Windows/POSIX paths) mentioned in an AI's Markdown reply. */
+export function extractMentionedFiles(text: string): string[] {
   const found: string[] = [];
   const add = (raw: string) => {
     let candidate = raw.trim();
@@ -257,7 +564,8 @@ export function extractMentionedImages(text: string): string[] {
         candidate = candidate.slice('file:///'.length);
       }
     }
-    if (!IMAGE_EXTS.has(path.extname(candidate).toLowerCase())) return;
+    const ext = path.extname(candidate).toLowerCase();
+    if (!ext || BLOCKED_EXTS.has(ext)) return;
     try {
       const st = fs.statSync(candidate);
       if (st.isFile() && !found.includes(candidate)) found.push(candidate);
@@ -266,12 +574,12 @@ export function extractMentionedImages(text: string): string[] {
     }
   };
   for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) add(m[1]);
-  for (const m of text.matchAll(/(?:file:\/\/\/|[A-Za-z]:[\\/])[^\s)"'<>]+\.(?:png|jpe?g|webp|gif)/gi)) add(m[0]);
+  for (const m of text.matchAll(/(?:file:\/\/\/|[A-Za-z]:[\\/])[^\s)"'<>]+\.[A-Za-z0-9]{1,8}/gi)) add(m[0]);
   return found;
 }
 
 /** Rewrites local file:/// or disk paths in an AI's Markdown reply to HeartQuarters' /api/chat/file URL. */
-export function rewriteImageLinks(text: string, savedBySourcePath: Map<string, string>): string {
+export function rewriteFileLinks(text: string, savedBySourcePath: Map<string, string>): string {
   let out = text;
   for (const [srcPath, savedName] of savedBySourcePath) {
     const url = `/api/chat/file?name=${encodeURIComponent(savedName)}`;
@@ -313,13 +621,13 @@ export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = []) => {
   if (res.code !== 0) throw new Error(res.timedOut ? 'The AI timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);
 
   let text = '';
-  const generatedImages = newImagesInDir(cwd, started, beforeCwd);
+  const generatedImages = newMediaInDir(cwd, started, beforeCwd);
 
   if (ai === 'codex') {
     text = fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '';
     const threadId = sessionFrom(res.stdout, 'thread_id');
     if (threadId) {
-      for (const p of newImagesInDir(path.join(os.homedir(), '.codex', 'generated_images', threadId), started)) {
+      for (const p of newMediaInDir(path.join(os.homedir(), '.codex', 'generated_images', threadId), started)) {
         if (!generatedImages.includes(p)) generatedImages.push(p);
       }
     }
@@ -330,20 +638,21 @@ export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = []) => {
   } else {
     text = geminiAnswer(res.stdout);
     const convId = sessionFrom(res.stdout, 'conversation_id');
-    for (const p of newestBrainImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'), convId, started)) {
+    for (const p of newestBrainMedia(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'), convId, started)) {
       if (!generatedImages.includes(p)) generatedImages.push(p);
     }
   }
 
-  for (const p of extractMentionedImages(text)) {
+  for (const p of extractMentionedFiles(text)) {
     if (!generatedImages.includes(p)) generatedImages.push(p);
   }
 
   return { text, generatedImages };
 };
 
-/** Sends a chat message (and any attached files) to the chosen AI, saving both turns to Drive. */
+/** Sends a chat message (and any attached files) to the chosen AI, creating a new chat if none is selected. */
 export async function sendChatMessage(
+  rawChatId: unknown,
   rawAi: unknown,
   rawMessage: unknown,
   rawFiles: unknown = [],
@@ -356,7 +665,7 @@ export async function sendChatMessage(
   const files: string[] = [];
   for (const item of rawFiles ?? []) {
     if (typeof item !== 'string') throw new Error('Invalid file name.');
-    chatFilePath(item); // verify each file exists and is safe before recording it
+    chatFilePath(item);
     if (!files.includes(item)) files.push(item);
   }
 
@@ -364,27 +673,47 @@ export async function sendChatMessage(
   if (!trimmed && !files.length) throw new Error('Type a message or attach a file first.');
   const message = trimmed || 'Look at the attached file(s).';
 
-  if (activeChat) {
-    throw new Error('An AI is already replying in Chat. Wait a moment and try again.');
+  let chatId: string;
+  if (rawChatId === undefined || rawChatId === null || rawChatId === '') {
+    chatId = createChat(null, titleFromMessage(message)).chat.id;
+  } else {
+    chatId = checkId(rawChatId, 'conversation');
+    const idx = readIndex();
+    if (!idx.chats.some((c) => c.id === chatId)) throw new Error('That conversation no longer exists.');
   }
-  activeChat = true;
+
+  if (activeChats.has(chatId)) {
+    throw new Error('An AI is already replying in this conversation. Wait a moment and try again.');
+  }
+  activeChats.add(chatId);
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-chat-'));
   try {
-    const current = readChat();
-    const historyBefore = [...current.messages];
-    current.messages.push({
+    const messages = readThreadMessages(chatId);
+    const historyBefore = [...messages];
+    const now = new Date().toISOString();
+    messages.push({
       id: randomUUID(),
       from: 'john',
       text: message,
-      at: new Date().toISOString(),
+      at: now,
       ...(files.length ? { files } : {}),
     });
-    saveChat(current);
+    saveThreadMessages(chatId, messages);
 
-    // Copy all files referenced in the conversation into the AI's working folder.
+    const idxAfterUser = readIndex();
+    const sumAfterUser = idxAfterUser.chats.find((c) => c.id === chatId);
+    if (sumAfterUser) {
+      if (sumAfterUser.title === 'New Chat' && historyBefore.length === 0) {
+        sumAfterUser.title = titleFromMessage(message);
+      }
+      sumAfterUser.updatedAt = now;
+      sumAfterUser.messageCount = messages.length;
+      saveIndex(idxAfterUser);
+    }
+
     const allFiles: string[] = [];
-    for (const m of current.messages) {
+    for (const m of messages) {
       for (const name of m.files ?? []) {
         if (!allFiles.includes(name)) allFiles.push(name);
       }
@@ -399,7 +728,7 @@ export async function sendChatMessage(
       try {
         src = chatFilePath(name);
       } catch {
-        continue; // If a file was removed from Drive, continue with the remaining context.
+        continue;
       }
       const dest = path.join(work, name);
       fs.copyFileSync(src, dest);
@@ -430,7 +759,7 @@ export async function sendChatMessage(
     const rawResult = await ask(rawAi, prompt, work, sentImages);
     const rawText = (typeof rawResult === 'string' ? rawResult : rawResult.text).trim();
     const generatedPaths = typeof rawResult === 'string' ? [] : (rawResult.generatedImages ?? []);
-    for (const p of extractMentionedImages(rawText)) {
+    for (const p of extractMentionedFiles(rawText)) {
       if (!generatedPaths.includes(p)) generatedPaths.push(p);
     }
 
@@ -445,60 +774,60 @@ export async function sendChatMessage(
           savedBySourcePath.set(imgPath, savedName);
         }
       } catch {
-        // Ignore unreadable generated image paths.
+        // Ignore unreadable generated file paths.
       }
     }
 
-    const answerText = rewriteImageLinks(rawText, savedBySourcePath);
+    const answerText = rewriteFileLinks(rawText, savedBySourcePath);
 
     if (!answerText && !savedGenerated.length) {
       throw new Error(`${AI_NAMES[rawAi]} returned an empty reply.`);
     }
 
-    const latest = readChat();
-    latest.messages.push({
+    const latestMessages = readThreadMessages(chatId);
+    const replyAt = new Date().toISOString();
+    latestMessages.push({
       id: randomUUID(),
       from: rawAi,
       text: answerText || 'Generated an image.',
-      at: new Date().toISOString(),
+      at: replyAt,
       ...(savedGenerated.length ? { files: savedGenerated } : {}),
     });
-    saveChat(latest);
-    return latest;
+    saveThreadMessages(chatId, latestMessages);
+
+    const idxAfterReply = readIndex();
+    const sumAfterReply = idxAfterReply.chats.find((c) => c.id === chatId);
+    if (sumAfterReply) {
+      sumAfterReply.updatedAt = replyAt;
+      sumAfterReply.messageCount = latestMessages.length;
+      saveIndex(idxAfterReply);
+    }
+
+    return readChat(chatId);
   } finally {
-    activeChat = false;
+    activeChats.delete(chatId);
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
-/** Clears the chat conversation and moves any attached files in Drive to HeartQuarters Trash. */
-export function clearChat(): ChatThread {
-  if (activeChat) throw new Error('Wait for the AI reply before clearing the chat.');
+/** Clears the messages in one conversation and moves any unshared files to Trash. */
+export function clearChat(rawChatId: unknown): ChatThread {
+  const chatId = checkId(rawChatId, 'conversation');
+  if (activeChats.has(chatId)) throw new Error('Wait for the AI reply before clearing this conversation.');
 
-  const filesDir = chatFilesFolder(false);
-  if (fs.existsSync(filesDir)) {
-    writable(filesDir);
-    const entries = fs.readdirSync(filesDir);
-    if (entries.length) {
-      const projects = path.resolve(config.videoProjectsDir);
-      const trash = path.resolve(config.trashDir);
-      if (!config.trashDir || isInside(projects, trash) || isInside(trash, projects)) {
-        throw new Error('The trash folder must be outside Video Projects.');
-      }
-      fs.mkdirSync(trash, { recursive: true });
-      const holder = fs.mkdtempSync(path.join(trash, 'Chat Files '));
-      for (const entry of entries) {
-        const full = path.join(filesDir, entry);
-        writable(full);
-        fs.renameSync(full, path.join(holder, entry));
-      }
-    }
-  }
+  const index = readIndex();
+  const summary = index.chats.find((c) => c.id === chatId);
+  if (!summary) throw new Error('That conversation no longer exists.');
 
-  const cleared = emptyChat();
-  const dir = chatFolder(false);
-  if (fs.existsSync(path.join(dir, 'chat.json'))) {
-    saveChat(cleared);
-  }
-  return cleared;
+  const messages = readThreadMessages(chatId);
+  const keep = filesUsedByOtherChats(index, chatId);
+  const orphanFiles = [...new Set(messages.flatMap((m) => m.files ?? []))].filter((f) => !keep.has(f));
+
+  saveThreadMessages(chatId, []);
+  summary.messageCount = 0;
+  summary.updatedAt = new Date().toISOString();
+  saveIndex(index);
+  trashFiles(orphanFiles);
+
+  return readChat(chatId);
 }

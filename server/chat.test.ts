@@ -9,7 +9,15 @@ import {
   CHAT_FILES_DIR,
   chatFilePath,
   clearChat,
+  createChat,
+  createFolder,
+  deleteChat,
+  deleteFolder,
+  listChats,
+  moveChat,
   readChat,
+  renameChat,
+  renameFolder,
   sendChatMessage,
   uploadChatFile,
 } from './chat';
@@ -35,8 +43,9 @@ afterEach(() => {
 });
 
 describe('full-screen multi-AI chat', () => {
-  it('starts empty without creating Drive files until a message or upload happens', () => {
-    expect(readChat()).toEqual({ version: 1, messages: [] });
+  it('starts empty without creating Drive files until a message, chat, folder, or upload happens', () => {
+    expect(listChats()).toEqual({ version: 1, folders: [], chats: [] });
+    expect(readChat()).toEqual({ version: 1, id: '', title: 'New Chat', folderId: null, messages: [] });
     expect(fs.existsSync(path.join(config.videoProjectsDir, CHAT_DIR))).toBe(false);
   });
 
@@ -47,27 +56,79 @@ describe('full-screen multi-AI chat', () => {
       return `Reply from ${ai}`;
     };
 
-    const afterClaude = await sendChatMessage('claude', 'First thought', [], fakeAsk);
+    const afterClaude = await sendChatMessage(null, 'claude', 'First thought', [], fakeAsk);
+    expect(afterClaude.title).toBe('First thought');
     expect(afterClaude.messages.map((m) => [m.from, m.text])).toEqual([
       ['john', 'First thought'],
       ['claude', 'Reply from claude'],
     ]);
 
-    const afterCodex = await sendChatMessage('codex', 'What did Claude miss?', [], fakeAsk);
-    const afterGemini = await sendChatMessage('gemini', 'Synthesize both.', [], fakeAsk);
+    const afterCodex = await sendChatMessage(afterClaude.id, 'codex', 'What did Claude miss?', [], fakeAsk);
+    const afterGemini = await sendChatMessage(afterClaude.id, 'gemini', 'Synthesize both.', [], fakeAsk);
 
     expect(afterGemini.messages.map((m) => m.from)).toEqual(['john', 'claude', 'john', 'codex', 'john', 'gemini']);
     expect(seen[1].prompt).toContain('[John]\nFirst thought');
     expect(seen[1].prompt).toContain('[Claude]\nReply from claude');
     expect(seen[2].prompt).toContain('[ChatGPT]\nReply from codex');
-    expect(readChat().messages).toEqual(afterGemini.messages);
+    expect(readChat(afterClaude.id).messages).toEqual(afterGemini.messages);
     expect(afterCodex.messages).toHaveLength(4);
+  });
+
+  it('supports folders, creating, renaming, moving, and deleting conversations', async () => {
+    const withFolder = createFolder('SDAM Research');
+    expect(withFolder.folders.map((f) => f.name)).toEqual(['SDAM Research']);
+    const folderId = withFolder.folders[0].id;
+
+    const { chat } = createChat(folderId);
+    expect(chat.title).toBe('New Chat');
+    expect(chat.folderId).toBe(folderId);
+
+    // First message auto-titles a "New Chat".
+    await sendChatMessage(chat.id, 'claude', 'Outline the SDAM guide', [], async () => 'Here is an outline.');
+    expect(readChat(chat.id).title).toBe('Outline the SDAM guide');
+
+    renameChat(chat.id, 'SDAM Guide Outline');
+    renameFolder(folderId, 'Research');
+    expect(listChats().folders[0].name).toBe('Research');
+    expect(listChats().chats[0].title).toBe('SDAM Guide Outline');
+
+    // Deleting a folder moves its chats to the top level rather than deleting them.
+    deleteFolder(folderId);
+    expect(listChats().folders).toEqual([]);
+    expect(readChat(chat.id).folderId).toBeNull();
+
+    // Create a second folder and move the chat into it, then delete the chat.
+    const folder2 = createFolder('Archive').folders[0].id;
+    moveChat(chat.id, folder2);
+    expect(readChat(chat.id).folderId).toBe(folder2);
+
+    deleteChat(chat.id);
+    expect(listChats().chats).toEqual([]);
+    expect(() => readChat(chat.id)).toThrow('no longer exists');
+  });
+
+  it('migrates a legacy single chat.json into chats.json and Threads/', () => {
+    const chatDir = path.join(config.videoProjectsDir, CHAT_DIR);
+    fs.mkdirSync(chatDir, { recursive: true });
+    fs.writeFileSync(path.join(chatDir, 'chat.json'), JSON.stringify({
+      version: 1,
+      messages: [
+        { id: 'm1', from: 'john', text: 'Legacy question', at: '2026-11-26T12:00:00.000Z' },
+        { id: 'm2', from: 'claude', text: 'Legacy answer', at: '2026-11-26T12:01:00.000Z' },
+      ],
+    }));
+
+    const index = listChats();
+    expect(index.chats).toHaveLength(1);
+    expect(index.chats[0].title).toBe('Legacy question');
+    expect(readChat(index.chats[0].id).messages.map((m) => m.text)).toEqual(['Legacy question', 'Legacy answer']);
+    expect(fs.existsSync(path.join(chatDir, 'chat.json'))).toBe(false);
   });
 
   it('accepts arbitrarily long pasted text without a character limit', async () => {
     const huge = 'A'.repeat(120_000);
     let seenPrompt = '';
-    const res = await sendChatMessage('claude', huge, [], async (_ai, prompt) => {
+    const res = await sendChatMessage(null, 'claude', huge, [], async (_ai, prompt) => {
       seenPrompt = prompt;
       return 'Got all of it.';
     });
@@ -84,7 +145,6 @@ describe('full-screen multi-AI chat', () => {
     expect(docx.name).toBe('Notes.docx');
     expect(png.name).toBe('Screenshot.png');
 
-    // Duplicate file names are numbered rather than overwriting.
     const pdf2 = uploadChatFile('Research.pdf', Buffer.from('%PDF-1.4\nv2'));
     expect(pdf2.name).toBe('Research (2).pdf');
 
@@ -99,6 +159,7 @@ describe('full-screen multi-AI chat', () => {
     let promptSeen = '';
 
     await sendChatMessage(
+      null,
       'codex',
       '',
       [pdf.name, docx.name, png.name],
@@ -123,13 +184,13 @@ describe('full-screen multi-AI chat', () => {
     expect(promptSeen).toContain("Look at the attached file(s).\n[Attached: Research.pdf, Notes.docx, Screenshot.png]");
   });
 
-  it('clears the thread and moves attached files to Trash', async () => {
+  it('clears one thread and moves its unshared attached files to Trash', async () => {
     const file = uploadChatFile('Report.pdf', Buffer.from('%PDF-1.4'));
-    await sendChatMessage('gemini', 'Read this', [file.name], async () => 'Done');
+    const thread = await sendChatMessage(null, 'gemini', 'Read this', [file.name], async () => 'Done');
 
-    const cleared = clearChat();
+    const cleared = clearChat(thread.id);
     expect(cleared.messages).toEqual([]);
-    expect(readChat().messages).toEqual([]);
+    expect(readChat(thread.id).messages).toEqual([]);
     expect(fs.existsSync(path.join(config.videoProjectsDir, CHAT_FILES_DIR, file.name))).toBe(false);
 
     const trashEntries = fs.readdirSync(config.trashDir);
@@ -139,13 +200,13 @@ describe('full-screen multi-AI chat', () => {
 
   it('loses nothing if the app data folder is deleted', async () => {
     const file = uploadChatFile('KeepMe.txt', Buffer.from('important'));
-    await sendChatMessage('claude', 'Remember this', [file.name], async () => 'Saved in Drive');
+    const thread = await sendChatMessage(null, 'claude', 'Remember this', [file.name], async () => 'Saved in Drive');
 
     const chatDataDir = path.join(appDir, 'data', 'chat-test-dummy');
     fs.mkdirSync(chatDataDir, { recursive: true });
     fs.rmSync(chatDataDir, { recursive: true, force: true });
 
-    expect(readChat().messages.map((m) => m.text)).toEqual(['Remember this', 'Saved in Drive']);
+    expect(readChat(thread.id).messages.map((m) => m.text)).toEqual(['Remember this', 'Saved in Drive']);
     expect(fs.existsSync(chatFilePath(file.name))).toBe(true);
   });
 
@@ -153,15 +214,15 @@ describe('full-screen multi-AI chat', () => {
     expect(() => uploadChatFile('bad.exe', Buffer.from('mz'))).toThrow('cannot be attached');
     expect(() => uploadChatFile('empty.txt', Buffer.alloc(0))).toThrow('empty');
     expect(() => chatFilePath('../secret.txt')).toThrow('valid attached file');
-    await expect(sendChatMessage('other', 'Hi')).rejects.toThrow('Claude, ChatGPT, or Gemini');
-    await expect(sendChatMessage('claude', '   ', [])).rejects.toThrow('Type a message or attach a file');
+    await expect(sendChatMessage(null, 'other', 'Hi')).rejects.toThrow('Claude, ChatGPT, or Gemini');
+    await expect(sendChatMessage(null, 'claude', '   ', [])).rejects.toThrow('Type a message or attach a file');
 
     const elsewhere = makeTree({ 'secret.txt': 'nope' });
     try {
       fs.mkdirSync(path.dirname(path.join(config.videoProjectsDir, CHAT_DIR)), { recursive: true });
       fs.symlinkSync(elsewhere, path.join(config.videoProjectsDir, CHAT_DIR), 'junction');
-      expect(() => readChat()).toThrow();
-      await expect(sendChatMessage('claude', 'Hi')).rejects.toThrow();
+      expect(() => listChats()).toThrow();
+      await expect(sendChatMessage(null, 'claude', 'Hi')).rejects.toThrow();
     } finally {
       removeTree(elsewhere);
     }
@@ -176,7 +237,7 @@ describe('full-screen multi-AI chat', () => {
 
   it('saves images generated by an AI into Drive and attaches them to its reply', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const res = await sendChatMessage('gemini', 'Draw a calm ocean sunrise', [], async (_ai, prompt, cwd) => {
+    const res = await sendChatMessage(null, 'gemini', 'Draw a calm ocean sunrise', [], async (_ai, prompt, cwd) => {
       expect(prompt).toContain('image generation tool');
       expect(prompt).not.toContain('Do not create, edit, or delete any files.');
       const outImg = path.join(cwd, 'sunrise.png');
@@ -199,7 +260,7 @@ describe('full-screen multi-AI chat', () => {
       fs.writeFileSync(externalImg, jpgBytes);
       const fileUrl = `file:///${externalImg.replace(/\\/g, '/')}`;
 
-      const res = await sendChatMessage('gemini', 'Draw a guide image', [], async () => {
+      const res = await sendChatMessage(null, 'gemini', 'Draw a guide image', [], async () => {
         return `![Guide](${encodeURI(fileUrl)})\n\nSaved at: [sdam guide.jpg](${encodeURI(fileUrl)})`;
       });
 
@@ -209,6 +270,27 @@ describe('full-screen multi-AI chat', () => {
       expect(reply.text).toContain('[sdam guide.jpg](/api/chat/file?name=sdam%20guide.jpg)');
       expect(reply.text).not.toContain('file:///');
       expect(fs.readFileSync(chatFilePath('sdam guide.jpg')).equals(jpgBytes)).toBe(true);
+    } finally {
+      removeTree(externalDir);
+    }
+  });
+
+  it('captures file:/// video links in AI Markdown and rewrites them to /api/chat/file URLs', async () => {
+    const mp4Bytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+    const externalDir = makeTree({ 'brain/': '' });
+    try {
+      const externalVideo = path.join(externalDir, 'brain', 'the_edge_of_light.mp4');
+      fs.writeFileSync(externalVideo, mp4Bytes);
+      const fileUrl = `file:///${externalVideo.replace(/\\/g, '/')}`;
+
+      const res = await sendChatMessage(null, 'gemini', 'Make a cool video', [], async () => {
+        return `Video: [the edge of light.mp4](${fileUrl})`;
+      });
+
+      const reply = res.messages[1];
+      expect(reply.files).toEqual(['the_edge_of_light.mp4']);
+      expect(reply.text).toBe('Video: [the edge of light.mp4](/api/chat/file?name=the_edge_of_light.mp4)');
+      expect(fs.readFileSync(chatFilePath('the_edge_of_light.mp4')).equals(mp4Bytes)).toBe(true);
     } finally {
       removeTree(externalDir);
     }
