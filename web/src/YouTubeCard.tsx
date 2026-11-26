@@ -659,6 +659,22 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
       {shownView === 'diff' && !display && <div className={`compare-columns compare-names${reverse ? ' compare-reversed' : ''}`}><strong>{versionName ?? 'Local file'}</strong><strong>YouTube</strong></div>}
       <AiLineBoxes doc={busy ? { ...doc, locked: true } : doc} />
 
+      {/* Thumbnail: always first, so it doesn't jump below the fields once they load. */}
+      <div className="lvy-row">
+        <div className="lvy-row-head">
+          <span className="comparison-label"><strong>Thumbnail</strong>
+          {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</span>
+          {showCopyActions && shownView === 'diff' && <span className="comparison-actions">{directionControls(youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail), !!(canCompare && localThumb && !busy), !!(canCompare && data?.video.thumbnail && version && !busy && !out && !doc.locked), () => stage('Thumbnail'), saveThumbnail)}</span>}
+        </div>
+        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail) : null}>
+        {columns(
+          localThumb ? <img className="lvy-thumb" src={fileUrl('projects', localThumb.path, fileStamp(localThumb))} alt="Local thumbnail" /> : <p className="muted small-text">No thumbnail in this version.</p>,
+          !linked ? <p className="muted small-text">Not on YouTube yet.</p> : data ? data.video.thumbnail ? <img className="lvy-thumb" src={data.video.thumbnail} alt="YouTube thumbnail" /> : <p className="muted small-text">Not available.</p> : <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>,
+          false,
+        )}
+        </CopyDirectionFrame>
+      </div>
+
       {doc.text !== null &&
         shownLabels.map((label) => {
           const index = known(label);
@@ -722,22 +738,6 @@ export function LocalVsYouTube({ piece, doc: originalDoc, covers, version, link,
             </ComparisonRow>
           );
         })}
-
-      {/* Thumbnail */}
-      <div className="lvy-row">
-        <div className="lvy-row-head">
-          <span className="comparison-label"><strong>Thumbnail</strong>
-          {staged.includes('Thumbnail') && <span className="comparison-status comparison-waiting">Waiting to Apply</span>}</span>
-          {showCopyActions && shownView === 'diff' && <span className="comparison-actions">{directionControls(youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail), !!(canCompare && localThumb && !busy), !!(canCompare && data?.video.thumbnail && version && !busy && !out && !doc.locked), () => stage('Thumbnail'), saveThumbnail)}</span>}
-        </div>
-        <CopyDirectionFrame left={leftName} right={rightName} selected={shownView === 'diff' ? youtubeCopyDirection(reverse, staged.includes('Thumbnail'), youtubeThumbnail) : null}>
-        {columns(
-          localThumb ? <img className="lvy-thumb" src={fileUrl('projects', localThumb.path, fileStamp(localThumb))} alt="Local thumbnail" /> : <p className="muted small-text">No thumbnail in this version.</p>,
-          !linked ? <p className="muted small-text">Not on YouTube yet.</p> : data ? data.video.thumbnail ? <img className="lvy-thumb" src={data.video.thumbnail} alt="YouTube thumbnail" /> : <p className="muted small-text">Not available.</p> : <p className="muted small-text">{loading ? 'Reading from YouTube…' : 'Not read yet.'}</p>,
-          false,
-        )}
-        </CopyDirectionFrame>
-      </div>
 
       {/* Captions: YouTube's are downloaded only when asked (about 250 units). Without them there is nothing to compare, so
           sending yours is still offered but replaces YouTube's unseen; copying down needs the download. Same means
