@@ -4,7 +4,7 @@ import { useAutosavedText } from './unsavedEdits';
 import { useAi } from './AiPicker';
 import { channelRows, rowName, videoProjectsHash } from './channelRows';
 import { ALL_VIDEO_FILTERS, VideoFilterBar, type VideoSearchFilters } from './VideoFinder';
-import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
+import type { ChannelVideo } from '../../server/channel-videos';
 import type { BrainstormMessage, IdeaBrainstorm } from '../../server/idea-brainstorm';
 import type { WritingSummary } from '../../server/writing';
 import type { IdeaAttachment, IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
@@ -72,9 +72,7 @@ export function IdeasPage() {
   const load = () => getJson<VideoIdea[]>('/api/ideas').then(setIdeas, (e: Error) => setError(e.message));
   useEffect(() => {
     void load();
-    void getJson<ChannelVideoList | null>('/api/channel/videos').then((data) => {
-      setVideos((data?.videos ?? []).filter((v) => !!v.piece));
-    }, () => {});
+    void getJson<ChannelVideo[]>('/api/ideas/videos').then(setVideos, () => {});
     void getJson<WritingSection[]>('/api/writing').then(setWriting, () => {});
   }, []);
 
@@ -453,7 +451,7 @@ function VideoFinder({ ideaId, videos, busy, send }: {
 }) {
   const [filters, setFilters] = useState<VideoSearchFilters>(ALL_VIDEO_FILTERS);
   const [chosen, setChosen] = useState<string | null>(null);
-  const matching = channelRows(videos, filters, 'publishedAt', true);
+  const matching = channelRows(videos, filters, 'title', false);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   const picked = videos.find((v) => v.id === chosen) ?? null;
   // John can drag the finder's right edge; the width is remembered in this browser (a convenience only).

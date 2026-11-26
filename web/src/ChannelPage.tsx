@@ -22,13 +22,13 @@ const allVideoResults = ALL_VIDEO_FILTERS;
 export function ChannelVideoBrowser({ videos, id }: { videos?: ChannelVideo[]; id?: string }) {
   const [filters, setFilters] = useState(allVideoResults);
   const catalog = videos ?? [];
-  const matching = channelRows(catalog, filters, 'publishedAt', true);
+  const matching = channelRows(catalog, filters, 'title', false);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   const selected = matching.find(video => video.id === id);
   const openId = id && /^[\w-]{11}$/.test(id) && (!filtering || selected) ? id : undefined;
   const applyFilters = (next: typeof allVideoResults) => {
     setFilters(next);
-    if (openId && !channelRows(selected ? [selected] : [], next, 'publishedAt', true).length) {
+    if (openId && !channelRows(selected ? [selected] : [], next, 'title', false).length) {
       window.location.replace('#Channel/Video');
     }
   };

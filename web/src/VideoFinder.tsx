@@ -28,7 +28,7 @@ export function VideoSidebar({
   counts?: ReadonlyMap<string, number>;
 }) {
   const catalog = videos ?? [];
-  const matching = channelRows(catalog, filters, 'publishedAt', true);
+  const matching = channelRows(catalog, filters, 'title', false);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   return (
     <aside aria-label="Video Browser" className="channel-video-sidebar">

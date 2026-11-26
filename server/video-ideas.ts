@@ -4,7 +4,12 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, isInside, safeResolve } from './config.js';
+import { readChannelVideos, type ChannelVideo } from './channel-videos.js';
+import { STANDALONE_GROUP } from './create.js';
+import { writeFileSafely } from './files.js';
+import { listProjectVideos } from './projects.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
+import { readVideoProfile } from './video-profile.js';
 
 export const IDEAS_FILE = '_HeartQuarters/Ideas/Video Ideas.json';
 export const IDEA_RESOURCES_DIR = '_HeartQuarters/Ideas/Resources';
@@ -383,4 +388,45 @@ export function attachmentFile(ideaId: unknown, attachmentId: unknown): string {
     throw new Error('That attached file could not be found.');
   }
   return full;
+}
+
+/**
+ * Every Video Project piece on Drive for Ideas' Video Finder, enriched with YouTube titles/dates when available.
+ * Works even when YouTube data hasn't been fetched or omits a video.
+ */
+export function ideaVideos(): ChannelVideo[] {
+  const byPiece = new Map(
+    (readChannelVideos()?.videos ?? [])
+      .filter((v): v is ChannelVideo & { piece: string } => !!v.piece)
+      .map((v) => [v.piece, v]),
+  );
+  const out: ChannelVideo[] = [];
+  for (const { video } of listProjectVideos()) {
+    const longform = video.pieces.find((p) => p.kind === 'longform');
+    for (const p of video.pieces) {
+      const existing = byPiece.get(p.path);
+      if (existing) {
+        out.push(existing);
+        continue;
+      }
+      const kind = p.kind === 'longform' ? 'longform' : 'short';
+      const fromLongform = kind === 'short'
+        ? (p.path.startsWith(`${STANDALONE_GROUP}/`) ? 'standalone' : longform?.path ?? null)
+        : undefined;
+      out.push({
+        id: p.path,
+        title: '',
+        publishedAt: '',
+        seconds: 0,
+        privacy: 'unknown',
+        kind,
+        kindGuessed: false,
+        piece: p.path,
+        numbers: null,
+        fromLongform,
+        ...readVideoProfile(p.path),
+      });
+    }
+  }
+  return out;
 }

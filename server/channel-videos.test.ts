@@ -69,6 +69,27 @@ it('reads YouTube durations in seconds', () => {
   expect(parseDuration('nonsense')).toBe(0);
 });
 
+it('also fetches linked project videos omitted by the uploads playlist, ignoring other channels', async () => {
+  links.set('linkedOnly', { piece: '005 - Series/005B - Night One/Longform', kind: 'longform' });
+  links.set('otherChannel', { piece: '999 - Other/Longform', kind: 'longform' });
+  const prevFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: string | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/videos')) {
+      return Response.json({
+        items: [
+          { id: 'linkedOnly', snippet: { channelId: 'channel-id', title: 'Day One', publishedAt: '2025-12-26T23:24:09Z' }, contentDetails: { duration: 'PT14M19S' }, status: { privacyStatus: 'public' } },
+          { id: 'otherChannel', snippet: { channelId: 'someone-else', title: 'Not Mine', publishedAt: '2025-12-26T23:24:09Z' }, contentDetails: { duration: 'PT5M' }, status: { privacyStatus: 'public' } },
+        ],
+      });
+    }
+    return prevFetch(input);
+  });
+  const list = await collectChannelVideos({ id: 'channel-id', title: 'Heart Mind Fusion' }, new Date('2026-11-22T12:00:00Z'));
+  expect(list.videos.map((v) => v.id)).toEqual(['linkedOnly']);
+  expect(list.videos[0].piece).toBe('005 - Series/005B - Night One/Longform');
+});
+
 it('lists every video across pages, newest first, with numbers merged in', async () => {
   const list = await refreshChannelVideos();
   expect(list.videos.map((v) => v.id)).toEqual(['d', 'b', 'c', 'a']);

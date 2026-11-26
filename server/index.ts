@@ -21,7 +21,7 @@ import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox,
 import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
 import { fillInShotTags } from './expression-shot-tags.js';
-import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
@@ -365,6 +365,7 @@ app.post('/api/expressions/inbox/photopea-copy', handle((req, res) => {
 app.post('/api/expressions/inbox/copy-thumbnail', handle((req, res) => { res.json(copyThumbnailToInbox(String(req.body?.piece ?? ''), String(req.body?.image ?? ''))); }));
 app.post('/api/expressions/inbox/trash', handle((req, res) => { res.json(trashInboxPhoto(String(req.body?.photo ?? ''))); }));
 app.get('/api/ideas', handle((_req, res) => { res.json(readIdeas()); }));
+app.get('/api/ideas/videos', handle((_req, res) => { res.json(ideaVideos()); }));
 app.post('/api/ideas/add', handle((req, res) => { res.json(addIdea(req.body?.title, req.body?.notes ?? '')); }));
 app.post('/api/ideas/update', handle((req, res) => { res.json(updateIdea(req.body?.id, { title: req.body?.title, notes: req.body?.notes, status: req.body?.status, format: req.body?.format, category: req.body?.category, upNext: req.body?.upNext })); }));
 app.post('/api/ideas/move', handle((req, res) => { res.json(moveIdea(req.body?.id, req.body?.step, req.body?.targetId)); }));

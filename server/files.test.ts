@@ -1,7 +1,7 @@
 // Saving files all at once. Fake folders only.
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeFileSafely } from './files';
 import { makeTree, removeTree } from './testing';
 
@@ -32,5 +32,22 @@ describe('writeFileSafely', () => {
     expect(() => writeFileSafely(path.join(tmp, 'folder'), 'x')).toThrow();
     expect(fs.readdirSync(tmp).filter((n) => n.endsWith('.hq-tmp'))).toEqual([]);
     expect(fs.statSync(path.join(tmp, 'folder')).isDirectory()).toBe(true);
+  });
+
+  it('retries transient EPERM/EBUSY errors when swapping on Windows', () => {
+    const realRename = fs.renameSync;
+    let calls = 0;
+    const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      calls++;
+      if (calls === 1) throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+      return realRename(from, to);
+    });
+    try {
+      writeFileSafely(path.join(tmp, 'YouTube.md'), 'retried');
+      expect(calls).toBe(2);
+      expect(fs.readFileSync(path.join(tmp, 'YouTube.md'), 'utf8')).toBe('retried');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -83,12 +83,15 @@ async function uploadIds(token: string): Promise<string[]> {
 }
 
 type Detail = { id: string; title: string; publishedAt: string; seconds: number; privacy: string; thumbnail?: string };
-async function videoDetails(token: string, ids: string[]): Promise<Detail[]> {
+async function videoDetails(token: string, ids: string[], channelId?: string): Promise<Detail[]> {
   const out: Detail[] = [];
   for (const batch of chunks(ids, 50)) {
     const params = new URLSearchParams({ part: 'snippet,contentDetails,status', id: batch.join(',') });
-    const data = await getJson<{ items?: { id: string; snippet: { title: string; publishedAt: string; thumbnails?: Record<string, {url?: string}> }; contentDetails: { duration: string }; status?: { privacyStatus?: string } }[] }>(`https://www.googleapis.com/youtube/v3/videos?${params}`, token, 'read your videos');
-    for (const v of data.items ?? []) out.push({ id: v.id, title: v.snippet.title, publishedAt: v.snippet.publishedAt, seconds: parseDuration(v.contentDetails.duration), privacy: v.status?.privacyStatus ?? 'unknown', thumbnail: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url });
+    const data = await getJson<{ items?: { id: string; snippet: { channelId?: string; title: string; publishedAt: string; thumbnails?: Record<string, {url?: string}> }; contentDetails: { duration: string }; status?: { privacyStatus?: string } }[] }>(`https://www.googleapis.com/youtube/v3/videos?${params}`, token, 'read your videos');
+    for (const v of data.items ?? []) {
+      if (channelId && v.snippet.channelId && v.snippet.channelId !== channelId) continue;
+      out.push({ id: v.id, title: v.snippet.title, publishedAt: v.snippet.publishedAt, seconds: parseDuration(v.contentDetails.duration), privacy: v.status?.privacyStatus ?? 'unknown', thumbnail: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url });
+    }
   }
   return out;
 }
@@ -162,13 +165,15 @@ export function mergeChannelVideos(details: Detail[], numbers: Map<string, Video
 
 export async function collectChannelVideos(channel: { id: string; title: string }, now = new Date()): Promise<ChannelVideoList> {
   const token = await youtubeAccessToken();
-  const ids = await uploadIds(token);
+  const links = videoLinks();
+  const uploaded = await uploadIds(token);
+  const ids = [...uploaded, ...[...links.keys()].filter((id) => !uploaded.includes(id))];
   const endScreensRequest: Promise<EndScreenData> = youtubeStatus().reportingAccess
     ? getEndScreenData(token).catch((error): EndScreenData => ({ status: 'unavailable', note: error instanceof Error ? error.message : String(error) }))
     : Promise.resolve({ status: 'unavailable', note: 'Reconnect YouTube with Analytics permission to load end screen data.' });
   const trafficRequest = videoTrafficViews(token, ids, now).catch((error: unknown) => error instanceof Error ? error : new Error(String(error)));
-  const [details, numbers, traffic, endScreens] = await Promise.all([videoDetails(token, ids), videoNumbers(token, ids, now), trafficRequest, endScreensRequest]);
-  const videos = mergeChannelVideos(details, numbers, videoLinks());
+  const [details, numbers, traffic, endScreens] = await Promise.all([videoDetails(token, ids, channel.id), videoNumbers(token, ids, now), trafficRequest, endScreensRequest]);
+  const videos = mergeChannelVideos(details, numbers, links);
   const updatedAt = now.toISOString();
   if (traffic instanceof Error) return { channel, updatedAt, videos, endScreens, trafficError: traffic.message };
   return { channel, updatedAt, videos: videos.map((video) => ({ ...video, traffic: traffic.get(video.id) })), endScreens, trafficUpdatedAt: updatedAt };

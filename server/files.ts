@@ -3,12 +3,28 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 
+const RETRY_CODES = new Set(['EPERM', 'EBUSY']);
+const RENAME_DELAYS_MS = [25, 50, 100, 150];
+
+function pauseSync(ms: number) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 export function writeFileSafely(file: string, data: string) {
   const tmp = `${file}.${randomUUID().slice(0, 8)}.hq-tmp`;
   // "wx" refuses to write if a file by that name already exists, however unlikely.
   fs.writeFileSync(tmp, data, { flag: 'wx' });
   try {
-    fs.renameSync(tmp, file);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        fs.renameSync(tmp, file);
+        return;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code ?? '';
+        if (!RETRY_CODES.has(code) || attempt >= RENAME_DELAYS_MS.length) throw e;
+        pauseSync(RENAME_DELAYS_MS[attempt]);
+      }
+    }
   } catch (e) {
     fs.rmSync(tmp, { force: true }); // only ever the file made just above
     throw e;

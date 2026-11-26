@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, extractHtmlTitle, IDEA_RESOURCES_DIR, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, extractHtmlTitle, IDEA_RESOURCES_DIR, IDEAS_FILE, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
 
 let root: string;
 let saved: string;
@@ -175,5 +175,21 @@ describe('video ideas', () => {
     expect(() => addIdea('Sneaky')).toThrow();
     expect(() => readIdeas()).toThrow();
     expect(fs.readdirSync(elsewhere)).toEqual([]);
+  });
+
+  it('lists Drive video projects in ideaVideos even when no YouTube channel cache exists', () => {
+    fs.mkdirSync(path.join(config.videoProjectsDir, '005 - Ayahuasca', '005B - Night One', 'Longform', 'Exports'), { recursive: true });
+    fs.mkdirSync(path.join(config.videoProjectsDir, '005 - Ayahuasca', '005B - Night One', 'Shorts', '005B_S01 - Clip', 'Exports'), { recursive: true });
+    process.env.HQ_CHANNEL_VIDEOS_FILE = path.join(root, 'missing-channel-videos.json');
+    try {
+      const list = ideaVideos();
+      expect(list.map((v) => v.piece)).toEqual([
+        '005 - Ayahuasca/005B - Night One/Longform',
+        '005 - Ayahuasca/005B - Night One/Shorts/005B_S01 - Clip',
+      ]);
+      expect(list.map((v) => v.kind)).toEqual(['longform', 'short']);
+    } finally {
+      delete process.env.HQ_CHANNEL_VIDEOS_FILE;
+    }
   });
 });
