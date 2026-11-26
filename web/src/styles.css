@@ -1163,10 +1163,6 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-ref-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; }
 .idea-ref-new { border-top: 1px dashed var(--line); padding-top: 0.3rem; }
 .idea-video-finder { margin-top: 0.2rem; }
-.idea-video-finder > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); list-style: none; }
-.idea-video-finder > summary::-webkit-details-marker { display: none; }
-.idea-video-finder > summary::before { content: '▶ '; font-size: 0.75rem; }
-.idea-video-finder[open] > summary::before { content: '▼ '; }
 .idea-video-finder-body { margin-top: 0.3rem; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); display: flex; flex-direction: column; gap: 0.3rem; }
 .idea-video-count { margin: 0; }
 .idea-video-list { max-height: 165px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.1rem; border-top: 1px solid var(--line); padding-top: 0.25rem; }
@@ -1314,13 +1310,14 @@ button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 .idea-lower { display: flex; gap: 0.8rem; align-items: flex-start; }
 .idea-lower-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.65rem; }
 .idea-lower .idea-video-finder { flex: none; margin-top: 0; }
-.idea-lower .idea-video-finder:not([open]) { width: auto !important; }
-/* Open, it's wide enough for Kind, Topic and Angle side by side; drag the bottom-right corner to change it. */
-.idea-lower .idea-video-finder[open] { width: 31rem; min-width: 18rem; max-width: 70%; resize: horizontal; overflow: hidden; padding-bottom: 0.2rem; }
+/* Always open, wide enough for Kind, Topic and Angle side by side; drag the bottom-right corner to change it. */
+.idea-lower .idea-video-finder { display: flex; flex-direction: column; gap: 0.45rem; width: 31rem; min-width: 18rem; max-width: 70%; resize: horizontal; overflow: hidden; padding-bottom: 0.2rem; }
+.idea-lower .idea-video-finder .idea-video-finder-body { margin-top: 0; }
+.channel-video-search-row { display: flex; gap: 0.35rem; align-items: center; }
+.channel-video-search-row input { flex: 1; min-width: 0; }
+.channel-video-search-row button { flex: none; }
 .idea-video-option.chosen { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.idea-video-add { display: flex; gap: 0.4rem; align-items: center; min-width: 0; }
-.idea-video-add .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 760px) { .idea-lower { flex-direction: column; } .idea-lower .idea-video-finder[open] { width: 100%; } }
+@media (max-width: 760px) { .idea-lower { flex-direction: column; } .idea-lower .idea-video-finder { width: 100%; max-width: none; } }
 
 /* An open idea gets the same breathing room as a Video Projects section (padding 0.6rem 0.8rem, 0.65rem gaps);
    closed ideas stay as compact rows. A section heading also leaves a gap above its first idea. */

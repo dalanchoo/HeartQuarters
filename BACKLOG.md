@@ -138,7 +138,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 - Expression shot list: review expression suggestions from packaging briefs and final picks, add the looks still needed, and mark shots photographed in Expressions.
 - Icon (shortcut, browser tab, header) and taskbar pinning.
 - Ideas tab: John's own list of videos he might make, in `Video Projects\Video Ideas.json`. Add, edit title and notes,
-  set a status (Thinking About It, Researching, Packaged, Filming, Made, Dropped), mark it Longform or Short, reorder, delete. First step of the
+  set a status (Raw, Processed, Brainstorming, Researching, Packaged, Filming, Made, Dropped; Raw and Processed were
+  separate sections until 2026-11-25), mark it Longform or Short, put it on Up Next, reorder, delete. First step of the
   idea workflow: research (#21, vidIQ, Reddit), then brainstorm (#22), then packaging before filming.
 - Browse every packaging version (Legacy, V01, V05 Shock...).
 - Collapsible packaging fields; Copy with a fallback.

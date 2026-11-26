@@ -12,10 +12,11 @@ import type { IdeaAttachment, IdeaCategory, IdeaFormat, IdeaReference, IdeaStatu
 type Filter<T extends string> = 'all' | T;
 
 // The Ideas tab: John's own list of videos he might make, kept in Video Projects\Video Ideas.json.
-// Raw brain dumps stay in Raw; once turned into a clear idea they move to Processed.
+// Status runs Raw (a brain dump), Processed (a clear idea), then Brainstorming and on toward Made.
 // The order is his: the top is what he'd make next.
 export const STATUS_LABELS: Record<IdeaStatus, string> = {
-  thinking: 'Thinking About It',
+  raw: 'Raw',
+  processed: 'Processed',
   brainstorming: 'Brainstorming',
   researching: 'Researching',
   packaged: 'Packaged',
@@ -29,14 +30,14 @@ export const FORMAT_LABELS: Record<IdeaFormat, string> = { undecided: 'Undecided
 
 /**
  * The grey details after an idea's title. Values nobody has chosen yet (Unassigned, Undecided,
- * Thinking About It) are left out: on almost every row they only add noise.
+ * Raw) are left out: on almost every row they only add noise.
  */
 export function ideaLabels(idea: Pick<VideoIdea, 'category' | 'format' | 'status' | 'notes' | 'references' | 'attachments'>): string {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   return [
     idea.category !== 'unassigned' && CATEGORY_LABELS[idea.category],
     idea.format !== 'undecided' && FORMAT_LABELS[idea.format],
-    idea.status !== 'thinking' && STATUS_LABELS[idea.status],
+    idea.status !== 'raw' && STATUS_LABELS[idea.status],
     idea.notes.trim() && 'Has Notes',
     idea.references.length > 0 && plural(idea.references.length, 'Link'),
     idea.attachments.length > 0 && plural(idea.attachments.length, 'File'),
@@ -115,8 +116,7 @@ export function IdeasPage() {
   const visible = (idea: VideoIdea) => matches(idea) && (showFinished || filtering || !FINISHED.includes(idea.status));
   // Up Next ideas show only in their own short list at the top, not again in Raw or Processed.
   const upNext = all.filter((idea) => idea.upNext && visible(idea));
-  const raw = all.filter((idea) => !idea.upNext && !idea.processed && visible(idea));
-  const done = all.filter((idea) => !idea.upNext && idea.processed && visible(idea));
+  const others = all.filter((idea) => !idea.upNext && visible(idea));
   const hidden = all.filter((idea) => matches(idea) && !visible(idea)).length;
   const first = all[0]?.id;
   const last = all[all.length - 1]?.id;
@@ -187,15 +187,8 @@ export function IdeasPage() {
 
       {ideas && (
         <details className="page-section idea-section">
-          <summary>Raw <span className="muted">({raw.length}) · raw brain dumps still to sort out</span></summary>
-          {raw.length ? list(raw) : <p className="muted">Nothing left to process.</p>}
-        </details>
-      )}
-
-      {ideas && (
-        <details className="page-section idea-section">
-          <summary>Processed <span className="muted">({done.length}) · turned into clear ideas</span></summary>
-          {done.length ? list(done) : <p className="muted">No processed ideas yet.</p>}
+          <summary>Other Ideas <span className="muted">({others.length}) · use the Status filter for Raw or Processed</span></summary>
+          {others.length ? list(others) : <p className="muted">No other ideas match.</p>}
         </details>
       )}
 
@@ -277,9 +270,6 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         </div>
         <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
-          <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, processed: !idea.processed })}>
-            {idea.processed ? 'Back to Raw' : 'Mark Processed'}
-          </button>
           <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, upNext: !idea.upNext })}>
             {idea.upNext ? 'Remove From Up Next' : 'Add to Up Next'}
           </button>
@@ -378,13 +368,13 @@ function VideoFinder({ ideaId, videos, busy, send }: {
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   const picked = videos.find((v) => v.id === chosen) ?? null;
   // John can drag the finder's right edge; the width is remembered in this browser (a convenience only).
-  const finderRef = useRef<HTMLDetailsElement>(null);
+  const finderRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = finderRef.current;
     if (!el) return;
     try { const saved = Number(localStorage.getItem('hq-idea-finder-width')); if (saved >= 200) el.style.width = `${saved}px`; } catch { /* convenience */ }
     const watch = new ResizeObserver(() => {
-      if (!el.open || !el.style.width) return;
+      if (!el.style.width) return;
       try { localStorage.setItem('hq-idea-finder-width', String(Math.round(el.offsetWidth))); } catch { /* convenience */ }
     });
     watch.observe(el);
@@ -399,12 +389,16 @@ function VideoFinder({ ideaId, videos, busy, send }: {
 
   if (!videos.length) return null;
   return (
-    <details className="idea-video-finder" ref={finderRef}>
-      <summary>Find a Video in HeartQuarters</summary>
+    <section className="idea-video-finder" ref={finderRef}>
+      <div className="idea-refs-head">Find a Video in HeartQuarters</div>
       <div className="idea-video-finder-body">
-        <VideoFilterBar filters={filters} onChange={setFilters} />
+        <VideoFilterBar
+          filters={filters}
+          onChange={setFilters}
+          searchAction={<button type="button" className="small" disabled={busy || !picked} title={picked ? `Add ${rowName(picked)}` : 'Click a video below first'} onClick={() => void add()}>Add Video</button>}
+        />
         <p className="muted small-text idea-video-count">
-          {matching.length} {filtering ? 'Matching ' : ''}{matching.length === 1 ? 'Video' : 'Videos'} · click one to choose it
+          {matching.length} {filtering ? 'Matching ' : ''}{matching.length === 1 ? 'Video' : 'Videos'} · click one, then Add Video
         </p>
         <div className="idea-video-list">
           {matching.map((v) => (
@@ -422,12 +416,8 @@ function VideoFinder({ ideaId, videos, busy, send }: {
           ))}
           {matching.length === 0 && <p className="muted small-text">No videos match these filters.</p>}
         </div>
-        <div className="idea-video-add">
-          <button type="button" className="small" disabled={busy || !picked} onClick={() => void add()}>Add Video</button>
-          <span className="muted small-text">{picked ? rowName(picked) : 'No video chosen'}</span>
-        </div>
       </div>
-    </details>
+    </section>
   );
 }
 

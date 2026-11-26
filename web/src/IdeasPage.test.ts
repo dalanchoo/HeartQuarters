@@ -28,8 +28,9 @@ describe('idea link labels', () => {
 describe('idea row labels', () => {
   const base = { notes: '', references: [], attachments: [] };
   it('leaves out values nobody has chosen yet', () => {
-    expect(ideaLabels({ ...base, category: 'unassigned', format: 'undecided', status: 'thinking' })).toBe('');
-    expect(ideaLabels({ ...base, category: 'sdam', format: 'undecided', status: 'thinking', notes: 'x' })).toBe('SDAM · Has Notes');
+    expect(ideaLabels({ ...base, category: 'unassigned', format: 'undecided', status: 'raw' })).toBe('');
+    expect(ideaLabels({ ...base, category: 'sdam', format: 'undecided', status: 'raw', notes: 'x' })).toBe('SDAM · Has Notes');
+    expect(ideaLabels({ ...base, category: 'unassigned', format: 'undecided', status: 'processed' })).toBe('Processed');
     expect(ideaLabels({ ...base, category: 'unassigned', format: 'longform', status: 'brainstorming', references: [{ id: 'a', url: 'u', note: '' }] }))
       .toBe('Longform · Brainstorming · 1 Link');
   });

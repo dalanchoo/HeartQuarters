@@ -23,7 +23,7 @@ describe('video ideas', () => {
     addIdea('  SDAM and grief  ');
     const ideas = addIdea('Psychedelics and memory', 'Ask the group');
     expect(ideas.map(i => i.title)).toEqual(['Psychedelics and memory', 'SDAM and grief']);
-    expect(ideas[0]).toMatchObject({ notes: 'Ask the group', status: 'thinking' });
+    expect(ideas[0]).toMatchObject({ notes: 'Ask the group', status: 'raw' });
     expect(readIdeas()).toEqual(ideas);
   });
 
@@ -57,13 +57,21 @@ describe('video ideas', () => {
     expect(readIdeas()[0].category).toBe('unassigned');
   });
 
-  it('marks ideas processed or unprocessed; older ideas are unprocessed', () => {
+  it('turns the old Thinking About It status and processed tick into Raw and Processed', () => {
     const [idea] = addIdea('Raw dump');
-    expect(idea.processed).toBe(false);
-    expect(updateIdea(idea.id, { processed: true })[0].processed).toBe(true);
-    expect(() => updateIdea(idea.id, { processed: 'yes' })).toThrow('processed or unprocessed');
-    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [{ ...idea, processed: undefined }] }));
-    expect(readIdeas()[0].processed).toBe(false);
+    expect(idea.status).toBe('raw');
+    expect(updateIdea(idea.id, { status: 'processed' })[0].status).toBe('processed');
+    const old = { ...idea, status: 'thinking' };
+    fs.writeFileSync(file(), JSON.stringify({ version: 1, ideas: [
+      { ...old, id: 'a', processed: true },
+      { ...old, id: 'b', processed: false },
+      { ...old, id: 'c' },
+      { ...old, id: 'd', status: 'brainstorming', processed: true },
+    ] }));
+    const read = readIdeas();
+    expect(read.map((i) => i.status)).toEqual(['processed', 'raw', 'raw', 'brainstorming']);
+    expect(read.every((i) => !('processed' in i))).toBe(true);
+    expect(() => updateIdea('a', { status: 'thinking' })).toThrow('valid status');
   });
 
   it('puts ideas on and off the Up Next list; older ideas are not up next', () => {

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ANGLE_LABELS, TOPIC_LABELS } from './videoProfile';
 import { channelRows, rowName, type RowFilters } from './channelRows';
 import type { ChannelVideo } from '../../server/channel-videos';
@@ -93,17 +94,21 @@ export function VideoFacetControls({ filters, onChange }: { filters: VideoFacets
 }
 
 /** Reusable "Find a Video" search box + Kind/Topic/Angle dropdowns + Clear Filters button. */
-export function VideoFilterBar({ filters, onChange }: { filters: VideoSearchFilters; onChange: (filters: VideoSearchFilters) => void }) {
+/** `searchAction` (for example an Add button) sits to the right of the search box. */
+export function VideoFilterBar({ filters, onChange, searchAction }: { filters: VideoSearchFilters; onChange: (filters: VideoSearchFilters) => void; searchAction?: ReactNode }) {
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   return (
     <>
       <label className="channel-video-search">Find a Video
-        <input
-          type="search"
-          value={filters.text}
-          placeholder="Project name or YouTube title"
-          onChange={(e) => onChange({ ...filters, text: e.target.value })}
-        />
+        <span className="channel-video-search-row">
+          <input
+            type="search"
+            value={filters.text}
+            placeholder="Project name or YouTube title"
+            onChange={(e) => onChange({ ...filters, text: e.target.value })}
+          />
+          {searchAction}
+        </span>
       </label>
       <div className="idea-filters">
         <VideoFacetControls filters={filters} onChange={(next) => onChange({ ...next, text: filters.text })} />
