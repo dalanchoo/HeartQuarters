@@ -48,6 +48,15 @@ export function ideaLabels(idea: Pick<VideoIdea, 'category' | 'format' | 'status
 
 interface WritingSection { section: string; pieces: WritingSummary[]; }
 
+function ideaIdFromHash(): string {
+  if (!location.hash.startsWith('#Ideas/')) return '';
+  try {
+    return decodeURIComponent(location.hash.slice('#Ideas/'.length));
+  } catch {
+    return '';
+  }
+}
+
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);
   const [videos, setVideos] = useState<ChannelVideo[]>([]);
@@ -61,6 +70,8 @@ export function IdeasPage() {
   const [status, setStatus] = useState<Filter<IdeaStatus>>('all');
   const [text, setText] = useState('');
   const [brainstormId, setBrainstormId] = useState<string | null>(null);
+  const [targetIdeaId, setTargetIdeaId] = useState<string>(ideaIdFromHash);
+  const [backlogOpen, setBacklogOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     try {
       const saved = Number(localStorage.getItem('hq-brainstorm-width'));
@@ -78,6 +89,31 @@ export function IdeasPage() {
   }, []);
 
   /** Send one change; the server replies with the whole updated list. */
+  useEffect(() => {
+    const onHash = () => {
+      const id = ideaIdFromHash();
+      if (id) setTargetIdeaId(id);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  useEffect(() => {
+    if (!targetIdeaId || !ideas) return;
+    const found = ideas.find((i) => i.id === targetIdeaId);
+    if (!found) return;
+    if (FINISHED.includes(found.status)) setShowFinished(true);
+    if (!found.upNext) setBacklogOpen(true);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`idea-${found.id}`);
+      if (el instanceof HTMLDetailsElement) {
+        el.open = true;
+        el.scrollIntoView({ block: 'nearest' });
+      }
+      setTargetIdeaId('');
+    });
+  }, [targetIdeaId, ideas]);
+
   const send = async (url: string, data: unknown) => {
     setBusy(true); setError(null);
     try { setIdeas(await postJson<VideoIdea[]>(url, data)); return true; }
@@ -189,7 +225,7 @@ export function IdeasPage() {
       )}
 
       {ideas && (
-        <details className="page-section idea-section">
+        <details className="page-section idea-section" open={backlogOpen} onToggle={(e) => setBacklogOpen(e.currentTarget.open)}>
           <summary>Backlog <span className="muted">({others.length}) · use the Status filter for Raw or Processed</span></summary>
           {others.length ? list(others) : <p className="muted">No other ideas match.</p>}
         </details>
@@ -243,7 +279,7 @@ function IdeaCard({ idea, videos, writing, busy, send, uploadAttachment, prevId,
   };
 
   return (
-    <details className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
+    <details id={`idea-${idea.id}`} className={`card idea-card${FINISHED.includes(idea.status) ? ' finished' : ''}`}>
       <summary>
         <span className="idea-title">{idea.title}</span>
         <span className="muted small-text">{ideaLabels(idea)}</span>
@@ -304,6 +340,7 @@ function IdeaCard({ idea, videos, writing, busy, send, uploadAttachment, prevId,
               void postJson<{ index: ChatIndex; chat: ChatThread }>('/api/chat/new', {
                 folderName: 'Brainstorming',
                 title: `Brainstorming: ${idea.title}`,
+                ideaId: idea.id,
               }).then((res) => {
                 location.hash = `#Chat/${encodeURIComponent(res.chat.id)}`;
               }).catch(() => {});

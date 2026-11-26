@@ -108,15 +108,23 @@ describe('full-screen multi-AI chat', () => {
   });
 
   it('creates a named folder on demand when creating a chat by folderName', () => {
-    const first = createChat(null, 'Brainstorming: Video One', 'Brainstorming');
+    const first = createChat(null, 'Brainstorming: Video One', 'Brainstorming', 'idea-123');
     expect(first.index.folders.map((f) => f.name)).toEqual(['Brainstorming']);
     expect(first.chat.title).toBe('Brainstorming: Video One');
     expect(first.chat.folderId).toBe(first.index.folders[0].id);
+    expect(first.chat.ideaId).toBe('idea-123');
     expect(first.chat.messages).toEqual([]);
+    expect(readChat(first.chat.id).ideaId).toBe('idea-123');
 
     const second = createChat(null, 'Brainstorming: Video Two', 'brainstorming');
     expect(second.index.folders).toHaveLength(1);
     expect(second.chat.folderId).toBe(first.index.folders[0].id);
+    expect(second.chat.ideaId).toBeUndefined();
+
+    // Calling createChat again for the same ideaId returns the existing chat instead of creating a duplicate.
+    const repeat = createChat(null, 'Brainstorming: Video One (Renamed)', 'Brainstorming', 'idea-123');
+    expect(repeat.chat.id).toBe(first.chat.id);
+    expect(repeat.index.chats).toHaveLength(2);
   });
 
   it('migrates a legacy single chat.json into chats.json and Threads/', () => {

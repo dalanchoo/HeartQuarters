@@ -1351,6 +1351,9 @@ button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 .chat-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; flex-shrink: 0; flex-wrap: wrap; }
 .chat-head-left { display: flex; align-items: flex-start; gap: 0.6rem; min-width: 0; flex: 1; }
 .chat-title-wrap { min-width: 0; }
+.chat-title-row { display: flex; align-items: baseline; gap: 0.65rem; flex-wrap: wrap; }
+.chat-idea-link { font-size: 0.9rem; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.chat-idea-link:hover { text-decoration: underline; }
 .chat-subtitle { margin: 0.15rem 0 0; }
 .chat-head-actions { display: flex; gap: 0.35rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
 .chat-error, .chat-status { margin: 0; flex-shrink: 0; }

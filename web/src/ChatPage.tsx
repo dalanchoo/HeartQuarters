@@ -431,7 +431,14 @@ export function ChatPage() {
                 {sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
               </button>
               <div className="chat-title-wrap">
-                <h1 className="ellipsis">{thread?.title || 'Chat'}</h1>
+                <div className="chat-title-row">
+                  <h1 className="ellipsis">{thread?.title || 'Chat'}</h1>
+                  {thread?.ideaId && (
+                    <a href={`#Ideas/${encodeURIComponent(thread.ideaId)}`} className="chat-idea-link">
+                      ← Back to Idea
+                    </a>
+                  )}
+                </div>
                 <p className="muted small-text chat-subtitle">
                   Saved in Drive. Claude, ChatGPT, and Gemini all share this conversation and every attached file.
                 </p>

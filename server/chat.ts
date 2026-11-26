@@ -52,6 +52,7 @@ export interface ChatSummary {
   id: string;
   title: string;
   folderId: string | null;
+  ideaId?: string;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -68,6 +69,7 @@ export interface ChatThread {
   id: string;
   title: string;
   folderId: string | null;
+  ideaId?: string;
   messages: ChatMessage[];
 }
 
@@ -257,6 +259,7 @@ export function readChat(rawChatId?: unknown): ChatThread {
       id: latest.id,
       title: latest.title,
       folderId: latest.folderId,
+      ...(latest.ideaId ? { ideaId: latest.ideaId } : {}),
       messages: readThreadMessages(latest.id),
     };
   }
@@ -268,13 +271,21 @@ export function readChat(rawChatId?: unknown): ChatThread {
     id: summary.id,
     title: summary.title,
     folderId: summary.folderId,
+    ...(summary.ideaId ? { ideaId: summary.ideaId } : {}),
     messages: readThreadMessages(chatId),
   };
 }
 
 /** Creates a new empty conversation, optionally inside a folder (by ID or folder name, creating the folder if needed). */
-export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderName?: unknown): { index: ChatIndex; chat: ChatThread } {
+export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderName?: unknown, rawIdeaId?: unknown): { index: ChatIndex; chat: ChatThread } {
   const index = readIndex();
+  const ideaId = rawIdeaId !== undefined && rawIdeaId !== null && rawIdeaId !== '' ? checkId(rawIdeaId, 'idea') : undefined;
+  if (ideaId) {
+    const existingChat = index.chats.find((c) => c.ideaId === ideaId);
+    if (existingChat) {
+      return { index: listChats(), chat: readChat(existingChat.id) };
+    }
+  }
   let folderId: string | null = null;
   if (rawFolderId !== undefined && rawFolderId !== null && rawFolderId !== '') {
     folderId = checkId(rawFolderId, 'folder');
@@ -295,13 +306,13 @@ export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderN
   const id = randomUUID();
   const now = new Date().toISOString();
   const title = cleanTitle(rawTitle, 'New Chat');
-  const summary: ChatSummary = { id, title, folderId, createdAt: now, updatedAt: now, messageCount: 0 };
+  const summary: ChatSummary = { id, title, folderId, ...(ideaId ? { ideaId } : {}), createdAt: now, updatedAt: now, messageCount: 0 };
   index.chats.unshift(summary);
   saveThreadMessages(id, []);
   saveIndex(index);
   return {
     index: listChats(),
-    chat: { version: 1, id, title, folderId, messages: [] },
+    chat: { version: 1, id, title, folderId, ...(ideaId ? { ideaId } : {}), messages: [] },
   };
 }
 
