@@ -177,6 +177,12 @@ const TAG_RULES = 'Write at least 10 comma-separated YouTube tags in Title Case 
 
 const PACKAGING_RULES = 'Put 3 to 5 lowercase hashtags on one line inside the description. If the video is about SDAM, the description must mention the downloadable guide (https://www.heartmindfusion.com/sdam-guide) and include the Eventbrite group link (https://www.eventbrite.com/e/sdam-support-group-registration-1992895106912), while the pinned comment must point only to the downloadable guide (https://www.heartmindfusion.com/sdam-guide). Leave AI disclosure lines out of the description; John handles those with checkboxes in HeartQuarters.';
 
+/**
+ * Accuracy is a hard rule for every AI that writes, reviews, picks or judges packaging (John, 2026-11-25). The skill's
+ * "no bait and switch" test is about the video as a whole; this one is about each claim, alone and as a pair.
+ */
+export const ACCURACY_RULE = 'Accuracy is a hard rule. Every claim the title and the thumbnail words make must be literally true to the video (source.txt), read on its own and read together as a pair. Do not inflate amounts, frequency or finality (for example "one memory left" when the video says one story stood out), and do not join separate moments into one (a detail from one scene presented as what happened in another). The supporting visual must show the thing the words refer to, as the video describes it, not a different scene from the video. A surprising angle is fine only when it is true. When unsure whether a wording is literally supported, choose one that is.';
+
 export const THUMBNAIL_EXPRESSION_GUIDANCE = 'Choose a natural expression that fits the story. Avoid a strongly negative look when a more inviting expression also fits. Anger can fit a story about being consumed by rage. For a story about swinging between anger and joy, favor joy when it fits the concept and let the words or supporting image convey the contrast.';
 
 const THUMBNAIL_CONCEPT_GUIDANCE = 'Give each thumbnail concept one supporting visual that helps tell this specific story, such as a prop, a recognizable setting, or a simple symbol. It should be recognizable at phone size and add meaning alongside John and the words. Describe where the portrait, supporting visual, and words sit, which element draws the eye first, and how the elements relate.';
@@ -209,6 +215,7 @@ export function writerPrompt(pieceName: string, source: BriefSource, hasNotes: b
     vidiqNote(vidiq, true),
     CATEGORIES_NOTE(),
     ...(!isShort(pieceName) ? [thumbnailComparisonNote(comparison)] : []),
+    ACCURACY_RULE,
     `Include proposed YouTube descriptions, tags, hashtags and pinned comments. For longform, when source-timings.srt or source-timings.vtt exists, use its timestamps to include accurate chapters in the proposed description. If neither file exists, omit chapters. Keep claims grounded in the source and do not invent timestamps. Put hashtags inside the proposed description.`,
     TAG_RULES,
     PACKAGING_RULES,
@@ -229,9 +236,11 @@ export function reviewerPrompt(name: string, source: BriefSource, hasNotes = fal
     vidiqNote(vidiq, false),
     CATEGORIES_NOTE(),
     ...(piece && !isShort(piece) ? [thumbnailComparisonNote(comparison)] : []),
+    ACCURACY_RULE,
     THUMBNAIL_EXPRESSION_GUIDANCE,
     THUMBNAIL_CONCEPT_GUIDANCE,
     `Don't create or change any file, and don't make images. Reply with only your review in Markdown, starting with the line "## Review: ${name}":`,
+    '- an "### Accuracy" section first: every title, thumbnail text, title and thumbnail pairing or supporting visual in the brief whose claim is not literally supported by source.txt, each with the words from source.txt that contradict it or are missing, or "None found.";',
     '- your ranking of the title options, best first, one line each on why;',
     '- your ranking of the thumbnail ideas, one line each;',
     '- what is weak or wrong in the brief, and why;',
@@ -355,6 +364,8 @@ export function picksPrompt(hasNotes: boolean, comparison = ''): string {
     'Choose the top 3 title and thumbnail pairs, best first. Favour ideas the reviewers agreed on and follow John\'s notes. Follow the thumbnail skill, including the 30-second payoff, gaze toward the centre or camera, and a clear bottom-right corner for longform. A pair may combine a title from one place with a thumbnail from another.',
     THUMBNAIL_EXPRESSION_GUIDANCE,
     THUMBNAIL_CONCEPT_GUIDANCE,
+    ACCURACY_RULE,
+    'Leave out any pair that breaks the accuracy rule, including those named in the reviews\' Accuracy sections, or fix its wording or supporting visual so it is literally true. Check every pick, alone and as a title and thumbnail pair, before replying.',
     'Make the top three easy to tell apart at phone size. Give each a distinct composition by varying the placement, scale, and visual relationship of the portrait, words, and supporting visual.',
     `Use photoAttributes only when a particular gaze or mouth position helps the concept. For example, use LookRight if John is on the left looking toward a prop on the right, or LookAtCamera if he is addressing the viewer. Left and right are the viewer's sides of the image. Use MouthOpen when an open mouth matters, and leave the array empty when any natural look that fits the expression will work. Allowed tags: ${THUMBNAIL_PHOTO_ATTRIBUTES.join(', ')}.`,
     'For each pick include a complete description, comma-separated tags and a pinned comment grounded in the source and the brief. Read source.txt if it exists. For longform, if source-timings.srt or source-timings.vtt exists, read it and include accurate chapters based on those timestamps in the description; otherwise omit chapters. Put hashtags inside the description. Do not invent facts or timestamps.',

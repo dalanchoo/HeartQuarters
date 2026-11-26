@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AI_NAMES, isAiId, type AiId } from './ai.js';
-import { findSource, readSource, THUMBNAIL_EXPRESSION_GUIDANCE, type AskAi } from './brief.js';
+import { ACCURACY_RULE, findSource, readSource, THUMBNAIL_EXPRESSION_GUIDANCE, type AskAi } from './brief.js';
 import { appDir, config, safeResolve } from './config.js';
 import { askReadOnlyImage } from './expression-assessment.js';
 import { DRAFTS_FOLDER } from './projects.js';
@@ -40,6 +40,8 @@ export function feedbackPrompt(image: string, metadata: unknown, question: strin
     `Review the actual thumbnail image at ${image} and the generated YouTube packaging below for Heart Mind Fusion. This is ${short ? 'a vertical YouTube Short' : 'a longform YouTube video'}.`,
     'First inspect the image itself. Pay special attention to whether John’s facial expression fits the title, thumbnail words, and the actual subject. Say clearly if it seems incompatible, ambiguous, or appropriate, and explain why. Do not assume an expression from a filename.',
     THUMBNAIL_EXPRESSION_GUIDANCE,
+    ACCURACY_RULE,
+    'Start with accuracy: check each claim of the title, the thumbnail words and the supporting visual, alone and as a pair, against the video, and name any that is not literally true, with what the video actually says.',
     'Also assess readability at phone size, visual hierarchy, title and image working together, whether the packaging is truthful, and the description, tags, hashtags, chapters and pinned comment if present. Give concrete, prioritized suggestions. Avoid exaggerated YouTube faces and claims you cannot support. If you cannot see the image or do not have enough information, say so.',
     `Generated packaging (not necessarily the currently published YouTube metadata):\n${JSON.stringify(metadata ?? null, null, 2)}`,
     source ? 'The available script or transcript is in source.txt in the current folder. Read it to check whether claims and the expression fit the video; do not invent facts or timestamps.' : 'No script or transcript was available. Do not claim to have verified the video contents.',
