@@ -266,10 +266,11 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
           </select>
         </div>
         <textarea className={notes.dirty ? 'unsaved' : undefined} rows={3} aria-label="Notes" value={notes.value} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => notes.setValue(e.target.value)} onBlur={notes.flush} />
+        <VideoFinder ideaId={idea.id} videos={videos} busy={busy} send={send} />
         <div className="idea-refs">
           <div className="idea-refs-head">Links and Files</div>
           <IdeaLinkList idea={idea} busy={busy} send={send} />
-          <AddReference ideaId={idea.id} videos={videos} busy={busy} send={send} />
+          <AddLink ideaId={idea.id} busy={busy} send={send} />
         </div>
         <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
@@ -346,28 +347,32 @@ function IdeaLinkList({ idea, busy, send }: {
   );
 }
 
-/** A new link at the bottom of the list, plus a collapsible Video Finder matching Channel → Video Detail. */
-function AddReference({ ideaId, videos, busy, send }: {
-  ideaId: string; videos: ChannelVideo[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+/** A box for pasting a web address; Enter or Add Link adds it to the end of the list. */
+function AddLink({ ideaId, busy, send }: {
+  ideaId: string; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
   const [url, setUrl] = useState('');
-  const [note, setNote] = useState('');
-  const [filters, setFilters] = useState<VideoSearchFilters>(ALL_VIDEO_FILTERS);
   const add = async () => {
-    if (await send('/api/ideas/reference/add', { id: ideaId, url, note })) { setUrl(''); setNote(''); }
+    if (url.trim() && await send('/api/ideas/reference/add', { id: ideaId, url: url.trim(), note: '' })) setUrl('');
   };
+  return (
+    <form className="idea-add-link" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <input type="text" aria-label="New link address" placeholder="Paste a link (https://…)" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <button type="submit" className="small" disabled={busy || !url.trim()}>Add Link</button>
+    </form>
+  );
+}
+
+/** A collapsible Video Finder matching Channel → Video Detail; clicking a video adds it as a link named after it. */
+function VideoFinder({ ideaId, videos, busy, send }: {
+  ideaId: string; videos: ChannelVideo[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  const [filters, setFilters] = useState<VideoSearchFilters>(ALL_VIDEO_FILTERS);
   const matching = channelRows(videos, filters, 'publishedAt', true);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
 
   return (
     <>
-      <div className="idea-ref idea-ref-new">
-        <input type="text" aria-label="New link address" placeholder="https://… or pick a video below" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
-        <input type="text" aria-label="New link note" placeholder="Note" maxLength={20000} value={note} onChange={(e) => setNote(e.target.value)} />
-        <div className="idea-ref-actions">
-          <button type="button" className="small" disabled={busy || !url.trim()} onClick={() => void add()}>Add Link</button>
-        </div>
-      </div>
       {videos.length > 0 && (
         <details className="idea-video-finder">
           <summary>Find a Video in HeartQuarters</summary>
