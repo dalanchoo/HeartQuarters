@@ -80,6 +80,7 @@ import { analyticsAnalysis, analyticsSnapshots, parseAnalysisPlan, startAnalytic
 import { channelOverview, channelVideoDetail, refreshChannelWorkspace, startChannelVideoAnalysis } from './channel-workspace.js';
 import { readScript, saveScript } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
+import { draftCommentReply } from './comment-reply-ai.js';
 import { ensureExportsFolder } from './exports-folder.js';
 import { checkOwnComments } from './youtube-comment.js';
 import { listStoredComments, moderateComment, replyToComment, syncAllChannelComments, syncVideoComments } from './channel-comments.js';
@@ -126,6 +127,10 @@ app.post('/api/channel/comments/sync', (req, res) => {
 app.post('/api/channel/comments/reply', (req, res) => {
   replyToComment(req.body?.videoId, req.body?.parentId, req.body?.text)
     .then((file) => res.json({ file, stored: listStoredComments() }), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
+});
+app.post('/api/channel/comments/draft-reply', (req, res) => {
+  draftCommentReply(req.body?.videoId, req.body?.commentId, req.body?.ai, req.body?.title, req.body?.notes)
+    .then((draft) => res.json(draft), (error: unknown) => res.status(400).json({ error: error instanceof Error ? error.message : String(error) }));
 });
 app.post('/api/channel/comments/moderate', (req, res) => {
   moderateComment(req.body?.videoId, req.body?.commentId, req.body?.action)

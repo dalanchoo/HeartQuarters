@@ -57,6 +57,8 @@ export function filterAndSortComments(
   filters: CommentFilterState,
   videos?: ChannelVideo[],
   videoText = '',
+  /** Threads John replied to on this visit: they stay in the list even when the status filter would now hide them. */
+  keepThreadIds: ReadonlySet<string> = new Set(),
 ): CommentRow[] {
   const facetFiltering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!videoText.trim();
   const allowedVideoIds =
@@ -66,8 +68,9 @@ export function filterAndSortComments(
 
   const query = filters.text.trim().toLowerCase();
   const filtered = rows.filter((row) => {
-    if (filters.status === 'unresponded' && row.thread.ownerReplied) return false;
-    if (filters.status === 'responded' && !row.thread.ownerReplied) return false;
+    const kept = keepThreadIds.has(row.thread.id);
+    if (!kept && filters.status === 'unresponded' && row.thread.ownerReplied) return false;
+    if (!kept && filters.status === 'responded' && !row.thread.ownerReplied) return false;
     if (filters.videoId !== 'all' && row.videoId !== filters.videoId) return false;
     if (allowedVideoIds && !allowedVideoIds.has(row.videoId)) return false;
     if (query) {

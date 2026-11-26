@@ -1275,7 +1275,11 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .comment-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.1rem; }
 .comment-reply-box { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.25rem; }
 .comment-reply-box textarea { min-height: 0; font-size: 0.88rem; }
-.comment-reply-actions { display: flex; gap: 0.35rem; }
+.comment-reply-actions { display: flex; gap: 0.35rem; align-items: center; }
+.comment-reply-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.comment-reply-columns textarea { font-family: inherit; resize: vertical; }
+.comment-ai-thoughts { background: var(--bg, #f6f6f6); color: var(--muted, #555); }
+@media (max-width: 800px) { .comment-reply-columns { grid-template-columns: 1fr; } }
 .comment-replies { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.3rem; padding-left: 0.75rem; border-left: 2px solid var(--line); }
 .comment-reply { display: flex; flex-direction: column; gap: 0.15rem; }
 .comment-reply-delete { margin-left: auto; }

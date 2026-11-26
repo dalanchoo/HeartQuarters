@@ -115,6 +115,11 @@ const summary: StoredCommentsSummary = {
 };
 
 describe('channelComments helpers', () => {
+  it('keeps a thread just replied to under Unresponded', () => {
+    const rows = flattenComments(summary, videos);
+    expect(filterAndSortComments(rows, DEFAULT_COMMENT_FILTERS, videos, '', new Set(['t2'])).map((r) => r.thread.id)).toEqual(['t3', 't2', 't1']);
+  });
+
   it('filters by response status, topic, format, video, and search text', () => {
     const rows = flattenComments(summary, videos);
     expect(rows).toHaveLength(3);

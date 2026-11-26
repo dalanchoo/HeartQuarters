@@ -1,6 +1,8 @@
 // Studio-style Channel -> Comments inbox with a reusable VideoSidebar on the left and comment threads on the right.
 import { useEffect, useMemo, useState } from 'react';
 import { getJson, postJson } from './api';
+import { AiSelect, useAiFor } from './AiChoice';
+import type { CommentReplyDraft } from '../../server/comment-reply-ai';
 import type { CommentsSyncResult, ModerationAction, StoredCommentsSummary, VideoCommentsFile } from '../../server/channel-comments';
 import type { ChannelVideo } from '../../server/channel-videos';
 import { SidebarResizer } from './SidebarResizer';
@@ -38,6 +40,12 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Ask AI: the draft goes into the reply box; the AI's short reasoning shows beside it, read-only.
+  const [ai, setAi] = useAiFor('comment-reply');
+  const [draftingId, setDraftingId] = useState<string | null>(null);
+  const [thoughts, setThoughts] = useState('');
+  // Comments replied to since the filters last changed stay on screen (so you can still heart them), even under Unresponded.
+  const [keptThreadIds, setKeptThreadIds] = useState<ReadonlySet<string>>(new Set());
 
   const selectedVideoId = videoId && /^[\w-]{11}$/.test(videoId) ? videoId : undefined;
 
@@ -77,9 +85,11 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
     [filters, videoFilters, selectedVideoId],
   );
 
+  useEffect(() => { setKeptThreadIds(new Set()); }, [effectiveFilters, videoFilters.text]);
+
   const visibleRows = useMemo(
-    () => filterAndSortComments(allRows, effectiveFilters, sidebarVideos, videoFilters.text),
-    [allRows, effectiveFilters, sidebarVideos, videoFilters.text],
+    () => filterAndSortComments(allRows, effectiveFilters, sidebarVideos, videoFilters.text, keptThreadIds),
+    [allRows, effectiveFilters, sidebarVideos, videoFilters.text, keptThreadIds],
   );
 
   const sync = async (singleVideoId?: string) => {
@@ -99,7 +109,7 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
     }
   };
 
-  const postReply = async (targetVideoId: string, parentId: string) => {
+  const postReply = async (targetVideoId: string, parentId: string, threadId: string) => {
     const text = replyText.trim();
     if (!text) return;
     setBusyId(parentId);
@@ -109,6 +119,7 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
         '/api/channel/comments/reply',
         { videoId: targetVideoId, parentId, text },
       );
+      setKeptThreadIds((prev) => new Set(prev).add(threadId));
       setSummary(res.stored);
       setReplyOpenId(null);
       setReplyText('');
@@ -117,6 +128,21 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
       setError((e as Error).message);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const askAi = async (targetVideoId: string, commentId: string, title: string) => {
+    setDraftingId(commentId);
+    setError('');
+    try {
+      // Whatever is already in the reply box goes along as John's notes for the AI to follow.
+      const draft = await postJson<CommentReplyDraft>('/api/channel/comments/draft-reply', { videoId: targetVideoId, commentId, ai, title, notes: replyText });
+      setReplyText(draft.reply);
+      setThoughts(draft.thoughts ? `${draft.aiName}: ${draft.thoughts}` : '');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDraftingId(null);
     }
   };
 
@@ -250,10 +276,21 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
                       onClick={() => {
                         setReplyOpenId(isReplying ? null : thread.topLevelCommentId);
                         setReplyText('');
+                        setThoughts('');
                       }}
                     >
                       {isReplying ? 'Cancel' : 'Reply'}
                     </button>
+                    {!thread.isOwner && (
+                      <button
+                        type="button"
+                        className="small"
+                        title="YouTube doesn't let apps heart comments. This opens the comment on YouTube, highlighted at the top, so you can click its heart."
+                        onClick={() => window.open(`https://www.youtube.com/watch?v=${rowVideoId}&lc=${encodeURIComponent(thread.topLevelCommentId)}`, '_blank', 'noopener')}
+                      >
+                        ♥ Heart on YouTube
+                      </button>
+                    )}
                     {thread.replies.length > 0 && (
                       <button
                         type="button"
@@ -294,28 +331,50 @@ export function ChannelComments({ videos, videoId }: { videos?: ChannelVideo[]; 
                     )}
                   </div>
 
-                  {isReplying && (
-                    <div className="comment-reply-box">
-                      <textarea
-                        rows={2}
-                        aria-label={`Reply to ${thread.author || 'comment'}`}
-                        placeholder="Write a reply…"
-                        value={replyText}
-                        disabled={busyId === thread.topLevelCommentId}
-                        onChange={(e) => setReplyText(e.target.value)}
-                      />
-                      <div className="comment-reply-actions">
-                        <button
-                          type="button"
-                          className="small"
-                          disabled={busyId === thread.topLevelCommentId || !replyText.trim()}
-                          onClick={() => void postReply(rowVideoId, thread.topLevelCommentId)}
-                        >
-                          {busyId === thread.topLevelCommentId ? 'Posting…' : 'Post Reply'}
-                        </button>
+                  {isReplying && (() => {
+                    const busy = busyId === thread.topLevelCommentId || draftingId === thread.topLevelCommentId;
+                    return (
+                      <div className="comment-reply-box">
+                        <div className="comment-reply-columns">
+                          <textarea
+                            rows={4}
+                            aria-label={`Reply to ${thread.author || 'comment'}`}
+                            placeholder="Write a reply, or notes for the AI…"
+                            value={replyText}
+                            disabled={busy}
+                            onChange={(e) => setReplyText(e.target.value)}
+                          />
+                          <textarea
+                            rows={4}
+                            readOnly
+                            className="comment-ai-thoughts"
+                            aria-label="Why the AI wrote this reply"
+                            placeholder="Ask AI drafts a reply in the box on the left. Anything you type there first goes to the AI as notes. Its reasons show here."
+                            value={draftingId === thread.topLevelCommentId ? 'Thinking…' : thoughts}
+                          />
+                        </div>
+                        <div className="comment-reply-actions">
+                          <button
+                            type="button"
+                            className="small"
+                            disabled={busy || !replyText.trim()}
+                            onClick={() => void postReply(rowVideoId, thread.topLevelCommentId, thread.id)}
+                          >
+                            {busyId === thread.topLevelCommentId ? 'Posting…' : 'Post Reply'}
+                          </button>
+                          <button
+                            type="button"
+                            className="small"
+                            disabled={busy}
+                            onClick={() => void askAi(rowVideoId, thread.topLevelCommentId, videoTitle ?? '')}
+                          >
+                            {draftingId === thread.topLevelCommentId ? 'Asking AI…' : replyText.trim() ? 'Ask AI (Use My Notes)' : 'Ask AI'}
+                          </button>
+                          <AiSelect value={ai} onChange={setAi} title="Which AI drafts the reply" />
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {isRepliesOpen && thread.replies.length > 0 && (
                     <div className="comment-replies">
