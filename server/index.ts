@@ -34,7 +34,7 @@ import { readExpressionReferences, readLikenessReferences, saveExpressionReferen
 import { approveExpression, assignExpressionCategory, candidateFile, expressionJobs, previewExpressionPrompt, rejectExpression, startExpressionGeneration } from './expression-generation.js';
 import { thumbnail } from './thumbs.js';
 import { pairShot, rankingJob, readMadeFor, readRanking, startRanking } from './photo-ranking.js';
-import { clearDiscussion, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion.js';
+import { clearDiscussion, discussionImage, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion.js';
 import { cleanupPlan, runCleanup } from './cleanup.js';
 import { cleanupDone, cleanupStatus } from './cleanup-status.js';
 import { listSkills, setSkillLink, targetFolder } from './skills.js';
@@ -94,6 +94,7 @@ app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted s
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
 app.use('/api/expressions/inbox/import', express.json({ limit: '24mb' }));
 app.use('/api/thumbs/change', express.json({ limit: '80mb' })); // up to 4 pasted reference images
+app.use('/api/thumbs/discussion', express.json({ limit: '80mb' })); // up to 4 pasted images in a Discuss message
 app.use(['/api/brief/start', '/api/brief/picks'], express.json({ limit: '120mb' })); // screenshots pasted into the brief's boxes
 app.use(express.json());
 
@@ -677,7 +678,13 @@ app.get('/api/thumbs/discussion', handle((req, res) => {
 
 // { piece, image, ai, message }: John's message in Discuss; the AI's reply arrives in the background.
 app.post('/api/thumbs/discussion', handle((req, res) => {
-  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message).job);
+  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message, undefined, req.body?.pasted).job);
+}));
+
+// ?piece=&image=&name=: an image John pasted into a Discuss message.
+app.get('/api/thumbs/discussion/image', handle((req, res) => {
+  sandboxHeaders(res);
+  res.sendFile(discussionImage(String(req.query.piece ?? ''), String(req.query.image ?? ''), req.query.name));
 }));
 
 // { piece, image }: Start Over, forgetting that draft's discussion.

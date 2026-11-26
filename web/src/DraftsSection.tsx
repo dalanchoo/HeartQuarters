@@ -892,8 +892,8 @@ function Conversation({ piece, target, conversation, chosenPhoto, allDrafts, job
 
 /**
  * Discuss: a conversation with any AI about this draft before making a new image (John, 2026-11-25). Each message goes
- * with the image shown. A reply that settles a change has a Change Request, which Use as Change Request puts in the
- * Ask for Changes box below, to read and send.
+ * with the image shown, and any images John pastes or drops in (up to four). A reply that settles a change has a Change
+ * Request, which Use as Change Request puts in the Ask for Changes box below, to read and send.
  */
 function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: string; image: string; canChange: boolean; onUseChange: (text: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -903,7 +903,16 @@ function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: 
   const [error, setError] = useState('');
   const [ai, setAi] = useAiFor('thumb-discuss');
   const [usedId, setUsedId] = useState('');
+  const [pics, setPics] = useState<Reference[]>([]);
   const replying = job?.state === 'working';
+  const addPics = (files: File[]) => {
+    if (!files.length) return;
+    readImages(files).then((more) => {
+      if (!more.length) setError('Only PNG, JPEG or WebP images can be added.');
+      setPics((p) => [...p, ...more].slice(0, 4));
+    }, (e: Error) => setError(e.message));
+  };
+  const picUrl = (name: string) => `/api/thumbs/discussion/image?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}&name=${encodeURIComponent(name)}`;
   const url = `/api/thumbs/discussion?piece=${encodeURIComponent(piece)}&image=${encodeURIComponent(image)}`;
   const load = (isActive: () => boolean = () => true) => getJson<{ messages: DiscussionMessage[]; job: DiscussionJob | null }>(url).then(
     (data) => { if (isActive()) { setMessages(data.messages); setJob(data.job); } },
@@ -922,10 +931,11 @@ function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: 
   }, [replying, piece, image]);
   const send = () => {
     const text = draft.trim();
-    if (!text) return;
+    const pasted = pics.flatMap((p) => (p.kind === 'pasted' ? [p.data] : []));
+    if (!text && !pasted.length) return;
     setError('');
-    postJson<DiscussionJob>('/api/thumbs/discussion', { piece, image, ai, message: text }).then(
-      (started) => { setDraft(''); setJob(started); void load(); },
+    postJson<DiscussionJob>('/api/thumbs/discussion', { piece, image, ai, message: text, pasted }).then(
+      (started) => { setDraft(''); setPics([]); setJob(started); void load(); },
       (e: Error) => setError(e.message),
     );
   };
@@ -940,6 +950,7 @@ function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: 
     {messages.map(m => <div key={m.id} className={`discussion-message ${m.from === 'john' ? 'from-john' : 'from-ai'}`}>
       <div className="small-text"><strong>{speaker(m.from)}</strong> <span className="muted">· {new Date(m.at).toLocaleString()}</span></div>
       {m.from === 'john' ? <p className="discussion-text">{m.text}</p> : <div className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown></div>}
+      {!!m.images?.length && <div className="ref-list">{m.images.map(name => <a key={name} className="ref-item" href={picUrl(name)} target="_blank" rel="noreferrer" title="Open full size"><img src={picUrl(name)} alt="Pasted image" /></a>)}</div>}
       {m.changeRequest && <div className="claude-buttons">
         <button className="small" disabled={!canChange} title={canChange ? 'Puts this change request in the Ask for Changes box below, to read and send' : 'Wait until the image being made is ready'} onClick={() => { onUseChange(m.changeRequest!); setUsedId(m.id); }}>Use as Change Request</button>
         {usedId === m.id && <span className="muted small-text">In the Ask for Changes box below.</span>}
@@ -947,9 +958,22 @@ function ThumbnailDiscussion({ piece, image, canChange, onUseChange }: { piece: 
     </div>)}
     {replying && <p className="brief-working small-text">{aiName(job?.ai ?? ai)} is replying…</p>}
     {job?.state === 'failed' && <p className="error small-text">{aiName(job.ai)}: {job.error}</p>}
-    <textarea rows={2} value={draft} maxLength={4000} disabled={replying} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); }} placeholder="For example: He never said he had one memory left. What would be true here?" />
+    <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); addPics([...e.dataTransfer.files]); }}>
+      <textarea rows={2} value={draft} maxLength={4000} disabled={replying} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); }}
+        onPaste={e => {
+          const files = [...e.clipboardData.items].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter((f): f is File => !!f);
+          if (!files.length) return; // ordinary text
+          e.preventDefault();
+          addPics(files);
+        }}
+        placeholder="For example: He never said he had one memory left. What would be true here? Paste or drop an image to show what you mean." />
+      {pics.length > 0 && <div className="ref-list">{pics.map((p, i) => <div key={i} className="ref-item">
+        <img src={p.kind === 'pasted' ? p.preview : thumbUrl('projects', p.path, 240)} alt="Image to send" />
+        <button className="small" title="Remove this image" onClick={() => setPics(pics.filter((_, j) => j !== i))}>✕</button>
+      </div>)}</div>}
+    </div>
     <div className="claude-buttons">
-      <button className="small" disabled={replying || !draft.trim()} onClick={send}>{replying ? 'Waiting for the Reply…' : 'Send'}</button>
+      <button className="small" disabled={replying || (!draft.trim() && !pics.length)} onClick={send}>{replying ? 'Waiting for the Reply…' : 'Send'}</button>
       <AiSelect value={ai} onChange={setAi} title="Which AI you talk with" />
       {messages.length > 0 && <button className="small" disabled={replying} onClick={startOver} title="Forgets this draft's discussion">Start Over</button>}
     </div>

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import type { AskAi } from './brief';
-import { changeRequestIn, clearDiscussion, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion';
+import { changeRequestIn, clearDiscussion, discussionImage, readDiscussion, sendDiscussionMessage } from './thumbnail-discussion';
 import { makeTree, removeTree } from './testing';
 
 const PIECE = "005 - John's Video/Longform";
@@ -71,6 +71,27 @@ describe('discussing a thumbnail draft', () => {
     expect(() => sendDiscussionMessage(PIECE, `${DRAFT}/01.png`, 'nobody', 'Hi')).toThrow(/Choose Claude/);
     expect(() => sendDiscussionMessage(PIECE, 'Other/Packaging/Drafts/ChatGPT 01/01.png', 'codex', 'Hi')).toThrow();
     expect(() => readDiscussion(PIECE, `${PIECE}/../../Other/Packaging/Drafts/ChatGPT 01/01.png`)).toThrow();
+  });
+
+  it('keeps pasted images with the message and sends them, with earlier ones, to the AI', async () => {
+    const png = (n: number) => Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from(`picture ${n}`)]).toString('base64');
+    const seen: string[][] = [];
+    const prompts: string[] = [];
+    const ask: AskAi = async (_ai, prompt, _cwd, images = []) => { prompts.push(prompt); seen.push(images.map(i => fs.readFileSync(i, 'latin1').replace(/^\x89PNG\r\n\x1a\n/, ''))); return 'I see it.'; };
+    await sendDiscussionMessage(PIECE, `${DRAFT}/01.png`, 'claude', '', ask, [png(1)]).finished;
+    await sendDiscussionMessage(PIECE, `${DRAFT}/01.png`, 'claude', 'And this one?', ask, [png(2)]).finished;
+    // The draft first, then every pasted image so far.
+    expect(seen[0]).toEqual(['first image', 'picture 1']);
+    expect(seen[1]).toEqual(['first image', 'picture 1', 'picture 2']);
+    const { messages } = readDiscussion(PIECE, `${DRAFT}/01.png`);
+    expect(messages[0]).toMatchObject({ text: 'Look at the image I attached.', images: [expect.stringMatching(/-1\.png$/)] });
+    expect(prompts[1]).toContain(`(John attached: ${messages[0].images![0]})`);
+    expect(fs.readFileSync(discussionImage(PIECE, `${DRAFT}/01.png`, messages[2].images![0]), 'latin1')).toContain('picture 2');
+    expect(() => discussionImage(PIECE, `${DRAFT}/01.png`, '../../secret.png')).toThrow(/no longer/);
+    expect(() => sendDiscussionMessage(PIECE, `${DRAFT}/01.png`, 'claude', 'Hi', ask, ['not an image'])).toThrow(/could not be read/);
+    expect(() => sendDiscussionMessage(PIECE, `${DRAFT}/01.png`, 'claude', 'Hi', ask, [1, 2, 3, 4, 5].map(png))).toThrow(/at most 4/);
+    clearDiscussion(PIECE, `${DRAFT}/01.png`);
+    expect(fs.readdirSync(path.join(root, 'Discussions'))).toEqual([]);
   });
 
   it('finds the change request section, or none', () => {
