@@ -377,6 +377,19 @@ function VideoFinder({ ideaId, videos, busy, send }: {
   const matching = channelRows(videos, filters, 'publishedAt', true);
   const filtering = filters.kind !== 'all' || filters.topic !== 'all' || filters.angle !== 'all' || !!filters.text;
   const picked = videos.find((v) => v.id === chosen) ?? null;
+  // John can drag the finder's right edge; the width is remembered in this browser (a convenience only).
+  const finderRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const el = finderRef.current;
+    if (!el) return;
+    try { const saved = Number(localStorage.getItem('hq-idea-finder-width')); if (saved >= 200) el.style.width = `${saved}px`; } catch { /* convenience */ }
+    const watch = new ResizeObserver(() => {
+      if (!el.open || !el.style.width) return;
+      try { localStorage.setItem('hq-idea-finder-width', String(Math.round(el.offsetWidth))); } catch { /* convenience */ }
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [videos.length]);
 
   const add = async () => {
     if (!picked) return;
@@ -386,7 +399,7 @@ function VideoFinder({ ideaId, videos, busy, send }: {
 
   if (!videos.length) return null;
   return (
-    <details className="idea-video-finder">
+    <details className="idea-video-finder" ref={finderRef}>
       <summary>Find a Video in HeartQuarters</summary>
       <div className="idea-video-finder-body">
         <VideoFilterBar filters={filters} onChange={setFilters} />
