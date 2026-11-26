@@ -107,6 +107,18 @@ describe('full-screen multi-AI chat', () => {
     expect(() => readChat(chat.id)).toThrow('no longer exists');
   });
 
+  it('creates a named folder on demand when creating a chat by folderName', () => {
+    const first = createChat(null, 'Brainstorming: Video One', 'Brainstorming');
+    expect(first.index.folders.map((f) => f.name)).toEqual(['Brainstorming']);
+    expect(first.chat.title).toBe('Brainstorming: Video One');
+    expect(first.chat.folderId).toBe(first.index.folders[0].id);
+    expect(first.chat.messages).toEqual([]);
+
+    const second = createChat(null, 'Brainstorming: Video Two', 'brainstorming');
+    expect(second.index.folders).toHaveLength(1);
+    expect(second.chat.folderId).toBe(first.index.folders[0].id);
+  });
+
   it('migrates a legacy single chat.json into chats.json and Threads/', () => {
     const chatDir = path.join(config.videoProjectsDir, CHAT_DIR);
     fs.mkdirSync(chatDir, { recursive: true });

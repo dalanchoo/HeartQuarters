@@ -272,13 +272,25 @@ export function readChat(rawChatId?: unknown): ChatThread {
   };
 }
 
-/** Creates a new empty conversation, optionally inside a folder. */
-export function createChat(rawFolderId?: unknown, rawTitle?: unknown): { index: ChatIndex; chat: ChatThread } {
+/** Creates a new empty conversation, optionally inside a folder (by ID or folder name, creating the folder if needed). */
+export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderName?: unknown): { index: ChatIndex; chat: ChatThread } {
   const index = readIndex();
   let folderId: string | null = null;
   if (rawFolderId !== undefined && rawFolderId !== null && rawFolderId !== '') {
     folderId = checkId(rawFolderId, 'folder');
     if (!index.folders.some((f) => f.id === folderId)) throw new Error('That folder no longer exists.');
+  } else if (typeof rawFolderName === 'string' && rawFolderName.trim()) {
+    const wanted = cleanTitle(rawFolderName, '');
+    if (wanted) {
+      const existing = index.folders.find((f) => f.name.toLowerCase() === wanted.toLowerCase());
+      if (existing) {
+        folderId = existing.id;
+      } else {
+        const created = { id: randomUUID(), name: wanted, createdAt: new Date().toISOString() };
+        index.folders.push(created);
+        folderId = created.id;
+      }
+    }
   }
   const id = randomUUID();
   const now = new Date().toISOString();

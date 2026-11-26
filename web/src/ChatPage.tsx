@@ -106,11 +106,8 @@ export function ChatPage() {
     const onHash = () => {
       if (!location.hash.startsWith('#Chat')) return;
       const id = chatIdFromHash();
-      if (id && id !== thread?.id) {
-        getJson<ChatThread>(`/api/chat?id=${encodeURIComponent(id)}`).then(
-          (data) => { if (active) setThread(data); },
-          () => {},
-        );
+      if (id) {
+        loadAll(id).catch((e: Error) => { if (active) setError(e.message); });
       }
     };
     window.addEventListener('hashchange', onHash);

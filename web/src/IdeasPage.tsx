@@ -8,6 +8,7 @@ import type { ChannelVideo } from '../../server/channel-videos';
 import type { BrainstormMessage, IdeaBrainstorm } from '../../server/idea-brainstorm';
 import type { WritingSummary } from '../../server/writing';
 import type { IdeaAttachment, IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
+import type { ChatIndex, ChatThread } from '../../server/chat';
 
 /** A filter dropdown value: "all" shows everything. */
 type Filter<T extends string> = 'all' | T;
@@ -294,6 +295,21 @@ function IdeaCard({ idea, videos, writing, busy, send, uploadAttachment, prevId,
         <div className="idea-actions">
           <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
             {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}
+          </button>
+          <button
+            type="button"
+            className="small"
+            disabled={busy}
+            onClick={() => {
+              void postJson<{ index: ChatIndex; chat: ChatThread }>('/api/chat/new', {
+                folderName: 'Brainstorming',
+                title: `Brainstorming: ${idea.title}`,
+              }).then((res) => {
+                location.hash = `#Chat/${encodeURIComponent(res.chat.id)}`;
+              }).catch(() => {});
+            }}
+          >
+            Brainstorm in Chat
           </button>
           <span className="muted small-text">{title.dirty || notes.dirty ? 'Saving…' : `Saved · Changed ${new Date(idea.updatedAt).toLocaleDateString()}`}</span>
         </div>
