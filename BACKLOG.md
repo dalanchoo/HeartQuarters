@@ -116,7 +116,7 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   alone and as a pair, must be literally true to the transcript: no inflated amounts or finality,
   no joining separate moments, and the supporting visual shows what the words refer to. The
   writer, reviewers (Accuracy section first), picker, Ask for Feedback and the first image request
-  carry this rule. Still to do with John's OK: the same rule in the skill's hard rule 2 (on Drive).
+  carry this rule, and so does the thumbnails-and-titles skill's hard rule 2 (on Drive).
 - **Discuss a draft before changing it (2026-11-25).** Each thumbnail draft has a Discuss box: a
   conversation with any AI that sees the image, packaging, brief and transcript and never makes
   images. A reply's Change Request goes into Ask for Changes with one click.
