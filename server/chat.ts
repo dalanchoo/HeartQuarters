@@ -79,10 +79,39 @@ export interface UploadedChatFile {
   size: number;
 }
 
-export type ChatAskResult = string | { text: string; generatedImages?: string[] };
-export type AskChatAi = (ai: AiId, prompt: string, cwd: string, images?: string[]) => Promise<ChatAskResult>;
+export type ChatAskResult = string | { text: string; generatedImages?: string[]; sessionId?: string };
+export interface ChatAskOptions { sessionId?: string; isResume?: boolean }
+export type AskChatAi = (ai: AiId, prompt: string, cwd: string, images?: string[], opts?: ChatAskOptions) => Promise<ChatAskResult>;
+
+interface ChatSession {
+  ai: AiId;
+  sessionId: string;
+  cwd: string;
+  copiedFiles: Set<string>;
+  /** Total messages in the thread right after this AI last replied, so returning to it sends only what happened since. */
+  seenCount: number;
+}
 
 const activeChats = new Set<string>();
+const chatSessions = new Map<string, Partial<Record<AiId, ChatSession>>>();
+
+function dropChatSession(chatId: string, ai?: AiId): void {
+  const byAi = chatSessions.get(chatId);
+  if (!byAi) return;
+  if (ai) {
+    const existing = byAi[ai];
+    if (existing) {
+      delete byAi[ai];
+      fs.rmSync(existing.cwd, { recursive: true, force: true });
+    }
+    if (Object.keys(byAi).length === 0) chatSessions.delete(chatId);
+    return;
+  }
+  chatSessions.delete(chatId);
+  for (const session of Object.values(byAi)) {
+    if (session) fs.rmSync(session.cwd, { recursive: true, force: true });
+  }
+}
 
 function checkId(raw: unknown, label: string): string {
   if (typeof raw !== 'string' || !CHAT_ID_RE.test(raw)) {
@@ -398,6 +427,7 @@ export function deleteChat(rawChatId: unknown): ChatIndex {
 
   index.chats.splice(pos, 1);
   saveIndex(index);
+  dropChatSession(chatId);
 
   const file = path.join(threadsFolder(false), `${chatId}.json`);
   if (fs.existsSync(file)) {
@@ -561,6 +591,33 @@ export function buildChatPrompt(
   ].join('\n\n');
 }
 
+/** Builds a short prompt when resuming an AI's session, sending only missed turns from other AIs and John's new message. */
+export function buildChatResumePrompt(
+  nextMessage: string,
+  nextFiles: string[],
+  extractedDocx: Record<string, string> = {},
+  missedMessages: ChatMessage[] = [],
+): string {
+  const parts: string[] = [];
+  if (missedMessages.length) {
+    const missedText = missedMessages.map((m) => `[${speakerLabel(m.from)}]\n${formatMessageForPrompt(m)}`).join('\n\n');
+    parts.push(`--- MESSAGES SINCE YOU LAST REPLIED ---\n${missedText}`);
+  }
+  if (nextFiles.length) {
+    const fileLines = nextFiles.map((f, i) => {
+      const txt = extractedDocx[f] ? ` (extracted text also saved as ${extractedDocx[f]})` : '';
+      return `${i + 1}. ${f}${txt}`;
+    }).join('\n');
+    parts.push(`--- NEWLY ATTACHED FILES IN YOUR WORKING FOLDER ---\n${fileLines}`);
+  }
+  parts.push(
+    missedMessages.length
+      ? `--- JOHN'S NEW MESSAGE ---\n${formatMessageForPrompt({ text: nextMessage, files: nextFiles })}`
+      : formatMessageForPrompt({ text: nextMessage, files: nextFiles }),
+  );
+  return parts.join('\n\n');
+}
+
 function newMediaInDir(dir: string, since: number, exclude: Set<string> = new Set()): string[] {
   try {
     return fs
@@ -655,19 +712,20 @@ export function rewriteFileLinks(text: string, savedBySourcePath: Map<string, st
 }
 
 /** Runs the chosen AI for Chat, allowing both Markdown text replies and image generation (ChatGPT/Gemini). */
-export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = []) => {
+export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = [], opts = {}) => {
   const [cmd, ...prefix] = aiCommand(ai);
   const output = path.join(cwd, 'answer.json');
   const modelArgs = aiModelArgs(ai);
   const gemini = geminiStdin(prompt);
   const started = Date.now();
   const beforeCwd = new Set(fs.readdirSync(cwd));
+  const claudeSessionId = ai === 'claude' ? (opts.sessionId || randomUUID()) : '';
 
   const args = ai === 'codex'
-    ? ['exec', '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-c', 'sandbox_mode="workspace-write"', '--json', '-o', output, '-', ...images.flatMap((image) => ['-i', image])]
+    ? ['exec', ...(opts.isResume && opts.sessionId ? ['resume', opts.sessionId] : []), '--skip-git-repo-check', ...CODEX_STANDARD_TIER, ...modelArgs, '-c', 'sandbox_mode="workspace-write"', '--json', '-o', output, '-', ...images.flatMap((image) => ['-i', image])]
     : ai === 'claude'
-      ? ['-p', ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
-      : [...gemini.args, ...modelArgs, '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
+      ? ['-p', ...(opts.isResume && opts.sessionId ? ['--resume', opts.sessionId] : ['--session-id', claudeSessionId]), ...modelArgs, '--output-format', 'json', '--permission-mode', 'default', '--allowedTools', 'Read']
+      : [...gemini.args, ...(opts.isResume && opts.sessionId ? ['--conversation', opts.sessionId] : []), ...modelArgs, '--sandbox', '--add-dir', cwd, '--settings', JSON.stringify({ toolPermission: 'proceed-in-sandbox', enableTerminalSandbox: true, permissions: { allow: ['read_file(*)'] } }), '--print-timeout', '1200s'];
 
   const res = await runAiProcess(cmd, [...prefix, ...args], {
     cwd,
@@ -678,25 +736,31 @@ export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = []) => {
   if (res.code !== 0) throw new Error(res.timedOut ? 'The AI timed out.' : res.stderr.trim().slice(-600) || `The AI stopped (exit code ${res.code}).`);
 
   let text = '';
+  let sessionId: string | undefined;
   const generatedImages = newMediaInDir(cwd, started, beforeCwd);
 
   if (ai === 'codex') {
     text = fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '';
-    const threadId = sessionFrom(res.stdout, 'thread_id');
+    const threadId = sessionFrom(res.stdout, 'thread_id') || opts.sessionId || '';
     if (threadId) {
+      sessionId = threadId;
       for (const p of newMediaInDir(path.join(os.homedir(), '.codex', 'generated_images', threadId), started)) {
         if (!generatedImages.includes(p)) generatedImages.push(p);
       }
     }
   } else if (ai === 'claude') {
-    const result = JSON.parse(res.stdout) as { is_error?: boolean; result?: string };
+    const result = JSON.parse(res.stdout) as { is_error?: boolean; result?: string; session_id?: string };
     if (result.is_error || !result.result) throw new Error(result.result || 'Claude could not reply.');
     text = result.result;
+    sessionId = result.session_id || claudeSessionId;
   } else {
     text = geminiAnswer(res.stdout);
-    const convId = sessionFrom(res.stdout, 'conversation_id');
-    for (const p of newestBrainMedia(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'), convId, started)) {
-      if (!generatedImages.includes(p)) generatedImages.push(p);
+    const convId = sessionFrom(res.stdout, 'conversation_id') || opts.sessionId || '';
+    if (convId) {
+      sessionId = convId;
+      for (const p of newestBrainMedia(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'), convId, started)) {
+        if (!generatedImages.includes(p)) generatedImages.push(p);
+      }
     }
   }
 
@@ -704,7 +768,7 @@ export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = []) => {
     if (!generatedImages.includes(p)) generatedImages.push(p);
   }
 
-  return { text, generatedImages };
+  return { text, generatedImages, sessionId };
 };
 
 /** Sends a chat message (and any attached files) to the chosen AI, creating a new chat if none is selected. */
@@ -744,7 +808,11 @@ export async function sendChatMessage(
   }
   activeChats.add(chatId);
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-chat-'));
+  const prevSession = chatSessions.get(chatId)?.[rawAi];
+  const canResume = !!prevSession && !!prevSession.sessionId && fs.existsSync(prevSession.cwd);
+  if (!canResume && prevSession) dropChatSession(chatId, rawAi);
+
+  const work = canResume ? prevSession.cwd : fs.mkdtempSync(path.join(os.tmpdir(), 'hq-chat-'));
   try {
     const messages = readThreadMessages(chatId);
     const historyBefore = [...messages];
@@ -777,8 +845,11 @@ export async function sendChatMessage(
     }
 
     const copiedFiles: string[] = [];
+    const newFilesCopied: string[] = [];
     const extractedDocx: Record<string, string> = {};
     const imagePaths: string[] = [];
+    const newImagePaths: string[] = [];
+    const alreadyCopied = canResume ? prevSession.copiedFiles : new Set<string>();
 
     for (const name of allFiles) {
       let src: string;
@@ -788,13 +859,19 @@ export async function sendChatMessage(
         continue;
       }
       const dest = path.join(work, name);
-      fs.copyFileSync(src, dest);
+      const isNew = !alreadyCopied.has(name);
+      if (isNew) {
+        fs.copyFileSync(src, dest);
+        alreadyCopied.add(name);
+        newFilesCopied.push(name);
+      }
       copiedFiles.push(name);
 
       const ext = path.extname(name).toLowerCase();
       if (IMAGE_EXTS.has(ext)) {
         imagePaths.push(dest);
-      } else if (ext === '.docx') {
+        if (isNew) newImagePaths.push(dest);
+      } else if (ext === '.docx' && isNew) {
         try {
           const text = (await mammoth.extractRawText({ path: dest })).value.trim();
           if (text) {
@@ -811,10 +888,17 @@ export async function sendChatMessage(
       }
     }
 
-    const sentImages = imagePaths.slice(-IMAGES_SENT);
-    const prompt = buildChatPrompt(historyBefore, message, files, rawAi, copiedFiles, extractedDocx);
-    const rawResult = await ask(rawAi, prompt, work, sentImages);
+    const missedMessages = canResume ? historyBefore.slice(prevSession.seenCount) : [];
+    const sentImages = (canResume ? newImagePaths : imagePaths).slice(-IMAGES_SENT);
+    const prompt = canResume
+      ? buildChatResumePrompt(message, newFilesCopied, extractedDocx, missedMessages)
+      : buildChatPrompt(historyBefore, message, files, rawAi, copiedFiles, extractedDocx);
+    const rawResult = await ask(rawAi, prompt, work, sentImages, {
+      sessionId: canResume ? prevSession.sessionId : undefined,
+      isResume: canResume,
+    });
     const rawText = (typeof rawResult === 'string' ? rawResult : rawResult.text).trim();
+    const returnedSessionId = typeof rawResult === 'string' ? undefined : rawResult.sessionId;
     const generatedPaths = typeof rawResult === 'string' ? [] : (rawResult.generatedImages ?? []);
     for (const p of extractMentionedFiles(rawText)) {
       if (!generatedPaths.includes(p)) generatedPaths.push(p);
@@ -852,6 +936,20 @@ export async function sendChatMessage(
     });
     saveThreadMessages(chatId, latestMessages);
 
+    if (returnedSessionId) {
+      const byAi = chatSessions.get(chatId) ?? {};
+      byAi[rawAi] = {
+        ai: rawAi,
+        sessionId: returnedSessionId,
+        cwd: work,
+        copiedFiles: alreadyCopied,
+        seenCount: latestMessages.length,
+      };
+      chatSessions.set(chatId, byAi);
+    } else if (!canResume) {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
+
     const idxAfterReply = readIndex();
     const sumAfterReply = idxAfterReply.chats.find((c) => c.id === chatId);
     if (sumAfterReply) {
@@ -861,9 +959,11 @@ export async function sendChatMessage(
     }
 
     return readChat(chatId);
+  } catch (err) {
+    if (!canResume) fs.rmSync(work, { recursive: true, force: true });
+    throw err;
   } finally {
     activeChats.delete(chatId);
-    fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
@@ -871,6 +971,8 @@ export async function sendChatMessage(
 export function clearChat(rawChatId: unknown): ChatThread {
   const chatId = checkId(rawChatId, 'conversation');
   if (activeChats.has(chatId)) throw new Error('Wait for the AI reply before clearing this conversation.');
+
+  dropChatSession(chatId);
 
   const index = readIndex();
   const summary = index.chats.find((c) => c.id === chatId);

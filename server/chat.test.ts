@@ -332,4 +332,56 @@ describe('full-screen multi-AI chat', () => {
     const web = await attachLinkToChat('https://example.com/article', 'SDAM Article');
     expect(web).toEqual({ kind: 'text', text: '[SDAM Article](https://example.com/article)' });
   });
+
+  it('resumes the same AI session without resending history, and sends full history when switching AIs', async () => {
+    const calls: { ai: string; prompt: string; isResume?: boolean; sessionId?: string }[] = [];
+    const fakeAsk = async (
+      ai: 'claude' | 'codex' | 'gemini',
+      prompt: string,
+      _cwd: string,
+      _images?: string[],
+      opts?: { sessionId?: string; isResume?: boolean },
+    ) => {
+      calls.push({ ai, prompt, isResume: opts?.isResume, sessionId: opts?.sessionId });
+      return { text: `Reply ${calls.length} from ${ai}`, sessionId: `${ai}-sess-1` };
+    };
+
+    const t1 = await sendChatMessage(null, 'claude', 'Turn 1', [], fakeAsk);
+    expect(calls[0].isResume).toBe(false);
+    expect(calls[0].prompt).toContain('--- CONVERSATION SO FAR ---');
+
+    // Consecutive turn to Claude resumes claude-sess-1 with only the new message.
+    await sendChatMessage(t1.id, 'claude', 'Turn 2', [], fakeAsk);
+    expect(calls[1].isResume).toBe(true);
+    expect(calls[1].sessionId).toBe('claude-sess-1');
+    expect(calls[1].prompt).toBe('Turn 2');
+
+    // Switching to ChatGPT sends the full conversation history.
+    await sendChatMessage(t1.id, 'codex', 'Turn 3', [], fakeAsk);
+    expect(calls[2].isResume).toBe(false);
+    expect(calls[2].prompt).toContain('Turn 1');
+    expect(calls[2].prompt).toContain('Reply 2 from claude');
+
+    // Consecutive turn to ChatGPT resumes codex-sess-1 with only the new message.
+    await sendChatMessage(t1.id, 'codex', 'Turn 4', [], fakeAsk);
+    expect(calls[3].isResume).toBe(true);
+    expect(calls[3].sessionId).toBe('codex-sess-1');
+    expect(calls[3].prompt).toBe('Turn 4');
+
+    // Returning to Claude resumes claude-sess-1 and sends only the missed ChatGPT turns, not Turn 1 or Turn 2.
+    await sendChatMessage(t1.id, 'claude', 'Turn 5', [], fakeAsk);
+    expect(calls[4].isResume).toBe(true);
+    expect(calls[4].sessionId).toBe('claude-sess-1');
+    expect(calls[4].prompt).toContain('--- MESSAGES SINCE YOU LAST REPLIED ---');
+    expect(calls[4].prompt).toContain('Turn 3');
+    expect(calls[4].prompt).toContain('Reply 4 from codex');
+    expect(calls[4].prompt).toContain("--- JOHN'S NEW MESSAGE ---\nTurn 5");
+    expect(calls[4].prompt).not.toContain('Turn 1');
+    expect(calls[4].prompt).not.toContain('Reply 2 from claude');
+
+    // Clearing resets all cached sessions for this chat.
+    clearChat(t1.id);
+    await sendChatMessage(t1.id, 'codex', 'Fresh start', [], fakeAsk);
+    expect(calls[5].isResume).toBe(false);
+  });
 });
