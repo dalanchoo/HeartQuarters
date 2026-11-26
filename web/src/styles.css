@@ -1321,3 +1321,9 @@ button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 .idea-video-add { display: flex; gap: 0.4rem; align-items: center; min-width: 0; }
 .idea-video-add .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .idea-lower { flex-direction: column; } .idea-lower .idea-video-finder[open] { width: 100%; } }
+
+/* An open idea gets the same breathing room as a Video Projects section (padding 0.6rem 0.8rem, 0.65rem gaps);
+   closed ideas stay as compact rows. A section heading also leaves a gap above its first idea. */
+.idea-section[open] > summary { margin-bottom: 0.45rem; }
+.idea-card[open] { padding: 0.6rem 0.8rem; margin: 0.65rem 0; }
+.idea-card[open] > summary { margin-bottom: 0.65rem; }
