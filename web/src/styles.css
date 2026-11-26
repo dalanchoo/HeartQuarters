@@ -1181,7 +1181,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-attach-drop.dragging { outline: 2px dashed var(--accent); outline-offset: 3px; background: var(--accent-soft); }
 .idea-attach-new { display: flex; gap: 0.35rem; align-items: center; }
 /* Add Link and Attach File are the same width, so the two boxes end at the same place. */
-.idea-add-link > button, .idea-attach-new > button { min-width: 7.5rem; }
+.idea-add-link > button, .idea-attach-new > button { min-width: 6rem; }
 .idea-attach-new input[type="text"] { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
 .idea-attach-hint { font-size: 0.78rem; }
 
@@ -1299,10 +1299,11 @@ input.unsaved, textarea.unsaved { border-color: var(--accent); box-shadow: 0 0 0
 .unsaved-label { color: var(--accent); font-weight: 600; font-size: 0.8rem; }
 
 /* An idea's links and files: plain clickable lines, a divider between them, and a small × to remove one. */
-.idea-link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 1rem; row-gap: 0.15rem; font-size: 0.9rem; }
-.idea-link-list li { display: flex; align-items: baseline; gap: 0.3rem; min-width: 0; }
+.idea-refs-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.9rem; align-items: start; }
+.idea-refs-empty { margin: 0; }
+.idea-link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.9rem; }
+.idea-link-list li { display: flex; align-items: baseline; gap: 0.35rem; min-width: 0; }
 .idea-link-list a { overflow-wrap: anywhere; }
-.idea-link-list li.idea-link-divider { align-self: stretch; border-left: 1px solid var(--line); }
 .idea-add-link { display: flex; gap: 0.35rem; align-items: center; }
 .idea-add-link input { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
 button.remove-x { background: none; border: none; box-shadow: none; padding: 0 0.35rem; min-height: 0; font-size: 1.05rem; line-height: 1; color: var(--muted); cursor: pointer; }

@@ -257,7 +257,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, 
           </select>
           <span className="spacer" />
           <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, upNext: !idea.upNext })}>
-            {idea.upNext ? 'Remove From Active' : 'Add to Active'}
+            {idea.upNext ? 'Move to Backlog' : 'Add to Active'}
           </button>
           <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
           <button type="button" className="small idea-move-btn" aria-label="Move up" title="Move up" disabled={busy || !prevId} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1, targetId: prevId })}>
@@ -278,12 +278,14 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, 
         <div className="idea-lower">
         <VideoFinder ideaId={idea.id} videos={videos} busy={busy} send={send} />
         <div className="idea-lower-main">
-        <div className="idea-refs">
-          <div className="idea-refs-head">Links and Files</div>
-          <IdeaLinkList idea={idea} busy={busy} send={send} />
-          <AddLink ideaId={idea.id} busy={busy} send={send} />
+        <div className="idea-refs-split">
+          <div className="idea-refs">
+            <div className="idea-refs-head">Links</div>
+            <IdeaLinkList idea={idea} busy={busy} send={send} />
+            <AddLink ideaId={idea.id} busy={busy} send={send} />
+          </div>
+          <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         </div>
-        <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
           <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
             {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}
@@ -312,18 +314,14 @@ function linkSite(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
-/** The idea's links, then its files below a divider: each one clickable, with a small × to remove it. */
+/** The idea's links: each one clickable and left-aligned, with a small × to remove it. */
 function IdeaLinkList({ idea, busy, send }: {
   idea: VideoIdea; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
-  if (!idea.references.length && !idea.attachments.length) return <p className="muted small-text">No links or files yet.</p>;
+  if (!idea.references.length) return <p className="muted small-text idea-refs-empty">No links yet.</p>;
   const removeLink = (ref: IdeaReference) => {
     if (!window.confirm(`Remove the link “${linkLabel(ref)}”?`)) return;
     void send('/api/ideas/reference/delete', { id: idea.id, referenceId: ref.id });
-  };
-  const removeFile = (att: IdeaAttachment) => {
-    if (!window.confirm(`Remove “${att.name}”? It will be moved to HeartQuarters Trash.`)) return;
-    void send('/api/ideas/attachment/delete', { id: idea.id, attachmentId: att.id });
   };
   return (
     <ul className="idea-link-list">
@@ -338,7 +336,21 @@ function IdeaLinkList({ idea, busy, send }: {
           </li>
         );
       })}
-      {idea.references.length > 0 && idea.attachments.length > 0 && <li className="idea-link-divider" aria-hidden="true" />}
+    </ul>
+  );
+}
+
+/** The idea's attached files: each one clickable and left-aligned, with a small × to remove it. */
+function IdeaFileList({ idea, busy, send }: {
+  idea: VideoIdea; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  if (!idea.attachments.length) return <p className="muted small-text idea-refs-empty">No files yet.</p>;
+  const removeFile = (att: IdeaAttachment) => {
+    if (!window.confirm(`Remove “${att.name}”? It will be moved to HeartQuarters Trash.`)) return;
+    void send('/api/ideas/attachment/delete', { id: idea.id, attachmentId: att.id });
+  };
+  return (
+    <ul className="idea-link-list">
       {idea.attachments.map((att) => (
         <li key={att.id}>
           <a href={`/api/ideas/attachment?id=${encodeURIComponent(idea.id)}&attachmentId=${encodeURIComponent(att.id)}`} target="_blank" rel="noreferrer">{att.name}</a>
@@ -464,6 +476,8 @@ function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
 
   return (
     <div className="idea-refs">
+      <div className="idea-refs-head">Files</div>
+      <IdeaFileList idea={idea} busy={busy} send={send} />
       <div
         className={`idea-attach-drop${dragging ? ' dragging' : ''}`}
         tabIndex={0}
