@@ -6,6 +6,7 @@ import { channelRows, rowName, videoProjectsHash } from './channelRows';
 import { ALL_VIDEO_FILTERS, VideoFilterBar, type VideoSearchFilters } from './VideoFinder';
 import type { ChannelVideo, ChannelVideoList } from '../../server/channel-videos';
 import type { BrainstormMessage, IdeaBrainstorm } from '../../server/idea-brainstorm';
+import type { WritingSummary } from '../../server/writing';
 import type { IdeaAttachment, IdeaCategory, IdeaFormat, IdeaReference, IdeaStatus, VideoIdea } from '../../server/video-ideas';
 
 /** A filter dropdown value: "all" shows everything. */
@@ -44,9 +45,12 @@ export function ideaLabels(idea: Pick<VideoIdea, 'category' | 'format' | 'status
   ].filter(Boolean).join(' · ');
 }
 
+interface WritingSection { section: string; pieces: WritingSummary[]; }
+
 export function IdeasPage() {
   const [ideas, setIdeas] = useState<VideoIdea[] | null>(null);
   const [videos, setVideos] = useState<ChannelVideo[]>([]);
+  const [writing, setWriting] = useState<WritingSection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [showFinished, setShowFinished] = useState(false);
@@ -71,6 +75,7 @@ export function IdeasPage() {
     void getJson<ChannelVideoList | null>('/api/channel/videos').then((data) => {
       setVideos((data?.videos ?? []).filter((v) => !!v.piece));
     }, () => {});
+    void getJson<WritingSection[]>('/api/writing').then(setWriting, () => {});
   }, []);
 
   /** Send one change; the server replies with the whole updated list. */
@@ -124,6 +129,7 @@ export function IdeasPage() {
       key={idea.id}
       idea={idea}
       videos={videos}
+      writing={writing}
       busy={busy}
       send={send}
       uploadAttachment={uploadAttachment}
@@ -222,8 +228,8 @@ export function IdeasPage() {
   );
 }
 
-function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, brainstorming, onBrainstorm }: {
-  idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; prevId?: string; nextId?: string; brainstorming: boolean;
+function IdeaCard({ idea, videos, writing, busy, send, uploadAttachment, prevId, nextId, brainstorming, onBrainstorm }: {
+  idea: VideoIdea; videos: ChannelVideo[]; writing: WritingSection[]; busy: boolean; prevId?: string; nextId?: string; brainstorming: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
   uploadAttachment: (ideaId: string, file: File, note: string) => Promise<boolean>;
   onBrainstorm: () => void;
@@ -283,6 +289,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, 
             <div className="idea-refs-head">Links</div>
             <IdeaLinkList idea={idea} videos={videos} busy={busy} send={send} />
             <AddLink ideaId={idea.id} busy={busy} send={send} />
+            <AddSubstackLink ideaId={idea.id} writing={writing} busy={busy} send={send} />
           </div>
           <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         </div>
@@ -299,16 +306,19 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, 
   );
 }
 
-/** How a link reads in the list: its note, or else the address (a HeartQuarters video link without its code). */
+/** How a link reads in the list: its note, or else the address (a HeartQuarters video or Substack link without its prefix). */
 export function linkLabel(reference: Pick<IdeaReference, 'url' | 'note'>): string {
   if (reference.note.trim()) return reference.note.trim();
   if (reference.url.startsWith('#Videos/')) {
     try { return decodeURIComponent(reference.url.slice('#Videos/'.length).split('/').pop() ?? reference.url); } catch { return reference.url; }
   }
+  if (reference.url.startsWith('#Substack/')) {
+    try { return decodeURIComponent(reference.url.slice('#Substack/'.length)).split('/').pop() ?? reference.url; } catch { return reference.url; }
+  }
   return reference.url;
 }
 
-/** Readable tooltip for a link: the video's actual title for #Videos/ links, or the full URL for web links. */
+/** Readable tooltip for a link: the video's actual title for #Videos/ links, the section/piece for #Substack/, or the full URL for web links. */
 export function linkTitle(reference: Pick<IdeaReference, 'url' | 'note'>, videos: Pick<ChannelVideo, 'piece' | 'title'>[] = []): string | undefined {
   if (reference.url.startsWith('#Videos/')) {
     const video = videos.find((v) => v.piece && videoProjectsHash(v.piece) === reference.url);
@@ -320,12 +330,20 @@ export function linkTitle(reference: Pick<IdeaReference, 'url' | 'note'>, videos
       return undefined;
     }
   }
+  if (reference.url.startsWith('#Substack/')) {
+    try {
+      const clean = decodeURIComponent(reference.url.slice('#Substack/'.length)).replace(/\//g, ' / ');
+      return clean === linkLabel(reference) ? undefined : clean;
+    } catch {
+      return undefined;
+    }
+  }
   return reference.url;
 }
 
 /** The web site a link goes to, shown in grey underneath a link that has a note. */
 function linkSite(url: string): string {
-  if (url.startsWith('#Videos/')) return '';
+  if (url.startsWith('#Videos/') || url.startsWith('#Substack/')) return '';
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
@@ -341,7 +359,7 @@ function IdeaLinkList({ idea, videos, busy, send }: {
   return (
     <ul className="idea-link-list">
       {idea.references.map((ref) => {
-        const internal = ref.url.startsWith('#Videos/');
+        const internal = ref.url.startsWith('#Videos/') || ref.url.startsWith('#Substack/');
         const site = ref.note.trim() ? linkSite(ref.url) : '';
         return (
           <li key={ref.id}>
@@ -393,6 +411,38 @@ function AddLink({ ideaId, busy, send }: {
     <form className="idea-add-link" onSubmit={(e) => { e.preventDefault(); void add(); }}>
       <input type="text" aria-label="New link address" placeholder="Paste a link (https://…)" maxLength={2000} value={url} onChange={(e) => setUrl(e.target.value)} />
       <button type="submit" className="small" disabled={busy || !url.trim()}>Add Link</button>
+    </form>
+  );
+}
+
+/** Picker to link an idea to a local Substack entry in HeartQuarters. */
+function AddSubstackLink({ ideaId, writing, busy, send }: {
+  ideaId: string; writing: WritingSection[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+}) {
+  const [selected, setSelected] = useState('');
+  const allPieces = writing.flatMap((s) => s.pieces);
+  if (!allPieces.length) return null;
+  const picked = allPieces.find((p) => p.id === selected) ?? null;
+  const add = async () => {
+    if (!picked) return;
+    const label = picked.date ? `${picked.date} – ${picked.title}` : picked.title;
+    if (await send('/api/ideas/reference/add', { id: ideaId, url: `#Substack/${encodeURIComponent(picked.id)}`, note: label })) {
+      setSelected('');
+    }
+  };
+  return (
+    <form className="idea-add-link" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <select aria-label="Local Substack entry" value={selected} disabled={busy} onChange={(e) => setSelected(e.target.value)}>
+        <option value="">Substack entry…</option>
+        {writing.map((s) => s.pieces.length > 0 && (
+          <optgroup key={s.section} label={s.section}>
+            {s.pieces.map((p) => (
+              <option key={p.id} value={p.id}>{p.date ? `${p.date} – ${p.title}` : p.title}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <button type="submit" className="small" disabled={busy || !picked}>Add Substack</button>
     </form>
   );
 }

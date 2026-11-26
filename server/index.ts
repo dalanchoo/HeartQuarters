@@ -13,7 +13,7 @@ import { getJob, listTools, runTool } from './tools.js';
 import { savePackagingText, saveVersionNotes } from './metadata.js';
 import { copyPackagingVersion, createFirstPackagingVersion, trashPackagingVersion } from './packaging-version.js';
 import { copyVersionThumbnail, decodeThumbnail, savePackagingThumbnail } from './thumbnail-files.js';
-import { draftHtml, listWriting, readWriting } from './writing.js';
+import { draftHtml, listWriting, readWriting, saveSubstackLink } from './writing.js';
 import { assessmentJob, parseAssessmentAis, startAssessment } from './expression-assessment.js';
 import { slowRequestLogger, watchEngineStalls } from './slow-watch.js';
 import { expressionCategories, expressionIndex, inboxExpressionPhotos } from './expressions.js';
@@ -466,6 +466,10 @@ app.get('/api/writing', handle((_req, res) => {
 
 app.get('/api/writing/piece', handle((req, res) => {
   res.json(readWriting(String(req.query.id ?? '')));
+}));
+
+app.post('/api/writing/link', handle((req, res) => {
+  res.json(saveSubstackLink(String(req.body?.id ?? ''), String(req.body?.url ?? '')));
 }));
 
 app.get('/api/writing/draft', (req, res) => {

@@ -103,10 +103,13 @@ describe('video ideas', () => {
     expect(addReference(idea.id, { url: '#Videos/005%20-%20Ayahuasca', note: 'Day One' })[0].references[0].url)
       .toBe('#Videos/005%20-%20Ayahuasca');
     expect(() => addReference(idea.id, { url: '#Videos/' })).toThrow('valid video');
+    expect(addReference(idea.id, { url: '#Substack/My%20Journey%2F2022-02%20%E2%80%93%20Kinbaku', note: '2022-02 – Kinbaku' })[0].references[1].url)
+      .toBe('#Substack/My%20Journey%2F2022-02%20%E2%80%93%20Kinbaku');
+    expect(() => addReference(idea.id, { url: '#Substack/' })).toThrow('valid Substack piece');
     expect(() => addReference(idea.id, { url: 'file:///C:/secret.txt' })).toThrow('https://');
     expect(() => addReference(idea.id, { url: 'javascript:alert(1)' })).toThrow('https://');
     expect(() => addReference(idea.id, { url: 'not a link' })).toThrow('https://');
-    expect(readIdeas()[0].references).toHaveLength(1);
+    expect(readIdeas()[0].references).toHaveLength(2);
     expect(extractHtmlTitle('<html><head><title>The Journey&#39;s End &amp; Legacy</title></head></html>'))
       .toBe("The Journey's End & Legacy");
     expect(extractHtmlTitle('<meta property="og:title" content="From &ldquo;Substack&rdquo;">'))

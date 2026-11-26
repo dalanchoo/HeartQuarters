@@ -6,6 +6,7 @@ import {
   formatSize,
   getJson,
   openInExplorer,
+  postJson,
   thumbUrl,
   type FileRef,
   type WritingDetail,
@@ -71,17 +72,25 @@ export function SubstackPage() {
 function PieceView({ id }: { id: string }) {
   const [piece, setPiece] = useState<WritingDetail | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [url, setUrl] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkSaved, setLinkSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let stale = false; // set when you pick another piece before this one has loaded
     setPiece(null);
     setError(null);
+    setUrl('');
+    setLinkError(null);
+    setLinkSaved(false);
     getJson<WritingDetail>(`/api/writing/piece?id=${encodeURIComponent(id)}`).then(
       (p) => {
         if (stale) return;
         setPiece(p);
         setDraft(p.drafts[0]?.path ?? null);
+        setUrl(p.substackUrl ?? '');
       },
       (e) => !stale && setError(e.message),
     );
@@ -94,6 +103,21 @@ function PieceView({ id }: { id: string }) {
   if (!piece) return <p className="muted">Loading…</p>;
 
   const hasDrafts = piece.drafts.length > 0 || piece.googleDocs.length > 0;
+  const saveLink = async () => {
+    setSavingLink(true);
+    setLinkError(null);
+    setLinkSaved(false);
+    try {
+      const saved = await postJson<{ substackUrl: string }>('/api/writing/link', { id: piece.id, url });
+      setPiece((prev) => (prev ? { ...prev, substackUrl: saved.substackUrl } : prev));
+      setUrl(saved.substackUrl);
+      setLinkSaved(true);
+    } catch (e) {
+      setLinkError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingLink(false);
+    }
+  };
 
   return (
     <div>
@@ -108,6 +132,33 @@ function PieceView({ id }: { id: string }) {
       </div>
 
       <div className="card">
+        <div className="substack-linkbar">
+          <div className="yt-linkbar-row">
+            <span className="small-text">Substack Link</span>
+            <input
+              className="yt-link-input"
+              value={url}
+              disabled={savingLink}
+              onChange={(e) => { setUrl(e.target.value); setLinkError(null); setLinkSaved(false); }}
+              placeholder="Paste the Substack post link"
+            />
+            <button
+              className="small"
+              disabled={savingLink || !url.trim() || url.trim() === (piece.substackUrl ?? '')}
+              onClick={() => void saveLink()}
+            >
+              {savingLink ? 'Saving…' : piece.substackUrl ? 'Change Link' : 'Save Link'}
+            </button>
+            {piece.substackUrl && (
+              <a className="button-link small" href={piece.substackUrl} target="_blank" rel="noreferrer">
+                Open on Substack ↗
+              </a>
+            )}
+          </div>
+          {linkError && <p className="error small-text" style={{ margin: '0.3rem 0 0' }}>{linkError}</p>}
+          {linkSaved && <p className="muted small-text" style={{ margin: '0.3rem 0 0' }}>Saved to Substack Link.txt.</p>}
+        </div>
+
         {/* Top: the Substack preview on the left; videos and photos beside it. */}
         <div className="piece-body" style={{ marginTop: 0 }}>
           <div className="piece-media">

@@ -162,18 +162,20 @@ function referenceAt(idea: VideoIdea, referenceId: unknown): number {
   return at;
 }
 
-/** Web addresses or internal HeartQuarters #Videos/ links, so a reference can't hold a file path or script. */
+/** Web addresses or internal HeartQuarters #Videos/ or #Substack/ links, so a reference can't hold a file path or script. */
 export function checkUrl(value: unknown): string {
   const url = text(value, URL_MAX, 'link').trim();
-  if (url.startsWith('#Videos/')) {
-    if (url.length <= '#Videos/'.length || /[\r\n\t]/.test(url)) {
-      throw new Error('Choose a valid video in HeartQuarters.');
+  if (url.startsWith('#Videos/') || url.startsWith('#Substack/')) {
+    const isVideo = url.startsWith('#Videos/');
+    const prefix = isVideo ? '#Videos/' : '#Substack/';
+    if (url.length <= prefix.length || /[\r\n\t]/.test(url)) {
+      throw new Error(isVideo ? 'Choose a valid video in HeartQuarters.' : 'Choose a valid Substack piece in HeartQuarters.');
     }
     return url;
   }
   let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new Error('The link must start with https://, http://, or #Videos/.'); }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('The link must start with https://, http://, or #Videos/.');
+  try { parsed = new URL(url); } catch { throw new Error('The link must start with https://, http://, #Videos/, or #Substack/.'); }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('The link must start with https://, http://, #Videos/, or #Substack/.');
   return url;
 }
 

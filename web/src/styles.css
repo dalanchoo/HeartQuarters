@@ -335,6 +335,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .child-card .muted { margin-left: auto; font-size: 0.85rem; }
 
 /* Substack */
+.substack-linkbar { padding-bottom: 0.65rem; margin-bottom: 0.65rem; border-bottom: 1px solid var(--line); }
 .sidebar-section > summary { font-weight: 600; padding: 0.5rem 0.6rem 0.3rem; cursor: pointer; }
 .button-link { font-size: 0.9rem; font-weight: 600; min-height: 24px; padding: 0.1rem 0.75rem; border-radius: 7px; border: 1px solid #b5bdc9;
                background: #edf1f7; color: #273b58; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 0 #a8b1bf; }
@@ -1182,7 +1183,7 @@ ul.ai-suggestions { list-style: none; padding-left: 0; }
 .idea-attach-drop.dragging { outline: 2px dashed var(--accent); outline-offset: 3px; background: var(--accent-soft); }
 .idea-attach-new { display: flex; gap: 0.35rem; align-items: center; }
 /* Add Link and Attach File are the same width, so the two boxes end at the same place. */
-.idea-add-link > button, .idea-attach-new > button { min-width: 6rem; }
+.idea-add-link > button, .idea-attach-new > button { min-width: 7.1rem; }
 .idea-attach-new input[type="text"] { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
 .idea-attach-hint { font-size: 0.78rem; }
 
@@ -1309,6 +1310,7 @@ input.unsaved, textarea.unsaved { border-color: var(--accent); box-shadow: 0 0 0
 .idea-link-list a { overflow-wrap: anywhere; }
 .idea-add-link { display: flex; gap: 0.35rem; align-items: center; }
 .idea-add-link input { flex: 1; min-width: 0; font-size: 0.85rem; padding: 0.15rem 0.4rem; }
+.idea-add-link select { flex: 1; min-width: 0; font-size: 0.85rem; min-height: 24px; padding: 0.05rem 1.7rem 0.05rem 0.45rem; background-position: right 0.5rem center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 button.remove-x { background: none; border: none; box-shadow: none; padding: 0 0.35rem; min-height: 0; font-size: 1.05rem; line-height: 1; color: var(--muted); cursor: pointer; }
 button.remove-x:hover:not(:disabled) { color: #c0392b; background: none; }
 

@@ -1,9 +1,10 @@
-// Reads the Writing folder (Substack drafts). Read-only.
+// Reads the Writing folder (Substack drafts) and saves each piece's Substack Link.txt.
 //
 // Layout it understands:
 //   Writing\My Journey\2022-02 – Kinbaku\
 //     Drafts\*.docx               the drafts
 //     Substack Metadata\*.png     the post's preview image
+//     Substack Link.txt           the published Substack URL (one line)
 //     anything else               photos / videos used in the piece
 //   Writing\My Reflections\<piece>\...
 //   Writing\My Wisdom\<piece>\...
@@ -12,6 +13,9 @@ import path from 'node:path';
 import mammoth from 'mammoth';
 import { config, safeResolve } from './config.js';
 import { requireFolder, type FileRef } from './projects.js';
+import { readText, writeFile } from './safe-files.js';
+
+export const SUBSTACK_LINK_FILE = 'Substack Link.txt';
 
 const SECTIONS = ['My Journey', 'My Reflections', 'My Wisdom'];
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -28,6 +32,7 @@ export interface WritingSummary {
 }
 
 export interface WritingDetail extends WritingSummary {
+  substackUrl: string | null;
   drafts: FileRef[];
   googleDocs: { name: string; url: string }[];
   previews: FileRef[];
@@ -100,7 +105,7 @@ export function listWriting(): { section: string; pieces: WritingSummary[] }[] {
   });
 }
 
-export function readWriting(id: string): WritingDetail {
+function writingFolderDir(id: string): { section: string; folder: string; dir: string } {
   const [section, ...rest] = id.split('/');
   const folder = rest.join('/');
   if (!SECTIONS.includes(section) || !folder || folder.includes('/') || folder.includes('\\') || folder === '.' || folder === '..') {
@@ -108,6 +113,44 @@ export function readWriting(id: string): WritingDetail {
   }
   const dir = safeResolve('writing', id);
   if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Writing folder not found.');
+  return { section, folder, dir };
+}
+
+/** Checks that a user-entered Substack link is a safe http/https URL. */
+export function parseSubstackUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error('Enter a Substack link.');
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Enter a valid Substack link (starting with https://).');
+  }
+  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !parsed.hostname) {
+    throw new Error('Enter a valid Substack link (starting with https://).');
+  }
+  return parsed.toString();
+}
+
+function readSubstackLink(dir: string): string | null {
+  const file = path.join(dir, SUBSTACK_LINK_FILE);
+  try {
+    return parseSubstackUrl(readText(file, 'writing'));
+  } catch {
+    return null;
+  }
+}
+
+/** Saves the Substack post URL to Substack Link.txt in the piece's Drive folder. */
+export function saveSubstackLink(id: string, rawUrl: string): { substackUrl: string } {
+  const { dir } = writingFolderDir(id);
+  const url = parseSubstackUrl(rawUrl);
+  writeFile(path.join(dir, SUBSTACK_LINK_FILE), `${url}\n`, undefined, 'writing');
+  return { substackUrl: url };
+}
+
+export function readWriting(id: string): WritingDetail {
+  const { section, folder, dir } = writingFolderDir(id);
 
   const files = allFiles(dir);
   const ext = (f: string) => path.extname(f).toLowerCase();
@@ -131,6 +174,7 @@ export function readWriting(id: string): WritingDetail {
 
   return {
     ...describe(section, folder, files),
+    substackUrl: readSubstackLink(dir),
     drafts: files.filter((f) => ext(f) === '.docx').map((f) => toRef(f, dir)).sort(byName),
     googleDocs,
     previews: files.filter((f) => IMAGE_EXTS.has(ext(f)) && inMetadata(f)).map((f) => toRef(f, dir)).sort(byName),

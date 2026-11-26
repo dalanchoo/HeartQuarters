@@ -1,7 +1,8 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { listWriting, readWriting } from './writing';
+import { listWriting, readWriting, saveSubstackLink, SUBSTACK_LINK_FILE } from './writing';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -42,5 +43,36 @@ describe('Substack writing reader', () => {
     expect(() => readWriting('My Journey/.')).toThrow(/Not a writing folder/);
     expect(() => readWriting('My Journey/..')).toThrow(/Not a writing folder/);
     expect(() => readWriting('Other/Piece')).toThrow(/Not a writing folder/);
+  });
+
+  it('saves and updates Substack Link.txt in the piece folder', () => {
+    const id = 'My Journey/2026-02 – Story';
+    expect(readWriting(id).substackUrl).toBeNull();
+
+    const first = 'https://heartmindfusion.substack.com/p/first-story';
+    expect(saveSubstackLink(id, `  ${first}  `)).toEqual({ substackUrl: first });
+    const linkPath = path.join(config.writingDir, 'My Journey', '2026-02 – Story', SUBSTACK_LINK_FILE);
+    expect(fs.readFileSync(linkPath, 'utf8')).toBe(`${first}\n`);
+    expect(readWriting(id).substackUrl).toBe(first);
+
+    const updated = 'https://heartmindfusion.substack.com/p/updated-story';
+    expect(saveSubstackLink(id, updated)).toEqual({ substackUrl: updated });
+    expect(readWriting(id).substackUrl).toBe(updated);
+  });
+
+  it('rejects empty, invalid, or unsafe Substack links and unknown folders', () => {
+    const id = 'My Journey/2026-02 – Story';
+    expect(() => saveSubstackLink(id, '   ')).toThrow(/Enter a Substack link/);
+    expect(() => saveSubstackLink(id, 'not a url')).toThrow(/valid Substack link/);
+    expect(() => saveSubstackLink(id, 'javascript:alert(1)')).toThrow(/valid Substack link/);
+    expect(() => saveSubstackLink('Other/Piece', 'https://heartmindfusion.substack.com/p/test')).toThrow(/Not a writing folder/);
+  });
+
+  it('refuses to write Substack Link.txt through a junction', () => {
+    const elsewhere = path.join(tmp, 'Elsewhere');
+    fs.mkdirSync(elsewhere, { recursive: true });
+    const linked = path.join(config.writingDir, 'My Reflections', 'Other', SUBSTACK_LINK_FILE);
+    fs.symlinkSync(elsewhere, linked, 'junction');
+    expect(() => saveSubstackLink('My Reflections/Other', 'https://heartmindfusion.substack.com/p/test')).toThrow(/shortcut or junction/);
   });
 });
