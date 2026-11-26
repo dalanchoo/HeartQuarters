@@ -110,10 +110,12 @@ describe('video ideas', () => {
   });
 
   it('moves ideas up and down and deletes one', () => {
-    addIdea('C'); addIdea('B'); const [a] = addIdea('A');
+    const [c] = addIdea('C'); addIdea('B'); const [a] = addIdea('A');
     expect(moveIdea(a.id, 1).map(i => i.title)).toEqual(['B', 'A', 'C']);
     expect(moveIdea(a.id, -1).map(i => i.title)).toEqual(['A', 'B', 'C']);
     expect(moveIdea(a.id, -1).map(i => i.title)).toEqual(['A', 'B', 'C']); // already at the top
+    expect(moveIdea(a.id, 1, c.id).map(i => i.title)).toEqual(['C', 'B', 'A']); // swaps with visible neighbor
+    expect(moveIdea(a.id, -1, c.id).map(i => i.title)).toEqual(['A', 'B', 'C']);
     expect(() => moveIdea(a.id, 5)).toThrow();
     expect(deleteIdea(a.id).map(i => i.title)).toEqual(['B', 'C']);
   });

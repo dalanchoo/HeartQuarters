@@ -118,10 +118,8 @@ export function IdeasPage() {
   const upNext = all.filter((idea) => idea.upNext && visible(idea));
   const others = all.filter((idea) => !idea.upNext && visible(idea));
   const hidden = all.filter((idea) => matches(idea) && !visible(idea)).length;
-  const first = all[0]?.id;
-  const last = all[all.length - 1]?.id;
 
-  const list = (items: VideoIdea[]) => items.map((idea) => (
+  const list = (items: VideoIdea[]) => items.map((idea, index) => (
     <IdeaCard
       key={idea.id}
       idea={idea}
@@ -129,8 +127,8 @@ export function IdeasPage() {
       busy={busy}
       send={send}
       uploadAttachment={uploadAttachment}
-      first={first === idea.id}
-      last={last === idea.id}
+      prevId={items[index - 1]?.id}
+      nextId={items[index + 1]?.id}
       brainstorming={activeIdea?.id === idea.id}
       onBrainstorm={() => setBrainstormId((cur) => (cur === idea.id ? null : idea.id))}
     />
@@ -180,14 +178,14 @@ export function IdeasPage() {
 
       {ideas && (
         <details className="page-section idea-section" open>
-          <summary>Up Next <span className="muted">({upNext.length}) · the few you're working on now</span></summary>
-          {upNext.length ? list(upNext) : <p className="muted">Open an idea and click Add to Up Next to keep it here.</p>}
+          <summary>Active <span className="muted">({upNext.length}) · the few you're working on now</span></summary>
+          {upNext.length ? list(upNext) : <p className="muted">Open an idea and click Add to Active to keep it here.</p>}
         </details>
       )}
 
       {ideas && (
         <details className="page-section idea-section">
-          <summary>Other Ideas <span className="muted">({others.length}) · use the Status filter for Raw or Processed</span></summary>
+          <summary>Backlog <span className="muted">({others.length}) · use the Status filter for Raw or Processed</span></summary>
           {others.length ? list(others) : <p className="muted">No other ideas match.</p>}
         </details>
       )}
@@ -224,8 +222,8 @@ export function IdeasPage() {
   );
 }
 
-function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, brainstorming, onBrainstorm }: {
-  idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; first: boolean; last: boolean; brainstorming: boolean;
+function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, brainstorming, onBrainstorm }: {
+  idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; prevId?: string; nextId?: string; brainstorming: boolean;
   send: (url: string, data: unknown) => Promise<boolean>;
   uploadAttachment: (ideaId: string, file: File, note: string) => Promise<boolean>;
   onBrainstorm: () => void;
@@ -257,6 +255,23 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
           <select aria-label="Format" value={idea.format} disabled={busy} onChange={(e) => void send('/api/ideas/update', { id: idea.id, format: e.target.value })}>
             {Object.entries(FORMAT_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
+          <span className="spacer" />
+          <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, upNext: !idea.upNext })}>
+            {idea.upNext ? 'Remove From Active' : 'Add to Active'}
+          </button>
+          <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
+          <button type="button" className="small idea-move-btn" aria-label="Move up" title="Move up" disabled={busy || !prevId} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1, targetId: prevId })}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 19V5" />
+              <path d="M5 12l7-7 7 7" />
+            </svg>
+          </button>
+          <button type="button" className="small idea-move-btn" aria-label="Move down" title="Move down" disabled={busy || !nextId} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1, targetId: nextId })}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 5v14" />
+              <path d="M5 12l7 7 7-7" />
+            </svg>
+          </button>
         </div>
         <textarea className={notes.dirty ? 'unsaved' : undefined} rows={3} aria-label="Notes" value={notes.value} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => notes.setValue(e.target.value)} onBlur={notes.flush} />
         {/* The finder sits on the left at its own width; links, files and the idea's buttons fill the rest. */}
@@ -270,17 +285,10 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         </div>
         <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
         <div className="idea-actions">
-          <button type="button" className="small" disabled={busy} onClick={() => void send('/api/ideas/update', { id: idea.id, upNext: !idea.upNext })}>
-            {idea.upNext ? 'Remove From Up Next' : 'Add to Up Next'}
-          </button>
           <button type="button" className={`small${brainstorming ? ' active-brainstorm' : ''}`} onClick={onBrainstorm}>
             {brainstorming ? 'Close Brainstorm' : 'Brainstorm'}
           </button>
           <span className="muted small-text">{title.dirty || notes.dirty ? 'Saving…' : `Saved · Changed ${new Date(idea.updatedAt).toLocaleDateString()}`}</span>
-          <span className="spacer" />
-          <button type="button" className="small" disabled={busy || first} onClick={() => void send('/api/ideas/move', { id: idea.id, step: -1 })}>Up</button>
-          <button type="button" className="small" disabled={busy || last} onClick={() => void send('/api/ideas/move', { id: idea.id, step: 1 })}>Down</button>
-          <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
         </div>
         </div>
         </div>

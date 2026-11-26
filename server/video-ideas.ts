@@ -140,11 +140,12 @@ export function updateIdea(id: unknown, changes: { title?: unknown; notes?: unkn
   save(ideas, original); return ideas;
 }
 
-/** Move an idea one place up (-1) or down (+1). */
-export function moveIdea(id: unknown, step: unknown): VideoIdea[] {
+/** Move an idea one place up (-1) or down (+1), or swap with a visible neighbor. */
+export function moveIdea(id: unknown, step: unknown, targetId?: unknown): VideoIdea[] {
   if (step !== -1 && step !== 1) throw new Error('Choose up or down.');
-  const { ideas, original } = load(); const at = find(ideas, id); const to = at + step;
-  if (to < 0 || to >= ideas.length) return ideas;
+  const { ideas, original } = load(); const at = find(ideas, id);
+  const to = targetId !== undefined ? find(ideas, targetId) : at + step;
+  if (to < 0 || to >= ideas.length || to === at) return ideas;
   [ideas[at], ideas[to]] = [ideas[to], ideas[at]];
   save(ideas, original); return ideas;
 }
