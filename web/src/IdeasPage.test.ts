@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ideaLabels, linkLabel } from './IdeasPage';
+import { ideaLabels, linkLabel, linkTitle } from './IdeasPage';
 import { hasPendingEdits, setPendingEdit } from './unsavedEdits';
 
 describe('unsaved edits (unsavedEdits.ts)', () => {
@@ -22,6 +22,20 @@ describe('idea link labels', () => {
     expect(linkLabel({ url: 'https://example.com/a', note: '' })).toBe('https://example.com/a');
     expect(linkLabel({ url: '#Videos/001%20-%20About%20Me', note: '' })).toBe('001 - About Me');
     expect(linkLabel({ url: '#Videos/002%20-%20X/002%20-%20X%2FShorts%2FS01', note: '' })).toBe('002 - X/Shorts/S01');
+  });
+
+  it('shows actual video titles in tooltips for shorts and longforms, and keeps external URLs', () => {
+    const videos = [
+      { piece: '003 - SDAM/Longform', title: 'What It Is Like Having SDAM' },
+      { piece: "022 - Worth Telling Them/Shorts/022_S09 - You're Lucky", title: "You're Lucky You Don't Remember" },
+    ];
+    expect(linkTitle({ url: '#Videos/003%20-%20SDAM', note: '003 - SDAM' }, videos))
+      .toBe('What It Is Like Having SDAM');
+    expect(linkTitle({ url: "#Videos/022%20-%20Worth%20Telling%20Them/022%20-%20Worth%20Telling%20Them%2FShorts%2F022_S09%20-%20You're%20Lucky", note: '022_S09' }, videos))
+      .toBe("You're Lucky You Don't Remember");
+    expect(linkTitle({ url: '#Videos/003%20-%20SDAM', note: '003 - SDAM' })).toBeUndefined();
+    expect(linkTitle({ url: 'https://heartmindfusion.substack.com/p/test', note: 'Article' }, videos))
+      .toBe('https://heartmindfusion.substack.com/p/test');
   });
 });
 

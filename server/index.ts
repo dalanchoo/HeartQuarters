@@ -21,7 +21,7 @@ import { copyInboxPhotoForPhotopea, copyThumbnailToInbox, ensureExpressionInbox,
 import { deleteShot, readShotList, setShotDone } from './expression-shot-list.js';
 import { addShotsMerging, mergeDuplicateShots, mergeWorkFolder } from './expression-shot-merge.js';
 import { fillInShotTags } from './expression-shot-tags.js';
-import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, fetchPageTitle, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas.js';
 import { clearBrainstorm, readBrainstorm, sendBrainstormMessage } from './idea-brainstorm.js';
 import { deleteShotPicture, migrateShotReferences, moveShotReferenceToInbox, removeShotReference, shotReferenceFile, shotReferences, startShotReference } from './shot-reference.js';
 import { ensureGeneratedVideosDir, generatedVideoFile, listGeneratedVideos, renameGeneratedVideo, saveGeneratedVideo, trashGeneratedVideo } from './expression-videos.js';
@@ -213,10 +213,12 @@ app.post('/api/youtube/upload', handle((req, res) => { res.json(startUpload(req.
 app.post('/api/youtube/acknowledge', handle((req, res) => { acknowledgeUpload(String(req.body?.piece ?? ''), String(req.body?.id ?? '')); res.json({ ok: true }); }));
 
 /** Runs a route handler and turns any error into a readable JSON message. */
-function handle(fn: (req: Request, res: Response) => void) {
+function handle(fn: (req: Request, res: Response) => unknown) {
   return (req: Request, res: Response) => {
     try {
-      fn(req, res);
+      Promise.resolve(fn(req, res)).catch((e) => {
+        if (!res.headersSent) res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+      });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -367,7 +369,13 @@ app.post('/api/ideas/add', handle((req, res) => { res.json(addIdea(req.body?.tit
 app.post('/api/ideas/update', handle((req, res) => { res.json(updateIdea(req.body?.id, { title: req.body?.title, notes: req.body?.notes, status: req.body?.status, format: req.body?.format, category: req.body?.category, upNext: req.body?.upNext })); }));
 app.post('/api/ideas/move', handle((req, res) => { res.json(moveIdea(req.body?.id, req.body?.step, req.body?.targetId)); }));
 app.post('/api/ideas/delete', handle((req, res) => { res.json(deleteIdea(req.body?.id)); }));
-app.post('/api/ideas/reference/add', handle((req, res) => { res.json(addReference(req.body?.id, req.body ?? {})); }));
+app.post('/api/ideas/reference/add', handle(async (req, res) => {
+  const body = req.body ?? {};
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+  let note = typeof body.note === 'string' ? body.note : '';
+  if (!note.trim() && /^https?:\/\//i.test(url)) note = await fetchPageTitle(url);
+  res.json(addReference(body.id, { ...body, note }));
+}));
 app.post('/api/ideas/reference/update', handle((req, res) => { res.json(updateReference(req.body?.id, req.body?.referenceId, req.body ?? {})); }));
 app.post('/api/ideas/reference/move', handle((req, res) => { res.json(moveReference(req.body?.id, req.body?.referenceId, req.body?.step)); }));
 app.post('/api/ideas/reference/delete', handle((req, res) => { res.json(deleteReference(req.body?.id, req.body?.referenceId)); }));

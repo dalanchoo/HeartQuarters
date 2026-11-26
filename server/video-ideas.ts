@@ -177,6 +177,67 @@ export function checkUrl(value: unknown): string {
   return url;
 }
 
+function isPublicHostname(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h || h === 'localhost' || h.endsWith('.local') || h === '::1') return false;
+  const parts = h.split('.').map(Number);
+  if (parts.length === 4 && parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    const [a, b] = parts;
+    if (a === 0 || a === 10 || a === 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  return true;
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', ndash: '–', mdash: '—',
+};
+
+function decodeHtmlEntities(raw: string): string {
+  return raw.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (match, code: string) => {
+    if (code.startsWith('#x') || code.startsWith('#X')) {
+      const n = Number.parseInt(code.slice(2), 16);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : match;
+    }
+    if (code.startsWith('#')) {
+      const n = Number.parseInt(code.slice(1), 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : match;
+    }
+    return NAMED_ENTITIES[code.toLowerCase()] ?? match;
+  });
+}
+
+/** Pull a readable page title from HTML (<title>, og:title, or twitter:title). */
+export function extractHtmlTitle(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const ogMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:og:title|twitter:title)["'][^>]+content=["']([^"']+)["']/i)
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:title|twitter:title)["']/i);
+  const raw = titleMatch?.[1] || ogMatch?.[1] || '';
+  return decodeHtmlEntities(raw).replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX);
+}
+
+/** Best-effort fetch of a web page's title when adding a bare URL; returns '' on any failure. */
+export async function fetchPageTitle(rawUrl: string): Promise<string> {
+  try {
+    const parsed = new URL(checkUrl(rawUrl));
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !isPublicHostname(parsed.hostname)) return '';
+    const res = await fetch(parsed.toString(), {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HeartQuarters/1.0)' },
+    });
+    if (!res.ok) return '';
+    const type = res.headers.get('content-type') ?? '';
+    if (!/text\/html|application\/xhtml\+xml/i.test(type)) return '';
+    const html = (await res.text()).slice(0, 65536);
+    return extractHtmlTitle(html);
+  } catch {
+    return '';
+  }
+}
+
 /** Add a reference to the end of one idea's list. */
 export function addReference(ideaId: unknown, input: { url?: unknown; note?: unknown }): VideoIdea[] {
   const { ideas, original } = load(); const idea = ideas[find(ideas, ideaId)];

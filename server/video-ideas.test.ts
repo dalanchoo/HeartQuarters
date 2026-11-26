@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, IDEA_RESOURCES_DIR, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, extractHtmlTitle, IDEA_RESOURCES_DIR, IDEAS_FILE, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
 
 let root: string;
 let saved: string;
@@ -107,6 +107,10 @@ describe('video ideas', () => {
     expect(() => addReference(idea.id, { url: 'javascript:alert(1)' })).toThrow('https://');
     expect(() => addReference(idea.id, { url: 'not a link' })).toThrow('https://');
     expect(readIdeas()[0].references).toHaveLength(1);
+    expect(extractHtmlTitle('<html><head><title>The Journey&#39;s End &amp; Legacy</title></head></html>'))
+      .toBe("The Journey's End & Legacy");
+    expect(extractHtmlTitle('<meta property="og:title" content="From &ldquo;Substack&rdquo;">'))
+      .toBe('From “Substack”');
   });
 
   it('moves ideas up and down and deletes one', () => {

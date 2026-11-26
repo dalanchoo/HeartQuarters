@@ -281,7 +281,7 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, prevId, nextId, 
         <div className="idea-refs-split">
           <div className="idea-refs">
             <div className="idea-refs-head">Links</div>
-            <IdeaLinkList idea={idea} busy={busy} send={send} />
+            <IdeaLinkList idea={idea} videos={videos} busy={busy} send={send} />
             <AddLink ideaId={idea.id} busy={busy} send={send} />
           </div>
           <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
@@ -308,15 +308,30 @@ export function linkLabel(reference: Pick<IdeaReference, 'url' | 'note'>): strin
   return reference.url;
 }
 
-/** The web site a link goes to, shown in grey after a link that has a note. */
+/** Readable tooltip for a link: the video's actual title for #Videos/ links, or the full URL for web links. */
+export function linkTitle(reference: Pick<IdeaReference, 'url' | 'note'>, videos: Pick<ChannelVideo, 'piece' | 'title'>[] = []): string | undefined {
+  if (reference.url.startsWith('#Videos/')) {
+    const video = videos.find((v) => v.piece && videoProjectsHash(v.piece) === reference.url);
+    if (video?.title.trim()) return video.title.trim();
+    try {
+      const clean = decodeURIComponent(reference.url.slice('#Videos/'.length)).replace(/\//g, ' / ');
+      return clean === linkLabel(reference) ? undefined : clean;
+    } catch {
+      return undefined;
+    }
+  }
+  return reference.url;
+}
+
+/** The web site a link goes to, shown in grey underneath a link that has a note. */
 function linkSite(url: string): string {
   if (url.startsWith('#Videos/')) return '';
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
-/** The idea's links: each one clickable and left-aligned, with a small × to remove it. */
-function IdeaLinkList({ idea, busy, send }: {
-  idea: VideoIdea; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
+/** The idea's links: each one clickable and left-aligned, with its web site underneath and a small × to remove it. */
+function IdeaLinkList({ idea, videos, busy, send }: {
+  idea: VideoIdea; videos: ChannelVideo[]; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
   if (!idea.references.length) return <p className="muted small-text idea-refs-empty">No links yet.</p>;
   const removeLink = (ref: IdeaReference) => {
@@ -330,9 +345,13 @@ function IdeaLinkList({ idea, busy, send }: {
         const site = ref.note.trim() ? linkSite(ref.url) : '';
         return (
           <li key={ref.id}>
-            <a href={ref.url} title={ref.url} target={internal ? undefined : '_blank'} rel={internal ? undefined : 'noreferrer'}>{linkLabel(ref)}</a>
-            {site && <span className="muted small-text">{site}</span>}
-            <button type="button" className="remove-x" disabled={busy} aria-label={`Remove ${linkLabel(ref)}`} title="Remove" onClick={() => removeLink(ref)}>×</button>
+            <div className="idea-link-item">
+              <div className="idea-link-row">
+                <a href={ref.url} title={linkTitle(ref, videos)} target={internal ? undefined : '_blank'} rel={internal ? undefined : 'noreferrer'}>{linkLabel(ref)}</a>
+                <button type="button" className="remove-x" disabled={busy} aria-label={`Remove ${linkLabel(ref)}`} title="Remove" onClick={() => removeLink(ref)}>×</button>
+              </div>
+              {site && <span className="muted small-text">{site}</span>}
+            </div>
           </li>
         );
       })}
