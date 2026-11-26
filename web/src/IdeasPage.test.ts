@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ideaLabels, looksLikeLink } from './IdeasPage';
+import { ideaLabels, linkLabel } from './IdeasPage';
 import { hasPendingEdits, setPendingEdit } from './unsavedEdits';
 
 describe('unsaved edits (unsavedEdits.ts)', () => {
@@ -16,14 +16,12 @@ describe('unsaved edits (unsavedEdits.ts)', () => {
   });
 });
 
-describe('idea link autosave', () => {
-  it('waits until a typed address looks like a link', () => {
-    expect(looksLikeLink('https://example.com')).toBe(true);
-    expect(looksLikeLink('  #Videos/001%20-%20Video ')).toBe(true);
-    expect(looksLikeLink('https://')).toBe(false);
-    expect(looksLikeLink('#Videos/')).toBe(false);
-    expect(looksLikeLink('example.com')).toBe(false);
-    expect(looksLikeLink('')).toBe(false);
+describe('idea link labels', () => {
+  it('shows the note, or else a readable address', () => {
+    expect(linkLabel({ url: 'https://example.com/a', note: ' Chapter 2 ' })).toBe('Chapter 2');
+    expect(linkLabel({ url: 'https://example.com/a', note: '' })).toBe('https://example.com/a');
+    expect(linkLabel({ url: '#Videos/001%20-%20About%20Me', note: '' })).toBe('001 - About Me');
+    expect(linkLabel({ url: '#Videos/002%20-%20X/002%20-%20X%2FShorts%2FS01', note: '' })).toBe('002 - X/Shorts/S01');
   });
 });
 

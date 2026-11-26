@@ -267,11 +267,8 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
         </div>
         <textarea className={notes.dirty ? 'unsaved' : undefined} rows={3} aria-label="Notes" value={notes.value} maxLength={20000} placeholder="Why this video, who it's for, what you'd say…" onChange={(e) => notes.setValue(e.target.value)} onBlur={notes.flush} />
         <div className="idea-refs">
-          <div className="idea-refs-head">References</div>
-          {idea.references.map((ref, at) => (
-            <ReferenceRow key={ref.id} ideaId={idea.id} reference={ref} busy={busy} send={send}
-              first={at === 0} last={at === idea.references.length - 1} />
-          ))}
+          <div className="idea-refs-head">Links and Files</div>
+          <IdeaLinkList idea={idea} busy={busy} send={send} />
           <AddReference ideaId={idea.id} videos={videos} busy={busy} send={send} />
         </div>
         <AttachmentsSection idea={idea} busy={busy} send={send} uploadAttachment={uploadAttachment} />
@@ -296,46 +293,56 @@ function IdeaCard({ idea, videos, busy, send, uploadAttachment, first, last, bra
   );
 }
 
-/** Whether a typed address is complete enough to save (the server checks it properly). */
-export function looksLikeLink(value: string): boolean {
-  return /^(https?:\/\/\S|#Videos\/\S)/i.test(value.trim());
+/** How a link reads in the list: its note, or else the address (a HeartQuarters video link without its code). */
+export function linkLabel(reference: Pick<IdeaReference, 'url' | 'note'>): string {
+  if (reference.note.trim()) return reference.note.trim();
+  if (reference.url.startsWith('#Videos/')) {
+    try { return decodeURIComponent(reference.url.slice('#Videos/'.length).split('/').pop() ?? reference.url); } catch { return reference.url; }
+  }
+  return reference.url;
 }
 
-/** One link: its web address and a note, each saving itself, with Up, Down and Delete. */
-function ReferenceRow({ ideaId, reference, busy, send, first, last }: {
-  ideaId: string; reference: IdeaReference; busy: boolean; first: boolean; last: boolean;
-  send: (url: string, data: unknown) => Promise<boolean>;
+/** The web site a link goes to, shown in grey after a link that has a note. */
+function linkSite(url: string): string {
+  if (url.startsWith('#Videos/')) return '';
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+}
+
+/** The idea's links, then its files below a divider: each one clickable, with a small × to remove it. */
+function IdeaLinkList({ idea, busy, send }: {
+  idea: VideoIdea; busy: boolean; send: (url: string, data: unknown) => Promise<boolean>;
 }) {
-  const base = { id: ideaId, referenceId: reference.id };
-  // Both boxes save themselves; a half-typed address waits until it looks like a link.
-  const url = useAutosavedText(reference.url, (value) => send('/api/ideas/reference/update', { ...base, url: value.trim() }), looksLikeLink);
-  const note = useAutosavedText(reference.note, (value) => send('/api/ideas/reference/update', { ...base, note: value }));
-
-  const remove = () => {
-    if (!window.confirm(`Delete the link ${reference.url}?`)) return;
-    void send('/api/ideas/reference/delete', base);
+  if (!idea.references.length && !idea.attachments.length) return <p className="muted small-text">No links or files yet.</p>;
+  const removeLink = (ref: IdeaReference) => {
+    if (!window.confirm(`Remove the link “${linkLabel(ref)}”?`)) return;
+    void send('/api/ideas/reference/delete', { id: idea.id, referenceId: ref.id });
   };
-
-  const isInternal = reference.url.startsWith('#Videos/');
-
+  const removeFile = (att: IdeaAttachment) => {
+    if (!window.confirm(`Remove “${att.name}”? It will be moved to HeartQuarters Trash.`)) return;
+    void send('/api/ideas/attachment/delete', { id: idea.id, attachmentId: att.id });
+  };
   return (
-    <div className="idea-ref">
-      <input className={url.dirty ? 'unsaved' : undefined} type="text" aria-label="Link address" placeholder="https://… or #Videos/…" maxLength={2000} value={url.value} onChange={(e) => url.setValue(e.target.value)} onBlur={url.flush} />
-      <input className={note.dirty ? 'unsaved' : undefined} type="text" aria-label="Link note" placeholder="Note" maxLength={20000} value={note.value} onChange={(e) => note.setValue(e.target.value)} onBlur={note.flush} />
-      <div className="idea-ref-actions">
-        <a
-          className="button-link small"
-          href={reference.url}
-          target={isInternal ? undefined : '_blank'}
-          rel={isInternal ? undefined : 'noreferrer'}
-        >
-          Open
-        </a>
-        <button type="button" className="small" disabled={busy || first} onClick={() => void send('/api/ideas/reference/move', { ...base, step: -1 })}>Up</button>
-        <button type="button" className="small" disabled={busy || last} onClick={() => void send('/api/ideas/reference/move', { ...base, step: 1 })}>Down</button>
-        <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
-      </div>
-    </div>
+    <ul className="idea-link-list">
+      {idea.references.map((ref) => {
+        const internal = ref.url.startsWith('#Videos/');
+        const site = ref.note.trim() ? linkSite(ref.url) : '';
+        return (
+          <li key={ref.id}>
+            <a href={ref.url} title={ref.url} target={internal ? undefined : '_blank'} rel={internal ? undefined : 'noreferrer'}>{linkLabel(ref)}</a>
+            {site && <span className="muted small-text">{site}</span>}
+            <button type="button" className="remove-x" disabled={busy} aria-label={`Remove ${linkLabel(ref)}`} title="Remove" onClick={() => removeLink(ref)}>×</button>
+          </li>
+        );
+      })}
+      {idea.references.length > 0 && idea.attachments.length > 0 && <li className="idea-link-divider" aria-hidden="true" />}
+      {idea.attachments.map((att) => (
+        <li key={att.id}>
+          <a href={`/api/ideas/attachment?id=${encodeURIComponent(idea.id)}&attachmentId=${encodeURIComponent(att.id)}`} target="_blank" rel="noreferrer">{att.name}</a>
+          <span className="muted small-text">{[att.note.trim(), formatSize(att.size)].filter(Boolean).join(' · ')}</span>
+          <button type="button" className="remove-x" disabled={busy} aria-label={`Remove ${att.name}`} title="Remove" onClick={() => removeFile(att)}>×</button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -430,10 +437,6 @@ function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
 
   return (
     <div className="idea-refs">
-      <div className="idea-refs-head">Attached Files</div>
-      {idea.attachments.map((att) => (
-        <AttachmentRow key={att.id} ideaId={idea.id} attachment={att} busy={busy} send={send} />
-      ))}
       <div
         className={`idea-attach-drop${dragging ? ' dragging' : ''}`}
         tabIndex={0}
@@ -486,32 +489,6 @@ function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
         <div className="muted small-text idea-attach-hint">
           {dragging ? 'Drop to attach…' : 'Drop files here, or click here and press Ctrl+V to paste a file or image.'}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AttachmentRow({ ideaId, attachment, busy, send }: {
-  ideaId: string; attachment: IdeaAttachment; busy: boolean;
-  send: (url: string, data: unknown) => Promise<boolean>;
-}) {
-  const note = useAutosavedText(attachment.note, (value) => send('/api/ideas/attachment/update', { id: ideaId, attachmentId: attachment.id, note: value }));
-  const href = `/api/ideas/attachment?id=${encodeURIComponent(ideaId)}&attachmentId=${encodeURIComponent(attachment.id)}`;
-
-  const remove = () => {
-    if (!window.confirm(`Remove “${attachment.name}”? It will be moved to HeartQuarters Trash.`)) return;
-    void send('/api/ideas/attachment/delete', { id: ideaId, attachmentId: attachment.id });
-  };
-
-  return (
-    <div className="idea-attach">
-      <span className="idea-attach-name" title={attachment.name}>
-        {attachment.name} <span className="muted small-text">({formatSize(attachment.size)})</span>
-      </span>
-      <input className={note.dirty ? 'unsaved' : undefined} type="text" aria-label="Attachment note" placeholder="Note" maxLength={20000} value={note.value} onChange={(e) => note.setValue(e.target.value)} onBlur={note.flush} />
-      <div className="idea-ref-actions">
-        <a className="button-link small" href={href} target="_blank" rel="noreferrer">Open</a>
-        <button type="button" className="small danger-outline" disabled={busy} onClick={remove}>Delete</button>
       </div>
     </div>
   );
