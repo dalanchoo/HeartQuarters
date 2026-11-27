@@ -311,21 +311,20 @@ function runJob(folder: string, ai: ImageAi, work: (job: ThumbJob) => Promise<vo
   return { job, finished };
 }
 
-/** Make Thumbnail: a new conversation with `ai`, from the chosen pair and photo. */
-export function startThumbnail(piece: string, ai: unknown, make: MakeImage = makeImage): { job: ThumbJob; finished: Promise<void> } {
+/** Make Thumbnail: a new conversation with `ai`, for any pair and expressions-library photo. */
+export function startThumbnailFor(piece: string, pick: BriefChoice['pick'], photoPath: string, ai: unknown, make: MakeImage = makeImage): { job: ThumbJob; finished: Promise<void> } {
   if (ai !== 'codex' && ai !== 'gemini') throw new Error('Choose ChatGPT or Gemini to make the thumbnail.');
+  if (!photoPath) throw new Error('Pick a photo for the pair first.');
   const drafts = draftsFolder(piece);
-  const choice = readChoice(path.join(drafts, CHOICE_FILE));
-  if (!choice) throw new Error('Choose one of the top 3 pairs first.');
-  if (!choice.photo) throw new Error('Pick a photo for the pair first.');
-  const photo = resolveExpressionPhoto(choice.photo);
-  if (!fs.existsSync(photo)) throw new Error(`The photo ${choice.photo} isn't in the expressions library any more.`);
+  const photo = resolveExpressionPhoto(photoPath);
+  if (!fs.existsSync(photo)) throw new Error(`The photo ${photoPath} isn't in the expressions library any more.`);
   const name = nextConversationName(drafts, ai);
   const folder = makeFolder(path.join(drafts, name)); // made now, so a second click gets the next number
+  const choice: BriefChoice = { pick, index: 0, photo: photoPath };
   const prompt = firstRequest(choice, isShort(piece), '01.png');
   writeFile(
     path.join(folder, REQUESTS_FILE),
-    `# ${name}\n\nPair: ${choice.pick.thumbnailText} / ${choice.pick.title}\n\nPhoto: ${choice.photo}\n\n## 01\n\n${prompt}\n`,
+    `# ${name}\n\nPair: ${pick.thumbnailText} / ${pick.title}\n\nPhoto: ${photoPath}\n\n## 01\n\n${prompt}\n`,
   );
   return runJob(folder, ai, async () => {
     const work = workFolder(name);
@@ -333,13 +332,23 @@ export function startThumbnail(piece: string, ai: unknown, make: MakeImage = mak
       const answer = await make(ai, prompt, work, '01.png', { photo });
       const copied = writable(path.join(folder, '01.png'));
       fs.copyFileSync(answer.image, copied, fs.constants.COPYFILE_EXCL);
-      const info: ConversationInfo = { ai, session: answer.session, photo: choice.photo!, pick: choice.pick };
+      const info: ConversationInfo = { ai, session: answer.session, photo: photoPath, pick };
       writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
-      archiveDraftRound(piece, copied, choice.pick, `Draft ${name}, round 01, by ${AI_NAMES[ai]}.`);
+      archiveDraftRound(piece, copied, pick, `Draft ${name}, round 01, by ${AI_NAMES[ai]}.`);
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }
   });
+}
+
+/** Make Thumbnail: a new conversation with `ai`, from the chosen pair and photo. */
+export function startThumbnail(piece: string, ai: unknown, make: MakeImage = makeImage): { job: ThumbJob; finished: Promise<void> } {
+  if (ai !== 'codex' && ai !== 'gemini') throw new Error('Choose ChatGPT or Gemini to make the thumbnail.');
+  const drafts = draftsFolder(piece);
+  const choice = readChoice(path.join(drafts, CHOICE_FILE));
+  if (!choice) throw new Error('Choose one of the top 3 pairs first.');
+  if (!choice.photo) throw new Error('Pick a photo for the pair first.');
+  return startThumbnailFor(piece, choice.pick, choice.photo, ai, make);
 }
 
 /** A pasted image, checked: a PNG, JPEG or WebP up to 15 MB. Returns its bytes and file extension. */

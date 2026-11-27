@@ -700,6 +700,8 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .write-brief { margin: 0.4rem 0 0.6rem; }
 .top-picks { margin: 0.6rem 0 0.8rem; }
 .top-picks h4 { margin: 0 0 0.4rem; }
+.batch-thumbs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
+.batch-thumbs-status { list-style: none; padding: 0.4rem 0.6rem; margin: 0 0 0.6rem; background: var(--surface-alt, #f7f7f7); border-radius: 6px; display: flex; flex-direction: column; gap: 0.2rem; }
 .top-picks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.7rem; }
 .top-pick { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .top-pick p { margin: 0; }

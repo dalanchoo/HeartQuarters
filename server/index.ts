@@ -61,6 +61,7 @@ import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { askAi, briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, parseImageAi, startThumbnail, thumbJobs } from './thumbnails.js';
+import { batchThumbJob, startBatchThumbnails } from './thumbnail-batch.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
 import {
@@ -769,6 +770,16 @@ app.post('/api/thumbs/reviews', handle((req, res) => {
 // { piece, ai }: Make Thumbnail with ChatGPT ("codex") or Gemini, from the chosen pair and photo, in the background.
 app.post('/api/thumbs/make', handle((req, res) => {
   res.json(startThumbnail(String(req.body?.piece ?? ''), req.body?.ai).job);
+}));
+
+// ?piece=: current or most recent Make All 6 Drafts batch job for this video.
+app.get('/api/thumbs/batch', handle((req, res) => {
+  res.json(batchThumbJob(String(req.query.piece ?? '')));
+}));
+
+// { piece, ai }: rank photos for all top 3 pairs (with `ai`) and generate ChatGPT + Gemini drafts for each.
+app.post('/api/thumbs/make-all', handle((req, res) => {
+  res.json(startBatchThumbnails(String(req.body?.piece ?? ''), parseAi(req.body?.ai ?? 'claude')).job);
 }));
 
 // { piece, conversation, text, pasted, drafts }: a change request, with any reference images (pasted, or drafts of this video), to the conversation that made that draft.

@@ -120,6 +120,10 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
 - **Discuss a draft before changing it (2026-11-25).** Each thumbnail draft has a Discuss box: a
   conversation with any AI that sees the image, packaging, brief and transcript and never makes
   images. A reply's Change Request goes into Ask for Changes with one click.
+- **Make All 6 Drafts from the Top 3 (2026-11-26).** **Make All 6 Drafts** on the Top 3 picks
+  each pair's #1 photo (reusing a fresh saved ranking or running Photo Ranking with the chosen AI)
+  and generates one draft with ChatGPT and one with Gemini for every pair, skipping any pair with
+  no matching photo so John can see all options and iterate from there.
 
 ---
 

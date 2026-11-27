@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
+import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BatchThumbJob, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
 import { CopyButton } from './PackagingDoc';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
@@ -52,7 +52,7 @@ export function DraftsSection({ piece, drafts, target, research, onChanged }: { 
           </summary>
           <WriteBrief piece={piece} hasBrief={!!drafts?.brief} hasPicks={!!drafts?.picks} research={research} onChanged={onChanged} />
           {drafts && (drafts.brief || drafts.picks) && <ShotListSuggestions piece={piece} brief={drafts.brief} picks={drafts.picks ?? []} />}
-          {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} onChanged={onChanged} />}
+          {drafts?.picks && <TopPicks piece={piece} picks={drafts.picks} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
           {drafts?.choice?.photo && <MakeThumbnail piece={piece} choice={drafts.choice} thumbs={thumbs} onChanged={onChanged} />}
         </details>
       )}
@@ -193,9 +193,49 @@ function MakeThumbnail({ piece, choice, thumbs, onChanged }: { piece: string; ch
 }
 
 /** The top 3 title and thumbnail pairs, as cards. Choose saves one (Choice.json); then its photos appear to pick from. */
-function TopPicks({ piece, picks, choice, onChanged }: { piece: string; picks: BriefPick[]; choice: BriefChoice | null; onChanged?: () => void }) {
+function TopPicks({ piece, picks, choice, thumbs, onChanged }: { piece: string; picks: BriefPick[]; choice: BriefChoice | null; thumbs: ThumbJobs; onChanged?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [rankAi, setRankAi] = useAiFor('rank-photos');
+  const [batch, setBatch] = useState<BatchThumbJob | null>(null);
+  const lastPairs = useRef('');
+  const loadBatch = (isActive?: () => boolean) =>
+    getJson<BatchThumbJob | null>(`/api/thumbs/batch?piece=${encodeURIComponent(piece)}`).then(
+      (job) => {
+        if (isActive && !isActive()) return;
+        setBatch(job);
+        const signature = job ? job.pairs.map((p) => `${p.state}:${p.conversations?.length ?? 0}`).join('|') : '';
+        if (signature && signature !== lastPairs.current) {
+          lastPairs.current = signature;
+          thumbs.refresh();
+          onChanged?.();
+        }
+      },
+      () => undefined,
+    );
+  useEffect(() => {
+    let active = true;
+    lastPairs.current = '';
+    void loadBatch(() => active);
+    return () => { active = false; };
+  }, [piece]);
+  useEffect(() => {
+    if (batch?.state !== 'working') return;
+    let active = true;
+    const timer = setInterval(() => void loadBatch(() => active), 3000);
+    return () => { active = false; clearInterval(timer); };
+  }, [batch?.state, piece]);
+  const makeAll = () => {
+    setError('');
+    postJson<BatchThumbJob>('/api/thumbs/make-all', { piece, ai: rankAi }).then(
+      (job) => {
+        lastPairs.current = '';
+        setBatch(job);
+        thumbs.refresh();
+      },
+      (e: Error) => setError(e.message),
+    );
+  };
   // The saved choice counts only while it's still one of these picks (a new brief brings new picks).
   const chosen = isCurrentChoice(choice, picks) ? choice!.index : null;
   const choose = (index: number) => {
@@ -203,9 +243,38 @@ function TopPicks({ piece, picks, choice, onChanged }: { piece: string; picks: B
     setError('');
     postJson('/api/brief/choose', { piece, index }).then(() => onChanged?.(), (e: Error) => setError(e.message)).finally(() => setBusy(false));
   };
+  const batchWorking = batch?.state === 'working';
   return (
     <div className="top-picks">
       <h4>Top 3 Title and Thumbnail Pairs</h4>
+      <div className="batch-thumbs-bar">
+        <button className="small" disabled={batchWorking} onClick={makeAll}>
+          {batchWorking ? `Making All ${picks.length * 2} Drafts…` : `Make All ${picks.length * 2} Drafts`}
+        </button>
+        <AiSelect value={rankAi} onChange={setRankAi} title="Which AI picks the best photo for each pair" />
+        <span className="muted small-text">Picks the #1 photo for each pair and makes a ChatGPT and Gemini draft for all {picks.length}.</span>
+      </div>
+      {batch && (
+        <ul className="batch-thumbs-status small-text">
+          {batch.pairs.map((p) => (
+            <li key={p.index}>
+              <strong>Pair {p.index + 1}</strong> ({p.thumbnailText.toUpperCase()}):{' '}
+              {p.state === 'pending' && <span className="muted">Waiting…</span>}
+              {p.state === 'ranking' && <span>Picking best photo…</span>}
+              {p.state === 'generating' && <span>Making ChatGPT &amp; Gemini drafts with {p.photo?.split('/').pop()}…</span>}
+              {p.state === 'done' && (
+                <span>
+                  Done with {p.photo?.split('/').pop()}
+                  {p.reason ? <span className="error"> · {p.reason}</span> : null}
+                </span>
+              )}
+              {p.state === 'skipped' && <span className="muted">Skipped — {p.reason}</span>}
+              {p.state === 'failed' && <span className="error">Failed — {p.reason}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {batch?.state === 'failed' && batch.error && <p className="error small-text">{batch.error}</p>}
       <div className="top-picks-grid">
         {picks.map((p, i) => (
           <div key={i} className={`top-pick${chosen === i ? ' chosen' : ''}`}>

@@ -253,21 +253,32 @@ function pairCandidates(piece: string, pick: BriefPick, deps: RankingDeps = {}) 
   return rankingCandidates(photos, pickCategories(pick.expression), starred, pick.photoAttributes, madeFor);
 }
 
+/** The saved ranking for a given pair, or null. Asks no AI: it only checks whether the photos have changed. */
+export function readSavedRanking(piece: string, pick: BriefPick, deps: RankingDeps = {}): PhotoRanking | null {
+  try {
+    const drafts = draftsOf(piece);
+    const ranking = readRankings(drafts).find(r => samePair(r, pick));
+    if (!ranking) return null;
+    const photos = (deps.photos ?? (() => expressionIndex().photos))();
+    const disliked = new Set(photos.filter(photo => photo.rating === 'disliked').map(photo => photo.path));
+    const result: PhotoRanking = { ...ranking, ranked: ranking.ranked.filter(({ photo }) => !disliked.has(photo)) };
+    if (ranking.offered) {
+      const now = pairCandidates(piece, pick, deps).map(c => c.photo.path).sort();
+      const then = [...ranking.offered].sort();
+      if (now.length !== then.length || now.some((p, i) => p !== then[i])) result.changed = true;
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 /** The saved ranking for the chosen pair, or null. Asks no AI: it only checks whether the photos have changed. */
 export function readRanking(piece: string, deps: RankingDeps = {}): PhotoRanking | null {
   try {
     const drafts = draftsOf(piece);
     const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
-    const ranking = choice && readRankings(drafts).find(r => samePair(r, choice.pick));
-    if (!choice || !ranking) return null;
-    const disliked = new Set(expressionIndex().photos.filter(photo => photo.rating === 'disliked').map(photo => photo.path));
-    const result: PhotoRanking = { ...ranking, ranked: ranking.ranked.filter(({ photo }) => !disliked.has(photo)) };
-    if (ranking.offered) {
-      const now = pairCandidates(piece, choice.pick, deps).map(c => c.photo.path).sort();
-      const then = [...ranking.offered].sort();
-      if (now.length !== then.length || now.some((p, i) => p !== then[i])) result.changed = true;
-    }
-    return result;
+    return choice ? readSavedRanking(piece, choice.pick, deps) : null;
   } catch {
     return null;
   }
@@ -281,22 +292,18 @@ export interface RankingDeps {
   small?: (full: string) => Promise<string>;
 }
 
-/** Starts a ranking for the chosen pair. Returns the job at once; `finished` settles when the AI is done. */
-export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = 'claude'): { job: RankingJob; finished: Promise<void> } {
+/** Ranks the eligible photos for one pair, saves it into Photo Ranking.json, and returns the ranking. */
+export async function rankPair(piece: string, pick: BriefPick, deps: RankingDeps = {}, ai: AiId = 'claude', onCandidates?: (count: number) => void): Promise<PhotoRanking> {
   const ask = deps.ask ?? askAi;
   const drafts = draftsOf(piece);
-  if (jobs.get(piece)?.state === 'working') throw new Error('An AI is already looking at the photos for this video.');
-  const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
-  if (!choice) throw new Error('Choose one of the top 3 pairs first.');
-  const candidates = pairCandidates(piece, choice.pick, deps);
+  const candidates = pairCandidates(piece, pick, deps);
   if (!candidates.length) throw new Error("No eligible photos matched this pair's expression tags or folders. Thumbs-down photos, and photos marked as not having the gaze or mouth the pair asks for, are left out. Generate one for this pair from the Shot List.");
-  const job: RankingJob = { piece, state: 'working', looked: candidates.length, ai, title: choice.pick.title };
-  jobs.set(piece, job);
+  onCandidates?.(candidates.length);
   const small = deps.small ?? ((full: string) => thumbnail(full, 512));
-  const finished = (async () => {
-    const root = process.env.VITEST ? path.join(os.tmpdir(), 'hq-ranking-tests') : path.join(appDir, 'data', 'photo-ranking');
-    const work = path.join(root, `${Date.now()}`);
-    fs.mkdirSync(work, { recursive: true });
+  const root = process.env.VITEST ? path.join(os.tmpdir(), 'hq-ranking-tests') : path.join(appDir, 'data', 'photo-ranking');
+  const work = path.join(root, `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  fs.mkdirSync(work, { recursive: true });
+  try {
     const list: RankingPhoto[] = [];
     for (const [i, c] of candidates.entries()) {
       const file = `${String(i + 1).padStart(2, '0')}.jpg`;
@@ -307,13 +314,28 @@ export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = '
     const short = /(^|\/)Shorts\//i.test(piece) || /^999 - Shorts\//i.test(piece);
     const aiPhotos = new Set(list.filter(c => c.aiGenerated).map(c => c.photo));
     // The photos go along as images too: ChatGPT only sees images attached to the request.
-    const ranked = rankingFromAnswer(await ask(ai, rankingPrompt(choice.pick, short, list, skill), work, list.map(c => path.join(work, c.file))), list.map(c => c.photo), aiPhotos, AI_NAMES[ai]);
-    const ranking: PhotoRanking = { title: choice.pick.title, thumbnailText: choice.pick.thumbnailText, ranked, cameraFirst: true, looked: list.length, at: new Date().toISOString(), by: AI_NAMES[ai], offered: list.map(c => c.photo) };
+    const ranked = rankingFromAnswer(await ask(ai, rankingPrompt(pick, short, list, skill), work, list.map(c => path.join(work, c.file))), list.map(c => c.photo), aiPhotos, AI_NAMES[ai]);
+    const ranking: PhotoRanking = { title: pick.title, thumbnailText: pick.thumbnailText, ranked, cameraFirst: true, looked: list.length, at: new Date().toISOString(), by: AI_NAMES[ai], offered: list.map(c => c.photo) };
     // This pair's ranking replaces its last one; the other pairs' rankings are kept.
-    const rankings = [...readRankings(drafts).filter(r => !samePair(r, choice.pick)), ranking];
+    const rankings = [...readRankings(drafts).filter(r => !samePair(r, pick)), ranking];
     writeFile(path.join(drafts, RANKING_FILE), JSON.stringify({ rankings }, null, 2) + '\n');
-    fs.rmSync(work, { recursive: true, force: true });
-  })().then(
+    return ranking;
+  } finally {
+    try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore temp cleanup */ }
+  }
+}
+
+/** Starts a ranking for the chosen pair. Returns the job at once; `finished` settles when the AI is done. */
+export function startRanking(piece: string, deps: RankingDeps = {}, ai: AiId = 'claude'): { job: RankingJob; finished: Promise<void> } {
+  const drafts = draftsOf(piece);
+  if (jobs.get(piece)?.state === 'working') throw new Error('An AI is already looking at the photos for this video.');
+  const choice = readChoice(readable(path.join(drafts, CHOICE_FILE)));
+  if (!choice) throw new Error('Choose one of the top 3 pairs first.');
+  const candidates = pairCandidates(piece, choice.pick, deps);
+  if (!candidates.length) throw new Error("No eligible photos matched this pair's expression tags or folders. Thumbs-down photos, and photos marked as not having the gaze or mouth the pair asks for, are left out. Generate one for this pair from the Shot List.");
+  const job: RankingJob = { piece, state: 'working', looked: candidates.length, ai, title: choice.pick.title };
+  jobs.set(piece, job);
+  const finished = rankPair(piece, choice.pick, deps, ai).then(
     () => {
       job.state = 'done';
     },
