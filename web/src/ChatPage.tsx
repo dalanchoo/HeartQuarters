@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { copyText, formatSize, getJson, postJson, type AiId } from './api';
+import { copyText, formatSize, getJson, postJson, replaceHash, type AiId } from './api';
 import { useAi } from './AiPicker';
 import { SidebarResizer } from './SidebarResizer';
 import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile, VideoPart } from '../../server/chat';
@@ -116,8 +116,7 @@ export function ChatPage() {
     const data = await getJson<ChatThread>(idToLoad ? `/api/chat?id=${encodeURIComponent(idToLoad)}` : '/api/chat');
     setThread(data);
     if (data.id && location.hash.startsWith('#Chat')) {
-      const targetHash = `#Chat/${encodeURIComponent(data.id)}`;
-      if (location.hash !== targetHash) history.replaceState(null, '', targetHash);
+      replaceHash(`#Chat/${encodeURIComponent(data.id)}`);
     }
   };
 
@@ -197,7 +196,7 @@ export function ChatPage() {
     try {
       const data = await getJson<ChatThread>(`/api/chat?id=${encodeURIComponent(id)}`);
       setThread(data);
-      history.replaceState(null, '', `#Chat/${encodeURIComponent(id)}`);
+      replaceHash(`#Chat/${encodeURIComponent(id)}`);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -210,7 +209,7 @@ export function ChatPage() {
       const res = await postJson<{ index: ChatIndex; chat: ChatThread }>('/api/chat/new', { folderId });
       setIndex(res.index);
       setThread(res.chat);
-      history.replaceState(null, '', `#Chat/${encodeURIComponent(res.chat.id)}`);
+      replaceHash(`#Chat/${encodeURIComponent(res.chat.id)}`);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -255,7 +254,7 @@ export function ChatPage() {
         await selectChat(next.id);
       } else {
         setThread({ version: 1, id: '', title: 'New Chat', folderId: null, messages: [] });
-        history.replaceState(null, '', '#Chat');
+        replaceHash('#Chat');
       }
     } catch (e) {
       setError((e as Error).message);
@@ -434,7 +433,7 @@ export function ChatPage() {
       });
       setThread(updated);
       setIndex(await getJson<ChatIndex>('/api/chat/list'));
-      if (updated.id) history.replaceState(null, '', `#Chat/${encodeURIComponent(updated.id)}`);
+      if (updated.id && location.hash.startsWith('#Chat')) replaceHash(`#Chat/${encodeURIComponent(updated.id)}`);
       setDraft('');
       for (const item of pending) {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);

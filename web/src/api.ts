@@ -120,3 +120,10 @@ export function formatSize(bytes: number): string {
   if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
+
+/** Update the URL hash without adding a history entry, and notify App so the tab's saved address stays current. */
+export function replaceHash(hash: string) {
+  if (location.hash === hash) return;
+  history.replaceState(null, '', hash);
+  window.dispatchEvent(new Event('hq-hash-replace'));
+}

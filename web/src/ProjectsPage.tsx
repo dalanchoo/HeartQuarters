@@ -6,6 +6,7 @@ import {
   getJson,
   openInExplorer,
   postJson,
+  replaceHash,
   type Piece,
   type ProjectDetail,
   type CreateResult,
@@ -186,7 +187,7 @@ export function ProjectsPage() {
       if (!/^#(Videos|Projects)(\/|$)/.test(location.hash)) return;
       const next = projectFromHash();
       if (next !== selectedRef.current && hasPendingEdits() && !window.confirm('You have unsaved changes on this project. Discard them and open another project?')) {
-        history.replaceState(null, '', lastVideoHash.current);
+        replaceHash(lastVideoHash.current);
         return;
       }
       lastVideoHash.current = location.hash;

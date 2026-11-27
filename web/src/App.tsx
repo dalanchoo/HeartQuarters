@@ -105,7 +105,11 @@ export function App() {
     };
     remember();
     window.addEventListener('hashchange', remember);
-    return () => window.removeEventListener('hashchange', remember);
+    window.addEventListener('hq-hash-replace', remember);
+    return () => {
+      window.removeEventListener('hashchange', remember);
+      window.removeEventListener('hq-hash-replace', remember);
+    };
   }, []);
 
   const page = (id: TabId, element: ReactNode) =>
