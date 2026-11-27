@@ -6,7 +6,6 @@ import path from 'node:path';
 import { config, isInside, safeResolve } from './config.js';
 import { readChannelVideos, type ChannelVideo } from './channel-videos.js';
 import { STANDALONE_GROUP } from './create.js';
-import { writeFileSafely } from './files.js';
 import { listProjectVideos } from './projects.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 import { readVideoProfile } from './video-profile.js';

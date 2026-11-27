@@ -126,6 +126,7 @@ export async function capcutLinksSlowly(video: string): Promise<CapCutLinks> {
 }
 
 /** The HeartMind paths in one project file, remembered until the file changes (reading it is the slow part). */
+const MAX_CACHED_LINK_FILES = 500;
 const linksInFile = new Map<string, { stamp: string; paths: string[] }>();
 
 /** The video's CapCut projects: those named after it or one of its Shorts, and any other that uses its files. */
@@ -203,6 +204,11 @@ function* scanLinks(video: string): Generator<void, CapCutLinks> {
           if (original.toLowerCase().startsWith(heartMind)) found.add(original);
         }
         paths = [...found];
+        linksInFile.delete(file);
+        if (linksInFile.size >= MAX_CACHED_LINK_FILES) {
+          const oldest = linksInFile.keys().next().value;
+          if (oldest !== undefined) linksInFile.delete(oldest);
+        }
         linksInFile.set(file, { stamp, paths });
         yield;
       }

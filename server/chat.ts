@@ -102,6 +102,26 @@ interface ChatSession {
 const activeChats = new Set<string>();
 const chatSessions = new Map<string, Partial<Record<AiId, ChatSession>>>();
 
+function pruneStaleChatTempDirs(): void {
+  try {
+    const tmp = os.tmpdir();
+    for (const entry of fs.readdirSync(tmp, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith('hq-chat-')) {
+        fs.rmSync(path.join(tmp, entry.name), { recursive: true, force: true });
+      }
+    }
+  } catch {
+    // Best-effort temp cleanup.
+  }
+}
+
+if (!process.env.VITEST) {
+  pruneStaleChatTempDirs();
+  process.on('exit', () => {
+    for (const id of [...chatSessions.keys()]) dropChatSession(id);
+  });
+}
+
 function dropChatSession(chatId: string, ai?: AiId): void {
   const byAi = chatSessions.get(chatId);
   if (!byAi) return;
