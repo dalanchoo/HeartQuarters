@@ -657,19 +657,21 @@ function BrainstormResizer({ width, onWidth }: { width: number; onWidth: (width:
   const drag = useRef<{ x: number; width: number; pointerId: number } | null>(null);
   const latest = useRef(width);
   latest.current = width;
+  const onWidthRef = useRef(onWidth);
+  onWidthRef.current = onWidth;
 
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const active = drag.current;
       if (active?.pointerId === e.pointerId) {
-        onWidth(clampBrainstormWidth(active.width + (active.x - e.clientX)), false);
+        onWidthRef.current(clampBrainstormWidth(active.width + (active.x - e.clientX)), false);
       }
     };
     const stop = (e: PointerEvent) => {
       if (drag.current?.pointerId !== e.pointerId) return;
       drag.current = null;
       document.body.classList.remove('is-resizing-sidebar');
-      if (e.type === 'pointerup') onWidth(latest.current, true);
+      if (e.type === 'pointerup') onWidthRef.current(latest.current, true);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', stop);
@@ -680,7 +682,7 @@ function BrainstormResizer({ width, onWidth }: { width: number; onWidth: (width:
       window.removeEventListener('pointercancel', stop);
       if (drag.current) document.body.classList.remove('is-resizing-sidebar');
     };
-  }, [onWidth]);
+  }, []);
 
   return (
     <div
