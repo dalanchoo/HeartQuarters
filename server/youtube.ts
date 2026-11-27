@@ -116,17 +116,32 @@ function savePackagingHistory(piece: string, version: string, fields: string[]):
   catch (e) { return `YouTube accepted ${fields.join(', ')}, but the version’s Notes could not be saved: ${e instanceof Error ? e.message : String(e)}.`; }
 }
 
+function isRealFileInside(folder: string, file: string): boolean {
+  if (!isInside(folder, file)) return false;
+  try {
+    if (fs.lstatSync(file).isSymbolicLink()) return false;
+    return isInside(fs.realpathSync.native(folder), fs.realpathSync.native(file));
+  } catch {
+    return false;
+  }
+}
+
+function checkedCover(pieceRel: string, coverRel: string): string {
+  const folder = safeResolve('projects', path.join(pieceRel, 'Packaging'));
+  const coverPath = safeResolve('projects', coverRel);
+  if (!isRealFileInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > MAX_THUMBNAIL_BYTES) {
+    throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
+  }
+  return coverPath;
+}
+
 export function validateUpload(input: UploadInput) {
   if (!input || typeof input.piece !== 'string' || !input.piece || typeof input.video !== 'string' || typeof input.cover !== 'string') throw new Error('Choose a video and packaging.');
-  const piece = safeResolve('projects', input.piece);
+  safeResolve('projects', input.piece);
   const video = safeResolve('projects', input.video);
   const exports = safeResolve('projects', path.join(input.piece, 'Exports'));
-  if (!isInside(exports, video) || !/\.(mp4|mov|mkv|webm)$/i.test(video) || !fs.statSync(video).isFile()) throw new Error('Choose a video from this project’s Exports folder.');
-  let cover = '';
-  if (input.cover) {
-    cover = safeResolve('projects', input.cover);
-    if (!isInside(path.join(piece, 'Packaging'), cover) || !/\.(png|jpe?g)$/i.test(cover) || !fs.statSync(cover).isFile() || fs.statSync(cover).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
-  }
+  if (!isRealFileInside(exports, video) || !/\.(mp4|mov|mkv|webm)$/i.test(video) || !fs.statSync(video).isFile()) throw new Error('Choose a video from this project’s Exports folder.');
+  const cover = input.cover ? checkedCover(input.piece, input.cover) : '';
   if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 100 || typeof input.description !== 'string' || input.description.length > 5000) throw new Error('A title is required (up to 100 characters); descriptions can be up to 5,000 characters.');
   if (!Array.isArray(input.tags) || input.tags.some((t) => typeof t !== 'string') || input.tags.join(',').length > 500) throw new Error('Tags must be text, with at most 500 characters in total.');
   if (!['private', 'unlisted', 'public'].includes(input.privacy) || typeof input.madeForKids !== 'boolean' || typeof input.synthetic !== 'boolean') throw new Error('Choose visibility, audience and altered-content settings.');
@@ -248,12 +263,7 @@ export async function syncYoutubeSettings(piece: string, id: string, baseline: Y
   if (!Array.isArray(before) || !Array.isArray(after)) throw new Error('Load the current YouTube playlists first.');
   if (subtitle && job.subtitleStatus === 'uploading') throw new Error('Subtitles are still being sent to this video. Wait for that to finish.');
   if (subtitle) readSubtitle(piece, subtitle);
-  let coverPath = '';
-  if (cover) {
-    const folder = safeResolve('projects', path.join(piece, 'Packaging'));
-    coverPath = safeResolve('projects', cover);
-    if (!isInside(folder, coverPath) || !/\.(png|jpe?g)$/i.test(coverPath) || !fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size > MAX_THUMBNAIL_BYTES) throw new Error('Choose a PNG or JPEG thumbnail under 50 MB from this project’s packaging.');
-  }
+  const coverPath = cover ? checkedCover(piece, cover) : '';
   const version = checkPackagingVersion(piece, versionChoice, coverPath);
   const oldIds = checkPlaylistIds(before); const newIds = checkPlaylistIds(after);
   const playlistsChanged = oldIds.length !== newIds.length || oldIds.some((p) => !newIds.includes(p));

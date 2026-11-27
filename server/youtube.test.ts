@@ -64,6 +64,14 @@ describe('YouTube uploads', () => {
     acknowledgeUpload(input.piece, uploadsFor(input.piece)[0].id);
     expect(uploadsFor(input.piece)[0].status).toBe('checked');
   });
+  it('rejects a video or cover whose real path points outside the project folder', () => {
+    const otherExports = path.join(tmp, 'Videos', '002 - Other', 'Longform', 'Exports');
+    fs.mkdirSync(otherExports, { recursive: true });
+    fs.writeFileSync(path.join(otherExports, 'other.mp4'), 'other');
+    const linkedExports = path.join(tmp, 'Videos', input.piece, 'Exports', 'Linked');
+    fs.symlinkSync(otherExports, linkedExports, 'junction');
+    expect(() => validateUpload({ ...input, video: `${input.piece}/Exports/Linked/other.mp4` })).toThrow(/Exports folder/);
+  });
   it('marks pre-upload failures as failed so the upload can be retried', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(null, { status: 200 })));
     startUpload(input);
