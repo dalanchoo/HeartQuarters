@@ -544,9 +544,25 @@ function useBriefBoxes(piece: string) {
 type BoxName = 'notes' | 'vidiq' | 'studio';
 type Pasted = { data: string; preview: string };
 
+/** Revokes blob: preview URLs when items are removed or the component unmounts. */
+function useRevokePreviews(urls: string[]) {
+  const prevRef = useRef<string[]>([]);
+  useEffect(() => {
+    const current = new Set(urls);
+    for (const url of prevRef.current) {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    }
+    prevRef.current = urls;
+  }, [urls]);
+  useEffect(() => () => {
+    for (const url of prevRef.current) URL.revokeObjectURL(url);
+  }, []);
+}
+
 /** One of the brief's boxes: text, plus screenshots pasted or dropped into it, shown small with a ✕ each. */
 function BriefBox({ label, value, onText, images, onImages, placeholder }: { label: string; value: string; onText: (v: string) => void; images: Pasted[]; onImages: (i: Pasted[]) => void; placeholder: string }) {
   const [error, setError] = useState('');
+  useRevokePreviews(images.map((img) => img.preview));
   const add = (files: File[]) => {
     if (!files.length) return;
     setError('');
@@ -932,6 +948,7 @@ function ThumbnailChat({
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [pics, setPics] = useState<Reference[]>([]);
+  useRevokePreviews(pics.flatMap((p) => (p.kind === 'pasted' ? [p.preview] : [])));
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const replying = job?.state === 'working';
   const addPics = (files: File[]) => {
