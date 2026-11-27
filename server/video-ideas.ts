@@ -184,16 +184,32 @@ export function checkUrl(value: unknown): string {
   return url;
 }
 
+function isPrivateIpv4(a: number, b: number): boolean {
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  return false;
+}
+
 function isPublicHostname(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
-  if (!h || h === 'localhost' || h.endsWith('.local') || h === '::1') return false;
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return false;
   const parts = h.split('.').map(Number);
   if (parts.length === 4 && parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
-    const [a, b] = parts;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
+    return !isPrivateIpv4(parts[0], parts[1]);
+  }
+  if (h.includes(':')) {
+    if (h === '::' || h === '::1' || /^(?:0+:){7}0*1?$/.test(h)) return false;
+    if (/^f[cd]/i.test(h) || /^fe[89ab]/i.test(h)) return false;
+    const mapped4 = /^::ffff:(\d+)\.(\d+)\.(\d+)\.(\d+)$/i.exec(h);
+    if (mapped4) return !isPrivateIpv4(Number(mapped4[1]), Number(mapped4[2]));
+    const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(h);
+    if (mappedHex) {
+      const hi = Number.parseInt(mappedHex[1], 16);
+      return !isPrivateIpv4((hi >> 8) & 0xff, hi & 0xff);
+    }
   }
   return true;
 }
@@ -226,19 +242,51 @@ export function extractHtmlTitle(html: string): string {
   return decodeHtmlEntities(raw).replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX);
 }
 
+const PAGE_TITLE_BYTES = 65536;
+
+async function readHeadText(res: Response, limit: number): Promise<string> {
+  if (!res.body) return (await res.text()).slice(0, limit);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < limit) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      const take = value.byteLength > limit - total ? value.subarray(0, limit - total) : value;
+      chunks.push(take);
+      total += take.byteLength;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks, total).toString('utf8');
+}
+
 /** Best-effort fetch of a web page's title when adding a bare URL; returns '' on any failure. */
 export async function fetchPageTitle(rawUrl: string): Promise<string> {
   try {
-    const parsed = new URL(checkUrl(rawUrl));
-    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !isPublicHostname(parsed.hostname)) return '';
-    const res = await fetch(parsed.toString(), {
-      signal: AbortSignal.timeout(4000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HeartQuarters/1.0)' },
-    });
-    if (!res.ok) return '';
+    let current = new URL(checkUrl(rawUrl));
+    let res: Response | null = null;
+    for (let hops = 0; hops <= 3; hops++) {
+      if ((current.protocol !== 'https:' && current.protocol !== 'http:') || !isPublicHostname(current.hostname)) return '';
+      res = await fetch(current.toString(), {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(4000),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HeartQuarters/1.0)' },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location');
+        if (!location || hops === 3) return '';
+        current = new URL(location, current);
+        continue;
+      }
+      break;
+    }
+    if (!res || !res.ok) return '';
     const type = res.headers.get('content-type') ?? '';
     if (!/text\/html|application\/xhtml\+xml/i.test(type)) return '';
-    const html = (await res.text()).slice(0, 65536);
+    const html = await readHeadText(res, PAGE_TITLE_BYTES);
     return extractHtmlTitle(html);
   } catch {
     return '';

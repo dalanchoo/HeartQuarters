@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from './config';
 import { makeTree, removeTree } from './testing';
-import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, extractHtmlTitle, IDEA_RESOURCES_DIR, IDEAS_FILE, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
+import { addAttachment, addIdea, addReference, attachmentFile, deleteAttachment, deleteIdea, deleteReference, extractHtmlTitle, fetchPageTitle, IDEA_RESOURCES_DIR, IDEAS_FILE, ideaVideos, moveIdea, moveReference, readIdeas, updateAttachment, updateIdea, updateReference } from './video-ideas';
 
 let root: string;
 let saved: string;
@@ -14,7 +14,7 @@ beforeEach(() => {
   saved = config.videoProjectsDir; config.videoProjectsDir = path.join(root, 'Projects');
   savedTrash = config.trashDir; config.trashDir = path.join(root, 'Trash');
 });
-afterEach(() => { config.videoProjectsDir = saved; config.trashDir = savedTrash; removeTree(root); });
+afterEach(() => { vi.unstubAllGlobals(); config.videoProjectsDir = saved; config.trashDir = savedTrash; removeTree(root); });
 
 describe('video ideas', () => {
   it('starts empty and creates the file on the first idea, newest at the top', () => {
@@ -114,6 +114,23 @@ describe('video ideas', () => {
       .toBe("The Journey's End & Legacy");
     expect(extractHtmlTitle('<meta property="og:title" content="From &ldquo;Substack&rdquo;">'))
       .toBe('From “Substack”');
+  });
+
+  it('blocks local/private addresses and redirects in fetchPageTitle', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:4321/api/ideas' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await fetchPageTitle('http://127.0.0.1:4321/')).toBe('');
+    expect(await fetchPageTitle('http://[::1]/')).toBe('');
+    expect(await fetchPageTitle('http://[::ffff:127.0.0.1]/')).toBe('');
+    expect(await fetchPageTitle('http://[fc00::1]/')).toBe('');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    expect(await fetchPageTitle('https://example.com/start')).toBe('');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
   });
 
   it('moves ideas up and down and deletes one', () => {
