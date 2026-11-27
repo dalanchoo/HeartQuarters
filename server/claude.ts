@@ -276,6 +276,17 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
   let buffer = '';
   let stderr = '';
   let sawResult = false;
+  const processLine = (line: string) => {
+    const ev = read(line);
+    if (ev.sessionId) run.sessionId = ev.sessionId;
+    if (ev.text) run.messages.push({ from: 'claude', text: ev.text, at: new Date().toISOString() });
+    if (ev.activity) run.activity = ev.activity;
+    if (ev.done) {
+      sawResult = true;
+      run.error = ev.error;
+    }
+    if (ev.text || ev.activity || ev.done || ev.sessionId) save(run);
+  };
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk: string) => {
     // Output still arriving from a turn that was stopped (or replaced) must not save that turn's conversation over the
@@ -284,16 +295,9 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) >= 0) {
-      const ev = read(buffer.slice(0, nl));
+      const line = buffer.slice(0, nl);
       buffer = buffer.slice(nl + 1);
-      if (ev.sessionId) run.sessionId = ev.sessionId;
-      if (ev.text) run.messages.push({ from: 'claude', text: ev.text, at: new Date().toISOString() });
-      if (ev.activity) run.activity = ev.activity;
-      if (ev.done) {
-        sawResult = true;
-        run.error = ev.error;
-      }
-      if (ev.text || ev.activity || ev.done || ev.sessionId) save(run);
+      processLine(line);
     }
   });
   child.stderr.setEncoding('utf8');
@@ -322,6 +326,12 @@ function runTurn(run: ClaudeRun, message: string, first: boolean, cwd: string) {
   };
   child.on('error', (e) => finish(true, `Couldn't start ${name}: ${e.message}`));
   const finishUp = (code: number | null) => {
+    if (running.get(key) !== child || finishing) return;
+    if (buffer.trim()) {
+      const tail = buffer;
+      buffer = '';
+      processLine(tail);
+    }
     if (code === 0 && sawResult && !run.error) finish(false);
     else finish(true, run.error || stderr.trim() || `${name} stopped (exit code ${code}).`);
   };

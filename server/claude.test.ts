@@ -332,6 +332,21 @@ describe('a conversation', () => {
     expect(stopped.messages.length).toBeGreaterThan(2);
   });
 
+  it('processes the final stdout line even when it has no trailing newline', async () => {
+    const noNewlineAi = path.join(tmp, 'no-newline-ai.cjs');
+    fs.writeFileSync(
+      noNewlineAi,
+      `process.stdout.write(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Done without newline.' }] } }) + '\\n');
+       process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'ok' }));`,
+    );
+    config.claudeCommand = [process.execPath, noNewlineAi];
+    startEdit(VIDEO, 'claude');
+    const done = await settle();
+    expect(done.status).toBe('idle');
+    expect(done.error).toBeUndefined();
+    expect(done.messages.at(-1)?.text).toBe('Done without newline.');
+  });
+
   it('refuses a video without a Longform folder or a CapCut project, or outside the video folder', () => {
     expect(() => startEdit('../Drafts', 'claude')).toThrow();
     fs.rmSync(path.join(tmp, 'Drafts', VIDEO), { recursive: true });
