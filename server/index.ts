@@ -97,7 +97,7 @@ import { readVideoProfile, saveVideoProfile } from './video-profile.js';
 import { saveYoutubeCaptions } from './caption-save.js';
 import { analyticsAnalysis, analyticsSnapshots, parseAnalysisPlan, startAnalyticsAnalysis, startAnalyticsSummary, videoSnapshotNames } from './analytics-analysis.js';
 import { channelOverview, channelVideoDetail, refreshChannelWorkspace, startChannelVideoAnalysis } from './channel-workspace.js';
-import { readScript, saveScript } from './script.js';
+import { readScript, saveScript, ScriptConflict } from './script.js';
 import { checkAiWriting } from './ai-writing.js';
 import { draftCommentReply } from './comment-reply-ai.js';
 import { ensureExportsFolder } from './exports-folder.js';
@@ -253,13 +253,14 @@ app.get('/api/projects', handle((_req, res) => {
 }));
 app.get('/api/video-overview', handle((_req, res) => { res.json(videoOverview()); }));
 app.get('/api/script', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   readScript(String(req.query.piece ?? '')).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/script', (req, res) => {
   saveScript(String(req.body?.piece ?? ''), {
     html: req.body?.html !== undefined ? String(req.body.html) : undefined,
     text: req.body?.text !== undefined ? String(req.body.text) : undefined,
-  }).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));
+  }, req.body?.revision).then((result) => res.json(result), (e: unknown) => res.status(e instanceof ScriptConflict ? 409 : 400).json({ error: e instanceof Error ? e.message : String(e) }));
 });
 app.post('/api/ai-writing-check', (req, res) => {
   checkAiWriting(req.body?.text, req.body?.label, req.body?.ai).then((result) => res.json(result), (e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : String(e) }));

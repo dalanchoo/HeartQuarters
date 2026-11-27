@@ -3,11 +3,12 @@
 // bulleted and numbered lists (including nested indent levels), and blockquotes so it opens cleanly in Google Docs,
 // Microsoft Word, and HeartQuarters.
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import mammoth from 'mammoth';
 import { config, safeResolve } from './config.js';
-import { readable, readText, writeFile } from './safe-files.js';
+import { readable, writeFile } from './safe-files.js';
 
 export interface ScriptFile {
   /** Filename inside the piece folder, e.g. "022 - Worth Telling Them - Script.docx". */
@@ -16,6 +17,8 @@ export interface ScriptFile {
   path: string;
   /** Whether the file already exists on disk. */
   exists: boolean;
+  /** Identifies the exact file this editor started from. */
+  revision: string;
   /** Rich HTML contents for the WYSIWYG editor. */
   html: string;
   /** Plain-text representation for Copy Script and Write Brief. */
@@ -469,29 +472,49 @@ export function buildDocx(input: string): Buffer {
   return Buffer.concat([...locals, ...centrals, eocd]);
 }
 
-export async function readScript(piece: string): Promise<ScriptFile> {
-  const dir = pieceFolder(piece);
+function scriptSnapshot(dir: string) {
   const found = findScriptFile(dir);
-  if (!found) {
-    const name = defaultScriptName(dir);
-    return { name, path: rel(path.join(dir, name)), exists: false, html: '', text: '' };
-  }
-  readable(found);
-  if (/\.docx$/i.test(found)) {
-    const html = (await mammoth.convertToHtml({ path: found }, { styleMap: MAMMOTH_STYLE_MAP })).value;
-    const text = htmlToPlainText(html);
-    return { name: path.basename(found), path: rel(found), exists: true, html, text };
-  }
-  const raw = readText(found).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  const html = plainTextToHtml(raw);
-  return { name: path.basename(found), path: rel(found), exists: true, html, text: raw };
+  return {
+    file: found ?? path.join(dir, defaultScriptName(dir)),
+    bytes: found ? fs.readFileSync(readable(found)) : null,
+  };
 }
 
-export async function saveScript(piece: string, content: string | { html?: string; text?: string }): Promise<ScriptFile> {
+function scriptRevision(file: string, bytes: Buffer | null): string {
+  return bytes ? createHash('sha256').update(path.basename(file)).update('\0').update(bytes).digest('hex') : 'missing';
+}
+
+async function describeScript(file: string, bytes: Buffer | null): Promise<ScriptFile> {
+  const info = { name: path.basename(file), path: rel(file), exists: bytes !== null, revision: scriptRevision(file, bytes) };
+  if (!bytes) return { ...info, html: '', text: '' };
+  if (/\.docx$/i.test(file)) {
+    const html = (await mammoth.convertToHtml({ buffer: bytes }, { styleMap: MAMMOTH_STYLE_MAP })).value;
+    return { ...info, html, text: htmlToPlainText(html) };
+  }
+  const text = bytes.toString('utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  return { ...info, html: plainTextToHtml(text), text };
+}
+
+export async function readScript(piece: string): Promise<ScriptFile> {
+  const { file, bytes } = scriptSnapshot(pieceFolder(piece));
+  return describeScript(file, bytes);
+}
+
+export class ScriptConflict extends Error {}
+
+export async function saveScript(piece: string, content: string | { html?: string; text?: string }, expectedRevision: unknown): Promise<ScriptFile> {
   const dir = pieceFolder(piece);
-  const found = findScriptFile(dir);
-  const target = found && /\.docx$/i.test(found) ? found : path.join(dir, defaultScriptName(dir));
+  if (typeof expectedRevision !== 'string') {
+    throw new ScriptConflict('This script editor is out of date. Copy your unsaved edits before refreshing HeartQuarters.');
+  }
   const input = typeof content === 'string' ? content : String(content?.html ?? content?.text ?? '');
-  writeFile(target, buildDocx(input));
-  return readScript(piece);
+  const docx = buildDocx(input);
+  const { file, bytes } = scriptSnapshot(dir);
+  // Keep the revision check and the write synchronous so two app saves cannot both pass using the same revision.
+  if (scriptRevision(file, bytes) !== expectedRevision) {
+    throw new ScriptConflict('The script changed since you opened it. Copy your unsaved edits, then refresh HeartQuarters to load the latest version.');
+  }
+  const target = /\.docx$/i.test(file) ? file : path.join(dir, defaultScriptName(dir));
+  writeFile(target, docx);
+  return describeScript(target, docx);
 }

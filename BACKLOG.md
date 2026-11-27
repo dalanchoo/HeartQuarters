@@ -134,6 +134,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   back, as does closing the window. The Save icon sits next to the formatting tools.
   The toolbar highlights formatting at the cursor or selection, and Text Style
   shows a dropdown arrow in both windows.
+  One tab at a time can open the editor in the same browser. The engine rejects
+  saves from stale editors, including when the script changed outside the app.
 
 ---
 

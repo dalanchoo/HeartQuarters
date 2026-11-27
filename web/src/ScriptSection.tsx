@@ -18,6 +18,8 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   const [busy, setBusy] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [error, setError] = useState('');
+  const [lockedByOther, setLockedByOther] = useState(false);
+  const [openAttempt, setOpenAttempt] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
   const initialHtml = useRef('');
   const attachEditor = useCallback((editor: HTMLDivElement | null) => {
@@ -53,27 +55,45 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     if (editorRef.current) editorRef.current.innerHTML = clean;
   };
 
+  const editing = open || file !== null;
   useEffect(() => {
-    if (!open || file) return;
+    if (!editing) return;
     let active = true;
+    let release!: () => void;
+    const released = new Promise<void>(resolve => { release = resolve; });
+    setLockedByOther(false);
     setError('');
-    getJson<ScriptFile>(`/api/script?piece=${encodeURIComponent(piece)}`).then(
-      (res) => {
+
+    const load = async () => {
+      const res = await getJson<ScriptFile>(`/api/script?piece=${encodeURIComponent(piece)}`);
+      if (!active) return;
+      const clean = DOMPurify.sanitize(res.html);
+      initialHtml.current = clean;
+      setFile({ ...res, html: clean });
+      setHtml(clean);
+      setPlain(res.text);
+    };
+    const showError = (e: unknown) => { if (active) setError(e instanceof Error ? e.message : String(e)); };
+    if (navigator.locks) {
+      const key = `heartquarters-script:${piece.toLowerCase()}`;
+      void navigator.locks.request(key, { ifAvailable: true }, async lock => {
         if (!active) return;
-        const clean = DOMPurify.sanitize(res.html);
-        initialHtml.current = clean;
-        setFile({ ...res, html: clean });
-        setHtml(clean);
-        setPlain(res.text);
-      },
-      (e: Error) => {
-        if (active) setError(e.message);
-      },
-    );
+        if (!lock) {
+          setLockedByOther(true);
+          return;
+        }
+        void load().catch(showError);
+        await released;
+      }).catch(showError);
+    } else {
+      // The engine still checks the saved revision when Web Locks are unavailable.
+      void load().catch(showError);
+    }
     return () => {
       active = false;
+      release();
     };
-  }, [open, piece, file]);
+  }, [editing, piece, openAttempt]);
 
   const updateFormatting = useCallback(() => {
     const editor = editorRef.current;
@@ -119,11 +139,13 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     setSavedNotice(false);
     try {
       const currentHtml = editorRef.current ? DOMPurify.sanitize(editorRef.current.innerHTML) : html;
-      const updated = await postJson<ScriptFile>('/api/script', { piece, html: currentHtml });
+      const updated = await postJson<ScriptFile>('/api/script', { piece, html: currentHtml, revision: file.revision });
       const clean = DOMPurify.sanitize(updated.html);
       setFile({ ...updated, html: clean });
-      setHtml(clean);
-      setPlain(updated.text);
+      if (currentHtml === DOMPurify.sanitize(editorRef.current?.innerHTML ?? currentHtml)) {
+        setHtml(clean);
+        setPlain(updated.text);
+      }
       setSavedNotice(true);
       setTimeout(() => setSavedNotice(false), 2000);
       onSaved?.();
@@ -165,13 +187,19 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
         </header>
       )}
       {error && <p className="error" role="alert">{error}</p>}
-      {!file && !error && <p className="muted small-text">Loading script…</p>}
+      {lockedByOther && (
+        <div className="script-window-actions">
+          <span role="status">This script is already open for editing in another HeartQuarters tab.</span>
+          <button type="button" className="small" onClick={() => setOpenAttempt(attempt => attempt + 1)}>Try Again</button>
+        </div>
+      )}
+      {!file && !error && !lockedByOther && <p className="muted small-text">Loading script…</p>}
       {file && (
         <div className="script-editor">
           <div className="script-file muted small-text" role="status">
             {file.name}
             {!file.exists && ' (will be created on save)'}
-            {busy ? ' · Saving…' : savedNotice && ' · Saved ✓'}
+            {busy ? ' · Saving…' : savedNotice && !dirty && ' · Saved ✓'}
           </div>
           <div className="script-toolbar-row">
             <div className="script-formatting">

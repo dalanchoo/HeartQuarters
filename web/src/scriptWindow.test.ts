@@ -17,9 +17,10 @@ function setup(blocked = false) {
     focus: vi.fn(),
     close: vi.fn(),
   });
+  const opener = Object.assign(new EventTarget(), { open: vi.fn(() => blocked ? null : popup) });
   const editor = {
     ownerDocument: {
-      defaultView: { open: vi.fn(() => blocked ? null : popup) },
+      defaultView: opener,
       documentElement: { lang: 'en' },
       baseURI: 'http://127.0.0.1:4321/',
       querySelectorAll: vi.fn(() => [stylesheet]),
@@ -28,7 +29,7 @@ function setup(blocked = false) {
   };
   const onReturn = vi.fn();
   const handle = openScriptWindow(editor as unknown as HTMLElement, 'Script — 001', onReturn);
-  return { handle, editor, inline, popup, card, onReturn, parent: () => parent };
+  return { handle, editor, inline, opener, popup, card, onReturn, parent: () => parent };
 }
 
 describe('script window', () => {
@@ -53,6 +54,21 @@ describe('script window', () => {
     expect(parent()).toBe('inline');
     expect(popup.close).toHaveBeenCalledOnce();
     popup.dispatchEvent(new Event('pagehide'));
+    expect(onReturn).toHaveBeenCalledOnce();
+  });
+
+  it('focuses the same popup when it receives a second open request', () => {
+    const { handle, editor, opener, popup } = setup();
+    expect(openScriptWindow(editor as unknown as HTMLElement, 'Script — 001', vi.fn())).toBe(handle);
+    expect(opener.open).toHaveBeenCalledOnce();
+    expect(popup.focus).toHaveBeenCalledOnce();
+  });
+
+  it('closes the popup when the parent tab reloads or leaves', () => {
+    const { editor, opener, popup, onReturn, inline } = setup();
+    opener.dispatchEvent(new Event('pagehide'));
+    expect(popup.close).toHaveBeenCalledOnce();
+    expect(inline.append).toHaveBeenCalledExactlyOnceWith(editor);
     expect(onReturn).toHaveBeenCalledOnce();
   });
 

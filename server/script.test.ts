@@ -1,8 +1,9 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import mammoth from 'mammoth';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config.js';
-import { buildDocx, readScript, saveScript } from './script.js';
+import { buildDocx, readScript, saveScript, ScriptConflict } from './script.js';
 import { makeTree, removeTree } from './testing.js';
 
 let tmp: string;
@@ -29,6 +30,7 @@ describe('video script reader and .docx writer', () => {
       name: '022 - Worth Telling Them - Script.docx',
       path: '022 - Worth Telling Them/Longform/022 - Worth Telling Them - Script.docx',
       exists: false,
+      revision: 'missing',
       html: '',
       text: '',
     });
@@ -40,7 +42,7 @@ describe('video script reader and .docx writer', () => {
       '<ol><li>Step one</li><li>Step two</li></ol>' +
       '<blockquote>A quiet reflection.</blockquote>';
 
-    const saved = await saveScript('022 - Worth Telling Them/Longform', { html: richHtml });
+    const saved = await saveScript('022 - Worth Telling Them/Longform', { html: richHtml }, empty.revision);
     expect(saved.exists).toBe(true);
     expect(saved.name).toBe('022 - Worth Telling Them - Script.docx');
     expect(saved.html).toContain('<h1>Act One</h1>');
@@ -62,7 +64,9 @@ describe('video script reader and .docx writer', () => {
   });
 
   it('uses the standalone short folder name for standalone shorts', async () => {
-    const saved = await saveScript('999 - Shorts/2026/999-2026-01 - Quick Tip', '- Bullet one\n- Bullet two');
+    const piece = '999 - Shorts/2026/999-2026-01 - Quick Tip';
+    const { revision } = await readScript(piece);
+    const saved = await saveScript(piece, '- Bullet one\n- Bullet two', revision);
     expect(saved.name).toBe('999-2026-01 - Quick Tip - Script.docx');
     expect(saved.html).toContain('<ul><li>Bullet one</li><li>Bullet two</li></ul>');
     expect(saved.text).toBe('- Bullet one\n- Bullet two');
@@ -70,8 +74,34 @@ describe('video script reader and .docx writer', () => {
 
   it('rejects paths outside Video Projects or folders without Packaging', async () => {
     await expect(readScript('../outside')).rejects.toThrow();
-    await expect(saveScript('../outside', 'x')).rejects.toThrow();
+    await expect(saveScript('../outside', 'x', 'missing')).rejects.toThrow();
     await expect(readScript('022 - Worth Telling Them')).rejects.toThrow(/no Packaging folder/);
+  });
+
+  it('rejects older editors and two saves based on the same script revision', async () => {
+    const piece = '022 - Worth Telling Them/Longform';
+    const { revision } = await readScript(piece);
+    await expect(saveScript(piece, 'Old editor', undefined)).rejects.toBeInstanceOf(ScriptConflict);
+    expect((await readScript(piece)).exists).toBe(false);
+    const first = await saveScript(piece, 'Original script', revision);
+    const [winner, stale] = await Promise.allSettled([
+      saveScript(piece, 'First update', first.revision),
+      saveScript(piece, 'Stale update', first.revision),
+    ]);
+    expect(winner.status).toBe('fulfilled');
+    expect(stale).toMatchObject({ status: 'rejected', reason: expect.any(ScriptConflict) });
+    expect((await readScript(piece)).text).toBe('First update');
+  });
+
+  it('detects external changes to a text script before converting it to Word', async () => {
+    const piece = '022 - Worth Telling Them/Longform';
+    const source = path.join(config.videoProjectsDir, piece, 'Script.txt');
+    fs.writeFileSync(source, 'First draft');
+    const script = await readScript(piece);
+    fs.writeFileSync(source, 'Other draft');
+    await expect(saveScript(piece, 'Unsaved editor text', script.revision)).rejects.toBeInstanceOf(ScriptConflict);
+    expect((await readScript(piece)).text).toBe('Other draft');
+    expect(fs.existsSync(path.join(path.dirname(source), '022 - Worth Telling Them - Script.docx'))).toBe(false);
   });
 
   it('round-trips buildDocx through mammoth', async () => {
