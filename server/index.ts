@@ -241,7 +241,7 @@ function handle(fn: (req: Request, res: Response) => unknown) {
         if (!res.headersSent) res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
       });
     } catch (e) {
-      res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
+      if (!res.headersSent) res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
     }
   };
 }
@@ -895,7 +895,7 @@ app.use((_req, res) => {
 const port = Number(process.env.HQ_PORT) || config.port;
 const url = `http://127.0.0.1:${port}`;
 if (!process.env.VITEST) {
-  app.listen(port, '127.0.0.1', () => {
+  const server = app.listen(port, '127.0.0.1', () => {
     console.log(`HeartQuarters is running at ${url}`);
     console.log('Close this window (or press Ctrl+C) to stop it.');
     try { const n = migrateShotReferences(); if (n) console.log(`Shot reference pictures: copied ${n} files to Drive.`); } catch (e) { console.log(`Shot reference pictures not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
@@ -908,4 +908,11 @@ if (!process.env.VITEST) {
       spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
     }
   });
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    console.error(err.code === 'EADDRINUSE' ? `Port ${port} is already in use — is HeartQuarters already running?` : `Server error: ${err.message}`);
+    process.exit(1);
+  });
+  const shutdown = () => server.close(() => process.exit(0));
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
