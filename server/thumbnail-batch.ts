@@ -7,7 +7,7 @@ import { safeResolve } from './config.js';
 import { rankPair, readSavedRanking, type RankingDeps } from './photo-ranking.js';
 import { DRAFTS_FOLDER, PICKS_FILE, readPicks, type BriefPick } from './projects.js';
 import { readable } from './safe-files.js';
-import { makeImage, startThumbnailFor, type ImageAi, type MakeImage } from './thumbnails.js';
+import { makeImage, startThumbnailFor, type ImageAi, type MakeImage, type ThumbJob } from './thumbnails.js';
 
 export interface BatchPairStatus {
   index: number;
@@ -108,19 +108,28 @@ export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: B
       pair.photo = photo;
       pair.state = 'generating';
 
-      const started: { ai: ImageAi; conversation: string; finished: Promise<void> }[] = [];
+      const started: { ai: ImageAi; thumbJob: ThumbJob; finished: Promise<void> }[] = [];
       const startErrors: string[] = [];
       for (const imageAi of selected) {
         try {
           const { job: thumbJob, finished: thumbDone } = startThumbnailFor(piece, pick, photo, imageAi, make);
-          started.push({ ai: imageAi, conversation: thumbJob.conversation, finished: thumbDone });
+          started.push({ ai: imageAi, thumbJob, finished: thumbDone });
         } catch (e) {
           startErrors.push(`${imageAi}: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
-      pair.conversations = started.map(({ ai: imageAi, conversation }) => ({ ai: imageAi, conversation }));
+      pair.conversations = started.map(({ ai: imageAi, thumbJob }) => ({ ai: imageAi, conversation: thumbJob.conversation }));
       const results = await Promise.allSettled(started.map(s => s.finished));
-      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map(r => r.reason instanceof Error ? r.reason.message : String(r.reason));
+      const failed = started.flatMap((s, idx) => {
+        const res = results[idx];
+        if (res.status === 'rejected') {
+          return [`${s.ai}: ${res.reason instanceof Error ? res.reason.message : String(res.reason)}`];
+        }
+        if (s.thumbJob.state === 'failed') {
+          return [`${s.ai}: ${s.thumbJob.error ?? 'Failed'}`];
+        }
+        return [];
+      });
       const errors = [...startErrors, ...failed];
       if (errors.length === selected.length) {
         pair.state = 'failed';

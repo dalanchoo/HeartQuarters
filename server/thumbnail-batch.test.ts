@@ -164,4 +164,35 @@ describe('Make All 6 Drafts', () => {
     expect(job.state).toBe('done');
     expect(makeCalls).toEqual(['codex', 'codex']);
   });
+
+  it('marks a pair failed when every selected image AI fails, and records partial errors when one fails', async () => {
+    const smallFile = path.join(tmp, 'small.jpg');
+    fs.writeFileSync(smallFile, 'small');
+    const fakeMake: MakeImage = async (ai, prompt, cwd, out) => {
+      if (prompt.includes('Pair One Title') || ai === 'gemini') {
+        throw new Error(`${ai} rate limited`);
+      }
+      fs.writeFileSync(path.join(cwd, out), `img-${ai}`);
+      return { image: path.join(cwd, out), session: `s-${ai}` };
+    };
+    const { job, finished } = startBatchThumbnails(LONGFORM, 'claude', {
+      ranking: {
+        photos: () => PHOTOS,
+        starred: () => [],
+        shots: () => [],
+        small: async () => smallFile,
+        ask: async (_ai, prompt) =>
+          prompt.includes('Pair One Title')
+            ? JSON.stringify({ ranked: [{ photo: 'Positive/Relief/Relief_001.jpg', why: '1' }] })
+            : JSON.stringify({ ranked: [{ photo: 'Empathy/Compassion/Compassion_001.jpg', why: '2' }] }),
+      },
+      make: fakeMake,
+    });
+    await finished;
+    expect(job.pairs[0].state).toBe('failed');
+    expect(job.pairs[0].reason).toContain('codex rate limited');
+    expect(job.pairs[0].reason).toContain('gemini rate limited');
+    expect(job.pairs[1].state).toBe('done');
+    expect(job.pairs[1].reason).toContain('gemini rate limited');
+  });
 });
