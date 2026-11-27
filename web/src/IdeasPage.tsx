@@ -250,6 +250,7 @@ export function IdeasPage() {
         if (save) { try { localStorage.setItem('hq-brainstorm-width', String(w)); } catch { /* convenience */ } }
       }} />
       <BrainstormPanel
+        key={activeIdea.id}
         idea={activeIdea}
         width={panelWidth}
         busyIdeas={busy}
@@ -733,6 +734,8 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
   onClose: () => void;
 }) {
   const [thread, setThread] = useState<IdeaBrainstorm | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState<AiId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -782,14 +785,18 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
     setError(null);
     try {
       const updated = await postJson<IdeaBrainstorm>('/api/ideas/brainstorm/send', { id: idea.id, ai, message: msg });
+      if (!mountedRef.current) return;
       setThread(updated);
       setDraft('');
     } catch (e) {
+      if (!mountedRef.current) return;
       setError((e as Error).message);
       // Reload in case John's message was saved before the AI call failed.
-      void getJson<IdeaBrainstorm>(`/api/ideas/brainstorm?id=${encodeURIComponent(idea.id)}`).then(setThread, () => {});
+      void getJson<IdeaBrainstorm>(`/api/ideas/brainstorm?id=${encodeURIComponent(idea.id)}`).then((data) => {
+        if (mountedRef.current) setThread(data);
+      }, () => {});
     } finally {
-      setAsking(null);
+      if (mountedRef.current) setAsking(null);
     }
   };
 
@@ -798,9 +805,10 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
     if (!window.confirm(`Clear the brainstorm conversation for “${idea.title}”?`)) return;
     setError(null);
     try {
-      setThread(await postJson<IdeaBrainstorm>('/api/ideas/brainstorm/clear', { id: idea.id }));
+      const cleared = await postJson<IdeaBrainstorm>('/api/ideas/brainstorm/clear', { id: idea.id });
+      if (mountedRef.current) setThread(cleared);
     } catch (e) {
-      setError((e as Error).message);
+      if (mountedRef.current) setError((e as Error).message);
     }
   };
 
