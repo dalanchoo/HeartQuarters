@@ -34,7 +34,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   const popOut = () => {
     const next = openScriptWindow(editorHost, `Script — ${piece.split(/[\\/]/)[0]}`, () => {
       setPopup(null);
-      windowButton.current?.focus();
+      requestAnimationFrame(() => windowButton.current?.focus());
     });
     setPopupBlocked(!next);
     setPopup(next);
@@ -142,6 +142,14 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   };
 
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
+  const windowAction = popup ? 'Focus Script Window' : 'Pop Out Script';
+  const popOutButton = (
+    <button ref={windowButton} type="button" className="script-icon-button" aria-label={windowAction} title={windowAction} onClick={popup ? popup.focus : popOut}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3z" />
+      </svg>
+    </button>
+  );
 
   const editor = (
     <>
@@ -156,89 +164,93 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
       {!file && !error && <p className="muted small-text">Loading script…</p>}
       {file && (
         <div className="script-editor">
+          <div className="script-file muted small-text" role="status">
+            {file.name}
+            {!file.exists && ' (will be created on save)'}
+            {busy ? ' · Saving…' : savedNotice && ' · Saved ✓'}
+          </div>
           <div className="script-toolbar-row">
-            <div className="script-toolbar" role="toolbar" aria-label="Script Formatting">
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('undo')} title="Undo (Ctrl+Z)">
-                ↶
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('redo')} title="Redo (Ctrl+Y)">
-                ↷
-              </button>
-              <span className="script-divider" aria-hidden="true" />
-              <select
-                className="script-heading-select"
-                aria-label="Text Style"
-                value={blockTag}
-                onChange={(e) => {
-                  const tag = e.target.value;
-                  setBlockTag(tag);
-                  runCmd('formatBlock', `<${tag.toLowerCase()}>`);
-                }}
-              >
-                <option value="P">Normal Text</option>
-                <option value="H1">Heading 1</option>
-                <option value="H2">Heading 2</option>
-                <option value="H3">Heading 3</option>
-                <option value="BLOCKQUOTE">Quote</option>
-              </select>
-              <span className="script-divider" aria-hidden="true" />
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('bold')} title="Bold (Ctrl+B)">
-                <strong>B</strong>
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('italic')} title="Italic (Ctrl+I)">
-                <em>I</em>
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('underline')} title="Underline (Ctrl+U)">
-                <u>U</u>
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('strikeThrough')} title="Strikethrough">
-                <s>S</s>
-              </button>
-              <span className="script-divider" aria-hidden="true" />
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertOrderedList')} title="Numbered List">
-                1.☰
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertUnorderedList')} title="Bulleted List">
-                •☰
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('outdent')} title="Indent Less (Shift+Tab)">
-                ⇤
-              </button>
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('indent')} title="Indent More (Tab)">
-                ⇥
-              </button>
-              <button
-                type="button"
-                className="script-tool"
-                onMouseDown={keepFocus}
-                onClick={() => runCmd('formatBlock', blockTag === 'BLOCKQUOTE' ? '<p>' : '<blockquote>')}
-                title="Quote"
-              >
-                ❝
-              </button>
-              <span className="script-divider" aria-hidden="true" />
-              <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('removeFormat')} title="Clear Formatting">
-                Tₓ
+            <div className="script-formatting">
+              <div className="script-toolbar" role="toolbar" aria-label="Script Formatting">
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('undo')} title="Undo (Ctrl+Z)">
+                  ↶
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('redo')} title="Redo (Ctrl+Y)">
+                  ↷
+                </button>
+                <span className="script-divider" aria-hidden="true" />
+                <select
+                  className="script-heading-select"
+                  aria-label="Text Style"
+                  value={blockTag}
+                  onChange={(e) => {
+                    const tag = e.target.value;
+                    setBlockTag(tag);
+                    runCmd('formatBlock', `<${tag.toLowerCase()}>`);
+                  }}
+                >
+                  <option value="P">Normal Text</option>
+                  <option value="H1">Heading 1</option>
+                  <option value="H2">Heading 2</option>
+                  <option value="H3">Heading 3</option>
+                  <option value="BLOCKQUOTE">Quote</option>
+                </select>
+                <span className="script-divider" aria-hidden="true" />
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('bold')} title="Bold (Ctrl+B)">
+                  <strong>B</strong>
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('italic')} title="Italic (Ctrl+I)">
+                  <em>I</em>
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('underline')} title="Underline (Ctrl+U)">
+                  <u>U</u>
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('strikeThrough')} title="Strikethrough">
+                  <s>S</s>
+                </button>
+                <span className="script-divider" aria-hidden="true" />
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertOrderedList')} title="Numbered List">
+                  1.☰
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertUnorderedList')} title="Bulleted List">
+                  •☰
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('outdent')} title="Indent Less (Shift+Tab)">
+                  ⇤
+                </button>
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('indent')} title="Indent More (Tab)">
+                  ⇥
+                </button>
+                <button
+                  type="button"
+                  className="script-tool"
+                  onMouseDown={keepFocus}
+                  onClick={() => runCmd('formatBlock', blockTag === 'BLOCKQUOTE' ? '<p>' : '<blockquote>')}
+                  title="Quote"
+                >
+                  ❝
+                </button>
+                <span className="script-divider" aria-hidden="true" />
+                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('removeFormat')} title="Clear Formatting">
+                  Tₓ
+                </button>
+              </div>
+
+              <button type="button" className="script-icon-button" disabled={!dirty || busy} onClick={() => void save()} aria-label="Save Script" title="Save Script (Ctrl+S)">
+                <span aria-hidden="true">💾</span>
               </button>
             </div>
-
             <div className="script-actions">
-              <button type="button" className="small" disabled={!dirty || busy} onClick={() => void save()}>
-                {busy ? 'Saving…' : 'Save Script'}
-              </button>
               {dirty && (
                 <button type="button" className="small" disabled={busy} onClick={() => loadIntoEditor(file.html, file.text)}>
                   Discard Changes
                 </button>
               )}
               {plain.trim() && <CopyButton text={plain} label="Copy Script" />}
-              <span className="muted small-text">
-                {file.name}
-                {!file.exists && ' (will be created on save)'}
-                {savedNotice && ' · Saved ✓'}
-              </span>
+              {!popup && popOutButton}
             </div>
           </div>
+          {popupBlocked && <p className="error" role="alert">Allow pop-ups for HeartQuarters and try again.</p>}
 
           {/* Cleaned with DOMPurify before display. */}
           <div
@@ -264,14 +276,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   return (
     <details className={`yt-section${dirty ? ' unsaved' : ''}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>Script{dirty && <span className="unsaved-label">Unsaved Changes</span>}</summary>
-      {file && (
-        <div className="script-window-actions">
-          <button ref={windowButton} type="button" className="small" onClick={popup ? popup.focus : popOut}>
-            {popup ? 'Focus Script Window' : 'Open Script in New Window'}
-          </button>
-          {popupBlocked && <span className="error" role="alert">Allow pop-ups for HeartQuarters and try again.</span>}
-        </div>
-      )}
+      {popup && <div className="script-toolbar-row"><div className="script-actions">{popOutButton}</div></div>}
       <div ref={inlineRef} />
       {createPortal(editor, editorHost)}
     </details>
