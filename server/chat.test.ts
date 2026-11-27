@@ -221,6 +221,21 @@ describe('full-screen multi-AI chat', () => {
     expect(fs.existsSync(path.join(config.trashDir, trashEntries[0], file.name))).toBe(true);
   });
 
+  it('ignores path-traversal filenames in a thread when clearing or deleting', async () => {
+    const outside = path.join(config.videoProjectsDir, '_HeartQuarters', 'Outside.txt');
+    fs.mkdirSync(path.dirname(outside), { recursive: true });
+    fs.writeFileSync(outside, 'keep me');
+    const thread = await sendChatMessage(null, 'claude', 'Hi', [], async () => 'Hello');
+    const threadFile = path.join(config.videoProjectsDir, '_HeartQuarters', 'Chat', 'Threads', `${thread.id}.json`);
+    const savedThread = JSON.parse(fs.readFileSync(threadFile, 'utf8')) as { messages: { files?: string[] }[] };
+    savedThread.messages[0].files = ['../../Outside.txt'];
+    fs.writeFileSync(threadFile, JSON.stringify(savedThread));
+    fs.mkdirSync(path.join(config.videoProjectsDir, CHAT_FILES_DIR), { recursive: true });
+
+    clearChat(thread.id);
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
   it('loses nothing if the app data folder is deleted', async () => {
     const file = uploadChatFile('KeepMe.txt', Buffer.from('important'));
     const thread = await sendChatMessage(null, 'claude', 'Remember this', [file.name], async () => 'Saved in Drive');

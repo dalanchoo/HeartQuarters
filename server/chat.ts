@@ -383,12 +383,28 @@ export function moveChat(rawChatId: unknown, rawFolderId: unknown): ChatIndex {
   return listChats();
 }
 
+function isValidAttachedName(rawName: unknown): rawName is string {
+  return (
+    typeof rawName === 'string' &&
+    !!rawName.trim() &&
+    !rawName.includes('/') &&
+    !rawName.includes('\\') &&
+    rawName !== '.' &&
+    rawName !== '..'
+  );
+}
+
 function trashFiles(names: string[]): void {
   if (!names.length) return;
   const filesDir = chatFilesFolder(false);
   if (!fs.existsSync(filesDir)) return;
   writable(filesDir);
-  const existing = names.filter((n) => fs.existsSync(path.join(filesDir, n)));
+  const filesRoot = path.resolve(filesDir);
+  const existing = names.filter((n) => {
+    if (!isValidAttachedName(n)) return false;
+    const full = path.resolve(filesRoot, n);
+    return isInside(filesRoot, full) && fs.existsSync(full);
+  });
   if (!existing.length) return;
 
   const projects = path.resolve(config.videoProjectsDir);
@@ -399,7 +415,7 @@ function trashFiles(names: string[]): void {
   fs.mkdirSync(trash, { recursive: true });
   const holder = fs.mkdtempSync(path.join(trash, 'Chat Files '));
   for (const name of existing) {
-    const full = path.join(filesDir, name);
+    const full = path.join(filesRoot, name);
     writable(full);
     fs.renameSync(full, path.join(holder, name));
   }
@@ -645,7 +661,7 @@ export function attachVideoPartToChat(rawRelPath: unknown): UploadedChatFile {
 
 /** Checked path to an attached chat file for serving sandboxed in the browser. */
 export function chatFilePath(rawName: unknown): string {
-  if (typeof rawName !== 'string' || !rawName.trim() || rawName.includes('/') || rawName.includes('\\') || rawName === '.' || rawName === '..') {
+  if (!isValidAttachedName(rawName)) {
     throw new Error('Choose a valid attached file.');
   }
   const full = readable(safeResolve('projects', path.posix.join(CHAT_FILES_DIR, rawName)));
