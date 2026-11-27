@@ -106,9 +106,9 @@ import { listStoredComments, moderateComment, replyToComment, syncAllChannelComm
 import { gatherTopicEvidence, readTopicResearch, runTopicResearch, sendResearchMessage, topicCounts } from './channel-research.js';
 import { outsideOverview, runYoutubeScan, saveScanSettings } from './outside-youtube.js';
 
-const app = express();
+export const app = express();
 app.use(slowRequestLogger()); // prints a line in this window when a request takes over a second
-watchEngineStalls();
+if (!process.env.VITEST) watchEngineStalls();
 app.use(guard); // see security.ts: blocks other websites
 app.use('/api/shorts/retention', express.json({ limit: '40mb' })); // a pasted screenshot
 app.use('/api/packaging/import-thumbnail', express.json({ limit: '3mb' }));
@@ -872,7 +872,8 @@ app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Unknown API route.' });
 });
 
-app.use('/api', (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use('/api', (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
   const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500;
   const message = status === 413 ? 'That upload is too large.' : err instanceof Error ? err.message : String(err);
   res.status(status).json({ error: message });
@@ -893,16 +894,18 @@ app.use((_req, res) => {
 // HQ_PORT lets a second copy run alongside (e.g. for testing).
 const port = Number(process.env.HQ_PORT) || config.port;
 const url = `http://127.0.0.1:${port}`;
-app.listen(port, '127.0.0.1', () => {
-  console.log(`HeartQuarters is running at ${url}`);
-  console.log('Close this window (or press Ctrl+C) to stop it.');
-  try { const n = migrateShotReferences(); if (n) console.log(`Shot reference pictures: copied ${n} files to Drive.`); } catch (e) { console.log(`Shot reference pictures not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
-  try { const n = migrateReferenceFiles(); if (n) console.log(`Reference photo lists: copied ${n} to Drive.`); } catch (e) { console.log(`Reference photo lists not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
-  try {
-    const { written, restored } = syncLinkFiles();
-    if (written || restored) console.log(`YouTube links: saved ${written} to Drive, restored ${restored} from Drive.`);
-  } catch (e) { console.log(`YouTube links not checked this time: ${e instanceof Error ? e.message : String(e)}`); }
-  if (shouldOpenBrowser(process.argv.includes('--open'), path.join(appDir, 'data'), process.env.HQ_BROWSER_SESSION, process.ppid)) {
-    spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
-  }
-});
+if (!process.env.VITEST) {
+  app.listen(port, '127.0.0.1', () => {
+    console.log(`HeartQuarters is running at ${url}`);
+    console.log('Close this window (or press Ctrl+C) to stop it.');
+    try { const n = migrateShotReferences(); if (n) console.log(`Shot reference pictures: copied ${n} files to Drive.`); } catch (e) { console.log(`Shot reference pictures not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
+    try { const n = migrateReferenceFiles(); if (n) console.log(`Reference photo lists: copied ${n} to Drive.`); } catch (e) { console.log(`Reference photo lists not moved this time: ${e instanceof Error ? e.message : String(e)}`); }
+    try {
+      const { written, restored } = syncLinkFiles();
+      if (written || restored) console.log(`YouTube links: saved ${written} to Drive, restored ${restored} from Drive.`);
+    } catch (e) { console.log(`YouTube links not checked this time: ${e instanceof Error ? e.message : String(e)}`); }
+    if (shouldOpenBrowser(process.argv.includes('--open'), path.join(appDir, 'data'), process.env.HQ_BROWSER_SESSION, process.ppid)) {
+      spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+    }
+  });
+}
