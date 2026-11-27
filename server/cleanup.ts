@@ -151,6 +151,19 @@ function draftTextFiles(dir: string): string[] {
     .map((e) => path.join(e.parentPath, e.name));
 }
 
+/** Relative path inside a CapCut draft folder if `original` points into CapCut Drafts, otherwise null. */
+function pathInsideCapCutDraft(original: string): string | null {
+  const draftsRoot = config.capcutDraftsDir ? `${fwd(path.resolve(config.capcutDraftsDir))}/`.toLowerCase() : '';
+  const lower = original.toLowerCase();
+  if (draftsRoot && lower.startsWith(draftsRoot)) {
+    const afterRoot = original.slice(draftsRoot.length);
+    const slash = afterRoot.indexOf('/');
+    if (slash > 0) return afterRoot.slice(slash + 1);
+  }
+  const m = /\/capcut drafts\/[^/]+\/(.+)$/i.exec(original);
+  return m ? m[1] : null;
+}
+
 /**
  * Whether a path mentioned inside CapCut draft `dir` exists: either at `original` as written, or if it points into a
  * CapCut Drafts folder under an older draft name (for example ".../CapCut Drafts/021 - Working/subdraft/..."), at the
@@ -158,15 +171,14 @@ function draftTextFiles(dir: string): string[] {
  */
 function capcutLinkExists(dir: string, original: string): boolean {
   if (fs.existsSync(original)) return true;
-  const draftsRoot = config.capcutDraftsDir ? `${fwd(path.resolve(config.capcutDraftsDir))}/`.toLowerCase() : '';
-  const lower = original.toLowerCase();
-  if (draftsRoot && lower.startsWith(draftsRoot)) {
-    const afterRoot = original.slice(draftsRoot.length);
-    const slash = afterRoot.indexOf('/');
-    if (slash > 0 && fs.existsSync(path.join(dir, afterRoot.slice(slash + 1)))) return true;
-  }
-  const m = /\/capcut drafts\/[^/]+\/(.+)$/i.exec(original);
-  return !!m && fs.existsSync(path.join(dir, m[1]));
+  const inside = pathInsideCapCutDraft(original);
+  return !!inside && fs.existsSync(path.join(dir, inside));
+}
+
+/** CapCut writes a default draft_cover.jpg path in sub_draft_config.json even when no cover image was ever created. */
+function isOptionalCapCutCover(original: string): boolean {
+  const inside = pathInsideCapCutDraft(original);
+  return !!inside && /(?:^|\/)draft_cover\.jpg$/i.test(inside);
 }
 
 function* scanLinks(video: string): Generator<void, CapCutLinks> {
@@ -206,7 +218,7 @@ function* scanLinks(video: string): Generator<void, CapCutLinks> {
         const value = original.toLowerCase();
         if (value.startsWith(prefix)) used.add(value);
         // A file (it has an extension) in the HeartMind folders that isn't there.
-        if (!driveCopy && /\.[a-z0-9]{2,5}$/i.test(value) && !seen.has(value)) {
+        if (!driveCopy && /\.[a-z0-9]{2,5}$/i.test(value) && !isOptionalCapCutCover(original) && !seen.has(value)) {
           seen.add(value);
           if (!capcutLinkExists(dir, original)) missing.push(`${d}: ${original}`);
         }

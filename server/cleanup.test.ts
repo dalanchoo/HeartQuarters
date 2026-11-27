@@ -205,6 +205,14 @@ describe('cleaning up a video', () => {
     expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
   });
 
+  it("ignores missing draft_cover.jpg paths inside CapCut's subdrafts", () => {
+    const subDir = path.join(tmp, 'Drafts', '022 - V', 'subdraft', '086FD2EE');
+    fs.mkdirSync(subDir, { recursive: true });
+    const coverPath = `${fwd(path.join(tmp, 'Drafts', '022 - Old Working Name'))}/subdraft/086FD2EE/draft_cover.jpg`;
+    fs.writeFileSync(path.join(subDir, 'sub_draft_config.json'), JSON.stringify({ cover_path: coverPath }));
+    expect(cleanupPlan('022 - V/Longform').missing).toEqual([]);
+  });
+
   it("checks a Short's own project too, even when its links all point somewhere else", () => {
     const draft = path.join(tmp, 'Drafts', '022_S01 - A');
     fs.mkdirSync(draft, { recursive: true });
