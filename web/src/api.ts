@@ -98,18 +98,18 @@ export function openInExplorer(root: RootId, path: string) {
 }
 
 /** Copies text, falling back to the older method if the browser refuses. */
-export async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string, page = document): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await page.defaultView!.navigator.clipboard.writeText(text);
     return true;
   } catch {
-    const area = document.createElement('textarea');
+    const area = page.createElement('textarea');
     area.value = text;
     area.style.position = 'fixed';
     area.style.opacity = '0';
-    document.body.appendChild(area);
+    page.body.appendChild(area);
     area.select();
-    const ok = document.execCommand('copy');
+    const ok = page.execCommand('copy');
     area.remove();
     return ok;
   }

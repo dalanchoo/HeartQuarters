@@ -346,7 +346,7 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
         // Don't let the click also open/close the section the button sits in.
         e.preventDefault();
         e.stopPropagation();
-        setResult((await copyText(text)) ? 'copied' : 'failed');
+        setResult((await copyText(text, e.currentTarget.ownerDocument)) ? 'copied' : 'failed');
         setTimeout(() => setResult(null), 1500);
       }}
     >

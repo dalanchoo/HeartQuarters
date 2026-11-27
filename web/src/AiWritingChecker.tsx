@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AiSelect, useAiFor } from './AiChoice';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { postJson } from './api';
+import { copyText, postJson } from './api';
 import { applySuggestion, findAiTellSpans, findAiWritingTells, isProseFieldLabel, type AiTellSpan } from './aiWritingCheck';
 import type { AiWritingReview, AiWritingSuggestion } from '../../server/ai-writing';
 import { setFieldSuggestions } from './fieldSuggestions';
@@ -116,7 +116,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
 
   if (!trimmed && !review && !error) return action ? <div className="ai-writing-checker"><div className="ai-writing-bar">{action}</div></div> : null;
 
-  const use = async (i: number) => {
+  const use = async (i: number, page: Document) => {
     const s = review?.suggestions[i];
     if (!s) return;
     const next = applySuggestion(text, s.find, s.replace);
@@ -130,7 +130,10 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
         setError(e instanceof Error ? e.message : String(e));
       }
     } else {
-      await navigator.clipboard.writeText(s.replace).catch(() => undefined);
+      if (!await copyText(s.replace, page)) {
+        setError('Could not copy the rewrite.');
+        return;
+      }
       setCopied(i);
       setTimeout(() => setCopied((c) => (c === i ? null : c)), 1500);
     }
@@ -143,7 +146,7 @@ export function AiWritingChecker({ text, label, onReplace, suggestionKey, action
         <div><span className="ai-suggestion-label">With</span> <span className="ai-suggestion-replace">{s.replace}</span></div>
         {s.why && <div className="muted">{s.why}</div>}
         {open ? (
-          <button type="button" className="small" onClick={() => void use(i)}>
+          <button type="button" className="small" onClick={(e) => void use(i, e.currentTarget.ownerDocument)}>
             {onReplace ? 'Replace in Text' : copied === i ? 'Copied ✓' : 'Copy Rewrite'}
           </button>
         ) : (

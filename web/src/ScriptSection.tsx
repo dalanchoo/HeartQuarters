@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useUnsavedWarning } from './unsavedEdits';
 import DOMPurify from 'dompurify';
 import { getJson, postJson } from './api';
 import { AiWritingChecker } from './AiWritingChecker';
 import { CopyButton } from './PackagingDoc';
 import type { ScriptFile } from '../../server/script';
+import { openScriptWindow } from './scriptWindow';
 
 export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -16,6 +18,27 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   const [savedNotice, setSavedNotice] = useState(false);
   const [error, setError] = useState('');
   const editorRef = useRef<HTMLDivElement>(null);
+  const inlineRef = useRef<HTMLDivElement>(null);
+  const windowButton = useRef<HTMLButtonElement>(null);
+  // Keep the portal target the same when moving the editor between windows.
+  const [editorHost] = useState(() => document.createElement('div'));
+  const [popup, setPopup] = useState<ReturnType<typeof openScriptWindow>>(null);
+  const [popupBlocked, setPopupBlocked] = useState(false);
+
+  useLayoutEffect(() => {
+    inlineRef.current?.append(editorHost);
+  }, [editorHost]);
+
+  useEffect(() => () => popup?.dispose(), [popup]);
+
+  const popOut = () => {
+    const next = openScriptWindow(editorHost, `Script — ${piece.split(/[\\/]/)[0]}`, () => {
+      setPopup(null);
+      windowButton.current?.focus();
+    });
+    setPopupBlocked(!next);
+    setPopup(next);
+  };
 
   const loadIntoEditor = (rawHtml: string, rawText: string) => {
     const clean = DOMPurify.sanitize(rawHtml);
@@ -56,7 +79,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
   };
 
   const updateCurrentBlockTag = () => {
-    const sel = window.getSelection();
+    const sel = editorRef.current?.ownerDocument.getSelection();
     let node: Node | null = sel?.anchorNode ?? null;
     while (node && node !== editorRef.current) {
       if (node.nodeType === Node.ELEMENT_NODE) {
@@ -75,7 +98,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     const el = editorRef.current;
     if (!el) return;
     el.focus();
-    document.execCommand(command, false, value);
+    el.ownerDocument.execCommand(command, false, value);
     syncFromDom();
     updateCurrentBlockTag();
   };
@@ -120,9 +143,15 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
 
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
-  return (
-    <details className={`yt-section${dirty ? ' unsaved' : ''}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>Script{dirty && <span className="unsaved-label">Unsaved Changes</span>}</summary>
+  const editor = (
+    <>
+      {popup && (
+        <header className="script-window-actions">
+          <h1>Script</h1>
+          <button type="button" className="small" onClick={popup.close}>Return to Video Projects</button>
+          {dirty && <span className="unsaved-label">Unsaved Changes</span>}
+        </header>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
       {!file && !error && <p className="muted small-text">Loading script…</p>}
       {file && (
@@ -229,6 +258,22 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
           <AiWritingChecker text={plain} label="YouTube Script" />
         </div>
       )}
+    </>
+  );
+
+  return (
+    <details className={`yt-section${dirty ? ' unsaved' : ''}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>Script{dirty && <span className="unsaved-label">Unsaved Changes</span>}</summary>
+      {file && (
+        <div className="script-window-actions">
+          <button ref={windowButton} type="button" className="small" onClick={popup ? popup.focus : popOut}>
+            {popup ? 'Focus Script Window' : 'Open Script in New Window'}
+          </button>
+          {popupBlocked && <span className="error" role="alert">Allow pop-ups for HeartQuarters and try again.</span>}
+        </div>
+      )}
+      <div ref={inlineRef} />
+      {createPortal(editor, editorHost)}
     </details>
   );
 }

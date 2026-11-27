@@ -128,6 +128,9 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   each pair's #1 photo (reusing a fresh saved ranking or running Photo Ranking with the chosen AI)
   and generates one draft with ChatGPT and one with Gemini for every pair, skipping any pair with
   no matching photo so John can see all options and iterate from there.
+- **Script in a separate window (2026-11-26).** Open Script in New Window moves the
+  active editor and its unsaved changes out of Video Projects. Closing the window
+  or using Return to Video Projects brings the editor back.
 
 ---
 
