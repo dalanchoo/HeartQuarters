@@ -6,22 +6,37 @@ import { appDir } from './config.js';
 interface Secrets { clientId: string; clientSecret: string; refreshToken?: string; captionAccess?: boolean; reportingAccess?: boolean }
 const script = path.join(appDir, 'server', 'credential-store.ps1');
 function credential(action: 'read' | 'write' | 'delete', value = ''): string {
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', script, action], { input: value, encoding: 'utf8', windowsHide: true });
-  if (result.status !== 0) throw new Error('Could not access Windows Credential Manager.');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', script, action], {
+    input: value,
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 10_000,
+  });
+  if (result.error || result.status !== 0) throw new Error('Could not access Windows Credential Manager.');
   return result.stdout;
 }
 let cachedSecrets: Secrets | null | undefined = undefined;
 let cachedToken: { value: string; expiresAt: number } | null = null;
+let refreshPromise: Promise<string> | null = null;
 function load(): Secrets | null {
   if (cachedSecrets !== undefined) return cachedSecrets;
   const value = credential('read');
-  cachedSecrets = value ? JSON.parse(value) as Secrets : null;
-  return cachedSecrets;
+  if (!value) {
+    cachedSecrets = null;
+    return null;
+  }
+  try {
+    cachedSecrets = JSON.parse(value) as Secrets;
+    return cachedSecrets;
+  } catch {
+    throw new Error('Saved YouTube credentials could not be read. Reconnect YouTube.');
+  }
 }
 function save(value: Secrets) {
   credential('write', JSON.stringify(value));
   cachedSecrets = value;
   cachedToken = null;
+  refreshPromise = null;
 }
 let pending: { state: string; verifier: string; redirect: string; expires: number } | null = null;
 
@@ -31,7 +46,7 @@ export function configureYoutube(clientId: unknown, clientSecret: unknown) {
   pending = null;
   save({ clientId: clientId.trim(), clientSecret: clientSecret.trim() });
 }
-export function disconnectYoutube() { pending = null; cachedSecrets = null; cachedToken = null; credential('delete'); }
+export function disconnectYoutube() { pending = null; cachedSecrets = null; cachedToken = null; refreshPromise = null; credential('delete'); }
 export function authorizationUrl(port: number): string {
   const s = load(); if (!s) throw new Error('Set up your Google OAuth client first.');
   const verifier = randomBytes(32).toString('base64url');
@@ -72,9 +87,15 @@ export async function finishYoutubeAuth(state: string, code: string) {
 }
 export async function youtubeAccessToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.value;
+  if (refreshPromise) return refreshPromise;
   const s = load(); if (!s?.refreshToken) throw new Error('Connect YouTube first.');
-  const result = await tokenRequest({ client_id: s.clientId, client_secret: s.clientSecret, refresh_token: s.refreshToken, grant_type: 'refresh_token' });
-  const ttlMs = Math.max(60_000, ((result.expires_in ?? 3600) - 60) * 1000);
-  cachedToken = { value: result.access_token!, expiresAt: Date.now() + ttlMs };
-  return cachedToken.value;
+  refreshPromise = (async () => {
+    const result = await tokenRequest({ client_id: s.clientId, client_secret: s.clientSecret, refresh_token: s.refreshToken!, grant_type: 'refresh_token' });
+    const ttlMs = Math.max(60_000, ((result.expires_in ?? 3600) - 60) * 1000);
+    cachedToken = { value: result.access_token!, expiresAt: Date.now() + ttlMs };
+    return cachedToken.value;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
 }

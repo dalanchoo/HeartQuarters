@@ -37,4 +37,22 @@ describe('YouTube sign-in', () => {
     expect(() => authorizationUrl(4321)).toThrow(/Set up/);
     expect(() => configureYoutube('not-a-client-id', 'secret')).toThrow(/client ID/);
   });
+
+  it('deduplicates concurrent token refreshes and reports corrupt credential JSON clearly', async () => {
+    configureYoutube('123.apps.googleusercontent.com', 'secret');
+    const url = new URL(authorizationUrl(4321));
+    const mock = vi.fn().mockImplementation(async () => Response.json({ access_token: 'access-1', refresh_token: 'refresh' }));
+    vi.stubGlobal('fetch', mock);
+    await finishYoutubeAuth(url.searchParams.get('state')!, 'code');
+
+    const [a, b] = await Promise.all([youtubeAccessToken(), youtubeAccessToken()]);
+    expect(a).toBe('access-1');
+    expect(b).toBe('access-1');
+    expect(mock).toHaveBeenCalledTimes(2); // 1 for auth code exchange + 1 shared refresh
+
+    store.value = '{not-json';
+    vi.resetModules();
+    const fresh = await import('./youtube-auth');
+    expect(() => fresh.youtubeStatus()).toThrow(/Reconnect YouTube/);
+  });
 });
