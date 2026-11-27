@@ -156,7 +156,6 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
       {popup && (
         <header className="script-window-actions">
           <h1>Script</h1>
-          <button type="button" className="small" onClick={popup.close}>Return to Video Projects</button>
           {dirty && <span className="unsaved-label">Unsaved Changes</span>}
         </header>
       )}
@@ -247,7 +246,13 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
                 </button>
               )}
               {plain.trim() && <CopyButton text={plain} label="Copy Script" />}
-              {!popup && popOutButton}
+              {popup ? (
+                <button type="button" className="script-icon-button" aria-label="Pop In Script" title="Pop In Script" onClick={popup.close}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                    <path d="m5 5 14 14m0-9v9h-9" />
+                  </svg>
+                </button>
+              ) : popOutButton}
             </div>
           </div>
           {popupBlocked && <p className="error" role="alert">Allow pop-ups for HeartQuarters and try again.</p>}

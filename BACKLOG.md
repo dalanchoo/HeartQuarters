@@ -130,8 +130,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   no matching photo so John can see all options and iterate from there.
 - **Script in a separate window (2026-11-26).** The pop-out icon at the right of
   the Script toolbar moves the active editor and its unsaved changes out of
-  Video Projects. Closing the window or using Return to Video Projects brings
-  the editor back. The Save icon sits next to the formatting tools.
+  Video Projects. The down-right arrow beside Copy Script brings the editor
+  back, as does closing the window. The Save icon sits next to the formatting tools.
 
 ---
 
