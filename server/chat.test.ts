@@ -277,43 +277,50 @@ describe('full-screen multi-AI chat', () => {
 
   it('captures file:/// image links in AI Markdown and rewrites them to /api/chat/file URLs', async () => {
     const jpgBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
-    const externalDir = makeTree({ 'brain/': '' });
-    try {
-      const externalImg = path.join(externalDir, 'brain', 'sdam guide.jpg');
-      fs.writeFileSync(externalImg, jpgBytes);
-      const fileUrl = `file:///${externalImg.replace(/\\/g, '/')}`;
+    const res = await sendChatMessage(null, 'gemini', 'Draw a guide image', [], async (_ai, _prompt, cwd) => {
+      const generatedImg = path.join(cwd, 'sdam guide.jpg');
+      fs.writeFileSync(generatedImg, jpgBytes);
+      const fileUrl = `file:///${generatedImg.replace(/\\/g, '/')}`;
+      return `![Guide](${encodeURI(fileUrl)})\n\nSaved at: [sdam guide.jpg](${encodeURI(fileUrl)})`;
+    });
 
-      const res = await sendChatMessage(null, 'gemini', 'Draw a guide image', [], async () => {
-        return `![Guide](${encodeURI(fileUrl)})\n\nSaved at: [sdam guide.jpg](${encodeURI(fileUrl)})`;
-      });
-
-      const reply = res.messages[1];
-      expect(reply.files).toEqual(['sdam guide.jpg']);
-      expect(reply.text).toContain('![Guide](/api/chat/file?name=sdam%20guide.jpg)');
-      expect(reply.text).toContain('[sdam guide.jpg](/api/chat/file?name=sdam%20guide.jpg)');
-      expect(reply.text).not.toContain('file:///');
-      expect(fs.readFileSync(chatFilePath('sdam guide.jpg')).equals(jpgBytes)).toBe(true);
-    } finally {
-      removeTree(externalDir);
-    }
+    const reply = res.messages[1];
+    expect(reply.files).toEqual(['sdam guide.jpg']);
+    expect(reply.text).toContain('![Guide](/api/chat/file?name=sdam%20guide.jpg)');
+    expect(reply.text).toContain('[sdam guide.jpg](/api/chat/file?name=sdam%20guide.jpg)');
+    expect(reply.text).not.toContain('file:///');
+    expect(fs.readFileSync(chatFilePath('sdam guide.jpg')).equals(jpgBytes)).toBe(true);
   });
 
   it('captures file:/// video links in AI Markdown and rewrites them to /api/chat/file URLs', async () => {
     const mp4Bytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
-    const externalDir = makeTree({ 'brain/': '' });
-    try {
-      const externalVideo = path.join(externalDir, 'brain', 'the_edge_of_light.mp4');
-      fs.writeFileSync(externalVideo, mp4Bytes);
-      const fileUrl = `file:///${externalVideo.replace(/\\/g, '/')}`;
+    const res = await sendChatMessage(null, 'gemini', 'Make a cool video', [], async (_ai, _prompt, cwd) => {
+      const generatedVideo = path.join(cwd, 'the_edge_of_light.mp4');
+      fs.writeFileSync(generatedVideo, mp4Bytes);
+      const fileUrl = `file:///${generatedVideo.replace(/\\/g, '/')}`;
+      return `Video: [the edge of light.mp4](${fileUrl})`;
+    });
 
-      const res = await sendChatMessage(null, 'gemini', 'Make a cool video', [], async () => {
-        return `Video: [the edge of light.mp4](${fileUrl})`;
+    const reply = res.messages[1];
+    expect(reply.files).toEqual(['the_edge_of_light.mp4']);
+    expect(reply.text).toBe('Video: [the edge of light.mp4](/api/chat/file?name=the_edge_of_light.mp4)');
+    expect(fs.readFileSync(chatFilePath('the_edge_of_light.mp4')).equals(mp4Bytes)).toBe(true);
+  });
+
+  it('ignores links to local files outside the chat working directory and AI output folders', async () => {
+    const externalDir = makeTree({ 'secret.txt': 'do not copy' });
+    try {
+      const outsideFile = path.join(externalDir, 'secret.txt');
+      const fileUrl = `file:///${outsideFile.replace(/\\/g, '/')}`;
+      const res = await sendChatMessage(null, 'claude', 'Hello', [], async () => {
+        return `See [cfg](config.json) and [secret](${fileUrl})`;
       });
 
       const reply = res.messages[1];
-      expect(reply.files).toEqual(['the_edge_of_light.mp4']);
-      expect(reply.text).toBe('Video: [the edge of light.mp4](/api/chat/file?name=the_edge_of_light.mp4)');
-      expect(fs.readFileSync(chatFilePath('the_edge_of_light.mp4')).equals(mp4Bytes)).toBe(true);
+      expect(reply.files).toBeUndefined();
+      expect(reply.text).toBe(`See [cfg](config.json) and [secret](${fileUrl})`);
+      expect(() => chatFilePath('config.json')).toThrow();
+      expect(() => chatFilePath('secret.txt')).toThrow();
     } finally {
       removeTree(externalDir);
     }

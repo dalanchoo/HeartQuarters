@@ -767,8 +767,34 @@ function newestBrainMedia(rootDir: string, convId: string, since: number): strin
   return [];
 }
 
-/** Finds local file paths (file:///... or Windows/POSIX paths) mentioned in an AI's Markdown reply. */
-export function extractMentionedFiles(text: string): string[] {
+function chatOutputRoots(workDir?: string): string[] {
+  const roots = [
+    path.join(os.homedir(), '.codex', 'generated_images'),
+    path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'),
+  ];
+  if (workDir) roots.unshift(workDir);
+  return roots;
+}
+
+function isAllowedGeneratedFile(candidate: string, allowedRoots: string[]): boolean {
+  try {
+    if (fs.lstatSync(candidate).isSymbolicLink()) return false;
+    const real = fs.realpathSync.native(candidate);
+    if (!fs.statSync(real).isFile()) return false;
+    return allowedRoots.some((root) => {
+      try {
+        return isInside(fs.realpathSync.native(root), real);
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Finds local file paths (file:///... or Windows/POSIX paths) mentioned in an AI's Markdown reply within allowed output folders. */
+export function extractMentionedFiles(text: string, allowedRoots: string[] = chatOutputRoots()): string[] {
   const found: string[] = [];
   const add = (raw: string) => {
     let candidate = raw.trim();
@@ -781,11 +807,8 @@ export function extractMentionedFiles(text: string): string[] {
     }
     const ext = path.extname(candidate).toLowerCase();
     if (!ext || BLOCKED_EXTS.has(ext)) return;
-    try {
-      const st = fs.statSync(candidate);
-      if (st.isFile() && !found.includes(candidate)) found.push(candidate);
-    } catch {
-      // Not an existing local file.
+    if (isAllowedGeneratedFile(candidate, allowedRoots) && !found.includes(candidate)) {
+      found.push(candidate);
     }
   };
   for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) add(m[1]);
@@ -865,7 +888,7 @@ export const askChatAi: AskChatAi = async (ai, prompt, cwd, images = [], opts = 
     }
   }
 
-  for (const p of extractMentionedFiles(text)) {
+  for (const p of extractMentionedFiles(text, chatOutputRoots(cwd))) {
     if (!generatedImages.includes(p)) generatedImages.push(p);
   }
 
@@ -1000,14 +1023,16 @@ export async function sendChatMessage(
     });
     const rawText = (typeof rawResult === 'string' ? rawResult : rawResult.text).trim();
     const returnedSessionId = typeof rawResult === 'string' ? undefined : rawResult.sessionId;
+    const allowedRoots = chatOutputRoots(work);
     const generatedPaths = typeof rawResult === 'string' ? [] : (rawResult.generatedImages ?? []);
-    for (const p of extractMentionedFiles(rawText)) {
+    for (const p of extractMentionedFiles(rawText, allowedRoots)) {
       if (!generatedPaths.includes(p)) generatedPaths.push(p);
     }
 
     const savedGenerated: string[] = [];
     const savedBySourcePath = new Map<string, string>();
     for (const imgPath of generatedPaths) {
+      if (!isAllowedGeneratedFile(imgPath, allowedRoots)) continue;
       try {
         const bytes = fs.readFileSync(imgPath);
         if (bytes.length > 0) {
