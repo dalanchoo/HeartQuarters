@@ -132,6 +132,8 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   the Script toolbar moves the active editor and its unsaved changes out of
   Video Projects. The down-right arrow beside Copy Script brings the editor
   back, as does closing the window. The Save icon sits next to the formatting tools.
+  The toolbar highlights formatting at the cursor or selection, and Text Style
+  shows a dropdown arrow in both windows.
 
 ---
 

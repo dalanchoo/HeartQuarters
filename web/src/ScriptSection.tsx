@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnsavedWarning } from './unsavedEdits';
 import DOMPurify from 'dompurify';
@@ -7,17 +7,23 @@ import { AiWritingChecker } from './AiWritingChecker';
 import { CopyButton } from './PackagingDoc';
 import type { ScriptFile } from '../../server/script';
 import { openScriptWindow } from './scriptWindow';
+import { defaultScriptFormatting, readScriptFormatting } from './scriptFormatting';
 
 export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () => void }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<ScriptFile | null>(null);
   const [html, setHtml] = useState('');
   const [plain, setPlain] = useState('');
-  const [blockTag, setBlockTag] = useState('P');
+  const [{ blockTag, active }, setFormatting] = useState(defaultScriptFormatting);
   const [busy, setBusy] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [error, setError] = useState('');
   const editorRef = useRef<HTMLDivElement>(null);
+  const initialHtml = useRef('');
+  const attachEditor = useCallback((editor: HTMLDivElement | null) => {
+    editorRef.current = editor;
+    if (editor) editor.innerHTML = initialHtml.current;
+  }, []);
   const inlineRef = useRef<HTMLDivElement>(null);
   const windowButton = useRef<HTMLButtonElement>(null);
   // Keep the portal target the same when moving the editor between windows.
@@ -55,12 +61,10 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
       (res) => {
         if (!active) return;
         const clean = DOMPurify.sanitize(res.html);
+        initialHtml.current = clean;
         setFile({ ...res, html: clean });
         setHtml(clean);
         setPlain(res.text);
-        requestAnimationFrame(() => {
-          if (editorRef.current) editorRef.current.innerHTML = clean;
-        });
       },
       (e: Error) => {
         if (active) setError(e.message);
@@ -71,27 +75,29 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     };
   }, [open, piece, file]);
 
+  const updateFormatting = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const next = readScriptFormatting(editor);
+    setFormatting(current => current.blockTag === next.blockTag && current.active.join() === next.active.join() ? current : next);
+  }, []);
+
+  const hasFile = file !== null;
+  useEffect(() => {
+    const page = editorRef.current?.ownerDocument;
+    if (!page) return;
+    // The editor changes documents when it pops out or back in.
+    updateFormatting();
+    page.addEventListener('selectionchange', updateFormatting);
+    return () => page.removeEventListener('selectionchange', updateFormatting);
+  }, [hasFile, popup, updateFormatting]);
+
   const syncFromDom = () => {
     const el = editorRef.current;
     if (!el) return;
     setHtml(DOMPurify.sanitize(el.innerHTML));
     setPlain(el.innerText);
-  };
-
-  const updateCurrentBlockTag = () => {
-    const sel = editorRef.current?.ownerDocument.getSelection();
-    let node: Node | null = sel?.anchorNode ?? null;
-    while (node && node !== editorRef.current) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const tag = (node as HTMLElement).tagName;
-        if (tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'BLOCKQUOTE' || tag === 'P') {
-          setBlockTag(tag);
-          return;
-        }
-      }
-      node = node.parentNode;
-    }
-    setBlockTag('P');
+    updateFormatting();
   };
 
   const runCmd = (command: string, value?: string) => {
@@ -100,7 +106,6 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
     el.focus();
     el.ownerDocument.execCommand(command, false, value);
     syncFromDom();
-    updateCurrentBlockTag();
   };
 
   const dirty = file !== null && html !== file.html;
@@ -182,11 +187,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
                   className="script-heading-select"
                   aria-label="Text Style"
                   value={blockTag}
-                  onChange={(e) => {
-                    const tag = e.target.value;
-                    setBlockTag(tag);
-                    runCmd('formatBlock', `<${tag.toLowerCase()}>`);
-                  }}
+                  onChange={(e) => runCmd('formatBlock', `<${e.target.value.toLowerCase()}>`)}
                 >
                   <option value="P">Normal Text</option>
                   <option value="H1">Heading 1</option>
@@ -195,23 +196,23 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
                   <option value="BLOCKQUOTE">Quote</option>
                 </select>
                 <span className="script-divider" aria-hidden="true" />
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('bold')} title="Bold (Ctrl+B)">
+                <button type="button" className="script-tool" aria-pressed={active.includes('bold')} aria-label="Bold" onMouseDown={keepFocus} onClick={() => runCmd('bold')} title="Bold (Ctrl+B)">
                   <strong>B</strong>
                 </button>
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('italic')} title="Italic (Ctrl+I)">
+                <button type="button" className="script-tool" aria-pressed={active.includes('italic')} aria-label="Italic" onMouseDown={keepFocus} onClick={() => runCmd('italic')} title="Italic (Ctrl+I)">
                   <em>I</em>
                 </button>
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('underline')} title="Underline (Ctrl+U)">
+                <button type="button" className="script-tool" aria-pressed={active.includes('underline')} aria-label="Underline" onMouseDown={keepFocus} onClick={() => runCmd('underline')} title="Underline (Ctrl+U)">
                   <u>U</u>
                 </button>
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('strikeThrough')} title="Strikethrough">
+                <button type="button" className="script-tool" aria-pressed={active.includes('strikeThrough')} aria-label="Strikethrough" onMouseDown={keepFocus} onClick={() => runCmd('strikeThrough')} title="Strikethrough">
                   <s>S</s>
                 </button>
                 <span className="script-divider" aria-hidden="true" />
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertOrderedList')} title="Numbered List">
+                <button type="button" className="script-tool" aria-pressed={active.includes('insertOrderedList')} aria-label="Numbered List" onMouseDown={keepFocus} onClick={() => runCmd('insertOrderedList')} title="Numbered List">
                   1.☰
                 </button>
-                <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('insertUnorderedList')} title="Bulleted List">
+                <button type="button" className="script-tool" aria-pressed={active.includes('insertUnorderedList')} aria-label="Bulleted List" onMouseDown={keepFocus} onClick={() => runCmd('insertUnorderedList')} title="Bulleted List">
                   •☰
                 </button>
                 <button type="button" className="script-tool" onMouseDown={keepFocus} onClick={() => runCmd('outdent')} title="Indent Less (Shift+Tab)">
@@ -223,6 +224,8 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
                 <button
                   type="button"
                   className="script-tool"
+                  aria-pressed={blockTag === 'BLOCKQUOTE'}
+                  aria-label="Quote"
                   onMouseDown={keepFocus}
                   onClick={() => runCmd('formatBlock', blockTag === 'BLOCKQUOTE' ? '<p>' : '<blockquote>')}
                   title="Quote"
@@ -259,7 +262,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
 
           {/* Cleaned with DOMPurify before display. */}
           <div
-            ref={editorRef}
+            ref={attachEditor}
             className="script-rich-editor"
             contentEditable
             suppressContentEditableWarning
@@ -268,8 +271,7 @@ export function ScriptSection({ piece, onSaved }: { piece: string; onSaved?: () 
             aria-label="Script Editor"
             data-placeholder="Write your script here…"
             onInput={syncFromDom}
-            onKeyUp={updateCurrentBlockTag}
-            onMouseUp={updateCurrentBlockTag}
+            onKeyUp={updateFormatting}
             onKeyDown={onKeyDown}
           />
           <AiWritingChecker text={plain} label="YouTube Script" />
