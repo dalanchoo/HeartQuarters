@@ -22,7 +22,7 @@ export interface UploadInput { piece: string; video: string; cover: string; vers
 export interface UploadJob { id: string; piece: string; video: string; status: 'uploading' | 'done' | 'failed' | 'unknown' | 'checked'; sent: number; total: number; createdAt?: string; phase?: 'waiting-thumbnail'; videoId?: string; error?: string; warning?: string; subtitleStatus?: 'uploading' | 'sent' | 'error'; subtitleError?: string; /** The captions file last sent, and whether it added a track or replaced one. */ subtitleFile?: string; subtitleAction?: 'added' | 'replaced'; playlistResults?: { id: string; status: 'added' | 'error'; error?: string }[] }
 const jobs = new Map<string, UploadJob>();
 const jobsDir = () => process.env.HQ_YOUTUBE_JOBS_DIR ?? path.join(appDir, 'data', 'youtube-uploads');
-function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); fs.writeFileSync(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
+function record(job: UploadJob) { fs.mkdirSync(jobsDir(), { recursive: true }); writeFileSafely(path.join(jobsDir(), `${job.id}.json`), JSON.stringify(job, null, 2)); }
 export function uploadsFor(piece: string): UploadJob[] {
   if (!fs.existsSync(jobsDir())) return [];
   const entries = fs.readdirSync(jobsDir()).filter((f) => /^[\da-f-]+\.json$/i.test(f)).flatMap((f) => {
