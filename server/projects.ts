@@ -13,6 +13,7 @@ import path from 'node:path';
 import { config, safeResolve } from './config.js';
 import { THUMBNAIL_PHOTO_ATTRIBUTES } from './expression-attribute-vocabulary.js';
 import { readable, readText } from './safe-files.js';
+import { applyRoundPackaging, roundNumber, type RoundPackaging } from './round-packaging.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.mkv', '.webm']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -53,6 +54,7 @@ export interface DraftConversation {
   requests: FileRef | null;
   /** The title and thumbnail text these images were made for (from Conversation.json), if known. */
   pick: BriefPick | null;
+  roundPicks?: Record<string, BriefPick>;
   /** The photo of John it uses now (from Conversation.json), relative to the expressions library, if known. */
   photo: string | null;
 }
@@ -68,6 +70,8 @@ export interface BriefPick {
   /** Optional gaze or mouth tags that help the chosen composition. */
   photoAttributes?: string[];
   background: string;
+  /** Revised planning note for a generated round. */
+  thumbnailIdea?: string;
   why: string;
   /** Which AIs suggested or ranked it highly. */
   backedBy: string[];
@@ -135,6 +139,7 @@ export function parsePicks(data: unknown): BriefPick[] | null {
       photoAttributes: [...new Set(p.photoAttributes.filter((tag): tag is string => typeof tag === 'string' && THUMBNAIL_PHOTO_ATTRIBUTES.includes(tag)))],
     } : {}),
     background: text(p?.background),
+    ...(text(p?.thumbnailIdea) ? { thumbnailIdea: text(p?.thumbnailIdea) } : {}),
     why: text(p?.why),
     backedBy: Array.isArray(p?.backedBy) ? p.backedBy.filter((b): b is string => typeof b === 'string') : [],
     ...(text(p?.description) ? { description: text(p?.description) } : {}),
@@ -296,16 +301,11 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
 }
 
 /** The pair a draft conversation was made for, from its Conversation.json or Requests.md (`Pair: TEXT / Title`). */
-function readConversationPick(folder: string): BriefPick | null {
+function readConversationPick(folder: string, savedPick: unknown): BriefPick | null {
+  const parsed = parsePicks({ picks: [savedPick] })?.[0];
+  if (parsed) return parsed;
   try {
-    const info = JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')) as { pick?: unknown };
-    const parsed = parsePicks({ picks: [info.pick] })?.[0];
-    if (parsed) return parsed;
-  } catch {
-    /* fall through to Requests.md */
-  }
-  try {
-    const requests = fs.readFileSync(path.join(folder, 'Requests.md'), 'utf8');
+    const requests = readText(path.join(folder, 'Requests.md'));
     const m = /^Pair:\s*(.+?)\s*\/\s*(.+)$/m.exec(requests);
     if (!m) return null;
     const thumbnailText = m[1].trim();
@@ -316,13 +316,11 @@ function readConversationPick(folder: string): BriefPick | null {
   }
 }
 
-/** The photo a draft conversation uses now, from its Conversation.json; null if there's none. */
-function readConversationPhoto(folder: string): string | null {
+function readDraftConversation(folder: string): { pick?: unknown; photo?: string; roundPackaging?: Record<string, RoundPackaging> } {
   try {
-    const photo = (JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')) as { photo?: unknown }).photo;
-    return typeof photo === 'string' && photo ? photo : null;
+    return JSON.parse(readText(path.join(folder, 'Conversation.json'))) ?? {};
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -336,13 +334,24 @@ function readDrafts(packagingRoot: string): Drafts | null {
     .filter((c) => c.toLowerCase() !== 'research')
     .map((c): DraftConversation => {
     const cDir = path.join(dir, c);
+      const info = readDraftConversation(cDir);
+      const pick = readConversationPick(cDir, info.pick);
+      const images = filesIn(cDir, IMAGE_EXTS).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      const roundPicks: Record<string, BriefPick> = {};
+      for (const image of images) {
+        const number = roundNumber(image.name);
+        if (!number || !info.roundPackaging?.[number]) continue;
+        const revised = applyRoundPackaging(pick, info.roundPackaging[number]);
+        if (revised) roundPicks[image.name] = revised;
+      }
     return {
       name: c,
       path: rel(cDir),
-      images: filesIn(cDir, IMAGE_EXTS).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+        images,
       requests: named(filesIn(cDir, DOC_EXTS), 'requests.md'),
-      pick: readConversationPick(cDir),
-      photo: readConversationPhoto(cDir),
+        pick,
+        ...(Object.keys(roundPicks).length ? { roundPicks } : {}),
+        photo: typeof info.photo === 'string' && info.photo ? info.photo : null,
     };
   });
   return { path: rel(dir), brief: named(filesIn(dir, DOC_EXTS), 'brief.md'), picks: readPicks(path.join(dir, PICKS_FILE)), choice: readChoice(path.join(dir, CHOICE_FILE)), conversations };

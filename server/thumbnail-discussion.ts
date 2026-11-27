@@ -103,7 +103,7 @@ export function discussionPrompt(ai: AiId, image: string | null, pick: unknown, 
     ACCURACY_RULE,
     THUMBNAIL_EXPRESSION_GUIDANCE,
     `The draft's packaging (title, thumbnail words and concept):\n${JSON.stringify(pick ?? null, null, 2)}`,
-    'Do not make or edit an image, use image generation, or change any file. When John asks you to, or you and he have settled on a change to this image, end your reply with a section "### Change Request" holding only the request for the image AI, written to the AI that made the draft, in a few plain sentences it can follow on its own.',
+    'Do not make or edit an image, use image generation, or change any file. When John asks you to, or you and he have settled on a change, end your reply with a section "### Change Request" holding a request for the image AI. Within that section, include the changed packaging on separate plain-text lines with these exact labels: Final Title:, Final Thumbnail Text:, Final Thumbnail Idea:. Include only settled changes. Give the exact approved title and on-image wording (an empty value if he removed the text). For a visual or text change, write a standalone thumbnail idea describing the resulting image. Leave out unchanged fields and suggestions John has not accepted.',
     `--- CONVERSATION SO FAR ---\n${thread}`,
     `--- JOHN'S NEW MESSAGE ---\n${withImages({ text: message, images: attached })}`,
     'Reply in Markdown.',
@@ -121,7 +121,7 @@ export function sendDiscussionMessage(piece: string, image: string, rawAi: unkno
   if (message.length > MESSAGE_MAX) throw new Error('That message is too long.');
   const { pieceDir, imageFile, conversation, file, key, images: imageDir } = fileFor(piece, image, conversationPath);
   if (jobs.get(key)?.state === 'working') throw new Error('An AI is already replying in this discussion.');
-  const pick = checkedPick(conversation);
+  const pick = checkedPick(conversation, imageFile);
   const history = readMessages(file);
   const id = randomUUID();
   const names = decoded.map((d, i) => `${id}-${i + 1}${d.ext}`);
@@ -148,7 +148,7 @@ export function sendDiscussionMessage(piece: string, image: string, rawAi: unkno
       const answer = (await ask(rawAi, discussionPrompt(rawAi, folder.imageCopy, pick, history, message, { ...folder, pasted: copies }, isShort(piece), names), work, images)).trim();
       if (!answer) throw new Error(`${AI_NAMES[rawAi]} returned an empty reply.`);
       const changeRequest = changeRequestIn(answer);
-      saveMessages(file, [...readMessages(file), { id: randomUUID(), from: rawAi, text: answer, at: new Date().toISOString(), ...(changeRequest ? { changeRequest } : {}) }]);
+      saveMessages(file, [...readMessages(file), { id: randomUUID(), from: rawAi, text: answer, at: new Date().toISOString(), ...(image ? { image } : {}), ...(changeRequest ? { changeRequest } : {}) }]);
       jobs.delete(key);
     } finally { fs.rmSync(work, { recursive: true, force: true }); }
   })().catch((e: unknown) => { job.state = 'failed'; job.error = e instanceof Error ? e.message : String(e); });

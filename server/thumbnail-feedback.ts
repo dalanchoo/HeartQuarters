@@ -1,6 +1,7 @@
 // Read-only AI feedback on an existing thumbnail. Reviews live in the app's data folder, never in Drive.
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { applyRoundPackaging, roundNumber } from './round-packaging.js';
 import os from 'node:os';
 import path from 'node:path';
 import { AI_NAMES, isAiId, type AiId } from './ai.js';
@@ -27,10 +28,12 @@ export function checkedImage(piece: string, image: string) {
   return { pieceDir, imageFile, conversation };
 }
 
-export function checkedPick(conversation: string) {
+export function checkedPick(conversation: string, imageFile: string | null) {
   const info = safeResolve('projects', path.relative(config.videoProjectsDir, path.join(conversation, 'Conversation.json')));
   if (fs.existsSync(info) && fs.lstatSync(info).isSymbolicLink()) throw new Error('The draft metadata must be a real file.');
-  return readConversation(conversation)?.pick ?? null;
+  const saved = readConversation(conversation);
+  const number = imageFile ? roundNumber(imageFile) : undefined;
+  return applyRoundPackaging(saved?.pick ?? null, number ? saved?.roundPackaging?.[number] : undefined);
 }
 
 const metadataHash = (pick: unknown) => createHash('sha256').update(JSON.stringify(pick ?? null)).digest('hex');
@@ -90,7 +93,7 @@ export async function prepareDraftFolder(pieceDir: string, imageFile: string | n
 export function thumbnailReviews(piece: string, image: string): { reviews: ThumbnailReview[]; jobs: ThumbnailReviewJob[] } {
   const { imageFile, conversation } = checkedImage(piece, image);
   const currentHash = createHash('sha256').update(fs.readFileSync(imageFile)).digest('hex');
-  const currentMetadata = metadataHash(checkedPick(conversation));
+  const currentMetadata = metadataHash(checkedPick(conversation, imageFile));
   const key = keyFor(piece, image); const dir = path.join(storage(), key);
   const reviews: ThumbnailReview[] = [];
   if (fs.existsSync(dir)) for (const name of fs.readdirSync(dir).filter(n => /^[a-f0-9-]+\.json$/i.test(n))) {
@@ -105,7 +108,7 @@ export function startThumbnailReview(piece: string, image: string, ai: unknown, 
   const { pieceDir, imageFile, conversation } = checkedImage(piece, image);
   const key = keyFor(piece, image); const jobKey = `${key}:${ai}`;
   if (jobs.get(jobKey)?.state === 'working') throw new Error(`${AI_NAMES[ai]} is already reviewing this image.`);
-  const pick = checkedPick(conversation);
+  const pick = checkedPick(conversation, imageFile);
   const job: ThumbnailReviewJob = { ai, state: 'working' }; jobs.set(jobKey, job);
   const finished = (async () => {
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-thumbnail-review-'));

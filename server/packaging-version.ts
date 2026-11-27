@@ -4,6 +4,7 @@ import { config, safeResolve } from './config.js';
 import { makeFolder, readText, writable, writeFile } from './safe-files.js';
 import { NOTES_FILE, type BriefPick } from './projects.js';
 import { pacificDay } from './youtube-quota.js';
+import { thumbnailIdea } from './round-packaging.js';
 
 export function versionFolder(piece: string, source: string): string {
   if (!piece || !source) throw new Error('Choose a packaging version.');
@@ -62,14 +63,13 @@ function splitHashtags(text: string): { description: string; hashtags: string } 
 /** A complete standard YouTube.md for a saved draft, matching the fields of a normal version. */
 export function buildDraftYoutubeMd(pick: BriefPick | null): string {
   const { description, hashtags } = splitHashtags(pick?.description ?? '');
-  const idea = [pick?.expression, pick?.background].filter(Boolean).join('. ');
   const fields: [string, string][] = [
     ['Title', pick?.title ?? ''],
     ['Description', description],
     ['Tags', pick?.tags ?? ''],
     ['Hashtags', hashtags],
     ['Thumbnail text', pick?.thumbnailText ? pick.thumbnailText.toUpperCase() : ''],
-    ['Thumbnail idea', idea],
+    ['Thumbnail idea', thumbnailIdea(pick)],
     ['Video language', 'en-US'],
     ['Made for kids', 'No'],
     ['Altered content', 'No'],

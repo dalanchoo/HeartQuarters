@@ -10,10 +10,11 @@ import path from 'node:path';
 import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, type AiId } from './ai.js';
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
-import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
+import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice, type BriefPick } from './projects.js';
 import { appendDiscussionMessages } from './thumbnail-discussion.js';
 import { archiveDraftRound } from './packaging-version.js';
-import { appendText, makeFolder, writable, writeFile } from './safe-files.js';
+import { appendText, makeFolder, readText, writable, writeFile } from './safe-files.js';
+import { applyRoundPackaging, roundNumber, roundPackagingIn, thumbnailIdea, type RoundPackaging } from './round-packaging.js';
 
 /** The AIs that can make images. Claude can't. */
 export type ImageAi = Extract<AiId, 'codex' | 'gemini'>;
@@ -61,12 +62,14 @@ export interface ConversationInfo {
   session: string;
   photo: string;
   pick?: BriefChoice['pick'];
+  /** Changes from the original pick, keyed by generated image number. */
+  roundPackaging?: Record<string, RoundPackaging>;
 }
 
 /** A draft's Conversation.json, or null if it has none (made by hand) or it can't be read. */
 export function readConversation(folder: string): ConversationInfo | null {
   try {
-    const info = JSON.parse(fs.readFileSync(path.join(folder, CONVERSATION_FILE), 'utf8')) as ConversationInfo;
+    const info = JSON.parse(readText(path.join(folder, CONVERSATION_FILE))) as ConversationInfo;
     return info.ai === 'codex' || info.ai === 'gemini' ? info : null;
   } catch {
     return null;
@@ -130,9 +133,10 @@ export function firstRequest(choice: BriefChoice, short: boolean, out: string): 
   ].join('\n\n');
 }
 
-export function changeRequest(text: string, out: string, refs: string[] = [], newPhoto?: string): string {
+export function changeRequest(text: string, out: string, refs: string[] = [], newPhoto?: string, current: BriefPick | null = null): string {
   return [
     `Change request from John for the thumbnail you made last in this conversation: ${text.trim()}`,
+    ...(current ? [`The current pairing is Title: ${current.title} / Thumbnail Text: ${current.thumbnailText}. Current Thumbnail Idea: ${thumbnailIdea(current)}`] : []),
     ...(newPhoto
       ? [
           `John chose a new photo of himself for it (attached, and saved at: ${newPhoto}). From now on it is THE IDENTITY REFERENCE: ` +
@@ -149,6 +153,7 @@ export function changeRequest(text: string, out: string, refs: string[] = [], ne
       ? 'Keep everything else the same unless he asks otherwise. Use your image tool to make the image (not code).'
       : "Keep everything else the same, especially his face and likeness, unless he asks otherwise. Use your image tool to edit the image (not code).",
     `Save the result at the size the tool makes, without enlarging it with code, in the current folder as ${out}, and reply with its full path.`,
+    'After the path, report any changes using these exact line labels, with one plain-text value per line: Final Title:, Final Thumbnail Text:, Final Thumbnail Idea:. Report only title wording John explicitly requested or approved. When the on-image wording changes, report its exact final words (leave the value empty if he removed all text). When the image changes, give an updated standalone Thumbnail Idea describing the final composition, expression, supporting visual and typography as applicable. Leave unchanged or unresolved fields out. Only report the approved result, with no alternatives.',
   ].join('\n\n');
 }
 
@@ -425,12 +430,8 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
   if (path.dirname(folder).toLowerCase() !== drafts.toLowerCase()) throw new Error("That isn't one of this video's drafts.");
   const running = jobs.get(rel(folder));
   if (running?.state === 'working') throw new Error(`${AI_NAMES[running.ai]} is still working on this one.`);
-  let info: ConversationInfo;
-  try {
-    info = JSON.parse(fs.readFileSync(path.join(folder, CONVERSATION_FILE), 'utf8')) as ConversationInfo;
-  } catch {
-    throw new Error("This draft wasn't made by Make Thumbnail, so there's no conversation to continue. Make a new one.");
-  }
+  const info = readConversation(folder);
+  if (!info) throw new Error("This draft wasn't made by Make Thumbnail, so there's no conversation to continue. Make a new one.");
   if (!info.session) throw new Error('The AI gave no conversation to continue. Make a new one.');
   // The photo of John chosen now, when he asked for it to be sent: it becomes the conversation's photo.
   let newPhoto: { name: string; full: string } | null = null;
@@ -442,22 +443,32 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
     newPhoto = { name: chosen, full };
   }
   const out = nextImageName(folder);
-  const number = out.replace(/\.png$/, '');
+  const number = roundNumber(out)!;
+  const previous = info.roundPackaging?.[String(Number(number) - 1).padStart(2, '0')];
+  const approved = roundPackagingIn(request);
   const saved = saveReferences(drafts, folder, number, refs);
-  const prompt = changeRequest(request, out, saved, newPhoto?.full);
+  const prompt = changeRequest(request, out, saved, newPhoto?.full, applyRoundPackaging(info.pick ?? null, previous));
   appendDiscussionMessages(piece, folder, [{ from: 'john', text: request }]);
   return runJob(folder, info.ai, async () => {
     const work = workFolder(path.basename(folder));
     try {
       const answer = await make(info.ai, prompt, work, out, { session: info.session, refs: saved, ...(newPhoto ? { photo: newPhoto.full } : {}) });
+      const changes = { ...previous, ...roundPackagingIn(answer.reply ?? ''), ...approved };
+      const pick = applyRoundPackaging(info.pick ?? null, changes);
       const copied = writable(path.join(folder, out));
       fs.copyFileSync(answer.image, copied, fs.constants.COPYFILE_EXCL);
       const refNote = saved.length ? `\n\nReference images: ${saved.map((f) => `${REFERENCES_FOLDER}/${path.basename(f)}`).join(', ')}` : '';
       const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
       appendText(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
-      if (newPhoto) writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+      if (newPhoto || Object.keys(changes).length) {
+        writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({
+          ...info,
+          photo: newPhoto?.name ?? info.photo,
+          roundPackaging: { ...info.roundPackaging, [number]: changes },
+        }, null, 2) + '\n');
+      }
       appendDiscussionMessages(piece, folder, [{ from: info.ai, text: answer.reply?.trim() || `Generated round ${number}.` }]);
-      archiveDraftRound(piece, copied, info.pick ?? null, `Draft ${path.basename(folder)}, round ${number}, by ${AI_NAMES[info.ai]}.`);
+      archiveDraftRound(piece, copied, pick, `Draft ${path.basename(folder)}, round ${number}, by ${AI_NAMES[info.ai]}.`);
     } catch (e) {
       appendDiscussionMessages(piece, folder, [{ from: info.ai, text: e instanceof Error ? e.message : String(e) }]);
       throw e;

@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
 import { changeThumbnail, firstRequest, geminiImageArgs, isShort, lastReply, newestImage, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
 import { makeTree, removeTree } from './testing';
+import { readProject, type BriefPick } from './projects';
+import { checkedPick } from './thumbnail-feedback';
 
 let tmp: string;
 const saved = { projects: '', expressions: '' };
 const LONGFORM = '005 - Series/005A - One/Longform';
 const drafts = () => path.join(tmp, 'Projects', LONGFORM, 'Packaging', 'Drafts');
-const PICK = { title: 'Rope Broke Me Open', thumbnailText: 'Rope broke me open', accent: 'OPEN', expression: 'Positive > Relief', background: 'warm brown', why: 'because', backedBy: ['Claude'] };
+const PICK: BriefPick = { title: 'Rope Broke Me Open', thumbnailText: 'Rope broke me open', accent: 'OPEN', expression: 'Positive > Relief', background: 'warm brown', why: 'because', backedBy: ['Claude'] };
 
 beforeEach(() => {
   tmp = makeTree({
@@ -144,6 +146,38 @@ describe('Make Thumbnail', () => {
 });
 
 describe('change requests', () => {
+  it('archives the approved metadata with the new image and keeps each earlier round intact', async () => {
+    choose(undefined, { ...PICK, description: 'The video description.' });
+    await startThumbnail(LONGFORM, 'codex', fakeMake).finished;
+    const conversation = `${LONGFORM}/Packaging/Drafts/ChatGPT 01`;
+    const idea = 'Put the two silhouettes below the new words, with a muted blue background.';
+    const report: MakeImage = async (...args) => ({
+      ...await fakeMake(...args),
+      reply: `Saved 02.png.\nFinal Title: An unapproved alternative\nFinal Thumbnail Idea: ${idea}`,
+    });
+    const revised = changeThumbnail(LONGFORM, conversation, 'Replace the words.\nFinal Title: A Revised Title\nFinal Thumbnail Text: FOUND MY VOICE', report);
+    await revised.finished;
+    expect(revised.job.state).toBe('done');
+    await changeThumbnail(LONGFORM, conversation, 'Move the portrait a little to the right.', fakeMake).finished;
+
+    const draft = (n: string) => fs.readFileSync(path.join(config.videoProjectsDir, LONGFORM, 'Packaging', n, 'YouTube.md'), 'utf8');
+    expect(draft('D01')).toContain(`## Title\n${PICK.title}`);
+    expect(draft('D01')).toContain(`## Thumbnail text\n${PICK.thumbnailText.toUpperCase()}`);
+    for (const n of ['D02', 'D03']) {
+      expect(draft(n)).toContain('## Title\nA Revised Title');
+      expect(draft(n)).toContain('## Thumbnail text\nFOUND MY VOICE');
+      expect(draft(n)).toContain(`## Thumbnail idea\n${idea}`);
+      expect(draft(n)).toContain('## Description\nThe video description.');
+    }
+    const card = readProject('005 - Series/005A - One').videos[0].pieces[0].drafts!.conversations[0];
+    expect(card.pick?.title).toBe(PICK.title);
+    expect(card.roundPicks?.['02.png']).toMatchObject({ title: 'A Revised Title', thumbnailText: 'FOUND MY VOICE', thumbnailIdea: idea });
+    expect(card.roundPicks?.['01.png']).toBeUndefined();
+    const folder = path.join(config.videoProjectsDir, conversation);
+    expect(checkedPick(folder, path.join(folder, '01.png'))?.title).toBe(PICK.title);
+    expect(checkedPick(folder, path.join(folder, '02.png'))?.title).toBe('A Revised Title');
+  });
+
   it('go to the same conversation, and the result is saved as the next image', async () => {
     choose();
     await startThumbnail(LONGFORM, 'codex', fakeMake).finished;

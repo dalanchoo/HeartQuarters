@@ -800,6 +800,7 @@ function Conversation({ piece, conversation, chosenPhoto, job, thumbs }: { piece
   const rounds = [...conversation.images].reverse(); // newest first
   const [shown, setShown] = useState<string | undefined>(undefined);
   const current = rounds.find((r) => r.path === shown) ?? rounds[0];
+  const pick = (current && conversation.roundPicks?.[current.name]) ?? conversation.pick;
   const [using, setUsing] = useState(false);
   const [used, setUsed] = useState('');
   const [error, setError] = useState('');
@@ -842,10 +843,16 @@ function Conversation({ piece, conversation, chosenPhoto, job, thumbs }: { piece
           ))}
         </div>
       )}
-      {conversation.pick && (
+      {pick && (
         <div className="draft-pair">
-          <div className="draft-pair-title">{conversation.pick.title}</div>
-          <div className="muted small-text">Thumbnail text: {conversation.pick.thumbnailText.toUpperCase()}</div>
+          <div className="draft-pair-title">{pick.title}</div>
+          <div className="muted small-text">Thumbnail Text: {pick.thumbnailText.toUpperCase()}</div>
+          {pick.thumbnailIdea && (
+            <details className="yt-section">
+              <summary>Thumbnail Idea</summary>
+              <p>{pick.thumbnailIdea}</p>
+            </details>
+          )}
         </div>
       )}
       {working && <p className="brief-working small-text">{conversation.name.replace(/ \d+$/, '')} is working on it…</p>}
@@ -965,7 +972,7 @@ function ThumbnailChat({
     if (!window.confirm('Start over? This forgets the discussion about this draft.')) return;
     postJson('/api/thumbs/discussion/clear', { piece, image, conversation: conversationPath }).then(() => { setMessages([]); setJob(null); }, (e: Error) => setError(e.message));
   };
-  const latestChangeRequest = [...messages].reverse().find((m) => m.changeRequest)?.changeRequest ?? '';
+  const latestChangeRequest = [...messages].reverse().find((m) => m.changeRequest && (!m.image || m.image === image))?.changeRequest ?? '';
   const withPhoto = !!newPhoto && sendPhoto;
   const canSubmitRound = canGenerate && !!(draft.trim() || latestChangeRequest || withPhoto);
   const triggerGenerate = () => {

@@ -124,6 +124,11 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   **Generate New Round** to make the next round (`05`, `06`, ...) while keeping the chat open.
   Removed **Use Thumbnail**, **Use Title**, **Use Both** (drafts already archive as `D01`...) and
   **Add a draft as reference...**.
+- **Packaging follows each thumbnail round (2026-11-27).** The agreed title,
+  thumbnail words, and visual idea are saved with the new image and its D-numbered
+  YouTube.md. The card and AI feedback use the round being viewed. Later rounds
+  carry forward fields that did not change. Already archived drafts can be
+  corrected in Packaging by unlocking the relevant draft.
 - **Make All 6 Drafts from the Top 3 (2026-11-26).** **Make All 6 Drafts** on the Top 3 picks
   each pair's #1 photo (reusing a fresh saved ranking or running Photo Ranking with the chosen AI)
   and generates one draft with ChatGPT and one with Gemini for every pair, skipping any pair with

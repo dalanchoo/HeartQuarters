@@ -17,6 +17,7 @@ import { madeByHeartQuarters, SOURCE_MANIFEST } from './cleanup.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, NOTES_FILE, readChoice, type BriefPick } from './projects.js';
 import { isShort, readConversation } from './thumbnails.js';
 import { AI_NAMES } from './ai.js';
+import { applyRoundPackaging, thumbnailIdea } from './round-packaging.js';
 
 /** Makes `out` from `source` at exactly width x height (filling the frame, trimming any sliver). Tests pass a fake. */
 export type Enlarge = (source: string, out: string, width: number, height: number) => Promise<void>;
@@ -116,7 +117,7 @@ export async function useDraft(piece: string, image: string, version: string, pa
   const versionName = path.basename(dir);
 
   const info = readConversation(conversation);
-  const pick: BriefPick | undefined = info?.pick ?? readChoice(path.join(drafts, CHOICE_FILE))?.pick;
+  const pick: BriefPick | null = applyRoundPackaging(info?.pick ?? readChoice(path.join(drafts, CHOICE_FILE))?.pick ?? null, info?.roundPackaging?.[round]);
   const photo = info?.photo ?? null;
   if (parts.title && !pick) throw new Error("This draft's title isn't known, so only its thumbnail can be used.");
   const conv = path.basename(conversation);
@@ -219,7 +220,7 @@ export async function useDraft(piece: string, image: string, version: string, pa
       }
       if (parts.thumbnail) {
         text = setField(text, 'Thumbnail text', pick.thumbnailText.toUpperCase());
-        text = setField(text, 'Thumbnail idea', `${pick.expression}. ${pick.background}`);
+        text = setField(text, 'Thumbnail idea', thumbnailIdea(pick));
       }
       youtube = { file: ytFile, text: text.endsWith('\n') ? text : text + '\n' };
     }
