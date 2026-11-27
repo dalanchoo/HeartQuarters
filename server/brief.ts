@@ -606,6 +606,7 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     steps: [{ ai: picker, name: AI_NAMES[picker], role: 'picks', state: 'waiting' }],
     startedAt: new Date().toISOString(),
   };
+  const before = jobs.get(piece);
   jobs.set(piece, job);
   let work: string;
   let notes: string;
@@ -626,12 +627,18 @@ export async function startPicks(piece: string, rawNotes: string, ask: AskAi = a
     notes = notesWithImages(rawNotes, saved);
     if (notes.trim()) fs.writeFileSync(path.join(work, 'notes.txt'), notes.trim() + '\n');
   } catch (e) {
-    jobs.delete(piece);
+    if (before) jobs.set(piece, before);
+    else jobs.delete(piece);
     throw e;
   }
   const finished = runPicks(job.steps[0], ask, work, !!notes.trim(), drafts, new Date(), shots, comparison).then(async () => {
     await addToShotList(job, job.steps[0], ask, work, drafts);
-    job.status = job.steps[0].state === 'done' ? 'done' : 'failed';
+    if (job.steps[0].state === 'done') {
+      job.status = 'done';
+    } else {
+      job.status = 'failed';
+      job.error = job.steps[0].error;
+    }
   });
   return { job, finished };
 }

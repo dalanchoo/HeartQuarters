@@ -358,6 +358,14 @@ describe('writing the brief', () => {
     expect(readPicks(path.join(draftsDir(), 'Picks.json'))?.[0].tags).toBe('SDAM, Memory');
     expect(fs.readdirSync(draftsDir()).filter((f) => /^Picks - .*\.json$/.test(f))).toHaveLength(1);
     expect(briefText()).toBe('# Brief: 022\n\nan older brief');
+
+    // A setup error keeps the previous job status, and a picker failure records job.error.
+    await expect(startPicks(LONGFORM, '', fakeAi, { notes: Array(13).fill('x') })).rejects.toThrow(/12/);
+    expect(job.status).toBe('done');
+    const failed = await startPicks(LONGFORM, '', async () => { throw new Error('picker offline'); });
+    await failed.finished;
+    expect(failed.job.status).toBe('failed');
+    expect(failed.job.error).toBe('picker offline');
   });
 
   it('refuses a second brief while one is being written, and a video with no source', async () => {
