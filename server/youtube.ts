@@ -154,7 +154,7 @@ export function startUpload(input: UploadInput): UploadJob {
   if (uploadsFor(input.piece).some((j) => j.video === input.video && (j.status === 'uploading' || j.status === 'unknown'))) throw new Error('An upload of this file is still running or its result is unknown. Check YouTube Studio before trying again.');
   const job: UploadJob = { id: randomUUID(), piece: input.piece, video: input.video, status: 'uploading', sent: 0, total: files.size, createdAt: new Date().toISOString() };
   record(job); jobs.set(job.id, job);
-  void upload(job, input, files).catch((e: unknown) => { job.status = job.videoId ? 'done' : 'unknown'; job.error = e instanceof Error ? e.message : String(e); record(job); });
+  void upload(job, input, files);
   return job;
 }
 export async function youtubePlaylists() { return listYoutubePlaylists(await youtubeAccessToken()); }
@@ -380,6 +380,16 @@ export function acknowledgeUpload(piece: string, id: string) {
   record(job);
 }
 async function upload(job: UploadJob, input: UploadInput, files: ReturnType<typeof validateUpload>) {
+  let putStarted = false;
+  try {
+    await runUpload(job, input, files, () => { putStarted = true; });
+  } catch (e: unknown) {
+    job.status = job.videoId ? 'done' : putStarted ? 'unknown' : 'failed';
+    job.error = e instanceof Error ? e.message : String(e);
+    record(job);
+  }
+}
+async function runUpload(job: UploadJob, input: UploadInput, files: ReturnType<typeof validateUpload>, markPutStarted: () => void) {
   let token: string;
   try { token = await youtubeAccessToken(); } catch (e) { job.status = 'failed'; job.error = e instanceof Error ? e.message : String(e); record(job); return; }
   const init = await youtubeFetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
@@ -395,6 +405,7 @@ async function upload(job: UploadJob, input: UploadInput, files: ReturnType<type
       const n = Math.min(chunk.length, files.size - job.sent);
       const { bytesRead } = await handle.read(chunk, 0, n, job.sent);
       if (bytesRead !== n) throw new Error('The export changed or could not be read during upload.');
+      markPutStarted();
       const res = await youtubeFetch(url, { method: 'PUT', headers: { 'Content-Length': String(n), 'Content-Range': `bytes ${job.sent}-${job.sent + n - 1}/${files.size}` }, body: new Uint8Array(chunk.buffer, chunk.byteOffset, n) });
       if (res.status === 308) { const range = /^bytes=0-(\d+)$/.exec(res.headers.get('range') ?? ''); if (!range || Number(range[1]) + 1 !== job.sent + n) throw new Error('YouTube reported an unexpected upload position.'); job.sent += n; }
       else if (res.ok) { const result = await res.json() as { id?: string }; if (!result.id) throw new Error('YouTube did not return a video ID.'); job.videoId = result.id; job.sent = files.size; record(job); }

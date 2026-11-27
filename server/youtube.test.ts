@@ -64,6 +64,13 @@ describe('YouTube uploads', () => {
     acknowledgeUpload(input.piece, uploadsFor(input.piece)[0].id);
     expect(uploadsFor(input.piece)[0].status).toBe('checked');
   });
+  it('marks pre-upload failures as failed so the upload can be retried', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(null, { status: 200 })));
+    startUpload(input);
+    for (let i = 0; i < 100 && uploadsFor(input.piece)[0]?.status === 'uploading'; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(uploadsFor(input.piece)[0].status).toBe('failed');
+    expect(uploadsFor(input.piece)[0].error).toMatch(/valid upload address/);
+  });
   it('sends selected subtitles after the video, without changing the source file', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/session' } }))
