@@ -701,6 +701,7 @@ button.danger-outline:hover:not(:disabled) { border-color: var(--bad); color: va
 .top-picks { margin: 0.6rem 0 0.8rem; }
 .top-picks h4 { margin: 0 0 0.4rem; }
 .batch-thumbs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
+.batch-ai-check { display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; }
 .batch-thumbs-status { list-style: none; padding: 0.4rem 0.6rem; margin: 0 0 0.6rem; background: var(--surface-alt, #f7f7f7); border-radius: 6px; display: flex; flex-direction: column; gap: 0.2rem; }
 .top-picks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.7rem; }
 .top-pick { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; }
@@ -793,6 +794,10 @@ textarea[readonly]:focus { outline: none; }
 /* Each draft: the title and thumbnail text it was made for, and the Use buttons. */
 .draft-pair { margin: 0.4rem 0; }
 .draft-pair-title { font-weight: 600; }
+.draft-no-thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; margin-bottom: 0.4rem; }
+.thumbnail-chat { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.4rem 0; }
+.thumbnail-chat-log { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding-right: 0.2rem; }
+.thumbnail-chat textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .lock-toggle { font-weight: 600; }
 .lock-toggle--locked { background: #f1f1f3; color: #555; }
 .draft-use { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.4rem; }

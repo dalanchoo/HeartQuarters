@@ -22,6 +22,7 @@ export interface BatchPairStatus {
 export interface BatchThumbJob {
   piece: string;
   ai: AiId;
+  ais: ImageAi[];
   state: 'working' | 'done' | 'failed';
   pairs: BatchPairStatus[];
   error?: string;
@@ -57,11 +58,21 @@ async function bestPhotoForPair(piece: string, pick: BriefPick, ai: AiId, deps: 
   return fresh.ranked[0]?.photo ?? null;
 }
 
+/** Which image AIs to run for each pair; defaults to both ChatGPT and Gemini. */
+export function parseBatchAis(value: unknown): ImageAi[] {
+  if (value === undefined) return ['codex', 'gemini'];
+  if (!Array.isArray(value)) throw new Error('Choose ChatGPT, Gemini, or both.');
+  const list = [...new Set(value.filter((v): v is ImageAi => v === 'codex' || v === 'gemini'))];
+  if (!list.length) throw new Error('Tick ChatGPT, Gemini, or both.');
+  return list;
+}
+
 /**
- * Starts generating ChatGPT + Gemini thumbnails for every pair in Picks.json.
- * Runs one pair at a time (ChatGPT and Gemini in parallel per pair) so neither AI is hit with 3 image calls at once.
+ * Starts generating thumbnails for every pair in Picks.json using the selected `ais` (ChatGPT, Gemini, or both).
+ * Runs one pair at a time (selected AIs in parallel per pair) so neither AI is hit with 3 image calls at once.
  */
-export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: BatchThumbDeps = {}): { job: BatchThumbJob; finished: Promise<void> } {
+export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: BatchThumbDeps = {}, ais: ImageAi[] = ['codex', 'gemini']): { job: BatchThumbJob; finished: Promise<void> } {
+  const selected = parseBatchAis(ais);
   const drafts = draftsOf(piece);
   if (batchJobs.get(piece)?.state === 'working') throw new Error('Already generating drafts for all pairs on this video.');
   const picks = readPicks(readable(path.join(drafts, PICKS_FILE)));
@@ -71,6 +82,7 @@ export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: B
   const job: BatchThumbJob = {
     piece,
     ai,
+    ais: selected,
     state: 'working',
     pairs: picks.map((p, index) => ({ index, title: p.title, thumbnailText: p.thumbnailText, state: 'pending' })),
   };
@@ -98,7 +110,7 @@ export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: B
 
       const started: { ai: ImageAi; conversation: string; finished: Promise<void> }[] = [];
       const startErrors: string[] = [];
-      for (const imageAi of ['codex', 'gemini'] as const) {
+      for (const imageAi of selected) {
         try {
           const { job: thumbJob, finished: thumbDone } = startThumbnailFor(piece, pick, photo, imageAi, make);
           started.push({ ai: imageAi, conversation: thumbJob.conversation, finished: thumbDone });
@@ -110,7 +122,7 @@ export function startBatchThumbnails(piece: string, ai: AiId = 'claude', deps: B
       const results = await Promise.allSettled(started.map(s => s.finished));
       const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map(r => r.reason instanceof Error ? r.reason.message : String(r.reason));
       const errors = [...startErrors, ...failed];
-      if (errors.length === 2) {
+      if (errors.length === selected.length) {
         pair.state = 'failed';
         pair.reason = errors.join(' · ');
       } else {

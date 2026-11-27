@@ -132,4 +132,36 @@ describe('Make All 6 Drafts', () => {
     fs.unlinkSync(path.join(drafts(), 'Picks.json'));
     expect(() => startBatchThumbnails(LONGFORM, 'claude')).toThrow(/pick the top 3 pairs/i);
   });
+
+  it('can run only ChatGPT or only Gemini when selected', async () => {
+    const smallFile = path.join(tmp, 'small.jpg');
+    fs.writeFileSync(smallFile, 'small');
+    const makeCalls: string[] = [];
+    const fakeMake: MakeImage = async (ai, _prompt, cwd, out) => {
+      makeCalls.push(ai);
+      fs.writeFileSync(path.join(cwd, out), `img-${ai}`);
+      return { image: path.join(cwd, out), session: `s-${ai}` };
+    };
+    const { job, finished } = startBatchThumbnails(
+      LONGFORM,
+      'claude',
+      {
+        ranking: {
+          photos: () => PHOTOS,
+          starred: () => [],
+          shots: () => [],
+          small: async () => smallFile,
+          ask: async (_ai, prompt) =>
+            prompt.includes('Pair One Title')
+              ? JSON.stringify({ ranked: [{ photo: 'Positive/Relief/Relief_001.jpg', why: '1' }] })
+              : JSON.stringify({ ranked: [{ photo: 'Empathy/Compassion/Compassion_001.jpg', why: '2' }] }),
+        },
+        make: fakeMake,
+      },
+      ['codex'],
+    );
+    await finished;
+    expect(job.state).toBe('done');
+    expect(makeCalls).toEqual(['codex', 'codex']);
+  });
 });

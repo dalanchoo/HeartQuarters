@@ -11,6 +11,7 @@ import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, runAiProcess, ty
 import { appDir, config, safeResolve } from './config.js';
 import { resolveExpressionPhoto } from './expression-photo-path.js';
 import { CHOICE_FILE, DRAFTS_FOLDER, readChoice, type BriefChoice } from './projects.js';
+import { appendDiscussionMessages } from './thumbnail-discussion.js';
 import { archiveDraftRound } from './packaging-version.js';
 import { appendText, makeFolder, writable, writeFile } from './safe-files.js';
 
@@ -31,10 +32,11 @@ export interface ThumbJob {
   error?: string;
 }
 
-/** What an image AI sends back: where it saved the image, and the conversation's id for later changes. */
+/** What an image AI sends back: where it saved the image, the conversation's id for later changes, and any reply text. */
 export interface ImageAnswer {
   image: string;
   session: string;
+  reply?: string;
 }
 
 /**
@@ -160,18 +162,33 @@ async function run(cmd: string, args: string[], cwd: string): Promise<string> {
   throw new Error(res.stderr.trim().split('\n').slice(-3).join(' ') || `It stopped (exit code ${res.code}).`);
 }
 
-/** The newest image in a folder made after `since` (so an old image is never taken for a new one), or null. */
-function newestImage(dir: string, since: number): string | null {
-  try {
-    const images = fs
-      .readdirSync(dir)
-      .filter((f) => IMAGE_RE.test(f))
-      .map((f) => path.join(dir, f))
-      .filter((f) => fs.statSync(f).mtimeMs >= since - 2000);
-    return images.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] ?? null;
-  } catch {
-    return null;
-  }
+/** The newest image in a folder (including subfolders up to 3 levels deep) made after `since`, or null. */
+export function newestImage(dir: string, since: number, depth = 3): string | null {
+  const images: { file: string; mtime: number }[] = [];
+  const walk = (current: string, left: number) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // skip .system_generated logs/media so input photos are never mistaken for generated thumbnails
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (left > 0) walk(full, left - 1);
+      } else if (entry.isFile() && IMAGE_RE.test(entry.name)) {
+        try {
+          const mtime = fs.statSync(full).mtimeMs;
+          if (mtime >= since - 2000) images.push({ file: full, mtime });
+        } catch {
+          /* ignore unreadable file */
+        }
+      }
+    }
+  };
+  walk(dir, depth);
+  return images.sort((a, b) => b.mtime - a.mtime)[0]?.file ?? null;
 }
 
 /** The id an AI's JSON lines give for the conversation: Codex's thread_id, Antigravity's conversation_id. */
@@ -207,7 +224,9 @@ export function lastReply(output: string): string {
       (event.item?.type === 'agent_message' && text(event.item.text)) ||
       (event.msg?.type === 'agent_message' && text(event.msg.message)) ||
       text(event.last_agent_message) ||
-      ((event.role === 'assistant' || event.type === 'assistant') && (text(event.content) || text(event.text) || text(event.message?.content)));
+      ((event.role === 'assistant' || event.type === 'assistant') && (text(event.content) || text(event.text) || text(event.message?.content))) ||
+      (event.type === 'result' && text(event.result)) ||
+      (event.type === 'error' && (text(event.message) || text(event.error?.message)));
     if (said && said.trim()) last = said.trim();
   }
   return last;
@@ -241,7 +260,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
     // If it didn't save where asked, the image tool keeps its own copy.
     const image = fs.existsSync(saved) ? saved : newestImage(path.join(os.homedir(), '.codex', 'generated_images', id), started);
     if (!image) throw noImageError('ChatGPT', output);
-    return { image, session: id };
+    return { image, session: id, reply: lastReply(output) };
   }
   const args = geminiImageArgs(prompt, cwd, { session, photo, refs });
   const output = await run(cmd, [...pre, ...args], cwd);
@@ -249,7 +268,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
   // Antigravity can't save outside its own folder in a sandbox, so the image is taken from there.
   const image = fs.existsSync(saved) ? saved : id ? newestImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain', id), started) : null;
   if (!image) throw noImageError('Gemini', output);
-  return { image, session: id };
+  return { image, session: id, reply: lastReply(output) };
 };
 
 // ---- Conversations in Drafts ---------------------------------------------------------------------------
@@ -326,6 +345,9 @@ export function startThumbnailFor(piece: string, pick: BriefChoice['pick'], phot
     path.join(folder, REQUESTS_FILE),
     `# ${name}\n\nPair: ${pick.thumbnailText} / ${pick.title}\n\nPhoto: ${photoPath}\n\n## 01\n\n${prompt}\n`,
   );
+  // Save the pair & AI up front so even if image generation fails, the card still shows the title, text and chat.
+  writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ai, session: '', photo: photoPath, pick } satisfies ConversationInfo, null, 2) + '\n');
+  appendDiscussionMessages(piece, folder, [{ from: 'john', text: prompt }]);
   return runJob(folder, ai, async () => {
     const work = workFolder(name);
     try {
@@ -334,7 +356,11 @@ export function startThumbnailFor(piece: string, pick: BriefChoice['pick'], phot
       fs.copyFileSync(answer.image, copied, fs.constants.COPYFILE_EXCL);
       const info: ConversationInfo = { ai, session: answer.session, photo: photoPath, pick };
       writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify(info, null, 2) + '\n');
+      appendDiscussionMessages(piece, folder, [{ from: ai, text: answer.reply?.trim() || 'Generated round 01.' }]);
       archiveDraftRound(piece, copied, pick, `Draft ${name}, round 01, by ${AI_NAMES[ai]}.`);
+    } catch (e) {
+      appendDiscussionMessages(piece, folder, [{ from: ai, text: e instanceof Error ? e.message : String(e) }]);
+      throw e;
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }
@@ -419,6 +445,7 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
   const number = out.replace(/\.png$/, '');
   const saved = saveReferences(drafts, folder, number, refs);
   const prompt = changeRequest(request, out, saved, newPhoto?.full);
+  appendDiscussionMessages(piece, folder, [{ from: 'john', text: request }]);
   return runJob(folder, info.ai, async () => {
     const work = workFolder(path.basename(folder));
     try {
@@ -429,7 +456,11 @@ export function changeThumbnail(piece: string, conversation: string, text: unkno
       const photoNote = newPhoto ? `\n\nNew photo: ${newPhoto.name}` : '';
       appendText(path.join(folder, REQUESTS_FILE), `\n## ${number} (change request from John)\n\n${request}${photoNote}${refNote}\n`);
       if (newPhoto) writeFile(path.join(folder, CONVERSATION_FILE), JSON.stringify({ ...info, photo: newPhoto.name }, null, 2) + '\n');
+      appendDiscussionMessages(piece, folder, [{ from: info.ai, text: answer.reply?.trim() || `Generated round ${number}.` }]);
       archiveDraftRound(piece, copied, info.pick ?? null, `Draft ${path.basename(folder)}, round ${number}, by ${AI_NAMES[info.ai]}.`);
+    } catch (e) {
+      appendDiscussionMessages(piece, folder, [{ from: info.ai, text: e instanceof Error ? e.message : String(e) }]);
+      throw e;
     } finally {
       try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore busy temp cleanup */ }
     }

@@ -295,11 +295,22 @@ function readPiece(dir: string, kind: Piece['kind'], name: string): Piece {
   };
 }
 
-/** The pair a draft conversation was made for, from its Conversation.json; null if there's none. */
+/** The pair a draft conversation was made for, from its Conversation.json or Requests.md (`Pair: TEXT / Title`). */
 function readConversationPick(folder: string): BriefPick | null {
   try {
     const info = JSON.parse(fs.readFileSync(path.join(folder, 'Conversation.json'), 'utf8')) as { pick?: unknown };
-    return parsePicks({ picks: [info.pick] })?.[0] ?? null;
+    const parsed = parsePicks({ picks: [info.pick] })?.[0];
+    if (parsed) return parsed;
+  } catch {
+    /* fall through to Requests.md */
+  }
+  try {
+    const requests = fs.readFileSync(path.join(folder, 'Requests.md'), 'utf8');
+    const m = /^Pair:\s*(.+?)\s*\/\s*(.+)$/m.exec(requests);
+    if (!m) return null;
+    const thumbnailText = m[1].trim();
+    const title = m[2].trim();
+    return title && thumbnailText ? { title, thumbnailText, accent: '', expression: '', background: '', why: '', backedBy: [] } : null;
   } catch {
     return null;
   }

@@ -61,7 +61,7 @@ import { aiSignIns, openSignIn } from './ai-signin.js';
 import { forgetIdleRuns, getRun, parseShortsJob, sendNote, startShortsProposal, stopRun } from './claude.js';
 import { askAi, briefSource, briefSourceText, chooseBriefPhoto, chooseBriefPick, getBrief, parseBriefPlan, startBrief, startPicks } from './brief.js';
 import { changeThumbnail, parseImageAi, startThumbnail, thumbJobs } from './thumbnails.js';
-import { batchThumbJob, startBatchThumbnails } from './thumbnail-batch.js';
+import { batchThumbJob, parseBatchAis, startBatchThumbnails } from './thumbnail-batch.js';
 import { startThumbnailReview, thumbnailReviews } from './thumbnail-feedback.js';
 import { useDraft } from './use-draft.js';
 import {
@@ -738,25 +738,25 @@ app.get('/api/thumbs', handle((req, res) => {
 }));
 
 // Feedback reviews an existing image and its generated packaging without changing either.
-// ?piece=&image=: the Discuss conversation about a thumbnail draft, and whether an AI is replying.
+// ?piece=&image=&conversation=: the Discuss conversation about a thumbnail draft, and whether an AI is replying.
 app.get('/api/thumbs/discussion', handle((req, res) => {
-  res.json(readDiscussion(String(req.query.piece ?? ''), String(req.query.image ?? '')));
+  res.json(readDiscussion(String(req.query.piece ?? ''), String(req.query.image ?? ''), String(req.query.conversation ?? '')));
 }));
 
-// { piece, image, ai, message }: John's message in Discuss; the AI's reply arrives in the background.
+// { piece, image, conversation, ai, message }: John's message in Discuss; the AI's reply arrives in the background.
 app.post('/api/thumbs/discussion', handle((req, res) => {
-  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message, undefined, req.body?.pasted).job);
+  res.json(sendDiscussionMessage(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), req.body?.ai, req.body?.message, undefined, req.body?.pasted, String(req.body?.conversation ?? '')).job);
 }));
 
-// ?piece=&image=&name=: an image John pasted into a Discuss message.
+// ?piece=&image=&conversation=&name=: an image John pasted into a Discuss message.
 app.get('/api/thumbs/discussion/image', handle((req, res) => {
   sandboxHeaders(res);
-  res.sendFile(discussionImage(String(req.query.piece ?? ''), String(req.query.image ?? ''), req.query.name));
+  res.sendFile(discussionImage(String(req.query.piece ?? ''), String(req.query.image ?? ''), req.query.name, String(req.query.conversation ?? '')));
 }));
 
-// { piece, image }: Start Over, forgetting that draft's discussion.
+// { piece, image, conversation }: Start Over, forgetting that draft's discussion.
 app.post('/api/thumbs/discussion/clear', handle((req, res) => {
-  clearDiscussion(String(req.body?.piece ?? ''), String(req.body?.image ?? ''));
+  clearDiscussion(String(req.body?.piece ?? ''), String(req.body?.image ?? ''), String(req.body?.conversation ?? ''));
   res.json({ ok: true });
 }));
 
@@ -777,9 +777,9 @@ app.get('/api/thumbs/batch', handle((req, res) => {
   res.json(batchThumbJob(String(req.query.piece ?? '')));
 }));
 
-// { piece, ai }: rank photos for all top 3 pairs (with `ai`) and generate ChatGPT + Gemini drafts for each.
+// { piece, ai, ais }: rank photos for all top 3 pairs (with `ai`) and generate drafts for the selected `ais` (ChatGPT, Gemini, or both).
 app.post('/api/thumbs/make-all', handle((req, res) => {
-  res.json(startBatchThumbnails(String(req.body?.piece ?? ''), parseAi(req.body?.ai ?? 'claude')).job);
+  res.json(startBatchThumbnails(String(req.body?.piece ?? ''), parseAi(req.body?.ai ?? 'claude'), undefined, parseBatchAis(req.body?.ais)).job);
 }));
 
 // { piece, conversation, text, pasted, drafts }: a change request, with any reference images (pasted, or drafts of this video), to the conversation that made that draft.

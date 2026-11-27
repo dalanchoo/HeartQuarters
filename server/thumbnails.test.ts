@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { changeThumbnail, firstRequest, geminiImageArgs, isShort, lastReply, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
+import { changeThumbnail, firstRequest, geminiImageArgs, isShort, lastReply, newestImage, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
 import { makeTree, removeTree } from './testing';
 
 let tmp: string;
@@ -70,6 +70,23 @@ describe('Make Thumbnail', () => {
     expect(args).toContain('--sandbox');
     expect(JSON.parse(args[args.indexOf('--settings') + 1]).permissions.allow).toEqual(['read_file(*)']);
   });
+  it('finds a generated image inside a subfolder of the session folder, ignoring dot-folders like .system_generated', () => {
+    const dir = path.join(tmp, 'brain', 'sess-1');
+    const hidden = path.join(dir, '.system_generated', 'logs', 'media');
+    fs.mkdirSync(hidden, { recursive: true });
+    fs.writeFileSync(path.join(hidden, 'step_2_media_0.jpg'), 'input-photo');
+    const sub = path.join(dir, 'artifacts', 'media');
+    fs.mkdirSync(sub, { recursive: true });
+    const img = path.join(sub, 'thumb.png');
+    fs.writeFileSync(img, 'png');
+    expect(newestImage(dir, Date.now() - 5000)).toBe(img);
+    fs.unlinkSync(img);
+    expect(newestImage(dir, Date.now() - 5000)).toBeNull();
+  });
+  it('captures result and error messages when an AI finishes without an image', () => {
+    expect(lastReply(JSON.stringify({ type: 'result', result: 'I could not generate that.' }))).toBe('I could not generate that.');
+    expect(lastReply(JSON.stringify({ type: 'error', message: 'Quota exceeded' }))).toBe('Quota exceeded');
+  });
   it('uses a project-owned source photo after the library photo is removed', async () => {
     const local = `${LONGFORM}/Packaging/Drafts/Source/kept.jpg`;
     fs.mkdirSync(path.join(drafts(), 'Source'));
@@ -122,7 +139,7 @@ describe('Make Thumbnail', () => {
     });
     await finished;
     expect(job).toMatchObject({ state: 'failed', error: 'out of credits' });
-    expect(fs.readdirSync(path.join(drafts(), 'ChatGPT 01'))).toEqual(['Requests.md']);
+    expect(fs.readdirSync(path.join(drafts(), 'ChatGPT 01'))).toEqual(['Conversation.json', 'Requests.md']);
   });
 });
 

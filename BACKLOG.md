@@ -117,9 +117,13 @@ John wants to discuss the recommendations and get feedback on ideas of his own.
   no joining separate moments, and the supporting visual shows what the words refer to. The
   writer, reviewers (Accuracy section first), picker, Ask for Feedback and the first image request
   carry this rule, and so does the thumbnails-and-titles skill's hard rule 2 (on Drive).
-- **Discuss a draft before changing it (2026-11-25).** Each thumbnail draft has a Discuss box: a
-  conversation with any AI that sees the image, packaging, brief and transcript and never makes
-  images. A reply's Change Request goes into Ask for Changes with one click.
+- **One persistent chat per thumbnail draft (2026-11-26).** Each draft card now has one
+  always-open chat box instead of separate Discuss, Ask for Feedback, and Ask for Changes boxes:
+  switch between **Ask Claude**, **Ask ChatGPT**, and **Ask Gemini** in the same thread, click
+  **Ask for Feedback** to insert an editable review prompt, paste/drop images directly, and click
+  **Generate New Round** to make the next round (`05`, `06`, ...) while keeping the chat open.
+  Removed **Use Thumbnail**, **Use Title**, **Use Both** (drafts already archive as `D01`...) and
+  **Add a draft as reference...**.
 - **Make All 6 Drafts from the Top 3 (2026-11-26).** **Make All 6 Drafts** on the Top 3 picks
   each pair's #1 photo (reusing a fresh saved ranking or running Photo Ranking with the chosen AI)
   and generates one draft with ChatGPT and one with Gemini for every pair, skipping any pair with

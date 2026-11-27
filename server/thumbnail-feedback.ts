@@ -52,14 +52,28 @@ export function feedbackPrompt(image: string, metadata: unknown, question: strin
   ].join('\n\n');
 }
 
+/** Only a direct folder inside this video's Drafts is eligible. */
+export function checkedConversation(piece: string, conversationPath: string) {
+  if (!piece || !conversationPath) throw new Error('Choose a video and a draft.');
+  const pieceDir = safeResolve('projects', piece);
+  const conversation = safeResolve('projects', conversationPath);
+  const drafts = path.join(pieceDir, 'Packaging', DRAFTS_FOLDER);
+  if (path.dirname(conversation).toLowerCase() !== drafts.toLowerCase() || !fs.statSync(conversation, { throwIfNoEntry: false })?.isDirectory() || [pieceDir, path.join(pieceDir, 'Packaging'), drafts, conversation].some(file => fs.lstatSync(file).isSymbolicLink())) throw new Error("Choose a draft from this video's Drafts folder.");
+  return { pieceDir, conversation };
+}
+
 /**
- * Fills an AI's working folder for a thumbnail draft: a copy of the image, the video's source as source.txt, the brief
- * as brief.md and the channel's skills. Shared by Ask for Feedback and Discuss.
+ * Fills an AI's working folder for a thumbnail draft: a copy of the image (when one exists), the video's source as
+ * source.txt, the brief as brief.md and the channel's skills. Shared by Ask for Feedback and Discuss.
  */
-export async function prepareDraftFolder(pieceDir: string, imageFile: string, work: string): Promise<{ imageCopy: string; imageHash: string; source: boolean; brief: boolean; skills: string[] }> {
-  const imageCopy = path.join(work, `thumbnail${path.extname(imageFile).toLowerCase()}`);
-  const imageBytes = fs.readFileSync(imageFile); fs.writeFileSync(imageCopy, imageBytes);
-  const imageHash = createHash('sha256').update(imageBytes).digest('hex');
+export async function prepareDraftFolder(pieceDir: string, imageFile: string | null, work: string): Promise<{ imageCopy: string | null; imageHash: string; source: boolean; brief: boolean; skills: string[] }> {
+  let imageCopy: string | null = null;
+  let imageHash = '';
+  if (imageFile) {
+    imageCopy = path.join(work, `thumbnail${path.extname(imageFile).toLowerCase()}`);
+    const imageBytes = fs.readFileSync(imageFile); fs.writeFileSync(imageCopy, imageBytes);
+    imageHash = createHash('sha256').update(imageBytes).digest('hex');
+  }
   const source = findSource(pieceDir);
   if (source) { const safeSource = safeResolve('projects', path.relative(config.videoProjectsDir, source.full)); if (fs.lstatSync(safeSource).isSymbolicLink() || fs.lstatSync(path.dirname(safeSource)).isSymbolicLink()) throw new Error('The source must be a real file in this video folder.'); fs.writeFileSync(path.join(work, 'source.txt'), await readSource(safeSource)); }
   const briefPath = safeResolve('projects', path.relative(config.videoProjectsDir, path.join(pieceDir, 'Packaging', DRAFTS_FOLDER, 'Brief.md')));
@@ -97,7 +111,7 @@ export function startThumbnailReview(piece: string, image: string, ai: unknown, 
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-thumbnail-review-'));
     try {
       const { imageCopy, imageHash, source, brief: hasBrief, skills } = await prepareDraftFolder(pieceDir, imageFile, work);
-      const answer = (await ask(ai, feedbackPrompt(imageCopy, pick, question.trim(), source, isShort(piece), skills, hasBrief), work, [imageCopy])).trim();
+      const answer = (await ask(ai, feedbackPrompt(imageCopy!, pick, question.trim(), source, isShort(piece), skills, hasBrief), work, [imageCopy!])).trim();
       if (!answer) throw new Error(`${AI_NAMES[ai]} returned no feedback.`);
       const id = randomUUID(); const dir = path.join(storage(), key); fs.mkdirSync(dir, { recursive: true });
       const review: ThumbnailReview = { id, ai, name: AI_NAMES[ai], image, imageHash, metadataHash: metadataHash(pick), question: question.trim(), answer, createdAt: new Date().toISOString() };

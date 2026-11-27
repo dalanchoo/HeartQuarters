@@ -962,7 +962,7 @@ function PieceCard({
         </details>
       )}
 
-      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} target={version ? { name: versionLabel(version.name), path: version.path, locked } : undefined} research={research} onChanged={reloadDocs} />}
+      {piece.kind !== 'reel' && <DraftsSection key={piece.path} piece={piece.path} drafts={piece.drafts} research={research} onChanged={reloadDocs} />}
       {version && youtubeDoc && piece.kind !== 'reel' ? (
         <PackagingCompare key={`${version.path}|${unlocked ?? ''}`} piece={piece} version={version} doc={youtubeDoc} locked={locked} unlocked={unlocked} onToggleLock={toggleLock} link={link} onChanged={onChanged} longform={piece.kind === 'short' ? video : undefined} onDirtyChange={setCompareDirty} choices={compareChoices} setChoices={setCompareChoices} open={compareOpen} setOpen={setCompareOpen} />
       ) : (
