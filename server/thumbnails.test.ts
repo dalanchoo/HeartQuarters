@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from './config';
-import { changeThumbnail, firstRequest, geminiImageArgs, isShort, lastReply, newestImage, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
+import { changeThumbnail, fallbackGeneratedImage, firstRequest, geminiImageArgs, isShort, lastReply, newestImage, nextConversationName, noImageError, sessionFrom, startThumbnail, thumbJobs, type MakeImage } from './thumbnails';
 import { makeTree, removeTree } from './testing';
 import { readProject, type BriefPick } from './projects';
 import { checkedPick } from './thumbnail-feedback';
@@ -320,5 +320,19 @@ describe('small helpers', () => {
     expect(sessionFrom('noise\n{"type":"thread.started","thread_id":"abc"}\n', 'thread_id')).toBe('abc');
     expect(sessionFrom('{"conversation_id":"g1"}', 'conversation_id')).toBe('g1');
     expect(sessionFrom('nothing', 'thread_id')).toBe('');
+  });
+
+  it('does not scan other threads when Codex or Gemini returns an empty session id', () => {
+    const fakeHome = makeTree({
+      '.codex/generated_images/other-thread/01.png': 'other',
+      '.gemini/antigravity-cli/brain/other-conv/01.png': 'other',
+    });
+    try {
+      expect(fallbackGeneratedImage('codex', '', 0, fakeHome)).toBeNull();
+      expect(fallbackGeneratedImage('gemini', '', 0, fakeHome)).toBeNull();
+      expect(fallbackGeneratedImage('codex', 'other-thread', 0, fakeHome)).toBe(path.join(fakeHome, '.codex', 'generated_images', 'other-thread', '01.png'));
+    } finally {
+      removeTree(fakeHome);
+    }
   });
 });

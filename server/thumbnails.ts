@@ -253,6 +253,15 @@ export function geminiImageArgs(prompt: string, cwd: string, opts: { session?: s
   return ['-p', said, '--output-format', 'stream-json', ...(session ? ['--conversation', session] : []), ...aiModelArgs('gemini'), '--sandbox', ...dirs.flatMap((dir) => ['--add-dir', dir]), '--settings', JSON.stringify(settings), '--print-timeout', '900s'];
 }
 
+/** Look for an AI's own generated-image copy when it didn't write to the requested output path. */
+export function fallbackGeneratedImage(ai: ImageAi, id: string, since: number, homeDir = os.homedir()): string | null {
+  if (!id) return null;
+  const dir = ai === 'codex'
+    ? path.join(homeDir, '.codex', 'generated_images', id)
+    : path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', id);
+  return newestImage(dir, since);
+}
+
 export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, photo, refs }) => {
   const [cmd, ...pre] = aiCommand(ai);
   const saved = path.join(cwd, out);
@@ -263,7 +272,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
     const output = await run(cmd, [...pre, ...args], cwd);
     const id = session || sessionFrom(output, 'thread_id');
     // If it didn't save where asked, the image tool keeps its own copy.
-    const image = fs.existsSync(saved) ? saved : newestImage(path.join(os.homedir(), '.codex', 'generated_images', id), started);
+    const image = fs.existsSync(saved) ? saved : fallbackGeneratedImage('codex', id, started);
     if (!image) throw noImageError('ChatGPT', output);
     return { image, session: id, reply: lastReply(output) };
   }
@@ -271,7 +280,7 @@ export const makeImage: MakeImage = async (ai, prompt, cwd, out, { session, phot
   const output = await run(cmd, [...pre, ...args], cwd);
   const id = session || sessionFrom(output, 'conversation_id');
   // Antigravity can't save outside its own folder in a sandbox, so the image is taken from there.
-  const image = fs.existsSync(saved) ? saved : id ? newestImage(path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain', id), started) : null;
+  const image = fs.existsSync(saved) ? saved : fallbackGeneratedImage('gemini', id, started);
   if (!image) throw noImageError('Gemini', output);
   return { image, session: id, reply: lastReply(output) };
 };
