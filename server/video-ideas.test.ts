@@ -154,6 +154,18 @@ describe('video ideas', () => {
     expect(afterDelete[0].attachments.map(a => a.name)).toEqual(['SDAM Guide (2).pdf']);
     expect(fs.existsSync(path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR, idea.id, 'SDAM Guide.pdf'))).toBe(false);
     expect(fs.readdirSync(config.trashDir).some(d => d.startsWith('Idea Resources '))).toBe(true);
+
+    // If Trash is misconfigured, deleteAttachment fails before modifying Video Ideas.json or moving the file.
+    const savedTrash = config.trashDir;
+    config.trashDir = path.join(config.videoProjectsDir, 'BadTrash');
+    try {
+      const remainingId = afterDelete[0].attachments[0].id;
+      expect(() => deleteAttachment(idea.id, remainingId)).toThrow(/outside Video Projects/);
+      expect(readIdeas()[0].attachments.map(a => a.name)).toEqual(['SDAM Guide (2).pdf']);
+      expect(fs.existsSync(path.join(config.videoProjectsDir, IDEA_RESOURCES_DIR, idea.id, 'SDAM Guide (2).pdf'))).toBe(true);
+    } finally {
+      config.trashDir = savedTrash;
+    }
   });
 
   it('refuses unsafe attachment types and junctions', () => {

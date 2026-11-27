@@ -334,7 +334,12 @@ export function addAttachment(ideaId: unknown, rawName: unknown, bytes: Buffer, 
   const now = new Date().toISOString();
   idea.attachments.push({ id: randomUUID(), name: candidate, note, size: bytes.length, addedAt: now });
   idea.updatedAt = now;
-  save(ideas, original);
+  try {
+    save(ideas, original);
+  } catch (e) {
+    fs.rmSync(target, { force: true });
+    throw e;
+  }
   return ideas;
 }
 
@@ -358,21 +363,26 @@ export function deleteAttachment(ideaId: unknown, attachmentId: unknown): VideoI
   const att = idea.attachments[idx];
   const file = safeResolve('projects', path.posix.join(IDEA_RESOURCES_DIR, folderId, att.name));
 
-  if (fs.existsSync(file)) {
+  const hasFile = fs.existsSync(file);
+  let trash = '';
+  if (hasFile) {
     writable(file);
     const projects = path.resolve(config.videoProjectsDir);
-    const trash = path.resolve(config.trashDir);
+    trash = path.resolve(config.trashDir);
     if (!config.trashDir || isInside(projects, trash) || isInside(trash, projects)) {
       throw new Error('The trash folder must be outside Video Projects.');
     }
-    fs.mkdirSync(trash, { recursive: true });
-    const holder = fs.mkdtempSync(path.join(trash, 'Idea Resources '));
-    fs.renameSync(file, path.join(holder, path.basename(file)));
   }
 
   idea.attachments.splice(idx, 1);
   idea.updatedAt = new Date().toISOString();
   save(ideas, original);
+
+  if (hasFile) {
+    fs.mkdirSync(trash, { recursive: true });
+    const holder = fs.mkdtempSync(path.join(trash, 'Idea Resources '));
+    fs.renameSync(file, path.join(holder, path.basename(file)));
+  }
   return ideas;
 }
 
