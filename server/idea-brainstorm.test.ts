@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import mammoth from 'mammoth';
 import { config } from './config';
 import {
   BRAINSTORMS_DIR,
@@ -15,15 +16,20 @@ import { addAttachment, addIdea, addReference } from './video-ideas';
 
 let root: string;
 let saved: string;
+let savedWriting: string;
 
 beforeEach(() => {
-  root = makeTree({ 'Projects/001 - Video/': '' });
+  root = makeTree({ 'Projects/001 - Video/': '', 'Writing/My Journey/': '' });
   saved = config.videoProjectsDir;
+  savedWriting = config.writingDir;
   config.videoProjectsDir = path.join(root, 'Projects');
+  config.writingDir = path.join(root, 'Writing');
 });
 
 afterEach(() => {
   config.videoProjectsDir = saved;
+  config.writingDir = savedWriting;
+  vi.restoreAllMocks();
   removeTree(root);
 });
 
@@ -139,6 +145,34 @@ describe('idea brainstorm', () => {
     expect(folder['Linked Video 1 Transcript.txt']).toContain('What I actually said on camera.');
     expect(prompt).toContain('#Videos/001%20-%20Video — 001 - Video (its transcript is in your working folder: Linked Video 1 Transcript.txt)');
     expect(prompt).toContain('#Videos/999%20-%20Gone — Moved away\n');
+  });
+
+  it('gives the AI the matching .docx draft text of a linked local Substack entry', async () => {
+    const draftsDir = path.join(config.writingDir, 'My Journey', '2024-06-08 – Dad\'s Death', 'Drafts');
+    fs.mkdirSync(draftsDir, { recursive: true });
+    fs.writeFileSync(path.join(draftsDir, '2024-06-08 - Brainstorm.docx'), 'other');
+    fs.writeFileSync(path.join(draftsDir, '2024-06-08 – Dad\'s Death.docx'), 'main');
+
+    const spy = vi.spyOn(mammoth, 'extractRawText').mockImplementation(async (opts) => ({
+      value: (opts as { path?: string }).path?.includes("Dad's Death.docx") ? 'Body of the Substack post about Dad.' : 'Brainstorm notes.',
+      messages: [],
+    }));
+
+    const [idea] = addIdea('SDAM and grief');
+    addReference(idea.id, { url: '#Substack/My%20Journey%2F2024-06-08%20%E2%80%93%20Dad\'s%20Death', note: "2024-06-08 – Dad's Death" });
+
+    let prompt = '';
+    let folder: Record<string, string> = {};
+    await sendBrainstormMessage(idea.id, 'claude', 'How does this fit?', async (_ai, p, work) => {
+      prompt = p;
+      folder = Object.fromEntries(fs.readdirSync(work).map((f) => [f, fs.readFileSync(path.join(work, f), 'utf8')]));
+      return 'ok';
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(Object.keys(folder)).toEqual(['Linked Substack 1.txt']);
+    expect(folder['Linked Substack 1.txt']).toContain('Body of the Substack post about Dad.');
+    expect(prompt).toContain("(its text is in your working folder: Linked Substack 1.txt)");
   });
 
   it('refuses to read or write through a shortcut or junction', async () => {

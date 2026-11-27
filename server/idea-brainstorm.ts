@@ -11,6 +11,7 @@ import { safeResolve } from './config.js';
 import { askReadOnlyImage } from './expression-assessment.js';
 import { makeFolder, readable, readText, writable, writeFile } from './safe-files.js';
 import { attachmentFile, readIdeas, type VideoIdea } from './video-ideas.js';
+import { substackDraftText } from './writing.js';
 
 export const BRAINSTORMS_DIR = '_HeartQuarters/Brainstorms';
 const IDEA_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
@@ -127,18 +128,35 @@ export async function linkedTranscript(url: string): Promise<{ text: string; sou
   return null;
 }
 
+/** A linked local Substack entry's main .docx draft text, or null when none is found. */
+export async function linkedSubstackText(url: string): Promise<string | null> {
+  if (!url.startsWith('#Substack/')) return null;
+  let id: string;
+  try {
+    id = decodeURIComponent(url.slice('#Substack/'.length));
+  } catch {
+    return null;
+  }
+  try {
+    return await substackDraftText(id);
+  } catch {
+    return null;
+  }
+}
+
 /** Builds the full-context prompt passed to whichever AI John sends the next turn to. */
 export function buildBrainstormPrompt(
   idea: VideoIdea,
   history: BrainstormMessage[],
   nextMessage: string,
   ai: AiId,
-  /** File names in the working folder holding each linked video's transcript, by reference id. */
+  /** File names in the working folder holding each linked video's transcript or Substack text, by reference id. */
   transcripts: Record<string, string> = {},
 ): string {
   const refs = idea.references.length
     ? idea.references.map((r, i) => {
-      const transcript = transcripts[r.id] ? ` (its transcript is in your working folder: ${transcripts[r.id]})` : '';
+      const label = r.url.startsWith('#Substack/') ? 'text' : 'transcript';
+      const transcript = transcripts[r.id] ? ` (its ${label} is in your working folder: ${transcripts[r.id]})` : '';
       return `${i + 1}. ${r.url}${r.note ? ` — ${r.note}` : ''}${transcript}`;
     }).join('\n')
     : '(none)';
@@ -203,9 +221,17 @@ export async function sendBrainstormMessage(
       }
     }
 
-    // Linked HeartQuarters videos come with their transcripts, so the AI can read what was actually said.
+    // Linked HeartQuarters videos and Substack entries come with their text, so the AI can read them.
     const transcripts: Record<string, string> = {};
     for (const [i, ref] of idea.references.entries()) {
+      if (ref.url.startsWith('#Substack/')) {
+        const text = await linkedSubstackText(ref.url);
+        if (!text) continue;
+        const name = `Linked Substack ${i + 1}.txt`;
+        fs.writeFileSync(path.join(work, name), `${ref.note || ref.url}\n\n${text}`, { flag: 'wx' });
+        transcripts[ref.id] = name;
+        continue;
+      }
       const found = await linkedTranscript(ref.url);
       if (!found) continue;
       const name = `Linked Video ${i + 1} ${found.source === 'script' ? 'Script' : 'Transcript'}.txt`;

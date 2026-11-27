@@ -13,7 +13,7 @@ import path from 'node:path';
 import mammoth from 'mammoth';
 import { config, safeResolve } from './config.js';
 import { requireFolder, type FileRef } from './projects.js';
-import { readText, writeFile } from './safe-files.js';
+import { readText, readable, writeFile } from './safe-files.js';
 
 export const SUBSTACK_LINK_FILE = 'Substack Link.txt';
 
@@ -185,8 +185,33 @@ export function readWriting(id: string): WritingDetail {
 
 /** Converts a Word draft to HTML for reading in the app. */
 export async function draftHtml(relPath: string): Promise<string> {
-  const full = safeResolve('writing', relPath);
+  const full = readable(safeResolve('writing', relPath), 'writing');
   if (path.extname(full).toLowerCase() !== '.docx') throw new Error('Not a Word document.');
   const result = await mammoth.convertToHtml({ path: full });
   return result.value;
+}
+
+/** Extracts plain text from a Word draft for AI context. */
+export async function draftText(relPath: string): Promise<string> {
+  const full = readable(safeResolve('writing', relPath), 'writing');
+  if (path.extname(full).toLowerCase() !== '.docx') throw new Error('Not a Word document.');
+  const result = await mammoth.extractRawText({ path: full });
+  return result.value.trim();
+}
+
+const normalizeDraftName = (s: string) => s.toLowerCase().replace(/[-–\s]+/g, ' ').trim();
+
+/** Plain text of the main .docx draft (matching the folder name, or the first .docx) for a Substack piece. */
+export async function substackDraftText(id: string): Promise<string | null> {
+  const detail = readWriting(id);
+  if (!detail.drafts.length) return null;
+  const folder = normalizeDraftName(id.split('/').pop() ?? '');
+  const title = normalizeDraftName(detail.title);
+  const byName = (d: FileRef) => {
+    const base = normalizeDraftName(path.basename(d.name, path.extname(d.name)));
+    return base === folder || base === title;
+  };
+  const chosen = detail.drafts.find(byName) ?? detail.drafts[0];
+  const text = await draftText(chosen.path);
+  return text || null;
 }
