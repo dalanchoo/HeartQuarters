@@ -108,12 +108,18 @@ export function ChatPage() {
   const pickerRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef<PendingItem[]>([]);
   pendingRef.current = pending;
+  const loadEpoch = useRef(0);
+  const askingRef = useRef<AiId | null>(null);
+  askingRef.current = asking;
 
   const loadAll = async (requestedId = chatIdFromHash()) => {
+    const epoch = ++loadEpoch.current;
     const idx = await getJson<ChatIndex>('/api/chat/list');
+    if (loadEpoch.current !== epoch) return;
     setIndex(idx);
     const idToLoad = requestedId && idx.chats.some((c) => c.id === requestedId) ? requestedId : '';
     const data = await getJson<ChatThread>(idToLoad ? `/api/chat?id=${encodeURIComponent(idToLoad)}` : '/api/chat');
+    if (loadEpoch.current !== epoch) return;
     setThread(data);
     if (data.id && location.hash.startsWith('#Chat')) {
       replaceHash(`#Chat/${encodeURIComponent(data.id)}`);
@@ -124,7 +130,7 @@ export function ChatPage() {
     let active = true;
     loadAll().catch((e: Error) => { if (active) setError(e.message); });
     const onHash = () => {
-      if (!location.hash.startsWith('#Chat')) return;
+      if (!location.hash.startsWith('#Chat') || askingRef.current) return;
       const id = chatIdFromHash();
       if (id) {
         loadAll(id).catch((e: Error) => { if (active) setError(e.message); });
@@ -192,13 +198,15 @@ export function ChatPage() {
 
   const selectChat = async (id: string) => {
     if (asking) return;
+    const epoch = ++loadEpoch.current;
     setError(null);
     try {
       const data = await getJson<ChatThread>(`/api/chat?id=${encodeURIComponent(id)}`);
+      if (loadEpoch.current !== epoch) return;
       setThread(data);
       replaceHash(`#Chat/${encodeURIComponent(id)}`);
     } catch (e) {
-      setError((e as Error).message);
+      if (loadEpoch.current === epoch) setError((e as Error).message);
     }
   };
 
@@ -431,6 +439,7 @@ export function ChatPage() {
         message: draft,
         files: uploadedNames,
       });
+      loadEpoch.current++;
       setThread(updated);
       setIndex(await getJson<ChatIndex>('/api/chat/list'));
       if (updated.id && location.hash.startsWith('#Chat')) replaceHash(`#Chat/${encodeURIComponent(updated.id)}`);

@@ -415,6 +415,8 @@ function ProjectView({
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeIdRef = useRef(id);
+  activeIdRef.current = id;
 
   useEffect(() => {
     let stale = false; // set when you pick another project before this one has loaded
@@ -430,7 +432,14 @@ function ProjectView({
   }, [id, reloads]);
 
   // Picks up what changed in the folders, such as a new packaging version, without emptying the page first.
-  const refresh = () => { window.dispatchEvent(new CustomEvent('hq-video-status-changed')); return getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(id)}`).then(setProject, () => {}); };
+  const refresh = () => {
+    const requested = id;
+    window.dispatchEvent(new CustomEvent('hq-video-status-changed'));
+    return getJson<ProjectDetail>(`/api/project?id=${encodeURIComponent(requested)}`).then(
+      (p) => { if (activeIdRef.current === requested) setProject(p); },
+      () => {},
+    );
+  };
 
   if (error) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
