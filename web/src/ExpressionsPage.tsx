@@ -76,7 +76,26 @@ export function ExpressionsPage() {
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string; note?: string; steps?: ViewerSteps } | null>(null);
   const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
-  const refreshInbox = useCallback(() => { void getJson<ExpressionIndex>('/api/expressions').then(setIndex, e => setError(e.message)); void getJson<ExpressionPhoto[]>('/api/expressions/inbox').then(photos => { setInbox(photos); setPreview(current => { if (!current || current.imageUrl || current.photo.category !== '_Inbox') return current; const photo = photos.find(item => item.path === current.photo.path); return photo ? { ...current, photo } : null; }); }, e => setError(e.message)); }, []);
+  const inboxEpoch = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+  const refreshInbox = useCallback(() => {
+    const epoch = ++inboxEpoch.current;
+    const isLatest = () => mountedRef.current && inboxEpoch.current === epoch;
+    void getJson<ExpressionIndex>('/api/expressions').then(
+      (data) => { if (isLatest()) setIndex(data); },
+      (e: Error) => { if (isLatest()) setError(e.message); },
+    );
+    void getJson<ExpressionPhoto[]>('/api/expressions/inbox').then((photos) => {
+      if (!isLatest()) return;
+      setInbox(photos);
+      setPreview((current) => {
+        if (!current || current.imageUrl || current.photo.category !== '_Inbox') return current;
+        const photo = photos.find((item) => item.path === current.photo.path);
+        return photo ? { ...current, photo } : null;
+      });
+    }, (e: Error) => { if (isLatest()) setError(e.message); });
+  }, []);
   const [references, setReferences] = useState<string[]>(() => readReferences(localStorage));
   // Reference Photos: the photos that show the AI what John looks like. Separate from the stars.
   const [likeness, setLikeness] = useState<string[]>([]);

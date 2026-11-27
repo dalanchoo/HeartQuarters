@@ -241,9 +241,21 @@ export function ChannelPage() {
   const [key, setKey] = useState<SortKey>('publishedAt');
   const [descending, setDescending] = useState(true);
 
-  useEffect(() => { getJson<ChannelVideoList | null>('/api/channel/videos').then(setData, (e: Error) => setError(e.message)); }, []);
   useEffect(() => {
-    getJson<Overview | null>('/api/channel/overview').then(setOverview, (e: Error) => setError(e.message));
+    let active = true;
+    getJson<ChannelVideoList | null>('/api/channel/videos').then(
+      (v) => { if (active) setData(v); },
+      (e: Error) => { if (active) setError(e.message); },
+    );
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    getJson<Overview | null>('/api/channel/overview').then(
+      (v) => { if (active) setOverview(v); },
+      (e: Error) => { if (active) setError(e.message); },
+    );
+    return () => { active = false; };
   }, [refreshCount]);
   useEffect(() => {
     const sync = () => { if (location.hash.split('/')[0] === '#Channel') setAddress(location.hash); };
