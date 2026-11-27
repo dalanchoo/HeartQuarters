@@ -216,7 +216,13 @@ function saveThreadMessages(chatId: string, messages: ChatMessage[]) {
   writeFile(threadFile(chatId, true), JSON.stringify({ version: 1, messages }, null, 2) + '\n');
 }
 
-function saveIndex(index: ChatIndex) {
+/** Save the chat index only if nobody else changed chats.json since it was read. */
+export function saveIndex(index: ChatIndex, original: string | null) {
+  const file = indexFile(false);
+  const now = fs.existsSync(file) ? readText(file) : null;
+  if (now !== original) {
+    throw new Error('The chat list changed elsewhere. Reload it and try again; nothing was changed.');
+  }
   writeFile(indexFile(true), JSON.stringify(index, null, 2) + '\n');
 }
 
@@ -246,33 +252,40 @@ function maybeMigrateLegacyChat(): void {
   const title = firstJohn ? titleFromMessage(firstJohn.text) : 'Previous Chat';
 
   saveThreadMessages(id, parsed.messages);
-  saveIndex({
-    version: 1,
-    folders: [],
-    chats: [{ id, title, folderId: null, createdAt: firstAt, updatedAt: lastAt, messageCount: parsed.messages.length }],
-  });
+  saveIndex(
+    {
+      version: 1,
+      folders: [],
+      chats: [{ id, title, folderId: null, createdAt: firstAt, updatedAt: lastAt, messageCount: parsed.messages.length }],
+    },
+    null,
+  );
   writable(legacyPath);
   fs.rmSync(legacyPath, { force: true });
 }
 
-function readIndex(): ChatIndex {
+export function readIndexState(): { index: ChatIndex; original: string | null } {
   maybeMigrateLegacyChat();
   const dir = chatFolder(false);
-  if (!fs.existsSync(dir)) return emptyIndex();
+  if (!fs.existsSync(dir)) return { index: emptyIndex(), original: null };
   readable(dir);
   const candidate = path.join(dir, 'chats.json');
-  if (!fs.existsSync(candidate)) return emptyIndex();
-  const raw = readText(indexFile(false));
+  if (!fs.existsSync(candidate)) return { index: emptyIndex(), original: null };
+  const original = readText(indexFile(false));
   let parsed: Partial<ChatIndex>;
   try {
-    parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Partial<ChatIndex>;
+    parsed = JSON.parse(original.replace(/^\uFEFF/, '')) as Partial<ChatIndex>;
   } catch {
     throw new Error('The chat index could not be read. Nothing was changed.');
   }
   if (parsed?.version !== 1 || !Array.isArray(parsed.folders) || !Array.isArray(parsed.chats)) {
     throw new Error('The chat index has an unexpected format. Nothing was changed.');
   }
-  return { version: 1, folders: parsed.folders, chats: parsed.chats };
+  return { index: { version: 1, folders: parsed.folders, chats: parsed.chats }, original };
+}
+
+function readIndex(): ChatIndex {
+  return readIndexState().index;
 }
 
 /** Lists all folders and conversations (newest updated first). */
@@ -315,7 +328,7 @@ export function readChat(rawChatId?: unknown): ChatThread {
 
 /** Creates a new empty conversation, optionally inside a folder (by ID or folder name, creating the folder if needed). */
 export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderName?: unknown, rawIdeaId?: unknown): { index: ChatIndex; chat: ChatThread } {
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const ideaId = rawIdeaId !== undefined && rawIdeaId !== null && rawIdeaId !== '' ? checkId(rawIdeaId, 'idea') : undefined;
   if (ideaId) {
     const existingChat = index.chats.find((c) => c.ideaId === ideaId);
@@ -345,8 +358,8 @@ export function createChat(rawFolderId?: unknown, rawTitle?: unknown, rawFolderN
   const title = cleanTitle(rawTitle, 'New Chat');
   const summary: ChatSummary = { id, title, folderId, ...(ideaId ? { ideaId } : {}), createdAt: now, updatedAt: now, messageCount: 0 };
   index.chats.unshift(summary);
+  saveIndex(index, original);
   saveThreadMessages(id, []);
-  saveIndex(index);
   return {
     index: listChats(),
     chat: { version: 1, id, title, folderId, ...(ideaId ? { ideaId } : {}), messages: [] },
@@ -358,18 +371,18 @@ export function renameChat(rawChatId: unknown, rawTitle: unknown): ChatIndex {
   const chatId = checkId(rawChatId, 'conversation');
   const title = cleanTitle(rawTitle, '');
   if (!title) throw new Error('Enter a conversation name.');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const chat = index.chats.find((c) => c.id === chatId);
   if (!chat) throw new Error('That conversation no longer exists.');
   chat.title = title;
-  saveIndex(index);
+  saveIndex(index, original);
   return listChats();
 }
 
 /** Moves a conversation into a folder (or null for no folder). */
 export function moveChat(rawChatId: unknown, rawFolderId: unknown): ChatIndex {
   const chatId = checkId(rawChatId, 'conversation');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const chat = index.chats.find((c) => c.id === chatId);
   if (!chat) throw new Error('That conversation no longer exists.');
 
@@ -379,7 +392,7 @@ export function moveChat(rawChatId: unknown, rawFolderId: unknown): ChatIndex {
     if (!index.folders.some((f) => f.id === folderId)) throw new Error('That folder no longer exists.');
   }
   chat.folderId = folderId;
-  saveIndex(index);
+  saveIndex(index, original);
   return listChats();
 }
 
@@ -440,7 +453,7 @@ function filesUsedByOtherChats(index: ChatIndex, excludedChatId: string): Set<st
 export function deleteChat(rawChatId: unknown): ChatIndex {
   const chatId = checkId(rawChatId, 'conversation');
   if (activeChats.has(chatId)) throw new Error('Wait for the AI reply before deleting this conversation.');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const pos = index.chats.findIndex((c) => c.id === chatId);
   if (pos < 0) throw new Error('That conversation no longer exists.');
 
@@ -449,7 +462,7 @@ export function deleteChat(rawChatId: unknown): ChatIndex {
   const orphanFiles = [...new Set(messages.flatMap((m) => m.files ?? []))].filter((f) => !keep.has(f));
 
   index.chats.splice(pos, 1);
-  saveIndex(index);
+  saveIndex(index, original);
   dropChatSession(chatId);
 
   const file = path.join(threadsFolder(false), `${chatId}.json`);
@@ -465,9 +478,9 @@ export function deleteChat(rawChatId: unknown): ChatIndex {
 export function createFolder(rawName: unknown): ChatIndex {
   const name = cleanTitle(rawName, '');
   if (!name) throw new Error('Enter a folder name.');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   index.folders.push({ id: randomUUID(), name, createdAt: new Date().toISOString() });
-  saveIndex(index);
+  saveIndex(index, original);
   return listChats();
 }
 
@@ -476,25 +489,25 @@ export function renameFolder(rawFolderId: unknown, rawName: unknown): ChatIndex 
   const folderId = checkId(rawFolderId, 'folder');
   const name = cleanTitle(rawName, '');
   if (!name) throw new Error('Enter a folder name.');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const folder = index.folders.find((f) => f.id === folderId);
   if (!folder) throw new Error('That folder no longer exists.');
   folder.name = name;
-  saveIndex(index);
+  saveIndex(index, original);
   return listChats();
 }
 
 /** Deletes a folder, moving any conversations inside it back to the top level. */
 export function deleteFolder(rawFolderId: unknown): ChatIndex {
   const folderId = checkId(rawFolderId, 'folder');
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const pos = index.folders.findIndex((f) => f.id === folderId);
   if (pos < 0) throw new Error('That folder no longer exists.');
   index.folders.splice(pos, 1);
   for (const chat of index.chats) {
     if (chat.folderId === folderId) chat.folderId = null;
   }
-  saveIndex(index);
+  saveIndex(index, original);
   return listChats();
 }
 
@@ -966,15 +979,15 @@ export async function sendChatMessage(
     });
     saveThreadMessages(chatId, messages);
 
-    const idxAfterUser = readIndex();
-    const sumAfterUser = idxAfterUser.chats.find((c) => c.id === chatId);
+    const idxAfterUser = readIndexState();
+    const sumAfterUser = idxAfterUser.index.chats.find((c) => c.id === chatId);
     if (sumAfterUser) {
       if (sumAfterUser.title === 'New Chat' && historyBefore.length === 0) {
         sumAfterUser.title = titleFromMessage(message);
       }
       sumAfterUser.updatedAt = now;
       sumAfterUser.messageCount = messages.length;
-      saveIndex(idxAfterUser);
+      saveIndex(idxAfterUser.index, idxAfterUser.original);
     }
 
     const allFiles: string[] = [];
@@ -1092,12 +1105,12 @@ export async function sendChatMessage(
       fs.rmSync(work, { recursive: true, force: true });
     }
 
-    const idxAfterReply = readIndex();
-    const sumAfterReply = idxAfterReply.chats.find((c) => c.id === chatId);
+    const idxAfterReply = readIndexState();
+    const sumAfterReply = idxAfterReply.index.chats.find((c) => c.id === chatId);
     if (sumAfterReply) {
       sumAfterReply.updatedAt = replyAt;
       sumAfterReply.messageCount = latestMessages.length;
-      saveIndex(idxAfterReply);
+      saveIndex(idxAfterReply.index, idxAfterReply.original);
     }
 
     return readChat(chatId);
@@ -1116,7 +1129,7 @@ export function clearChat(rawChatId: unknown): ChatThread {
 
   dropChatSession(chatId);
 
-  const index = readIndex();
+  const { index, original } = readIndexState();
   const summary = index.chats.find((c) => c.id === chatId);
   if (!summary) throw new Error('That conversation no longer exists.');
 
@@ -1124,10 +1137,10 @@ export function clearChat(rawChatId: unknown): ChatThread {
   const keep = filesUsedByOtherChats(index, chatId);
   const orphanFiles = [...new Set(messages.flatMap((m) => m.files ?? []))].filter((f) => !keep.has(f));
 
-  saveThreadMessages(chatId, []);
   summary.messageCount = 0;
   summary.updatedAt = new Date().toISOString();
-  saveIndex(index);
+  saveIndex(index, original);
+  saveThreadMessages(chatId, []);
   trashFiles(orphanFiles);
 
   return readChat(chatId);

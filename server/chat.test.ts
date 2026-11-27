@@ -19,8 +19,10 @@ import {
   listVideoParts,
   moveChat,
   readChat,
+  readIndexState,
   renameChat,
   renameFolder,
+  saveIndex,
   sendChatMessage,
   uploadChatFile,
 } from './chat';
@@ -434,5 +436,15 @@ describe('full-screen multi-AI chat', () => {
     const attached = attachVideoPartToChat(parts[1].relPath);
     expect(attached.name).toBe('003-captions.txt');
     expect(fs.readFileSync(chatFilePath('003-captions.txt'), 'utf8')).toBe('Plain text captions');
+  });
+
+  it('refuses to overwrite chats.json if it changed since it was read', () => {
+    const first = createChat(null, 'First');
+    const stale = readIndexState();
+    renameChat(first.chat.id, 'Renamed Elsewhere');
+
+    stale.index.chats[0].title = 'Stale Overwrite';
+    expect(() => saveIndex(stale.index, stale.original)).toThrow(/changed elsewhere/);
+    expect(listChats().chats[0].title).toBe('Renamed Elsewhere');
   });
 });
