@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatSize, getJson, postJson, type AiId } from './api';
+import { filesFromClipboard, formatSize, getJson, insertTextAtCursor, postFile, postJson, type AiId } from './api';
+import { AI_OPTIONS, aiName } from './AiChoice';
 import { useAutosavedText } from './unsavedEdits';
 import { useAi } from './AiPicker';
 import { channelRows, rowName, videoProjectsHash } from './channelRows';
@@ -124,12 +125,10 @@ export function IdeasPage() {
   const uploadAttachment = async (ideaId: string, file: File, note: string) => {
     setBusy(true); setError(null);
     try {
-      const res = await fetch(
+      const body = await postFile<VideoIdea[]>(
         `/api/ideas/attachment/upload?id=${encodeURIComponent(ideaId)}&name=${encodeURIComponent(file.name)}&note=${encodeURIComponent(note)}`,
-        { method: 'POST', headers: { 'X-HeartQuarters': '1', 'Content-Type': 'application/octet-stream' }, body: file },
+        file,
       );
-      const body = (await res.json().catch(() => ({}))) as VideoIdea[] & { error?: string };
-      if (!res.ok) throw new Error(body.error || res.statusText || 'Could not attach file.');
       setIdeas(body);
       return true;
     } catch (e) {
@@ -586,15 +585,6 @@ function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
     if (allOk) setNote('');
   };
 
-  const filesFromClipboard = (data: DataTransfer | null): File[] => {
-    if (!data) return [];
-    if (data.files?.length) return Array.from(data.files);
-    return Array.from(data.items ?? [])
-      .filter((item) => item.kind === 'file')
-      .map((item) => item.getAsFile())
-      .filter((f): f is File => f !== null);
-  };
-
   return (
     <div className="idea-refs">
       <div className="idea-refs-head">Files</div>
@@ -656,18 +646,7 @@ function AttachmentsSection({ idea, busy, send, uploadAttachment }: {
   );
 }
 
-const BRAINSTORM_AIS: { id: AiId; label: string }[] = [
-  { id: 'claude', label: 'Send to Claude' },
-  { id: 'codex', label: 'Send to ChatGPT' },
-  { id: 'gemini', label: 'Send to Gemini' },
-];
-
-const SPEAKER_NAMES: Record<BrainstormMessage['from'], string> = {
-  john: 'John',
-  claude: 'Claude',
-  codex: 'ChatGPT',
-  gemini: 'Gemini',
-};
+const speakerName = (from: BrainstormMessage['from']) => (from === 'john' ? 'John' : aiName(from));
 
 function clampBrainstormWidth(width: number): number {
   const max = Math.min(820, Math.max(300, window.innerWidth - 360));
@@ -744,23 +723,7 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
   const listRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
 
-  const insertAtCursor = (snippet: string) => {
-    const el = draftRef.current;
-    const start = el?.selectionStart ?? draft.length;
-    const end = el?.selectionEnd ?? draft.length;
-    const before = draft.slice(0, start);
-    const after = draft.slice(end);
-    const padLeft = before && !/[\s\n]$/.test(before) ? ' ' : '';
-    const padRight = after && !/^[\s\n]/.test(after) ? ' ' : '';
-    const next = `${before}${padLeft}${snippet}${padRight}${after}`;
-    const caret = before.length + padLeft.length + snippet.length;
-    setDraft(next);
-    requestAnimationFrame(() => {
-      if (!draftRef.current) return;
-      draftRef.current.focus();
-      draftRef.current.setSelectionRange(caret, caret);
-    });
-  };
+  const insertAtCursor = (snippet: string) => insertTextAtCursor(draftRef.current, draft, snippet, setDraft);
 
   useEffect(() => {
     let active = true;
@@ -843,7 +806,7 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
         {messages.map((m) => (
           <div key={m.id} className={`brainstorm-msg brainstorm-msg--${m.from}`}>
             <div className="brainstorm-msg-head">
-              <strong>{SPEAKER_NAMES[m.from]}</strong>
+              <strong>{speakerName(m.from)}</strong>
               <span className="muted small-text">{new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               {m.from !== 'john' && (
                 <button
@@ -868,7 +831,7 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
         ))}
       </div>
 
-      {asking && <p className="muted small-text">Asking {SPEAKER_NAMES[asking]}…</p>}
+      {asking && <p className="muted small-text">Asking {aiName(asking)}…</p>}
 
       <div className="brainstorm-compose">
         {(idea.attachments.length > 0 || idea.references.length > 0) && (
@@ -923,7 +886,7 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
           onChange={(e) => setDraft(e.target.value)}
         />
         <div className="brainstorm-send-buttons">
-          {BRAINSTORM_AIS.map(({ id, label }) => {
+          {AI_OPTIONS.map(({ id, name }) => {
             const opt = overview?.options.find((o) => o.id === id);
             const available = opt ? opt.available : true;
             return (
@@ -932,10 +895,10 @@ function BrainstormPanel({ idea, width, busyIdeas, onAddToNotes, onClose }: {
                 type="button"
                 className="small"
                 disabled={!!asking || !draft.trim() || !available}
-                title={!available ? `${SPEAKER_NAMES[id]} is not installed` : undefined}
+                title={!available ? `${name} is not installed` : undefined}
                 onClick={() => void sendTo(id)}
               >
-                {label}
+                Send to {name}
               </button>
             );
           })}

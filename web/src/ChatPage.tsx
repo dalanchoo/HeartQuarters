@@ -1,24 +1,14 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { copyText, formatSize, getJson, postJson, replaceHash, type AiId } from './api';
+import { copyText, filesFromClipboard, formatSize, getJson, insertTextAtCursor, postFile, postJson, replaceHash, type AiId } from './api';
+import { AI_OPTIONS, aiName } from './AiChoice';
 import { useAi } from './AiPicker';
 import { SidebarResizer } from './SidebarResizer';
 import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile, VideoPart } from '../../server/chat';
 import type { VideoIdea } from '../../server/video-ideas';
 
-const CHAT_AIS: { id: AiId; label: string }[] = [
-  { id: 'claude', label: 'Send to Claude' },
-  { id: 'codex', label: 'Send to ChatGPT' },
-  { id: 'gemini', label: 'Send to Gemini' },
-];
-
-const SPEAKER_NAMES: Record<ChatMessage['from'], string> = {
-  john: 'John',
-  claude: 'Claude',
-  codex: 'ChatGPT',
-  gemini: 'Gemini',
-};
+const speakerName = (from: ChatMessage['from']) => (from === 'john' ? 'John' : aiName(from));
 
 const IMAGE_RE = /\.(png|jpe?g|webp|gif)$/i;
 const VIDEO_RE = /\.(mp4|mov|webm|m4v|mkv)$/i;
@@ -28,15 +18,6 @@ const SIDEBAR_KEY = 'hq-chat-sidebar-open';
 type PendingItem =
   | { id: string; kind: 'local'; name: string; size: number; file: File; previewUrl: string | null }
   | { id: string; kind: 'uploaded'; name: string; size: number; previewUrl: null };
-
-function filesFromClipboard(data: DataTransfer | null): File[] {
-  if (!data) return [];
-  if (data.files?.length) return Array.from(data.files);
-  return Array.from(data.items ?? [])
-    .filter((item) => item.kind === 'file')
-    .map((item) => item.getAsFile())
-    .filter((f): f is File => f !== null);
-}
 
 function chatFileUrl(name: string): string {
   return `/api/chat/file?name=${encodeURIComponent(name)}`;
@@ -61,14 +42,7 @@ function loadSidebarOpen(): boolean {
 
 async function uploadFile(file: File): Promise<UploadedChatFile> {
   const name = file.name || 'Pasted File';
-  const res = await fetch(`/api/chat/upload?name=${encodeURIComponent(name)}`, {
-    method: 'POST',
-    headers: { 'X-HeartQuarters': '1', 'Content-Type': 'application/octet-stream' },
-    body: file,
-  });
-  const body = (await res.json().catch(() => ({}))) as UploadedChatFile & { error?: string };
-  if (!res.ok) throw new Error(body.error || res.statusText || 'Could not upload file.');
-  return body;
+  return postFile<UploadedChatFile>(`/api/chat/upload?name=${encodeURIComponent(name)}`, file);
 }
 
 function SidebarToggleIcon({ open }: { open: boolean }) {
@@ -170,23 +144,7 @@ export function ChatPage() {
     return () => { active = false; };
   }, [thread?.ideaId]);
 
-  const insertAtCursor = (snippet: string) => {
-    const el = draftRef.current;
-    const start = el?.selectionStart ?? draft.length;
-    const end = el?.selectionEnd ?? draft.length;
-    const before = draft.slice(0, start);
-    const after = draft.slice(end);
-    const padLeft = before && !/[\s\n]$/.test(before) ? ' ' : '';
-    const padRight = after && !/^[\s\n]/.test(after) ? ' ' : '';
-    const next = `${before}${padLeft}${snippet}${padRight}${after}`;
-    const caret = before.length + padLeft.length + snippet.length;
-    setDraft(next);
-    requestAnimationFrame(() => {
-      if (!draftRef.current) return;
-      draftRef.current.focus();
-      draftRef.current.setSelectionRange(caret, caret);
-    });
-  };
+  const insertAtCursor = (snippet: string) => insertTextAtCursor(draftRef.current, draft, snippet, setDraft);
 
   const toggleSidebar = () => {
     setSidebarOpen((prev) => {
@@ -709,7 +667,7 @@ export function ChatPage() {
             {messages.map((m) => (
               <div key={m.id} className={`brainstorm-msg brainstorm-msg--${m.from}`}>
                 <div className="brainstorm-msg-head">
-                  <strong>{SPEAKER_NAMES[m.from]}</strong>
+                  <strong>{speakerName(m.from)}</strong>
                   <span className="muted small-text">
                     {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -784,7 +742,7 @@ export function ChatPage() {
             ))}
           </div>
 
-          {asking && <p className="muted small-text chat-status">Asking {SPEAKER_NAMES[asking]}…</p>}
+          {asking && <p className="muted small-text chat-status">Asking {aiName(asking)}…</p>}
           {dragging && <div className="chat-drop-banner">Drop files here to attach…</div>}
 
           <div className="chat-compose">
@@ -818,7 +776,7 @@ export function ChatPage() {
             />
             <div className="chat-compose-actions">
               <div className="brainstorm-send-buttons">
-                {CHAT_AIS.map(({ id, label }) => {
+                {AI_OPTIONS.map(({ id, name }) => {
                   const opt = overview?.options.find((o) => o.id === id);
                   const available = opt ? opt.available : true;
                   return (
@@ -826,10 +784,10 @@ export function ChatPage() {
                       key={id}
                       type="button"
                       disabled={!!asking || (!draft.trim() && !pending.length) || !available}
-                      title={!available ? `${SPEAKER_NAMES[id]} is not installed` : undefined}
+                      title={!available ? `${name} is not installed` : undefined}
                       onClick={() => void sendTo(id)}
                     >
-                      {label}
+                      Send to {name}
                     </button>
                   );
                 })}

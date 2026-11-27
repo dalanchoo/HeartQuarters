@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { fileUrl, getJson, getText, openInExplorer, postJson, thumbUrl, type BatchThumbJob, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
+import { fileUrl, filesFromClipboard, getJson, getText, openInExplorer, postJson, thumbUrl, type BatchThumbJob, type BriefChoice, type BriefJob, type BriefPick, type BriefSource, type DraftConversation, type Drafts, type ExpressionIndex, type ThumbJob } from './api';
 import { categoriesIn, photosIn } from './expressionPick';
 import { CopyButton } from './PackagingDoc';
 import { combineNotes, researchQuestion, type ResearchFacts } from './researchPrompt';
@@ -580,7 +580,7 @@ function BriefBox({ label, value, onText, images, onImages, placeholder }: { lab
         value={value}
         onChange={(e) => onText(e.target.value)}
         onPaste={(e) => {
-          const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+          const files = filesFromClipboard(e.clipboardData);
           if (!files.length) return; // ordinary text
           e.preventDefault();
           add(files);
@@ -1047,7 +1047,7 @@ function ThumbnailChat({
           disabled={replying}
           onChange={(e) => setDraft(e.target.value)}
           onPaste={(e) => {
-            const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+            const files = filesFromClipboard(e.clipboardData);
             if (!files.length) return; // ordinary text
             e.preventDefault();
             addPics(files);

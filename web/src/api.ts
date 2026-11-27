@@ -70,6 +70,18 @@ export async function postJson<T>(url: string, data: unknown = {}): Promise<T> {
   return body as T;
 }
 
+export async function postFile<T>(url: string, file: File): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'X-HeartQuarters': '1', 'Content-Type': 'application/octet-stream' },
+    body: file,
+  });
+  afterYoutube(url);
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : res.statusText || 'Could not upload file.');
+  return body;
+}
+
 export async function getText(root: RootId, path: string): Promise<string> {
   const res = await fetch(`/api/text?root=${root}&path=${encodeURIComponent(path)}`);
   if (!res.ok) {
@@ -126,4 +138,37 @@ export function replaceHash(hash: string) {
   if (location.hash === hash) return;
   history.replaceState(null, '', hash);
   window.dispatchEvent(new Event('hq-hash-replace'));
+}
+
+/** Files dropped or pasted from the clipboard, preferring DataTransfer.files when present. */
+export function filesFromClipboard(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  if (data.files?.length) return Array.from(data.files);
+  return Array.from(data.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((f): f is File => f !== null);
+}
+
+/** Inserts `snippet` at the textarea's cursor (padding with spaces when needed) and restores focus/caret. */
+export function insertTextAtCursor(
+  el: HTMLTextAreaElement | null,
+  current: string,
+  snippet: string,
+  setValue: (next: string) => void,
+) {
+  const start = el?.selectionStart ?? current.length;
+  const end = el?.selectionEnd ?? current.length;
+  const before = current.slice(0, start);
+  const after = current.slice(end);
+  const padLeft = before && !/[\s\n]$/.test(before) ? ' ' : '';
+  const padRight = after && !/^[\s\n]/.test(after) ? ' ' : '';
+  const next = `${before}${padLeft}${snippet}${padRight}${after}`;
+  const caret = before.length + padLeft.length + snippet.length;
+  setValue(next);
+  requestAnimationFrame(() => {
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(caret, caret);
+  });
 }
