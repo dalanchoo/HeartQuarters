@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getJson, postJson, thumbUrl, type ExpressionCategory, type ExpressionPhoto } from './api';
 import { CategoryPicker } from './CategoryPicker';
 import { filterSelectablePhotos } from './expressionPlanning';
-import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
+import { emptyPhotoFilters, ExpressionPhotoFilters, selectedAttributes } from './ExpressionPhotoFilters';
 import { matchesMarkFilter, matchesRatingFilter, type Rating, type RatingChoice } from './expressionRating';
 import { PhotoMarkFilters, PhotoMarks } from './PhotoMarks';
 
@@ -17,7 +17,8 @@ export function LikenessPicker({ chosen, onChoose, references, photos, categorie
   const [kept, setKept] = useState<string[]>([]);
   const keep = (photo: ExpressionPhoto) => setKept(current => current.includes(photo.path) ? current : [...current, photo.path]);
   const toggleReference = (photo: ExpressionPhoto, on: boolean) => { onToggleStar(photo.path, on); keep(photo); };
-  const visible = filterSelectablePhotos(photos, [], { scope: 'all', category: filters.category, query: '', attributes: [filters.framing, filters.pose, filters.morphology], textFilters: filters })
+  const pickedAttributes = selectedAttributes(filters);
+  const visible = filterSelectablePhotos(photos, [], { scope: 'all', category: filters.category, query: '', attributes: pickedAttributes.include, excludeAttributes: pickedAttributes.exclude })
     .filter(photo => kept.includes(photo.path) || (matchesMarkFilter(photo.path, marks, starred, references) && matchesRatingFilter(photo, marks.ratings)));
   return <section className="expression-planning generation-likeness">
     <div className="generation-likeness-head">

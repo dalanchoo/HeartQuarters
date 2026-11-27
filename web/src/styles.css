@@ -518,6 +518,7 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .category-picker-label { font-size: 0.85rem; }
 .category-picker-trigger { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; text-align: left; }
 .category-picker-trigger span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-picker-trigger.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .category-picker-popup { position: fixed; z-index: 1000; display: flex; flex-direction: column; padding: 0.5rem; gap: 0.4rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 5px 18px #0004; }
 .category-picker-popup input { width: 100%; flex: 0 0 auto; }
 .category-picker-options { overflow-y: auto; min-height: 0; }
@@ -525,6 +526,12 @@ pre.raw { white-space: pre-wrap; background: var(--bg); padding: 0.5rem 0.6rem; 
 .category-picker-options [role='option'].active { background: var(--accent-soft); }
 .category-picker-options [role='option'][aria-disabled='true'] { color: var(--muted); opacity: 0.65; cursor: not-allowed; }
 .category-picker-options p { margin: 0.4rem; }
+.attribute-filter-search { display: flex; gap: 0.35rem; align-items: center; }
+.attribute-filter-search input { flex: 1; min-width: 0; }
+.attribute-filter-option { display: flex; gap: 0.3rem; align-items: center; padding: 0.15rem 0; }
+.attribute-filter-include { flex: 1; min-width: 0; text-align: left; }
+.attribute-filter-include.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.attribute-filter-not.active { background: #fff0ef; border-color: #ce8580; color: #952b26; }
 .expression-planning { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.7rem; }
 .expression-planning summary { cursor: pointer; font-weight: 600; }
 .reference-grid { display: flex; flex-wrap: wrap; gap: 0.7rem; }

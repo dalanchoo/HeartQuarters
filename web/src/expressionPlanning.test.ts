@@ -32,17 +32,14 @@ describe('expression planning', () => {
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', attributes: ['lookoffcamera', ''] }).map(p => p.path)).toEqual(['b']);
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['LookOffCamera', 'EyesClosed'] })).toEqual([]);
   });
-  it('applies each text filter to its own group and combines them', () => {
+  it('supports multiple included and excluded attributes and ignores disconfirmed tags for inclusion', () => {
     const photos = [
-      { path: 'a', name: 'Frontal', category: 'Positive/Warmth', tags: [{ tag: 'Frontal', confidence: 80, confirmed: false }, { tag: 'LookOffCamera', confidence: 80, confirmed: false }, { tag: 'EyesClosed', confidence: 80, confirmed: false }, { tag: 'Joy', confidence: 80, confirmed: false }] },
-      { path: 'b', name: 'Other', category: 'Positive/Joy', tags: [{ tag: 'EyesClosed', confidence: 80, confirmed: false }] },
+      { path: 'a', name: 'Frontal', category: 'Positive/Warmth', tags: [{ tag: 'Frontal', confidence: 80, confirmed: false }, { tag: 'LookUp', confidence: 80, confirmed: false }, { tag: 'FurrowedBrow', confidence: 80, confirmed: true }] },
+      { path: 'b', name: 'Raised', category: 'Positive/Warmth', tags: [{ tag: 'LookUp', confidence: 80, confirmed: false }, { tag: 'FurrowedBrow', confidence: 80, confirmed: false }, { tag: 'RaisedBrow', confidence: 85, confirmed: false }] },
+      { path: 'c', name: 'Disconfirmed', category: 'Positive/Warmth', tags: [{ tag: 'LookUp', confidence: 80, confirmed: false }, { tag: 'FurrowedBrow', confidence: 80, confirmed: false }, { tag: 'RaisedBrow', confidence: 85, confirmed: false, disconfirmed: true }] },
     ];
-    const textFilters = { categoryText: 'warm', framingText: 'fron', poseText: 'off camera', morphologyText: 'eyes closed' };
-    const filter = { scope: 'all' as const, category: '*', query: '', textFilters };
-    expect(filterSelectablePhotos(photos, [], filter).map(p => p.path)).toEqual(['a']);
-    expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, framingText: 'Joy' } })).toEqual([]);
-    expect(filterSelectablePhotos(photos, [], { ...filter, textFilters: { ...textFilters, morphologyText: 'Frontal' } })).toEqual([]);
-    expect(filterSelectablePhotos(photos, [], { ...filter, category: 'Positive', includeSub: false })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['LookUp', 'FurrowedBrow'], excludeAttributes: ['RaisedBrow'] }).map(p => p.path)).toEqual(['a', 'c']);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: 'Positive', query: '', includeSub: false })).toEqual([]);
   });
   it('keeps the selected photo open if updated tags remove it from filtered results', () => {
     const first = { path: 'a', name: 'First', category: 'C', tags: [] };
@@ -54,7 +51,7 @@ describe('expression planning', () => {
   it('does not match disconfirmed tags in attribute filters', () => {
     const photos = [{ path: 'a', name: 'Photo', category: 'C', tags: [{ tag: 'EyesClosed', confidence: 90, confirmed: false, disconfirmed: true }] }];
     expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', attributes: ['EyesClosed'] })).toEqual([]);
-    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', textFilters: { categoryText: '', framingText: '', poseText: '', morphologyText: 'eyes closed' } })).toEqual([]);
+    expect(filterSelectablePhotos(photos, [], { scope: 'all', category: '*', query: '', excludeAttributes: ['EyesClosed'] }).map(p => p.path)).toEqual(['a']);
   });
   it('filters dropdown choices by any part of their label', () => {
     const options = [{ value: 'a', label: 'Composure > Determined' }, { value: 'b', label: 'Positive > Warmth' }, { value: 'c', label: 'Attitude > Determination' }];

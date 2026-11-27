@@ -16,7 +16,7 @@ import type { AiId } from './api';
 import { CopyButton } from './PackagingDoc';
 import { filterSelectablePhotos, openPhotoSelection, generationCategories, generationCategoryOnSwitch, readReferences, readyCandidateCount, saveReferences, readChosenLikeness, saveChosenLikeness } from './expressionPlanning';
 import { CategoryPicker } from './CategoryPicker';
-import { emptyPhotoFilters, ExpressionPhotoFilters } from './ExpressionPhotoFilters';
+import { emptyPhotoFilters, ExpressionPhotoFilters, selectedAttributes } from './ExpressionPhotoFilters';
 import { ExpressionCandidates, ExpressionGenerator, LikenessPicker } from './ExpressionGenerator';
 import { ExpressionShotList, type ViewerSteps } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
@@ -243,7 +243,8 @@ export function ExpressionsPage() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => {
     if (!index || !current) return [];
-    return filterSelectablePhotos(index.photos, [], { scope: 'all', category: current.path || '*', includeSub, query: '', attributes: [libraryFilters.framing, libraryFilters.pose, libraryFilters.morphology], textFilters: libraryFilters }).filter(p => (keptInView.includes(p.path) || (matchesMarkFilter(p.path, markFilter, references, likeness) && matchesRatingFilter(p, markFilter.ratings))) && matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+    const pickedAttributes = selectedAttributes(libraryFilters);
+    return filterSelectablePhotos(index.photos, [], { scope: 'all', category: current.path || '*', includeSub, query: '', attributes: pickedAttributes.include, excludeAttributes: pickedAttributes.exclude }).filter(p => (keptInView.includes(p.path) || (matchesMarkFilter(p.path, markFilter, references, likeness) && matchesRatingFilter(p, markFilter.ratings))) && matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
   }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, markFilter, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
   const gridActions = useRef<GridActions>(null as unknown as GridActions);
