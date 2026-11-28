@@ -50,6 +50,8 @@ export interface ExpressionPhoto {
   revision?: string;
   /** True when the photo's sidecar has a three-AI assessment marker or per-model scores. */
   assessedByThreeAIs?: boolean;
+  /** Most recent date (YYYY-MM-DD) each AI assessed this photo, kept in the sidecar as "# Assessed: ...". */
+  assessedAt?: AssessedDates;
   /** True when the image file itself contains embedded Motion Photo / MicroVideo XMP metadata. */
   motionPhoto?: boolean;
   /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked", "# Rating: Meh" or "# Rating: Disliked". */
@@ -100,6 +102,22 @@ export function hasMotionPhotoHeader(file: string): boolean {
 }
 
 export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
+export type AssessedDates = Partial<Record<'claude' | 'codex' | 'gemini', string>>;
+export const ASSESSED_LINE = /^#\s*Assessed:\s*(.+)$/i;
+
+/** Reads "# Assessed: claude=YYYY-MM-DD, codex=YYYY-MM-DD, gemini=YYYY-MM-DD" lines from a sidecar. */
+export function parseAssessedDates(text: string): AssessedDates | undefined {
+  const dates: AssessedDates = {};
+  for (const line of text.split(/\r?\n/)) {
+    const match = ASSESSED_LINE.exec(line.trim());
+    if (!match) continue;
+    for (const part of match[1].split(',')) {
+      const m = /^(claude|codex|gemini)=(\d{4}-\d{2}-\d{2})$/i.exec(part.trim());
+      if (m) dates[m[1].toLowerCase() as keyof AssessedDates] = m[2];
+    }
+  }
+  return Object.keys(dates).length ? dates : undefined;
+}
 
 export type ExpressionRating = 'liked' | 'meh' | 'disliked';
 /** The rating line starts with "#", so tag readers (and the AI assessment) leave it alone. */
@@ -141,7 +159,7 @@ export function parseRating(text: string): ExpressionRating | undefined {
   return rating;
 }
 
-type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; rating?: ExpressionRating; motion?: boolean; generation?: GenerationRecord };
+type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; assessedAt?: AssessedDates; rating?: ExpressionRating; motion?: boolean; generation?: GenerationRecord };
 const NO_SIDECAR: SidecarInfo = { tags: [], assessedByThreeAIs: false };
 
 function readSidecar(file: string): SidecarInfo {
@@ -151,10 +169,11 @@ function readSidecar(file: string): SidecarInfo {
     const assessedByThreeAIs =
       /(?:^|\n)#\s*AssessedWithAllThreeAIs\b/i.test(text) ||
       tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
+    const assessedAt = parseAssessedDates(text);
     const rating = parseRating(text);
     const motion = parseMotion(text);
     const generation = parseGeneration(text);
-    return { tags, assessedByThreeAIs, ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}), ...(generation ? { generation } : {}) };
+    return { tags, assessedByThreeAIs, ...(assessedAt ? { assessedAt } : {}), ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}), ...(generation ? { generation } : {}) };
   } catch {
     return NO_SIDECAR;
   }
@@ -199,7 +218,7 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
     const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : NO_SIDECAR;
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}), tags: sidecarInfo.tags };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(sidecarInfo.assessedAt ? { assessedAt: sidecarInfo.assessedAt } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -278,6 +297,7 @@ export function buildExpressionIndex(withPhotos = true): ExpressionIndex {
           name: base,
           category: relPath,
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
+          ...(sidecarInfo.assessedAt ? { assessedAt: sidecarInfo.assessedAt } : {}),
           ...(motionOf(full, files.has(`${base}.txt`) ? path.join(dir, `${base}.txt`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}),
           ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}),
           ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}),

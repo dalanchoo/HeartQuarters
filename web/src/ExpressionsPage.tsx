@@ -691,6 +691,12 @@ function Lightbox({ photo, imageUrl, note, starred, starDisabled, onToggleStar, 
           </div>
           <div id="expression-photo-details" hidden={!detailsExpanded}>
           {assessmentMessage && <p role="status">{assessmentMessage}</p>}
+          {photo.assessedAt && (
+            <p className="muted small-text">
+              <strong>Last Assessed:</strong>{' '}
+              {AI_OPTIONS.filter(a => photo.assessedAt?.[a.id]).map(a => `${a.name} ${photo.assessedAt![a.id]}`).join(' · ')}
+            </p>
+          )}
           {groups.details.length > 0 && showTags(groups.details)}
           {note && <p className="muted small-text">{note}</p>}
           {photo.generation && <div className="muted small-text expression-generation" aria-label="What the picture was asked to show">

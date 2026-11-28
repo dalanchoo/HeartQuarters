@@ -101,7 +101,7 @@ describe('buildExpressionIndex', () => {
       'Positive/Joy/Joy_001.jpg': 'a',
       'Positive/Joy/Joy_001.txt': 'Joy, 90%, CONFIRMED\n# AssessedWithAllThreeAIs\n',
       'Positive/Joy/Joy_002.jpg': 'b',
-      'Positive/Joy/Joy_002.txt': 'Joy, 85%, UNCONFIRMED, claude=85%, codex=80%\n',
+      'Positive/Joy/Joy_002.txt': 'Joy, 85%, UNCONFIRMED, claude=85%, codex=80%\n# Assessed: claude=2026-11-20, codex=2026-11-28\n',
       'Positive/Joy/Joy_003.jpg': 'c',
       'Positive/Joy/Joy_003.txt': 'Joy, 55%, UNCONFIRMED\n',
     });
@@ -112,7 +112,9 @@ describe('buildExpressionIndex', () => {
       expect(photos.find((p) => p.name === 'Joy_001')?.assessedByThreeAIs).toBe(true);
       expect(photos.find((p) => p.name === 'Joy_001')?.tags).toHaveLength(1);
       expect(photos.find((p) => p.name === 'Joy_002')?.assessedByThreeAIs).toBe(true);
+      expect(photos.find((p) => p.name === 'Joy_002')?.assessedAt).toEqual({ claude: '2026-11-20', codex: '2026-11-28' });
       expect(photos.find((p) => p.name === 'Joy_003')?.assessedByThreeAIs).toBeUndefined();
+      expect(photos.find((p) => p.name === 'Joy_003')?.assessedAt).toBeUndefined();
     } finally {
       config.expressionsDir = prev;
       removeTree(t);

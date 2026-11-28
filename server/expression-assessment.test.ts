@@ -38,8 +38,13 @@ describe('blind expression assessment', () => {
   });
   it('keeps disconfirmed attributes even if the AI suggests them again', () => {
     const cats = buildExpressionIndex().categories;
-    const result = mergeModelAssessments('Smile, 60%, DISCONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 95 }], codex: [], gemini: [] }, cats);
-    expect(result).toBe('Smile, 60%, DISCONFIRMED, claude=95%\n# AssessedWithAllThreeAIs\n');
+    const result = mergeModelAssessments('Smile, 60%, DISCONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 95 }], codex: [], gemini: [] }, cats, '2026-11-28');
+    expect(result).toBe('Smile, 60%, DISCONFIRMED, claude=95%\n# AssessedWithAllThreeAIs\n# Assessed: claude=2026-11-28, codex=2026-11-28, gemini=2026-11-28\n');
+  });
+  it('updates the assessed date only for the AIs that ran and keeps earlier dates for the others', () => {
+    const cats = buildExpressionIndex().categories;
+    const merged = mergeModelAssessments('Smile, 80%, UNCONFIRMED\n# Assessed: claude=2026-11-10, codex=2026-11-12\n', { gemini: [{ tag: 'Smile', confidence: 90 }] }, cats, '2026-11-28');
+    expect(merged).toContain('# Assessed: claude=2026-11-10, codex=2026-11-12, gemini=2026-11-28');
   });
   it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
     const cats = buildExpressionIndex().categories;

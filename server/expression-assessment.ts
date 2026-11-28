@@ -7,9 +7,10 @@ import { promisify } from 'node:util';
 import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, geminiAnswer, geminiStdin, isAiId, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
-import { buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
+import { ASSESSED_LINE, buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseAssessedDates, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
+import { pacificDay } from './youtube-quota.js';
 
 const exec = promisify(execFile);
 type Assessment = { tag: string; confidence: number };
@@ -83,7 +84,7 @@ export function mergeAssessment(text: string, values: Assessment[], categories: 
  * Combine the highest eligible score for filtering while recording every model's own score. Only an assessment by all
  * three AIs gets the "assessed by all three" marker.
  */
-export function mergeModelAssessments(text: string, results: Partial<Record<AiId, Assessment[]>>, categories: ExpressionCategory[]): string {
+export function mergeModelAssessments(text: string, results: Partial<Record<AiId, Assessment[]>>, categories: ExpressionCategory[], assessedDate = pacificDay()): string {
   const scores = new Map<string, { tag: string; byAi: Partial<Record<AiId, number>> }>();
   for (const ai of MODELS) for (const value of results[ai] ?? []) {
     const key = value.tag.toLowerCase(); const entry = scores.get(key) ?? { tag: value.tag, byAi: {} };
@@ -92,7 +93,9 @@ export function mergeModelAssessments(text: string, results: Partial<Record<AiId
   const aggregated = [...scores.values()].map(entry => ({ tag: entry.tag, confidence: Math.max(...Object.values(entry.byAi)) }));
   const base = mergeAssessment(text, aggregated, categories);
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const lines = base.split(/\r?\n/).filter(line => !/^#\s*AssessedWithAllThreeAIs\b/i.test(line.trim())).map(line => {
+  const dates = { ...(parseAssessedDates(text) ?? {}) };
+  for (const ai of MODELS) if (results[ai] !== undefined) dates[ai] = assessedDate;
+  const lines = base.split(/\r?\n/).filter(line => !/^#\s*AssessedWithAllThreeAIs\b/i.test(line.trim()) && !ASSESSED_LINE.test(line.trim())).map(line => {
     const parsed = parseTags(line)[0]; if (!parsed) return line;
     const clean = line.replace(/,\s*(?:claude|codex|gemini)=\d{1,3}%/gi, '');
     const entry = scores.get(parsed.tag.toLowerCase()); if (!entry) return clean;
@@ -101,6 +104,8 @@ export function mergeModelAssessments(text: string, results: Partial<Record<AiId
   });
   while (lines.at(-1) === '') lines.pop();
   if (MODELS.every((ai) => results[ai])) lines.push(THREE_AI_ASSESSED_MARKER);
+  const dateParts = MODELS.flatMap(ai => dates[ai] ? [`${ai}=${dates[ai]}`] : []);
+  if (dateParts.length) lines.push(`# Assessed: ${dateParts.join(', ')}`);
   return lines.join(newline) + newline;
 }
 export function assessmentJob(id: string): Job { const job = jobs.get(id); if (!job) throw new Error('Assessment not found.'); return job; }
