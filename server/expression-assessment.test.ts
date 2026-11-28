@@ -45,6 +45,7 @@ describe('blind expression assessment', () => {
     const cats = buildExpressionIndex().categories;
     const merged = mergeModelAssessments('Smile, 80%, UNCONFIRMED\n# Assessed: claude=2026-11-10, codex=2026-11-12\n', { gemini: [{ tag: 'Smile', confidence: 90 }] }, cats, '2026-11-28');
     expect(merged).toContain('# Assessed: claude=2026-11-10, codex=2026-11-12, gemini=2026-11-28');
+    expect(merged).toContain('# AssessedWithAllThreeAIs');
   });
   it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
     const cats = buildExpressionIndex().categories;

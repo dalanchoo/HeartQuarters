@@ -103,7 +103,7 @@ export function mergeModelAssessments(text: string, results: Partial<Record<AiId
     return clean + (details.length ? `, ${details.join(', ')}` : '');
   });
   while (lines.at(-1) === '') lines.pop();
-  if (MODELS.every((ai) => results[ai])) lines.push(THREE_AI_ASSESSED_MARKER);
+  if (MODELS.every((ai) => dates[ai])) lines.push(THREE_AI_ASSESSED_MARKER);
   const dateParts = MODELS.flatMap(ai => dates[ai] ? [`${ai}=${dates[ai]}`] : []);
   if (dateParts.length) lines.push(`# Assessed: ${dateParts.join(', ')}`);
   return lines.join(newline) + newline;

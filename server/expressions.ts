@@ -48,7 +48,7 @@ export interface ExpressionPhoto {
   category: string;
   /** Changes when a different file occupies this path, for browser image caches. */
   revision?: string;
-  /** True when the photo's sidecar has a three-AI assessment marker or per-model scores. */
+  /** True when the photo's sidecar has assessment dates for all three AIs (Claude, ChatGPT, and Gemini). */
   assessedByThreeAIs?: boolean;
   /** Most recent date (YYYY-MM-DD) each AI assessed this photo, kept in the sidecar as "# Assessed: ...". */
   assessedAt?: AssessedDates;
@@ -166,10 +166,8 @@ function readSidecar(file: string): SidecarInfo {
   try {
     const text = fs.readFileSync(file, 'utf8');
     const tags = parseTags(text);
-    const assessedByThreeAIs =
-      /(?:^|\n)#\s*AssessedWithAllThreeAIs\b/i.test(text) ||
-      tags.some((t) => !!t.assessments && Object.keys(t.assessments).length > 0);
     const assessedAt = parseAssessedDates(text);
+    const assessedByThreeAIs = Boolean(assessedAt?.claude && assessedAt?.codex && assessedAt?.gemini);
     const rating = parseRating(text);
     const motion = parseMotion(text);
     const generation = parseGeneration(text);
