@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { AI_NAMES, CODEX_STANDARD_TIER, aiCommand, aiModelArgs, geminiAnswer, geminiStdin, isAiId, runAiProcess, type AiId } from './ai.js';
 import type { AskAi } from './brief.js';
 import { safeResolve } from './config.js';
-import { ASSESSED_LINE, buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseAssessedDates, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
+import { ASSESSED_LINE, REMOVED_LINE, buildExpressionIndex, clearExpressionIndex, findExpressionPhoto, parseAssessedDates, parseRemovedTags, parseTags, THREE_AI_ASSESSED_MARKER, type ExpressionCategory } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 import { pacificDay } from './youtube-quota.js';
@@ -76,7 +76,7 @@ export function mergeAssessment(text: string, values: Assessment[], categories: 
   const known = new Set([...v.framing, ...v.pose, ...v.morphology, ...v.expressions.map(e => e.name)].map(s => s.toLowerCase()));
   const lines = text.split(/\r?\n/); const retained = lines.filter(line => { const tag = parseTags(line)[0]; return !tag || tag.confirmed || tag.disconfirmed || (!known.has(tag.tag.toLowerCase()) && (tag.confidence === null || tag.confidence >= 75)); });
   while (retained.at(-1) === '') retained.pop();
-  const confirmed = new Set(parseTags(retained.join('\n')).filter(t => t.confirmed || t.disconfirmed).map(t => t.tag.toLowerCase()));
+  const confirmed = new Set([...parseTags(retained.join('\n')).filter(t => t.confirmed || t.disconfirmed), ...parseRemovedTags(retained.join('\n'))].map(t => t.tag.toLowerCase()));
   for (const value of values) if (value.confidence >= 75 && !confirmed.has(value.tag.toLowerCase())) retained.push(`${value.tag}, ${value.confidence}%, UNCONFIRMED`);
   return retained.join(text.includes('\r\n') ? '\r\n' : '\n') + (text.includes('\r\n') ? '\r\n' : '\n');
 }
@@ -96,10 +96,11 @@ export function mergeModelAssessments(text: string, results: Partial<Record<AiId
   const dates = { ...(parseAssessedDates(text) ?? {}) };
   for (const ai of MODELS) if (results[ai] !== undefined) dates[ai] = assessedDate;
   const lines = base.split(/\r?\n/).filter(line => !/^#\s*AssessedWithAllThreeAIs\b/i.test(line.trim()) && !ASSESSED_LINE.test(line.trim())).map(line => {
-    const parsed = parseTags(line)[0]; if (!parsed) return line;
+    const isRemoved = REMOVED_LINE.test(line.trim());
+    const parsed = isRemoved ? parseRemovedTags(line)[0] : parseTags(line)[0]; if (!parsed) return line;
     const clean = line.replace(/,\s*(?:claude|codex|gemini)=\d{1,3}%/gi, '');
     const entry = scores.get(parsed.tag.toLowerCase()); if (!entry) return clean;
-    const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed || parsed.disconfirmed) ? [`${ai}=${score}%`] : []; });
+    const details = MODELS.flatMap(ai => { const score = entry.byAi[ai]; return score !== undefined && (score >= 75 || parsed.confirmed || parsed.disconfirmed || isRemoved) ? [`${ai}=${score}%`] : []; });
     return clean + (details.length ? `, ${details.join(', ')}` : '');
   });
   while (lines.at(-1) === '') lines.pop();

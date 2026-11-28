@@ -40,6 +40,14 @@ describe('confirming expression tags', () => {
     removeExpressionTag('Joy/Joy_001.jpg', 'Joy', null, true);
     expect(fs.readFileSync(path.join(tmp, 'Joy/Joy_001.txt'), 'utf8')).toBe('EyesWide: 72, UNCONFIRMED\r\n');
   });
+  it('records removed 3-AI attributes as # Removed: and can confirm or disconfirm them again', () => {
+    const file = path.join(tmp, 'Joy/Joy_001.txt');
+    fs.writeFileSync(file, 'Smile, 90%, UNCONFIRMED, claude=90%, codex=85%, gemini=80%\n');
+    removeExpressionTag('Joy/Joy_001.jpg', 'Smile', 90, false);
+    expect(fs.readFileSync(file, 'utf8')).toBe('# Removed: Smile, 90%, UNCONFIRMED, claude=90%, codex=85%, gemini=80%\n');
+    disconfirmExpressionTag('Joy/Joy_001.jpg', 'Smile', 90, false, false);
+    expect(fs.readFileSync(file, 'utf8')).toBe('Smile, 90%, DISCONFIRMED, claude=90%, codex=85%, gemini=80%\n');
+  });
   it('adds an existing expression as confirmed and rejects duplicates or invented values', () => {
     fs.mkdirSync(path.join(tmp, 'Calm'));
     addExpressionTag('Joy/Joy_001.jpg', 'calm');

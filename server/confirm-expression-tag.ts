@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeResolve } from './config.js';
-import { clearExpressionIndex, expressionIndex, isExpressionPhoto, parseTags } from './expressions.js';
+import { REMOVED_LINE, allThreeAIsAgreed, clearExpressionIndex, expressionIndex, isExpressionPhoto, parseRemovedTags, parseTags } from './expressions.js';
 import { writeFileSafely } from './files.js';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from './expression-attribute-vocabulary.js';
 
@@ -14,12 +14,13 @@ export function confirmExpressionTag(photoPath: string, name: string, confidence
   if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file, not a shortcut.');
   const text = fs.readFileSync(sidecar, 'utf8');
   const lines = text.split(/(?<=\n)/);
-  const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] })).filter(item => item.tag?.tag === name);
+  const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] ?? parseRemovedTags(line)[0] })).filter(item => item.tag?.tag === name);
   if (matching.length !== 1 || matching[0].tag.confidence !== confidence) throw new Error('The tag changed since it was shown. Refresh and try again.');
-  if (matching[0].tag.confirmed) return;
+  if (matching[0].tag.confirmed && !matching[0].tag.removed) return;
   const index = matching[0].i;
-  if (!/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i.test(lines[index])) throw new Error('This tag cannot be confirmed automatically.');
-  lines[index] = lines[index].replace(/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i, 'CONFIRMED');
+  const line = lines[index].replace(/^#\s*Removed:\s*/i, '');
+  if (!/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i.test(line)) throw new Error('This tag cannot be confirmed automatically.');
+  lines[index] = line.replace(/(?:UNCONFIRMED|DISCONFIRMED)(?=\s*(?:,|$))/i, 'CONFIRMED');
   writeFileSafely(sidecar, lines.join(''));
   clearExpressionIndex();
 }
@@ -31,16 +32,17 @@ export function disconfirmExpressionTag(photoPath: string, name: string, confide
   const sidecar = safeResolve('expressions', photoPath.slice(0, -path.extname(photoPath).length) + '.txt');
   if (!fs.lstatSync(sidecar).isFile()) throw new Error('The tag file must be a real file.');
   const lines = fs.readFileSync(sidecar, 'utf8').split(/(?<=\n)/);
-  const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] })).filter(item => item.tag?.tag === name);
+  const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] ?? parseRemovedTags(line)[0] })).filter(item => item.tag?.tag === name);
   const match = matching[0];
   if (matching.length !== 1 || match.tag.confidence !== confidence || match.tag.confirmed !== confirmed || !!match.tag.disconfirmed !== disconfirmed) throw new Error('The tag changed since it was shown. Refresh and try again.');
-  if (match.tag.disconfirmed) return;
-  if (!/(?:UNCONFIRMED|CONFIRMED)(?=\s*(?:,|$))/i.test(lines[match.i])) throw new Error('This tag cannot be disconfirmed automatically.');
-  lines[match.i] = lines[match.i].replace(/(?:UNCONFIRMED|CONFIRMED)(?=\s*(?:,|$))/i, 'DISCONFIRMED');
+  if (match.tag.disconfirmed && !match.tag.removed) return;
+  const line = lines[match.i].replace(/^#\s*Removed:\s*/i, '');
+  if (!/(?:UNCONFIRMED|CONFIRMED)(?=\s*(?:,|$))/i.test(line)) throw new Error('This tag cannot be disconfirmed automatically.');
+  lines[match.i] = line.replace(/(?:UNCONFIRMED|CONFIRMED)(?=\s*(?:,|$))/i, 'DISCONFIRMED');
   writeFileSafely(sidecar, lines.join('')); clearExpressionIndex();
 }
 
-/** Remove exactly the tag the user reviewed; reject if it has changed. */
+/** Remove exactly the tag the user reviewed; keep a "# Removed:" record when all three AIs had agreed on it. */
 export function removeExpressionTag(photoPath: string, name: string, confidence: unknown, confirmed: unknown): void {
   const photo = isExpressionPhoto(photoPath);
   if (!photo || !name || typeof confirmed !== 'boolean' || (confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence)))) throw new Error('That photo or tag is not available.');
@@ -49,7 +51,8 @@ export function removeExpressionTag(photoPath: string, name: string, confidence:
   const lines = fs.readFileSync(sidecar, 'utf8').split(/(?<=\n)/);
   const matching = lines.map((line, i) => ({ i, tag: parseTags(line)[0] })).filter(item => item.tag?.tag === name);
   if (matching.length !== 1 || matching[0].tag.confidence !== confidence || matching[0].tag.confirmed !== confirmed) throw new Error('The tag changed since it was shown. Refresh and try again.');
-  lines.splice(matching[0].i, 1);
+  if (allThreeAIsAgreed(matching[0].tag)) lines[matching[0].i] = `# Removed: ${lines[matching[0].i]}`;
+  else lines.splice(matching[0].i, 1);
   writeFileSafely(sidecar, lines.join(''));
   clearExpressionIndex();
 }
@@ -70,8 +73,9 @@ export function addExpressionTag(photoPath: string, name: string, group: unknown
     text = fs.readFileSync(sidecar, 'utf8'); exists = true;
   } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
   if (parseTags(text).some(tag => tag.tag.toLowerCase() === canonical.toLowerCase())) throw new Error('This attribute is already on the photo.');
-  const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const updated = text + (text && !text.endsWith('\n') ? newline : '') + `${canonical}, N/A, CONFIRMED${newline}`;
+  const kept = text.split(/(?<=\n)/).filter(line => !REMOVED_LINE.test(line.trim()) || parseRemovedTags(line)[0]?.tag.toLowerCase() !== canonical.toLowerCase()).join('');
+  const newline = kept.includes('\r\n') ? '\r\n' : '\n';
+  const updated = kept + (kept && !kept.endsWith('\n') ? newline : '') + `${canonical}, N/A, CONFIRMED${newline}`;
   if (exists) writeFileSafely(sidecar, updated); else fs.writeFileSync(sidecar, updated, { flag: 'wx' });
   clearExpressionIndex();
 }

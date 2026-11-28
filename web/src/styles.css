@@ -870,6 +870,12 @@ textarea[readonly]:focus { outline: none; }
 .attribute-assessments { color: var(--muted); font-size: 0.78rem; }
 
 .attribute-chip.disconfirmed { border: 1px solid #ce8580; background: #fff0ef; color: #952b26; }
+.attribute-chip.removed { border: 1px dashed #c49a6c; background: #fdf6ec; color: #7a4b13; }
+.attribute-chip.three-ai-conflict { border: 2px solid #d97706; background: #fffbeb; color: #854d0e; box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.18); }
+.three-ai-conflict-mark { color: #b45309; }
+.expression-review-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.expression-photo-choice.has-three-ai-conflict .photo { border-color: #d97706; box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25); }
+.expression-conflict-badge { font-size: 0.78rem; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 0.1rem 0.35rem; margin-top: 0.15rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Consistent, visible disclosure indicators for expandable sections and trees. */
 details:not(.action-menu):not(.new-version):not(.quota-badge):not(.packaging-choice):not(.playlist-select details) > summary { list-style: none; }

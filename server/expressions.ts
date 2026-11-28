@@ -26,6 +26,7 @@ export interface Tag {
   confidence: number | null;
   confirmed: boolean;
   disconfirmed?: boolean;
+  removed?: boolean;
   assessments?: Partial<Record<'claude' | 'codex' | 'gemini', number>>;
 }
 
@@ -56,6 +57,8 @@ export interface ExpressionPhoto {
   motionPhoto?: boolean;
   /** John's own thumbs up or down, kept in the sidecar as "# Rating: Liked", "# Rating: Meh" or "# Rating: Disliked". */
   rating?: ExpressionRating;
+  /** Attributes all three AIs agreed on that John removed (kept in the sidecar as "# Removed: ..."). */
+  removedTags?: Tag[];
   /** For an AI picture HeartQuarters made: what it was asked to show (separate from what the AIs think it shows). */
   generation?: GenerationRecord;
   tags: Tag[];
@@ -104,6 +107,25 @@ export function hasMotionPhotoHeader(file: string): boolean {
 export const THREE_AI_ASSESSED_MARKER = '# AssessedWithAllThreeAIs';
 export type AssessedDates = Partial<Record<'claude' | 'codex' | 'gemini', string>>;
 export const ASSESSED_LINE = /^#\s*Assessed:\s*(.+)$/i;
+export const REMOVED_LINE = /^#\s*Removed:\s*(.+)$/i;
+
+/** True when all three AIs independently scored this attribute at or above the 75% threshold. */
+export function allThreeAIsAgreed(tag: Pick<Tag, 'assessments'>): boolean {
+  const a = tag.assessments;
+  return !!a && a.claude !== undefined && a.codex !== undefined && a.gemini !== undefined &&
+    a.claude >= 75 && a.codex >= 75 && a.gemini >= 75;
+}
+
+/** Reads "# Removed: <tag line>" lines from a sidecar so removed 3-AI attributes stay highlighted and remembered. */
+export function parseRemovedTags(text: string): Tag[] {
+  const removed: Tag[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = REMOVED_LINE.exec(line.trim());
+    if (!match) continue;
+    for (const tag of parseTags(match[1])) removed.push({ ...tag, removed: true });
+  }
+  return removed;
+}
 
 /** Reads "# Assessed: claude=YYYY-MM-DD, codex=YYYY-MM-DD, gemini=YYYY-MM-DD" lines from a sidecar. */
 export function parseAssessedDates(text: string): AssessedDates | undefined {
@@ -159,19 +181,20 @@ export function parseRating(text: string): ExpressionRating | undefined {
   return rating;
 }
 
-type SidecarInfo = { tags: Tag[]; assessedByThreeAIs: boolean; assessedAt?: AssessedDates; rating?: ExpressionRating; motion?: boolean; generation?: GenerationRecord };
+type SidecarInfo = { tags: Tag[]; removedTags?: Tag[]; assessedByThreeAIs: boolean; assessedAt?: AssessedDates; rating?: ExpressionRating; motion?: boolean; generation?: GenerationRecord };
 const NO_SIDECAR: SidecarInfo = { tags: [], assessedByThreeAIs: false };
 
 function readSidecar(file: string): SidecarInfo {
   try {
     const text = fs.readFileSync(file, 'utf8');
     const tags = parseTags(text);
+    const removedTags = parseRemovedTags(text);
     const assessedAt = parseAssessedDates(text);
     const assessedByThreeAIs = Boolean(assessedAt?.claude && assessedAt?.codex && assessedAt?.gemini);
     const rating = parseRating(text);
     const motion = parseMotion(text);
     const generation = parseGeneration(text);
-    return { tags, assessedByThreeAIs, ...(assessedAt ? { assessedAt } : {}), ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}), ...(generation ? { generation } : {}) };
+    return { tags, ...(removedTags.length ? { removedTags } : {}), assessedByThreeAIs, ...(assessedAt ? { assessedAt } : {}), ...(rating ? { rating } : {}), ...(motion !== undefined ? { motion } : {}), ...(generation ? { generation } : {}) };
   } catch {
     return NO_SIDECAR;
   }
@@ -216,7 +239,7 @@ export function inboxExpressionPhotos(): ExpressionPhoto[] {
     const sidecar = entries.find(other => other.name.toLowerCase() === `${base}.txt`.toLowerCase());
     const full = safeResolve('expressions', `${EXPRESSION_INBOX}/${e.name}`); const stat = fs.statSync(full);
     const sidecarInfo = sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? readSidecar(safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`)) : NO_SIDECAR;
-    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(sidecarInfo.assessedAt ? { assessedAt: sidecarInfo.assessedAt } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}), tags: sidecarInfo.tags };
+    return { path: `${EXPRESSION_INBOX}/${e.name}`, name: base, category: EXPRESSION_INBOX, revision: `${stat.size}-${stat.mtimeMs}-${stat.ctimeMs}`, ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}), ...(sidecarInfo.assessedAt ? { assessedAt: sidecarInfo.assessedAt } : {}), ...(sidecarInfo.removedTags ? { removedTags: sidecarInfo.removedTags } : {}), ...(motionOf(full, sameBase.length === 1 && sidecar?.isFile() && !sidecar.isSymbolicLink() ? safeResolve('expressions', `${EXPRESSION_INBOX}/${sidecar.name}`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}), ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}), ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}), tags: sidecarInfo.tags };
   }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -296,6 +319,7 @@ export function buildExpressionIndex(withPhotos = true): ExpressionIndex {
           category: relPath,
           ...(sidecarInfo.assessedByThreeAIs ? { assessedByThreeAIs: true } : {}),
           ...(sidecarInfo.assessedAt ? { assessedAt: sidecarInfo.assessedAt } : {}),
+          ...(sidecarInfo.removedTags ? { removedTags: sidecarInfo.removedTags } : {}),
           ...(motionOf(full, files.has(`${base}.txt`) ? path.join(dir, `${base}.txt`) : null, sidecarInfo.motion) ? { motionPhoto: true } : {}),
           ...(sidecarInfo.rating ? { rating: sidecarInfo.rating } : {}),
           ...(sidecarInfo.generation ? { generation: sidecarInfo.generation } : {}),

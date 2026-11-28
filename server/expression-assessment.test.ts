@@ -47,6 +47,12 @@ describe('blind expression assessment', () => {
     expect(merged).toContain('# Assessed: claude=2026-11-10, codex=2026-11-12, gemini=2026-11-28');
     expect(merged).toContain('# AssessedWithAllThreeAIs');
   });
+  it('preserves removed 3-AI attributes during reassessment without re-adding them as unconfirmed', () => {
+    const cats = buildExpressionIndex().categories;
+    const merged = mergeModelAssessments('# Removed: Smile, 90%, UNCONFIRMED, claude=90%, codex=85%, gemini=80%\n', { claude: [{ tag: 'Smile', confidence: 92 }], codex: [{ tag: 'Smile', confidence: 88 }], gemini: [{ tag: 'Smile', confidence: 81 }] }, cats, '2026-11-28');
+    expect(merged).toContain('# Removed: Smile, 90%, UNCONFIRMED, claude=92%, codex=88%, gemini=81%');
+    expect(merged).not.toContain('\nSmile,');
+  });
   it('records separate model scores, uses the highest for filtering and keeps confirmations', () => {
     const cats = buildExpressionIndex().categories;
     const merged = mergeModelAssessments('Warmth, 42%, CONFIRMED\n', { claude: [{ tag: 'Smile', confidence: 90 }, { tag: 'Warmth', confidence: 50 }], codex: [{ tag: 'Smile', confidence: 80 }], gemini: [{ tag: 'Smile', confidence: 74 }, { tag: 'Warmth', confidence: 80 }] }, cats);

@@ -22,7 +22,7 @@ import { ExpressionShotList, type ViewerSteps } from './ExpressionShotList';
 import { ExpressionInbox } from './ExpressionInbox';
 import { clampZoom, fitScale, originalSizePercent, snapOriginalSize, zoomAfterResize } from './expressionZoom';
 import { isAiExpression, isMotionExpression, matchesExpressionOrigin, matchesMotionFilter } from '../../server/expression-origin';
-import { groupExpressionAttributes } from './expressionAttributes';
+import { allThreeAIsAgreed, groupExpressionAttributes, threeAiDisagreements } from './expressionAttributes';
 import { expressionCategoryNames, reviewExpressionFolder, type FolderReviewMode } from './expressionFolderReview';
 import { FRAMING_TAGS, MORPHOLOGY_TAGS, POSE_TAGS } from '../../server/expression-attribute-vocabulary';
 import { matchesMarkFilter, matchesRatingFilter, ratingSearchWords, type Rating, type RatingChoice } from './expressionRating';
@@ -73,6 +73,7 @@ export function ExpressionsPage() {
   const [origin, setOrigin] = useState<'all' | 'real' | 'ai'>('all');
   const [motionFilter, setMotionFilter] = useState<'all' | 'motion' | 'still'>('all');
   const [assessmentFilter, setAssessmentFilter] = useState<'all' | 'three-ais' | 'not-three-ais'>('all');
+  const [conflictsOnly, setConflictsOnly] = useState(false);
   const [open, setOpen] = useState<string | null>(null); // The photo path stays stable when filters change.
   const [preview, setPreview] = useState<{ photo: ExpressionPhoto; imageUrl?: string; note?: string; steps?: ViewerSteps } | null>(null);
   const [inbox, setInbox] = useState<ExpressionPhoto[]>([]);
@@ -263,8 +264,8 @@ export function ExpressionsPage() {
   const shown = useMemo(() => {
     if (!index || !current) return [];
     const pickedAttributes = selectedAttributes(libraryFilters);
-    return filterSelectablePhotos(index.photos, [], { scope: 'all', category: current.path || '*', includeSub, query: '', attributes: pickedAttributes.include, excludeAttributes: pickedAttributes.exclude }).filter(p => (keptInView.includes(p.path) || (matchesMarkFilter(p.path, markFilter, references, likeness) && matchesRatingFilter(p, markFilter.ratings))) && matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
-  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, markFilter, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
+    return filterSelectablePhotos(index.photos, [], { scope: 'all', category: current.path || '*', includeSub, query: '', attributes: pickedAttributes.include, excludeAttributes: pickedAttributes.exclude }).filter(p => (keptInView.includes(p.path) || (matchesMarkFilter(p.path, markFilter, references, likeness) && matchesRatingFilter(p, markFilter.ratings))) && matches(p, words) && matchesExpressionOrigin(p, origin) && matchesMotionFilter(p, motionFilter) && (assessmentFilter === 'all' || (assessmentFilter === 'three-ais' ? !!p.assessedByThreeAIs : !p.assessedByThreeAIs)) && (!conflictsOnly || threeAiDisagreements(p).length > 0) && (reviewFolders === 'all' || reviewExpressionFolder(p, categoryNames, reviewFolders) !== null));
+  }, [index, current, includeSub, query, origin, motionFilter, assessmentFilter, conflictsOnly, markFilter, references, likeness, keptInView, libraryFilters, reviewFolders, categoryNames]);
 
   const gridActions = useRef<GridActions>(null as unknown as GridActions);
   gridActions.current = {
@@ -374,7 +375,10 @@ export function ExpressionsPage() {
           <label>Motion Image <select value={motionFilter} onChange={e => { setMotionFilter(e.target.value as 'all' | 'motion' | 'still'); setOpen(null); }}><option value="all">All Photos</option><option value="motion">Motion Images Only</option><option value="still">Still Photos Only</option></select></label>
           <label>Assessment <select value={assessmentFilter} onChange={e => { setAssessmentFilter(e.target.value as 'all' | 'three-ais' | 'not-three-ais'); setOpen(null); }}><option value="all">All Photos</option><option value="three-ais">Assessed by All Three AIs</option><option value="not-three-ais">Not Assessed by All Three AIs</option></select></label>
         </div>
-        <label className="expression-review-filter">Folder Review <select value={reviewFolders} onChange={e => { const value = e.target.value as FolderReviewMode | 'all'; setReviewFolders(value); setOpen(null); if (value !== 'all') goTo(''); }}><option value="all">All Photos</option><option value="missing">Folder Expression Not Among Guesses</option><option value="higher">Another Expression Has a Higher Score</option></select></label>
+        <div className="expression-review-row">
+          <label className="expression-review-filter">Folder Review <select value={reviewFolders} onChange={e => { const value = e.target.value as FolderReviewMode | 'all'; setReviewFolders(value); setOpen(null); if (value !== 'all') goTo(''); }}><option value="all">All Photos</option><option value="missing">Folder Expression Not Among Guesses</option><option value="higher">Another Expression Has a Higher Score</option></select></label>
+          <label className="small-label"><input type="checkbox" checked={conflictsOnly} onChange={e => { setConflictsOnly(e.target.checked); setOpen(null); }} /> 3-AI Disconfirmed / Removed</label>
+        </div>
         {reviewFolders !== 'all' && <p className="muted">{reviewFolders === 'missing' ? 'Shows photos with recorded expression guesses, but none matching the folder. Photos without expression guesses are not included.' : 'Shows photos where the folder expression and another expression have scores, and the other score is higher. Photos without comparable scores are not included.'} Other filters still apply. AI guesses can be wrong.</p>}
         {referenceError && <p className="error">{referenceError}</p>}
         <p className="muted">
@@ -440,15 +444,19 @@ const LibraryGrid = memo(function LibraryGrid({ photos: shown, reviewFolders, ca
 }) {
   return (
         <div className="photo-grid">
-          {shown.map((p) => (
-            <div key={p.path} className="expression-photo-choice"><button className="photo" onClick={() => actions.current.open(p.path)} title={p.name}>
+          {shown.map((p) => {
+            const conflicts = threeAiDisagreements(p);
+            return (
+            <div key={p.path} className={`expression-photo-choice${conflicts.length ? ' has-three-ai-conflict' : ''}`}><button className="photo" onClick={() => actions.current.open(p.path)} title={p.name}>
               <img src={thumbUrl('expressions', p.path, 360, p.revision)} alt={p.name} loading="lazy" />
               <span>{p.name}</span>
+              {conflicts.length > 0 && <span className="expression-conflict-badge" title={`All 3 AIs agreed, but you disconfirmed/removed: ${conflicts.map(c => c.tag).join(', ')}`}>⚠ 3 AIs: {conflicts.map(c => c.tag).join(', ')}</span>}
             </button>{reviewFolders !== 'all' && (() => { const review = reviewExpressionFolder(p, categoryNames, reviewFolders); if (!review) return null; const show = (tag: ExpressionPhoto['tags'][number]) => `${tag.tag}${tag.confirmed ? ' (Confirmed)' : tag.confidence !== null ? ` ${tag.confidence}%` : ' (No score)'}`; return <p className="expression-review-reason"><strong>Folder:</strong> {p.category.split('/').join(' › ')}<br /><strong>Folder Guess:</strong> {review.folderTag ? show(review.folderTag) : 'Not recorded'}<br /><strong>Other Guesses:</strong> {review.alternatives.map(show).join(', ')}</p>; })()}
               <PhotoMarks small reference={likeness.includes(p.path)} referenceDisabled={likenessBusy} onToggleReference={() => actions.current.reference(p)} starred={references.includes(p.path)} starDisabled={starDisabled} onToggleStar={() => actions.current.star(p)} rating={p.rating} onRate={rating => actions.current.rate(p, rating)} />
               <PhotoActions photo={p} rootDir={rootDir} categories={categories} onChanged={message => actions.current.changed(message)} />
             </div>
-          ))}
+            );
+          })}
         </div>
   );
 });
@@ -645,7 +653,7 @@ function Lightbox({ photo, imageUrl, note, starred, starDisabled, onToggleStar, 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, onPrev, onNext, pendingTag]);
 
-  const groups = groupExpressionAttributes(photo.tags);
+  const groups = groupExpressionAttributes([...photo.tags, ...(photo.removedTags ?? [])]);
   const saveTag = async (action: TagAction) => {
     if (!onTagAction) return;
     setSavingTag(true); setConfirmError('');
@@ -653,10 +661,16 @@ function Lightbox({ photo, imageUrl, note, starred, starDisabled, onToggleStar, 
     catch (e) { setConfirmError(e instanceof Error ? e.message : String(e)); }
     finally { setSavingTag(false); }
   };
-  const showTags = (tags: ExpressionPhoto['tags'], expression = false) => <><div className="chips">{tags.map(t => <span key={t.tag} className={`attribute-chip${t.confirmed ? ' confirmed' : t.disconfirmed ? ' disconfirmed' : ''}`}>
-    <span title={t.confirmed ? 'Confirmed' : t.disconfirmed ? 'Disconfirmed' : 'AI suggestion'}>{t.tag}{t.disconfirmed && ' · Disconfirmed'}{!t.confirmed && !t.disconfirmed && !t.assessments && t.confidence !== null && ` ${t.confidence}%`}</span>{t.assessments && <span className="attribute-assessments">{([['claude', 'Claude'], ['codex', 'ChatGPT'], ['gemini', 'Gemini']] as const).filter(([id]) => t.assessments?.[id] !== undefined).map(([id, name]) => `${name} ${t.assessments?.[id]}%`).join(' · ')}</span>}
-    {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t, expression })}>Confirm</button>}{!t.disconfirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'disconfirm', tag: t })}>Disconfirm</button>}<button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button></>}
-  </span>)}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
+  const showTags = (tags: ExpressionPhoto['tags'], expression = false) => <><div className="chips">{tags.map(t => {
+    const conflict = (t.disconfirmed || t.removed) && allThreeAIsAgreed(t);
+    return <span key={`${t.tag}${t.removed ? '-removed' : ''}`} className={`attribute-chip${t.confirmed ? ' confirmed' : t.disconfirmed ? ' disconfirmed' : t.removed ? ' removed' : ''}${conflict ? ' three-ai-conflict' : ''}`}>
+      <span title={conflict ? 'All three AIs agreed on this, but you disconfirmed or removed it' : t.confirmed ? 'Confirmed' : t.disconfirmed ? 'Disconfirmed' : t.removed ? 'Removed' : 'AI suggestion'}>
+        {conflict && <strong className="three-ai-conflict-mark" aria-label="All 3 AIs agreed">⚠ All 3 AIs · </strong>}
+        {t.tag}{t.disconfirmed ? ' · Disconfirmed' : t.removed ? ' · Removed' : ''}{!t.confirmed && !t.disconfirmed && !t.removed && !t.assessments && t.confidence !== null && ` ${t.confidence}%`}
+      </span>{t.assessments && <span className="attribute-assessments">{([['claude', 'Claude'], ['codex', 'ChatGPT'], ['gemini', 'Gemini']] as const).filter(([id]) => t.assessments?.[id] !== undefined).map(([id, name]) => `${name} ${t.assessments?.[id]}%`).join(' · ')}</span>}
+      {onTagAction && <>{!t.confirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'confirm', tag: t, expression })}>Confirm</button>}{!t.disconfirmed && <button type="button" disabled={savingTag} onClick={() => void saveTag({ kind: 'disconfirm', tag: t })}>Disconfirm</button>}{!t.removed && <button type="button" disabled={savingTag} onClick={() => setPendingTag({ kind: 'remove', tag: t })} aria-label={`Remove ${t.tag}`}>×</button>}</>}
+    </span>;
+  })}</div>{pendingTag && tags.some(t => t.tag === pendingTag.tag.tag) && <div className="attribute-confirmation" role="alertdialog" aria-label={`${pendingTag.kind === 'confirm' ? 'Confirm' : 'Remove'} ${pendingTag.tag.tag}`}><p>{pendingTag.kind === 'confirm' ? `Confirm that ${pendingTag.tag.tag} applies to this photo?` : `Remove ${pendingTag.tag.tag} from this photo?`}</p><div className="attribute-confirmation-buttons"><button disabled={savingTag} onClick={() => void saveTag(pendingTag)}>{pendingTag.kind === 'confirm' ? 'Confirm Attribute' : 'Remove Attribute'}</button><button disabled={savingTag} onClick={() => setPendingTag(null)}>Cancel</button></div></div>}</>;
 
   return (
     <div className="lightbox" onClick={onClose}>
