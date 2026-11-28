@@ -1395,7 +1395,10 @@ button.small.chat-insert-btn { display: inline-flex; align-items: center; justif
 .chat-subtitle { margin: 0.15rem 0 0; }
 .chat-head-actions { display: flex; gap: 0.35rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
 .chat-error, .chat-status { margin: 0; flex-shrink: 0; }
+.chat-messages-wrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .chat-messages { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.25rem; }
+.chat-scroll-bottom { position: absolute; bottom: 0.7rem; left: 0; right: 0; margin-inline: auto; z-index: 2; width: 2.25rem; height: 2.25rem; min-height: 0; padding: 0; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }
+.chat-scroll-bottom:hover { border-color: var(--accent); color: var(--accent); }
 .chat-msg-files { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.35rem; }
 .chat-file-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); text-decoration: none; font-size: 0.85rem; }
 .chat-file-chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -1407,9 +1410,14 @@ button.small.chat-insert-btn { display: inline-flex; align-items: center; justif
 .chat-messages .markdown img { max-width: min(100%, 28rem); max-height: 22rem; border-radius: 8px; border: 1px solid var(--line); display: block; margin: 0.4rem 0; }
 .chat-file-thumb { max-height: 2.2rem; max-width: 3.5rem; border-radius: 4px; object-fit: cover; display: block; }
 .chat-drop-banner { padding: 0.45rem 0.7rem; border: 2px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; text-align: center; flex-shrink: 0; }
-.chat-compose { display: flex; flex-direction: column; gap: 0.45rem; border-top: 1px solid var(--line); padding-top: 0.5rem; flex-shrink: 0; }
+.chat-compose { display: flex; flex-direction: column; gap: 0.45rem; border-top: 1px solid var(--line); padding-top: 0; flex-shrink: 0; position: relative; }
+.chat-compose-resizer { height: 9px; margin: -5px 0 -2px; cursor: row-resize; position: relative; z-index: 2; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.chat-compose-resizer::after { content: ''; width: 2.5rem; height: 3px; border-radius: 999px; background: var(--line); transition: background 0.12s, width 0.12s; }
+.chat-compose-resizer:hover::after, .chat-compose-resizer:focus-visible::after, body.is-resizing-chat-compose .chat-compose-resizer::after { background: var(--accent); width: 3.5rem; }
+.chat-compose-resizer:focus-visible { outline: none; }
+body.is-resizing-chat-compose { user-select: none; cursor: row-resize; }
 .chat-pending-files { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .chat-pending-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 0.85rem; }
-.chat-compose textarea { font: inherit; font-size: 0.9rem; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; resize: vertical; min-height: 4.5rem; }
+.chat-compose textarea { font: inherit; font-size: 0.9rem; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; resize: vertical; min-height: 2.5rem; max-height: 60vh; }
 .chat-compose-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
 .chat-attach-actions { display: flex; gap: 0.4rem; }

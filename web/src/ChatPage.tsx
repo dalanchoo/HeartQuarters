@@ -5,6 +5,7 @@ import { copyText, filesFromClipboard, formatSize, getJson, insertTextAtCursor, 
 import { AI_OPTIONS, aiName } from './AiChoice';
 import { useAi } from './AiPicker';
 import { SidebarResizer } from './SidebarResizer';
+import { clampComposeHeight, COMPOSE_DEFAULT_HEIGHT, COMPOSE_MAX_HEIGHT, COMPOSE_MIN_HEIGHT, loadComposeHeight, saveComposeHeight } from './chatComposeResize';
 import type { ChatIndex, ChatMessage, ChatSummary, ChatThread, UploadedChatFile, VideoPart } from '../../server/chat';
 import type { VideoIdea } from '../../server/video-ideas';
 
@@ -69,6 +70,11 @@ export function ChatPage() {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
   const [draft, setDraft] = useState('');
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [composeHeight, setComposeHeight] = useState<number | null>(loadComposeHeight);
+  const composeDrag = useRef<{ y: number; height: number; pointerId: number } | null>(null);
+  const composeHeightRef = useRef<number | null>(composeHeight);
+  composeHeightRef.current = composeHeight;
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [asking, setAsking] = useState<AiId | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -85,6 +91,29 @@ export function ChatPage() {
   const loadEpoch = useRef(0);
   const askingRef = useRef<AiId | null>(null);
   askingRef.current = asking;
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const active = composeDrag.current;
+      if (active?.pointerId !== event.pointerId) return;
+      setComposeHeight(clampComposeHeight(active.height + (active.y - event.clientY), window.innerHeight));
+    };
+    const stop = (event: PointerEvent) => {
+      if (composeDrag.current?.pointerId !== event.pointerId) return;
+      composeDrag.current = null;
+      document.body.classList.remove('is-resizing-chat-compose');
+      if (event.type === 'pointerup') saveComposeHeight(composeHeightRef.current);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      if (composeDrag.current) document.body.classList.remove('is-resizing-chat-compose');
+    };
+  }, []);
 
   const loadAll = async (requestedId = chatIdFromHash()) => {
     const epoch = ++loadEpoch.current;
@@ -125,10 +154,20 @@ export function ChatPage() {
     };
   }, []);
 
+  const updateScrollBottom = () => {
+    const el = listRef.current;
+    setShowScrollBottom(!!el && el.scrollHeight - el.scrollTop - el.clientHeight > 40);
+  };
+
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+    setShowScrollBottom(false);
   }, [thread?.id, thread?.messages.length]);
+
+  useEffect(() => {
+    updateScrollBottom();
+  }, [composeHeight]);
 
   useEffect(() => {
     const ideaId = thread?.ideaId;
@@ -657,7 +696,8 @@ export function ChatPage() {
 
           {error && <p className="error chat-error">{error}</p>}
 
-          <div className="chat-messages" ref={listRef}>
+          <div className="chat-messages-wrap">
+            <div className="chat-messages" ref={listRef} onScroll={updateScrollBottom}>
             {thread === null && !error && <p className="muted small-text">Loading conversation…</p>}
             {thread !== null && messages.length === 0 && (
               <p className="muted small-text">
@@ -740,12 +780,61 @@ export function ChatPage() {
                   : <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown></div>}
               </div>
             ))}
+            </div>
+            {showScrollBottom && (
+              <button
+                type="button"
+                className="chat-scroll-bottom"
+                aria-label="Scroll to Bottom"
+                title="Scroll to Bottom"
+                onClick={() => {
+                  const el = listRef.current;
+                  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {asking && <p className="muted small-text chat-status">Asking {aiName(asking)}…</p>}
           {dragging && <div className="chat-drop-banner">Drop files here to attach…</div>}
 
           <div className="chat-compose">
+            <div
+              className="chat-compose-resizer"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize message box"
+              aria-valuemin={COMPOSE_MIN_HEIGHT}
+              aria-valuemax={COMPOSE_MAX_HEIGHT}
+              aria-valuenow={composeHeight ?? COMPOSE_DEFAULT_HEIGHT}
+              tabIndex={0}
+              title="Drag to make the message box taller or shorter. Double-click for the standard size."
+              onPointerDown={(e) => {
+                if (e.button !== 0 || composeDrag.current) return;
+                e.preventDefault();
+                const startHeight = draftRef.current?.getBoundingClientRect().height ?? composeHeight ?? COMPOSE_DEFAULT_HEIGHT;
+                composeDrag.current = { y: e.clientY, height: startHeight, pointerId: e.pointerId };
+                e.currentTarget.setPointerCapture(e.pointerId);
+                document.body.classList.add('is-resizing-chat-compose');
+              }}
+              onDoubleClick={() => {
+                setComposeHeight(null);
+                saveComposeHeight(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                e.preventDefault();
+                const step = e.shiftKey ? 48 : 16;
+                const current = draftRef.current?.getBoundingClientRect().height ?? composeHeight ?? COMPOSE_DEFAULT_HEIGHT;
+                const next = clampComposeHeight(current + (e.key === 'ArrowUp' ? step : -step), window.innerHeight);
+                setComposeHeight(next);
+                saveComposeHeight(next);
+              }}
+            />
             {pending.length > 0 && (
               <div className="chat-pending-files">
                 {pending.map((item) => (
@@ -769,6 +858,7 @@ export function ChatPage() {
             <textarea
               ref={draftRef}
               rows={4}
+              style={composeHeight != null ? { height: `${composeHeight}px` } : undefined}
               value={draft}
               disabled={!!asking}
               placeholder="Paste or type anything (no length limit), or drop/paste any file (Word, PDF, image, etc.)…"
